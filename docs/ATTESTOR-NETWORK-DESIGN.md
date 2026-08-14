@@ -206,6 +206,8 @@ runner loop:
   periodic: publish { key, identity, policy, uptime, claimed-verifications } to directory
 ```
 
+> See also: docs/ATTESTOR-LIBRARY-NOTES.md — aligned attestor shape (spawn-your-own-attestor library, proof-based + corroboration/band shapes).
+
 - **v1 adapters**: zkFetch (the Witness Fitness pipeline, proven) + direct-signing (an org
   signs claims it controls — makes the network useful before any zkFetch integration exists).
 - **Key management**: runner keys are the trust anchor — HSM-backed in production, key
