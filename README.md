@@ -3,8 +3,6 @@
 Private N-of-M attestation for Midnight — a plugin that lets contracts accept externally
 attested information with ZK privacy.
 
-**Status:** design phase — documentation only, no code yet.
-
 ## What it is
 
 - **Contract module** — an embeddable Compact module: each app carries its own attestor
@@ -21,11 +19,7 @@ machine.
 
 ## Docs
 
-- `docs/ATTESTOR-NETWORK-DESIGN.md` — the active production design (module spec, runner
-  spec, network model, threat model, test plan, milestones).
-- `docs/PRIVATE-N-OF-M-ATTESTATIONS.md` — feasibility report (why N is a deploy-time
-  constant, dynamic signer sets via Merkle trees, cost picture).
-- `docs/EXTRACTION.md` — what functionality ports from Witness Fitness when code starts.
+- `docs/DESIGN.md` — overview of the design and decisions
 
 ## Name origin
 

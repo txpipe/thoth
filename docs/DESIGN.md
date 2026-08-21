@@ -1,0 +1,132 @@
+# Thoth Design
+
+## Overview
+
+Midnight contracts rely on private data that is provided by the user's machine when
+needed and it is not stored in-contract. Sometimes this data is expected to come
+from an external source, and it is desirable to be able to assure that it is legit,
+while preserving the privacy. From this stem two requirements that must hold at once:
+
+- ensuring that a certain claim is true
+- keeping selected data private
+
+"Private" is precise, and differs by piece of data:
+
+- **Private credentials** (API keys, cookies, auth headers) never leave the user's
+  machine — the fetch mechanism redacts them.
+- **The evidence** (e.g. a zkFetch proof) is what the attestor sees: the *disclosed*
+  values the claim is derived from, but not the credentials and not anything the
+  fetch redacted.
+- **The claim values** are private witness data in the Midnight contract — they never
+  appear on-chain; only the predicate outcome and any commitments do.
+
+To establish that a claim is true, the client obtains evidence from a *data source* —
+e.g. a third-party API — via a protocol such as Reclaim Protocol's ZkFetch, which
+fetches the data and generates a zero knowledge proof that the connection took place
+and that the data retrieved wasn't forged.
+
+The *attestor* is the entity that verifies such evidence: given evidence the client
+obtained, the attestor checks it and, if satisfied, signs a claim derived from it with
+its own key — its signature is the attestation. Attestors are defined by the *kind* of
+verification they can perform:
+
+- **zkFetch** — verifies a client's fetch proof from a data source
+- **effectStream** — certifies events observed on another blockchain
+- **band** — checks a client-proposed value against the attestor's own data source,
+  within a bound
+- **trusted hardware / devices** — further kinds, where the proof comes from hardware
+  or a device
+
+The client calls the attestors whose kind matches how the claim was obtained.
+
+**Band attestors.** When no client-side proof exists, the client proposes a value and
+the attestor checks it against its own data source, signing only that the value is
+valid within a bound. N band attestors agreeing on the same value give the app
+independent corroboration rather than cryptographic proof.
+
+Attestors certify facts, not decisions: a claim is a canonical statement of what was
+observed, and the application defines the predicate over it. Attestors never know how
+a claim is used, so the same attested value can feed different predicates in
+different applications.
+
+On the other side is the *client* — the component that runs on the user's machine,
+inside the dApp. It first obtains evidence of a fact (typically
+by using ZkFetch to fetch the data it needs and obtain a proof of that connection). It
+then sends that evidence to the attestors in its dApp's trusted set, collects
+the N signatures it needs per the dApp's
+deploy-time threshold, and hands the claim together with those signatures to the
+Midnight contract as private witness data. The contract's predicate runs over the
+attested values without any of them ever being revealed on-chain.
+
+Of course, relying on one single attestor would be almost the same as having no
+attestors at all, so our approach aims to create an *attestor network* that can be
+pinged by any dApp that needs to use external data in-contract. Each dApp chooses its
+own threshold at deployment time, meaning how many attestors'
+signatures are needed for a claim to be valid.
+
+A claim can be *portable* — reusable to feed different predicates in different apps —
+or *scoped*: binding a claim to an app id forbids it from being used by any other app.
+
+## The contract
+
+The Midnight contract is where the attestation is finally consumed. It is deployed
+holding the app's *attestor registry* — the on-chain representation of the app's
+pinned trusted set — and with the app's N-of-M threshold fixed at deployment time.
+
+When the client submits a claim with N attestor signatures, the contract verifies,
+in zero knowledge, that:
+
+- each signature is valid and comes from a **distinct** attestor in the registry —
+  so the N-of-M threshold holds against exactly the attestors the app pinned;
+- the claim's nonce has not been used before — no replay;
+- optionally, that the claim is **fresh**, within the app's configured time window,
+  checked against block time.
+
+Only if those checks pass does the app's predicate run over the claim values, as
+private witness data. The claim values are never stored on-chain — only their
+commitments and the predicate outcome are — and, depending on the app's
+configuration, which attestors vouched may be hidden too.
+
+The claim and the signature scheme are the same object everywhere — client,
+attestors, and contract — so a signature produced off-chain verifies on-chain.
+
+## Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as 3rd Party API
+    participant Attestor
+    participant Contract
+
+    Note over Client,API: Step 1 — obtain evidence from a data source
+    Client->>API: zkFetch request
+    API-->>Client: zkFetch response
+
+    Note over Client,Attestor: Step 2 — request attestation (N-of-M)
+    loop for each attestor in the dApp's trusted set
+        Client->>Attestor: build(evidence)
+        Attestor-->>Client: signature over claim
+    end
+
+    Note over Client,Contract: Step 3 — submit to the contract
+    Client->>Contract: claim + N signatures (private witness data)
+    Note over Contract: verify
+    Note over Contract: run predicate
+```
+
+## Out of scope
+
+- **Org / 1-of-1 attestation**: a single authority makes the registry, N-of-M, and
+  verifier redundant; a plain signature checked by a witness function does the whole
+  job.
+- **Judgment / voting / adjudication**: N attestors co-signing an opinion is consensus,
+  not attesting a fact. It becomes in-scope only if a trustworthy reference exists,
+  then it is corroboration against a source.
+- **Price oracle absolute truth**: an attestor never vouches "the price is X"; it
+  vouches a bounded predicate ("|given − my source| ≤ margin"). The band shape exists
+  precisely to avoid single-source absolute claims.
+- **Aggregation of partial attestations**: N attestors each covering a piece is
+  invalid: if each can be cheated on a small part, the whole claim is a cheat.
+- **Verifiable compute / computation results**: trusted-execution and zkProof
+  territory, outside an attestation layer.
