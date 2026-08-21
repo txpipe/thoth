@@ -1,0 +1,43 @@
+{
+  "name": "thoth",
+  "version": "0.0.0",
+  "description": "Private N-of-M attestation for Midnight — a TypeScript library.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "types": "tsc --noEmit",
+    "check": "biome check .",
+    "check:fix": "biome check . --write",
+    "check:ci": "biome ci .",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "midnight",
+    "attestation",
+    "zero-knowledge",
+    "zk"
+  ],
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.10",
+    "@types/node": "^26.2.0",
+    "husky": "^9.1.7",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

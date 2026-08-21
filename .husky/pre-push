@@ -1,0 +1,4 @@
+set -e
+npx biome ci
+npx tsc --noEmit
+npx vitest run
