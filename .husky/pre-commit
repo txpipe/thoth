@@ -1,1 +1,2 @@
-npx biome check --staged
+npx biome check --staged --no-errors-on-unmatched
+compact format -c contracts
