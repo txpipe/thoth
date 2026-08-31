@@ -1,0 +1,63 @@
+// Test mock: a thin deployable wrapper around the attestation + registry
+// modules, specialized to V=3 values, K=9 message fields, M=3 signatures,
+// N=2 threshold (2-of-3). Exists only to give the modules a top-level shell to
+// compile against and to re-export the pure parity surface (`message`,
+// `schnorrChallenge`, `computeId`, `holderOf`) plus types and ledger fields
+// the simulator/tests need.
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+//           K=9 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "../../attestation"<9, 3, 2, 3> prefix A_;
+
+import "../../attestor_registry"<3, 9> prefix R_;
+
+export { A_Claim, A_ClaimEntry };
+
+export { A_freshnessWindow, A_claimsVault, A_nullifiers };
+
+export circuit verifyAttestation(): [] {
+  A_verifyAttestation();
+}
+
+export pure circuit message(a: A_Claim): Vector<9, Field> {
+  return A_buildMessage(a);
+}
+
+export pure circuit schnorrChallenge(
+                      ann_x: Field,
+                      ann_y: Field,
+                      pk_x: Field,
+                      pk_y: Field,
+                      msg: Vector<9, Field>
+                      ): Field {
+  return A_schnorrChallenge(ann_x, ann_y, pk_x, pk_y, msg);
+}
+
+export pure circuit computeId(a: A_Claim, rand: Bytes<32>): Bytes<32> {
+  return A_computeId(a, rand);
+}
+
+export pure circuit holderOf(secret: Bytes<32>): Field {
+  return A_holderOf(secret);
+}
+
+// App-predicate demo: open a vaulted claim in-circuit and read several value
+// slots in one shot. `openClaim` is intentionally NOT re-exported at the top
+// level (its tainted return would force a disclosing reveal); apps compose
+// predicates over it inside their own circuits instead.
+export circuit openAndRead(id: Bytes<32>, e0: Uint<64>, e1: Uint<64>): [] {
+  const c = A_openClaim(id);
+  assert(c.values[0] == e0, "value[0] mismatch");
+  assert(c.values[1] == e1, "value[1] mismatch");
+}
+
+witness seedKeys(): Vector<3, JubjubPoint>;
+
+witness freshWindow(): Uint<64>;
+
+constructor() {
+  A_freshnessWindow = disclose(freshWindow());
+  R_keys = disclose(seedKeys());
+}
