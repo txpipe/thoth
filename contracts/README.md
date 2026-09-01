@@ -56,9 +56,8 @@ returned `Claim` inside their own circuits — one open, read any subset of
   `disclose()` that publishes every value on-chain. Compose it in-circuit only.
 - **Consumes no nullifier** — opening is repeatable. "Use once" rules (e.g. the
   same claim can mint a given badge at most once) are enforced by the **app's
-  own holder-keyed state** (`Set`/`Counter`/map, à la Witness Fitness `badges`
-  `/streaks`), not by claim nullification. Nonce replay (depositing the same
-  attested fact twice) is already prevented by `verifyAttestation`.
+  own state** (`Set`/`Counter`/map), not by claim nullification.
+  Nonce replay (depositing the same attested fact twice) is already prevented by `verifyAttestation`.
 
 ## Notes / open questions
 
