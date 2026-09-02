@@ -17,6 +17,7 @@
     "compact:no-zk": "compact compile --skip-zk test/mocks/MockAttestation.compact artifacts/mock_attestation",
     "pretest": "npm run compact:no-zk",
     "test": "vitest run",
+    "types": "tsc --noEmit",
     "check": "npm run check:biome && npm run check:compact",
     "check:fix": "npm run check:fix:biome && npm run check:fix:compact",
     "check:ci": "npm run check:biome && npm run check:compact",

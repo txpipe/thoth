@@ -1,5 +1,5 @@
 set -e
 npx biome ci
-npx tsc --noEmit
 npm run compact:no-zk
+npm run types
 npx vitest run

@@ -32,7 +32,7 @@ export class MockAttestationSim {
   ) {
     this.contract = new Contract<PrivateState>(makeWitnesses(registryKeys, freshnessWindow));
     const deploy = this.contract.initialState(createConstructorContext(privateState, COIN_PK));
-    this.state = deploy.currentContractState;
+    this.state = deploy.currentContractState.data;
   }
 
   call(name: string, ps: PrivateState, ...args: unknown[]): unknown {
@@ -51,6 +51,9 @@ export class MockAttestationSim {
         (c: CircuitContext<PrivateState>, ...a: unknown[]) => CircuitResults<PrivateState, unknown>
       >
     )[name];
+    if (!circuit) {
+      throw new Error(`no circuit named '${name}'`);
+    }
     const res = circuit(ctx, ...args);
     this.state = res.context.currentQueryContext.state;
     this.lastEffects = res.context.currentQueryContext.effects;

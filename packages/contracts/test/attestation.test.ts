@@ -14,7 +14,7 @@ import { createPrivateState, type PrivateState } from './helpers/private-state.j
 import { MockAttestationSim } from './helpers/sim.js';
 
 const DAY = 86400n;
-const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()];
+const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 const registryKeys = notaryKeys.map((k) => k.pk);
 const holder = randomBytes(32);
 

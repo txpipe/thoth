@@ -56,7 +56,7 @@ const DUMMY_SIGNATURE: SchnorrSignature = {
 // signature, which never verifies.
 export const signClaim = (
   claim: A_Claim,
-  keys: (NotaryKey | null)[],
+  keys: readonly (NotaryKey | null)[],
   commitRand: Uint8Array,
 ): SignedClaim => {
   const signatures: SchnorrSignature[] = keys.map((key, i) =>

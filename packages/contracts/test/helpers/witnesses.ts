@@ -1,5 +1,9 @@
 import type { WitnessContext } from '@midnight-ntwrk/compact-runtime';
-import type { Ledger, Witnesses } from '../../artifacts/mock_attestation/contract/index.js';
+import type {
+  A_Claim,
+  Ledger,
+  Witnesses,
+} from '../../artifacts/mock_attestation/contract/index.js';
 import type { PrivateState } from './private-state.js';
 import { TWO_248 } from './sign.js';
 
@@ -11,10 +15,7 @@ export const makeWitnesses = (
 ): Witnesses<PrivateState> => ({
   getAttestationWitness: ({
     privateState,
-  }: WitnessBase): [
-    PrivateState,
-    [PrivateState['claim'], PrivateState['signatures'], Uint8Array],
-  ] => {
+  }: WitnessBase): [PrivateState, [A_Claim, PrivateState['signatures'], Uint8Array]] => {
     if (!privateState.claim) {
       throw new Error('getAttestationWitness: no claim in private state');
     }

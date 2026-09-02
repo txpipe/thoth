@@ -49,10 +49,7 @@ jobs:
         run: compact compile --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation
 
       - name: Run type checks
-        run: npx tsc --noEmit
+        run: npm run types
 
       - name: Run tests
         run: npx vitest run
-
-      - name: Build
-        run: npm run build

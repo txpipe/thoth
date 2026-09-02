@@ -55,9 +55,9 @@ thoth/
 │       ├── examples/example_app.compact  # 2-of-3 example embedding
 │       ├── test/                   # simulator tests + helpers
 │       └── README.md               # how to embed the modules in your own contract
-├── src/                        # client SDK (stub — planned)
 ├── docs/DESIGN.md              # design overview & decisions
-└── package.json                # repo root: workspace + TypeScript SDK, npm scripts, CI
+├── tsconfig.base.json          # shared TypeScript compiler options for all packages
+└── package.json                # repo root: npm workspace + shared scripts, CI
 ```
 
 The repo is an npm workspace monorepo: every `@thoth/*` package lives under
@@ -83,11 +83,10 @@ Requirements: Node.js 24 (`.nvmrc`), the Compact CLI (0.31.1).
 npm install
 npm test          # compiles the mock contract, then runs vitest
 npm run check     # biome format/lint + compact format check
-npm run build     # tsup build to dist/
 ```
 
-CI (`.github/workflows/`) runs compact compilation, type checks (`tsc --noEmit`),
-vitest, biome, and the compact formatter on every push/PR.
+CI (`.github/workflows/`) runs compact compilation, type checks (`npm run types`),
+vitest, and biome on every push/PR.
 
 ## Docs
 
