@@ -13,6 +13,7 @@
     "compact:no-zk": "compact compile --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation",
     "pretest": "npm run compact",
     "test": "vitest run",
+    "build": "npm run build --workspaces --if-present",
     "types": "tsc --noEmit && npm run types --workspaces --if-present",
     "check": "npm run check:biome && npm run check:compact",
     "check:fix": "npm run check:fix:biome && npm run check:fix:compact",
