@@ -39,4 +39,4 @@ jobs:
       - name: Format & Lint
         run: |
           npx biome ci
-          compact format -c contracts
+          compact format -c packages/contracts

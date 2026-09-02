@@ -1,6 +1,10 @@
 {
   "name": "thoth",
   "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "description": "Private N-of-M attestation for Midnight — a TypeScript library.",
   "type": "module",
   "license": "MIT",
@@ -19,8 +23,8 @@
   },
   "scripts": {
     "build": "tsup",
-    "compact": "compact compile contracts/test/mocks/MockAttestation.compact contracts/artifacts/mock_attestation",
-    "compact:no-zk": "compact compile --skip-zk contracts/test/mocks/MockAttestation.compact contracts/artifacts/mock_attestation",
+    "compact": "compact compile packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation",
+    "compact:no-zk": "compact compile --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation",
     "pretest": "npm run compact",
     "test": "vitest run",
     "types": "tsc --noEmit",
@@ -29,8 +33,8 @@
     "check:ci": "npm run check:biome && npm run check:compact",
     "check:biome": "biome check .",
     "check:fix:biome": "biome check . --write",
-    "check:compact": "compact format -c contracts",
-    "check:fix:compact": "compact format contracts",
+    "check:compact": "compact format -c packages/contracts",
+    "check:fix:compact": "compact format packages/contracts",
     "prepare": "husky"
   },
   "keywords": [

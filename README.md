@@ -47,22 +47,26 @@ was observed, and the application defines the predicate over it.
 
 ```
 thoth/
-├── contracts/                  # Compact on-chain layer
-│   ├── attestation.compact     # N-of-M verification, replay/freshness control, claims vault
-│   ├── attestor_registry.compact  # pinned attestor keys + signature counting
-│   ├── schnorr.compact         # Jubjub Schnorr verification polyfill
-│   ├── examples/example_app.compact  # 2-of-3 example embedding
-│   ├── test/                   # simulator tests + helpers
-│   ├── artifacts/              # compiled contract output (gitignored)
-│   └── README.md               # contract semantics & module params
+├── packages/                   # @thoth/* npm workspace packages
+│   └── contracts/              # @thoth/contracts — Compact on-chain layer
+│       ├── attestation.compact     # N-of-M verification, replay/freshness control, claims vault
+│       ├── attestor_registry.compact  # pinned attestor keys + signature counting
+│       ├── schnorr.compact         # Jubjub Schnorr verification polyfill
+│       ├── examples/example_app.compact  # 2-of-3 example embedding
+│       ├── test/                   # simulator tests + helpers
+│       └── README.md               # how to embed the modules in your own contract
 ├── src/                        # client SDK (stub — planned)
 ├── docs/DESIGN.md              # design overview & decisions
-└── package.json                # TypeScript library, npm scripts, CI
+└── package.json                # repo root: workspace + TypeScript SDK, npm scripts, CI
 ```
+
+The repo is an npm workspace monorepo: every `@thoth/*` package lives under
+`packages/` — `contracts/` is the `@thoth/contracts` package, and future
+packages (attestor SDK, client SDK) slot in beside it.
 
 ## The contracts
 
-Three embeddable Compact modules plus a top-level example (`contracts/README.md`):
+Three embeddable Compact modules plus a top-level example (`packages/contracts/README.md`):
 
 | File | Module | Role |
 |------|--------|------|
@@ -88,7 +92,7 @@ vitest, biome, and the compact formatter on every push/PR.
 ## Docs
 
 - `docs/DESIGN.md` — overview of the design and decisions
-- `contracts/README.md` — contract semantics, module parameters, deploy wiring
+- `packages/contracts/README.md` — contract semantics, module parameters, deploy wiring
 
 ## Name origin
 

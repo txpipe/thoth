@@ -1,14 +1,63 @@
-# Thoth Compact contracts
+# @thoth/contracts
 
-The Thoth on-chain layer: three embeddable modules plus an example top-level
-embedding.
+The Thoth Compact on-chain layer, distributed as an npm package of **Compact
+source modules**. There is nothing compiled here — you embed the modules into
+your own `.compact` contracts and compile as part of your own DApp build.
 
 | File | Module | Role |
 |------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and freshness (`freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)`. The claim can be opened at any time to access the values.|
+| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and freshness (`freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)`. The claim can be opened at any time to access the values. |
 | `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` over a `Vector<K, Field>` message. Counts only — no threshold |
 | `schnorr.compact` | `schnorr` | Jubjub Schnorr verification polyfill (generic `Vector<#n, Field>`) |
-| `examples/example_app.compact` | top-level | Example app embedding `Attestation<9, 3, 2, 3>` (2-of-3) |
+
+The modules form a single import graph (`attestation` → `attestor_registry` →
+`schnorr`), so they are always installed as one package. Import them by path
+from your contract; do not copy them into your project (you would then be
+forking the attestation semantics).
+
+## Installation
+
+```bash
+npm install --save-dev @thoth/contracts
+```
+
+Or, in a workspace monorepo, add `"@thoth/contracts": "*"` to your package's
+`dependencies` and `npm install`.
+
+## Embedding
+
+Compact resolves `import "..."` relative to the importing file's directory
+first, then through `--compact-path` / `COMPACT_PATH`. The simplest recipe is a
+**path import directly into the package**, which resolves transitively because
+the modules live as siblings inside the package directory:
+
+```compact
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+//            K=9 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "node_modules/@thoth/contracts/attestation"<9, 3, 2, 3> prefix A_;
+
+import "node_modules/@thoth/contracts/attestor_registry"<3, 9> prefix R_;
+```
+
+If the package is hoisted elsewhere by your package manager, add the package
+directory to the compact path instead and import by module name:
+
+```bash
+export COMPACT_PATH="$(node -p 'require.resolve("@thoth/contracts/package.json").replace(/package.json$/, "")')"
+```
+
+```compact
+import "attestation"<9, 3, 2, 3> prefix A_;
+import "attestor_registry"<3, 9> prefix R_;
+```
+
+See `examples/example_app.compact` for a complete top-level embedding that
+pins registry keys and the freshness window in the constructor, re-exports the
+module types/ledgers/pure circuits, and exports a `verifyAttestation` entry
+point.
 
 ## Module parameters
 
@@ -65,3 +114,15 @@ returned `Claim` inside their own circuits — one open, read any subset of
   plus a `present` mask. It is simple enough that any app can parse it, but the
   *meaning* of each slot is app-defined. There is no per-value tag in the signed
   message; the provider is identified by `kind`.
+
+## Development
+
+```bash
+npm install                 # from the repo root (workspace)
+npm test                    # compiles the mock (--skip-zk), runs vitest
+npm run check               # biome + compact format
+```
+
+The package's own test suite uses the mock top-level embedding in
+`test/mocks/MockAttestation.compact`; it exercises the modules and is not
+shipped with the package.

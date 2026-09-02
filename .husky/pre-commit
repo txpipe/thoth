@@ -1,2 +1,2 @@
 npx biome check --staged --no-errors-on-unmatched
-compact format -c contracts
+compact format -c packages/contracts
