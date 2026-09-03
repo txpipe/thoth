@@ -1,6 +1,6 @@
 // Test fixtures: claims, notary keys, and seeded valid signatures over the
 // FROZEN message shape (see sign.ts). Zero-filled absent slots are the
-// canonical "not present" encoding; `present` bits mark populated slots.
+// canonical "not present" encoding; `present[i] = true` marks slot i populated.
 import { randomBytes } from 'node:crypto';
 import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
@@ -17,16 +17,17 @@ export const makeNotaryKey = (): NotaryKey => {
 };
 
 // Build a valid `Claim` fixture. `values` is the raw vector (length 3 for this
-// embedding); `present` is the bitmask (bit i = slot i populated). If any value
-// is `0` it must still be marked present via `present`.
+// embedding); `present` marks populated slots (present[i] = true means slot i
+// was measured). If any value is `0` it must still be marked present via
+// `present[i] = true`.
 export const makeClaim = (
   overrides: Partial<Omit<A_Claim, 'values' | 'present'>> & {
     values?: bigint[];
-    present?: bigint;
+    present?: boolean[];
   } = {},
 ): A_Claim => {
   const values = overrides.values ?? [12345n, 0n, 0n];
-  const present = overrides.present ?? (values.length > 0 ? 0b001n : 0n);
+  const present = overrides.present ?? values.map((_, i) => i === 0);
   return {
     version: 1n,
     kind: 1n,

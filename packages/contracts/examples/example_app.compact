@@ -1,7 +1,7 @@
 // Example: embedding the Thoth Attestation module into a top-level contract.
 //
 // The app fixes, at embed time:
-//   #V = 3 value slots, #K = 9 signed-message fields (must equal V + 6),
+//   #V = 3 value slots, #K = 11 signed-message fields (must equal 2*V + 5),
 //   #M = 3 attestor signature slots, #N = 2 (2-of-3 threshold).
 //
 // The top-level constructor pins the registry keys (sealed) and the freshness
@@ -15,10 +15,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=9 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "../attestation"<9, 3, 2, 3> prefix A_;
+//           K=11 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "../attestation"<11, 3, 2, 3> prefix A_;
 
-import "../attestor_registry"<3, 9> prefix R_;
+import "../attestor_registry"<3, 11> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
@@ -34,9 +34,14 @@ export circuit verifyAttestation(): [] {
 
 // The exact flat signed message for a claim — exported pure so the
 // off-chain / attestor side and tests can reproduce it byte-for-byte.
-export pure circuit message(a: A_Claim): Vector<9, Field> {
+export pure circuit message(a: A_Claim): Vector<11, Field> {
   return A_buildMessage(a);
 }
+
+// Presence is now per-slot and natively readable: an app predicate over a
+// vaulted claim simply reads `c.present[i]` (true = values[i] was measured,
+// even if the value itself is 0). Compose this inside your own circuits over
+// `A_openClaim` — see test/mocks/MockAttestation.compact for a demo.
 
 // Deploy-time witness providing the 3 attestor public keys.
 witness seedKeys(): Vector<3, JubjubPoint>;

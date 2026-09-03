@@ -31,25 +31,27 @@ describe('mock attestation', () => {
   });
 
   describe('buildMessage (frozen wire shape)', () => {
-    it('returns exactly K=9 fields in the frozen order', () => {
-      const claim = makeClaim({ values: [100n, 200n, 300n], present: 0b111n });
+    it('returns exactly K=11 fields in the frozen order', () => {
+      const claim = makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] });
       const msg = pureCircuits.message(claim);
-      expect(msg).toHaveLength(9);
-      // [version, kind, timestamp, nonce, evidenceHash, present, v0, v1, v2]
+      expect(msg).toHaveLength(11);
+      // [version, kind, timestamp, nonce, evidenceHash, p0, p1, p2, v0, v1, v2]
       expect(msg[0]).toBe(1n);
       expect(msg[1]).toBe(1n);
       expect(msg[2]).toBe(claim.timestamp);
-      expect(msg[5]).toBe(0b111n);
-      expect(msg[6]).toBe(100n);
-      expect(msg[7]).toBe(200n);
-      expect(msg[8]).toBe(300n);
+      expect(msg[5]).toBe(1n);
+      expect(msg[6]).toBe(1n);
+      expect(msg[7]).toBe(1n);
+      expect(msg[8]).toBe(100n);
+      expect(msg[9]).toBe(200n);
+      expect(msg[10]).toBe(300n);
     });
 
-    it('distinguishes absent (present=0) from a genuine 0 value', () => {
-      const absent = makeClaim({ values: [0n, 0n, 0n], present: 0n });
-      const presentZero = makeClaim({ values: [0n, 0n, 0n], present: 0b001n });
+    it('distinguishes absent (present all false) from a genuine 0 value', () => {
+      const absent = makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] });
+      const presentZero = makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] });
       expect(pureCircuits.message(absent)).not.toEqual(pureCircuits.message(presentZero));
-      expect(pureCircuits.message(presentZero)[5]).toBe(0b001n);
+      expect(pureCircuits.message(presentZero)[5]).toBe(1n);
     });
   });
 
@@ -86,7 +88,7 @@ describe('mock attestation', () => {
     });
 
     it('rejects a tampered claim (value flipped)', () => {
-      const claim = makeClaim({ values: [12345n, 0n, 0n], present: 0b001n });
+      const claim = makeClaim({ values: [12345n, 0n, 0n], present: [true, false, false] });
       const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
       const tampered = {
         claim: { ...signed.claim, values: [54321n, 0n, 0n] },
@@ -115,8 +117,8 @@ describe('mock attestation', () => {
       );
     });
 
-    it('accepts a genuine-0 value when present bit set', () => {
-      const claim = makeClaim({ values: [0n, 200n, 0n], present: 0b010n });
+    it('accepts a genuine-0 value when present flag set', () => {
+      const claim = makeClaim({ values: [0n, 200n, 0n], present: [false, true, false] });
       const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
       sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
       expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
@@ -184,11 +186,51 @@ describe('mock attestation', () => {
     };
 
     it('re-hydrates the claim and reads multiple value slots', () => {
-      const signed = store(makeClaim({ values: [111n, 222n, 333n], present: 0b111n }));
+      const signed = store(makeClaim({ values: [111n, 222n, 333n], present: [true, true, true] }));
       const id = idOf(signed.claim, signed.commitRand);
       expect(() =>
         sim.call('openAndRead', ps({ ...signed, holderSecret: holder }), id, 111n, 222n),
       ).not.toThrow();
+    });
+
+    it('reads per-slot presence directly (present[i] is native)', () => {
+      const signed = store(makeClaim({ values: [111n, 0n, 333n], present: [true, false, true] }));
+      const id = idOf(signed.claim, signed.commitRand);
+      expect(() =>
+        sim.call('openAndReadPresence', ps({ ...signed, holderSecret: holder }), id, true, false),
+      ).not.toThrow();
+    });
+
+    it('rejects a presence mismatch on a slot', () => {
+      const signed = store(makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }));
+      const id = idOf(signed.claim, signed.commitRand);
+      expect(() =>
+        sim.call('openAndReadPresence', ps({ ...signed, holderSecret: holder }), id, true, true),
+      ).toThrow('present[1] mismatch');
+    });
+
+    it('accepts a claim where the required metric 0 is present', () => {
+      const signed = store(makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }));
+      const id = idOf(signed.claim, signed.commitRand);
+      expect(() =>
+        sim.call('openAndRequireMetric0', ps({ ...signed, holderSecret: holder }), id, 111n),
+      ).not.toThrow();
+    });
+
+    it('rejects a claim where the required metric 0 is absent', () => {
+      const signed = store(makeClaim({ values: [0n, 222n, 333n], present: [false, true, true] }));
+      const id = idOf(signed.claim, signed.commitRand);
+      expect(() =>
+        sim.call('openAndRequireMetric0', ps({ ...signed, holderSecret: holder }), id, 0n),
+      ).toThrow('metric 0 not present');
+    });
+
+    it('rejects a claim where the required metric 0 value mismatches', () => {
+      const signed = store(makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }));
+      const id = idOf(signed.claim, signed.commitRand);
+      expect(() =>
+        sim.call('openAndRequireMetric0', ps({ ...signed, holderSecret: holder }), id, 222n),
+      ).toThrow('value[0] mismatch');
     });
 
     it('rejects an unknown claim', () => {
@@ -209,7 +251,7 @@ describe('mock attestation', () => {
     });
 
     it('rejects a claim that does not match the id', () => {
-      const signed = store(makeClaim({ values: [12345n, 0n, 0n], present: 0b001n }));
+      const signed = store(makeClaim({ values: [12345n, 0n, 0n], present: [true, false, false] }));
       const id = idOf(signed.claim, signed.commitRand);
       const tampered = {
         ...signed,
@@ -221,7 +263,7 @@ describe('mock attestation', () => {
     });
 
     it('is repeatable (no nullifier consumed)', () => {
-      const signed = store(makeClaim({ values: [999n, 0n, 0n], present: 0b001n }));
+      const signed = store(makeClaim({ values: [999n, 0n, 0n], present: [true, false, false] }));
       const id = idOf(signed.claim, signed.commitRand);
       const state = ps({ ...signed, holderSecret: holder });
       sim.call('openAndRead', state, id, 999n, 0n);

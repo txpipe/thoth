@@ -1,5 +1,5 @@
 // Test mock: a thin deployable wrapper around the attestation + registry
-// modules, specialized to V=3 values, K=9 message fields, M=3 signatures,
+// modules, specialized to V=3 values, K=11 message fields, M=3 signatures,
 // N=2 threshold (2-of-3). Exists only to give the modules a top-level shell to
 // compile against and to re-export the pure parity surface (`message`,
 // `schnorrChallenge`, `computeId`, `holderOf`) plus types and ledger fields
@@ -8,10 +8,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=9 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "../../attestation"<9, 3, 2, 3> prefix A_;
+//           K=11 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "../../attestation"<11, 3, 2, 3> prefix A_;
 
-import "../../attestor_registry"<3, 9> prefix R_;
+import "../../attestor_registry"<3, 11> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
@@ -21,7 +21,7 @@ export circuit verifyAttestation(): [] {
   A_verifyAttestation();
 }
 
-export pure circuit message(a: A_Claim): Vector<9, Field> {
+export pure circuit message(a: A_Claim): Vector<11, Field> {
   return A_buildMessage(a);
 }
 
@@ -30,7 +30,7 @@ export pure circuit schnorrChallenge(
                       ann_y: Field,
                       pk_x: Field,
                       pk_y: Field,
-                      msg: Vector<9, Field>
+                      msg: Vector<11, Field>
                       ): Field {
   return A_schnorrChallenge(ann_x, ann_y, pk_x, pk_y, msg);
 }
@@ -51,6 +51,23 @@ export circuit openAndRead(id: Bytes<32>, e0: Uint<64>, e1: Uint<64>): [] {
   const c = A_openClaim(id);
   assert(c.values[0] == e0, "value[0] mismatch");
   assert(c.values[1] == e1, "value[1] mismatch");
+}
+
+// App-predicate demo: read per-slot presence directly off a vaulted claim.
+// `present` is `Vector<V, Boolean>`, so slots are checked without witnesses.
+export circuit openAndReadPresence(id: Bytes<32>, p0: Boolean, p1: Boolean): [] {
+  const c = A_openClaim(id);
+  assert(c.present[0] == p0, "present[0] mismatch");
+  assert(c.present[1] == p1, "present[1] mismatch");
+}
+
+// App-predicate demo: a predicate that REQUIRES metric 0 to be present before
+// consuming its value. Fixed index — Compact requires literal/loop-constant
+// vector subscripts.
+export circuit openAndRequireMetric0(id: Bytes<32>, expected: Uint<64>): [] {
+  const c = A_openClaim(id);
+  assert(c.present[0], "metric 0 not present");
+  assert(c.values[0] == expected, "value[0] mismatch");
 }
 
 witness seedKeys(): Vector<3, JubjubPoint>;

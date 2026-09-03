@@ -36,10 +36,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//            K=9 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "node_modules/@thoth/contracts/attestation"<9, 3, 2, 3> prefix A_;
+//            K=11 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "node_modules/@thoth/contracts/attestation"<11, 3, 2, 3> prefix A_;
 
-import "node_modules/@thoth/contracts/attestor_registry"<3, 9> prefix R_;
+import "node_modules/@thoth/contracts/attestor_registry"<3, 11> prefix R_;
 ```
 
 If the package is hoisted elsewhere by your package manager, add the package
@@ -50,8 +50,8 @@ export COMPACT_PATH="$(node -p 'require.resolve("@thoth/contracts/package.json")
 ```
 
 ```compact
-import "attestation"<9, 3, 2, 3> prefix A_;
-import "attestor_registry"<3, 9> prefix R_;
+import "attestation"<11, 3, 2, 3> prefix A_;
+import "attestor_registry"<3, 11> prefix R_;
 ```
 
 See `examples/example_app.compact` for a complete top-level embedding that
@@ -63,7 +63,7 @@ point.
 
 `attestation<#K, #V, #N, #M>` — embed as `import "attestation"<K, V, N, M>`:
 
-- `#K` — signed-message length in fields (`K` must equal `V + 6`)
+- `#K` — signed-message length in fields (`K` must equal `2*V + 5`)
 - `#V` — number of claim value slots (`Claim.values: Vector<V, Uint<64>>`)
 - `#N` — the app's N-of-M threshold
 - `#M` — number of attestor signatures supplied / registry key slots
@@ -77,14 +77,30 @@ All are fixed when a contract embeds the module.
 
 ```
 [ version, kind, timestamp,
-  degradeToTransient(nonce), degradeToTransient(evidenceHash), present,
+  degradeToTransient(nonce), degradeToTransient(evidenceHash),
+  present[0] as Field, ..., present[N-1] as Field,
   values[0] as Field, ..., values[N-1] as Field ]
 ```
 
 The attestor MUST reproduce this exact flat field vector to sign the same
-message (same order, sizes, `present` bitmask semantics, and the two
-`degradeToTransient` transforms). `present` is a `Uint<N>` bitmask: bit `i` set
-means `values[i]` was populated (its value may still be `0`).
+message (same order, sizes, presence-flag semantics, and the two
+`degradeToTransient` transforms). `present` is a `Vector<V, Boolean>`: one flag
+per value slot; `present[i] = true` means `values[i]` was populated (its value
+may still be `0`). The message length is `K = 5 + 2*V` (5 header fields, V
+presence flags, V values) — fixed when a contract embeds the module.
+
+## Reading presence in-circuit
+
+`present` is native `Vector<V, Boolean>`, so an app predicate over a vaulted
+claim reads any slot directly:
+
+```compact
+const c = A_openClaim(id);
+assert(c.present[0], "slot 0 must have been measured");
+```
+
+Because presence is part of the signed message, a claim whose `present[i]`
+flag disagrees with an asserted predicate can never pass signature verification.
 
 ## Deploy wiring
 
@@ -111,7 +127,7 @@ returned `Claim` inside their own circuits — one open, read any subset of
 ## Notes / open questions
 
 - Reusability across apps: the claim shape is positional (`values: Vector<N, Uint<64>>`)
-  plus a `present` mask. It is simple enough that any app can parse it, but the
+  plus per-slot `present` flags. It is simple enough that any app can parse it, but the
   *meaning* of each slot is app-defined. There is no per-value tag in the signed
   message; the provider is identified by `kind`.
 

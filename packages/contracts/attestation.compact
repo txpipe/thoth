@@ -18,9 +18,10 @@
 // attestor must mirror, per the documented wire layout below.
 //
 // Module parameters (import "attestation"<K, V, N, M>):
-//   #K — signed-message length in fields. Must equal V + 6 (the 6-field
-//        header in buildMessage plus V value fields). This is what the
-//        registry's countValidSignatures verifies over.
+//   #K — signed-message length in fields. Must equal 2*V + 5 (the 5-field
+//        header in buildMessage, the V `present` fields, and the V value
+//        fields). This is what the registry's countValidSignatures verifies
+//        over.
 //   #V — number of claim value slots (Claim.values: Vector<V, Uint<64>>).
 //   #N — the app's N-of-M threshold: at least #N of the #M signatures must
 //        verify for a claim to be accepted.
@@ -44,7 +45,7 @@ module attestation<#K, #V, #N, #M> {
     timestamp: Uint<32>; // Unix seconds of the attestation
     nonce: Bytes<32>; // per-claim randomness (replay protection)
     evidenceHash: Bytes<32>; // hash of the evidence artifacts (binding)
-    present: Uint<V>; // bit i = values[i] was populated (measured), even if 0
+    present: Vector<V, Boolean>; // present[i] = values[i] was populated (measured), even if 0
     values: Vector<V, Uint<64>>; // positional numeric claim values last; 0 IS a valid value
   }
 
@@ -63,21 +64,22 @@ module attestation<#K, #V, #N, #M> {
     return jubjubPointX(hashToCurve<Vector<2, Bytes<32>>>([pad(32, "thoth:holder:v1"), secret]));
   }
 
-  /// Reconstruct the flat signed message: a 6-field fixed header followed by
-  /// the values mapped to `Field`. Tuple/vector spread (`...`) appends the
-  /// values, so at specialization `[header..., values...]` has length 6 + V,
-  /// which must equal K (enforced by the embedder). This is the single wire
-  /// shape the attestor must mirror.
+  /// Reconstruct the flat signed message: a 5-field fixed header followed by
+  /// the `present` flags and the values mapped to `Field`. Tuple/vector spread
+  /// (`...`) appends the flags and values, so at specialization
+  /// `[header..., present..., values...]` has length 5 + 2*V, which must equal
+  /// K (enforced by the embedder). This is the single wire shape the attestor
+  /// must mirror.
   export pure circuit buildMessage(c: Claim): Vector<K, Field> {
-    const header: Vector<6, Field> =
+    const header: Vector<5, Field> =
             [c.version as Field,
              c.kind as Field,
              c.timestamp as Field,
              degradeToTransient(c.nonce),
-             degradeToTransient(c.evidenceHash),
-             c.present as Field,];
+             degradeToTransient(c.evidenceHash),];
+    const presentFields: Vector<V, Field> = map((p: Boolean) => p as Field, c.present);
     const valuesFields: Vector<V, Field> = map((v: Uint<64>) => v as Field, c.values);
-    return [...header, ...valuesFields];
+    return [...header, ...presentFields, ...valuesFields];
   }
 
   /// The Poseidon challenge hash over (announcement, public key, message).
