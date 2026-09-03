@@ -1,0 +1,50 @@
+// Attestor registry module for Thoth.
+//
+// Holds the app's pinned set of `M` attestor public keys (supplied at embed /
+// top-level construction) and provides `countValidSignatures` over an arbitrary
+// `Vector<K, Field>` signed message. This module only COUNTS signature
+// validity — it never interprets the message contents (the message shape is
+// defined by the Attestation module that embeds this one), and it does NOT
+// enforce a threshold (the Attestation module applies its own `#N`).
+//
+// Registry keys are a *sealed* ledger: they are set exactly once by the
+// top-level constructor at deploy time and cannot change afterwards — matching
+// DESIGN.md's "the app pins its trusted set at deployment".
+pragma language_version >= 0.22;
+
+module attestor_registry<#M, #K> {
+  import CompactStandardLibrary;
+  import "schnorr" prefix Schnorr_;
+
+  /// The M attestor public keys, pinned at deploy by the top-level constructor.
+  export sealed ledger keys: Vector<M, JubjubPoint>;
+
+  /// Whether one signature verifies against its registry slot.
+  circuit slotValid(
+            msg: Vector<K, Field>,
+            sig: Schnorr_SchnorrSignature,
+            pk: JubjubPoint,
+            slotEmpty: Boolean
+            ): Boolean {
+    if (slotEmpty) {
+      return false;
+    }
+    return Schnorr_schnorrVerifyOk<K>(msg, sig, pk);
+  }
+
+  /// Number of the M signatures that verify against their corresponding
+  /// registry slot (signature i is checked against keys[i]).
+  export circuit countValidSignatures(
+                   msg: Vector<K, Field>,
+                   sigs: Vector<M, Schnorr_SchnorrSignature>
+                   ): Uint<64> {
+    const verdicts: Vector<M, Boolean> =
+            map((key: JubjubPoint, sig: Schnorr_SchnorrSignature) =>
+                slotValid(msg, sig, key, key == default<JubjubPoint>),
+                keys,
+                sigs);
+    return fold((acc: Uint<64>, ok: Boolean) => (acc + (ok ? 1 : 0)) as Uint<64>,
+                0 as Uint<64>,
+                verdicts);
+  }
+}

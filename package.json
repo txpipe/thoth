@@ -1,29 +1,27 @@
 {
   "name": "thoth",
   "version": "0.0.0",
-  "description": "Private N-of-M attestation for Midnight — a TypeScript library.",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "description": "Private N-of-M attestation for Midnight — a TypeScript monorepo.",
   "type": "module",
   "license": "MIT",
-  "files": [
-    "dist"
-  ],
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    }
-  },
   "scripts": {
-    "build": "tsup",
+    "compact": "compact compile packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation",
+    "compact:no-zk": "compact compile --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation",
+    "pretest": "npm run compact",
     "test": "vitest run",
-    "types": "tsc --noEmit",
-    "check": "biome check .",
-    "check:fix": "biome check . --write",
-    "check:ci": "biome ci .",
+    "build": "npm run build --workspaces --if-present",
+    "types": "tsc --noEmit && npm run types --workspaces --if-present",
+    "check": "npm run check:biome && npm run check:compact",
+    "check:fix": "npm run check:fix:biome && npm run check:fix:compact",
+    "check:ci": "npm run check:biome && npm run check:compact",
+    "check:biome": "biome check .",
+    "check:fix:biome": "biome check . --write",
+    "check:compact": "compact format -c packages/contracts",
+    "check:fix:compact": "compact format packages/contracts",
     "prepare": "husky"
   },
   "keywords": [
@@ -34,9 +32,9 @@
   ],
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
     "@types/node": "^26.2.0",
     "husky": "^9.1.7",
-    "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
   }

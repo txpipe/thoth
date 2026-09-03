@@ -1,0 +1,159 @@
+// Thoth Attestation module.
+//
+// Verifies an off-chain attested `Claim` against an N-of-M attestor
+// signature threshold, controls replay and (optionally) freshness, and stores
+// a claimsVault entry keyed by `persistentCommit(claim, rand)`.
+//
+// Responsibilities:
+//   - verify >= #N of #M signatures from the appended AttestorRegistry over the
+//     frozen flat message built by `buildMessage` (this module's contract law);
+//   - reject nonce replay via the nullifiers set;
+//   - reject stale/future timestamps when the sealed `freshnessWindow` is set
+//     (0 disables the check);
+//   - store { holder, timestamp } in the claimsVault. Nothing is returned:
+//     the app composes its own predicates over the claim via `openClaim`.
+//
+// Signature counting is delegated to the registry; the threshold decision
+// (#N) lives here. The message shape (order+sizes) is the single thing the
+// attestor must mirror, per the documented wire layout below.
+//
+// Module parameters (import "attestation"<K, V, N, M>):
+//   #K — signed-message length in fields. Must equal 2*V + 5 (the 5-field
+//        header in buildMessage, the V `present` fields, and the V value
+//        fields). This is what the registry's countValidSignatures verifies
+//        over.
+//   #V — number of claim value slots (Claim.values: Vector<V, Uint<64>>).
+//   #N — the app's N-of-M threshold: at least #N of the #M signatures must
+//        verify for a claim to be accepted.
+//   #M — number of attestor signatures supplied / registry key slots.
+// All parameters are fixed when a contract embeds the module.
+pragma language_version >= 0.22;
+
+module attestation<#K, #V, #N, #M> {
+  import CompactStandardLibrary;
+  import "schnorr" prefix Schnorr_;
+  import "attestor_registry"<M, K> prefix Registry_;
+
+  export struct ClaimEntry {
+    holder: Field;
+    timestamp: Uint<32>;
+  }
+
+  export struct Claim {
+    version: Uint<8>; // schema version (1)
+    kind: Uint<8>; // attestor kind (1 = reclaim-attestor)
+    timestamp: Uint<32>; // Unix seconds of the attestation
+    nonce: Bytes<32>; // per-claim randomness (replay protection)
+    evidenceHash: Bytes<32>; // hash of the evidence artifacts (binding)
+    present: Vector<V, Boolean>; // present[i] = values[i] was populated (measured), even if 0
+    values: Vector<V, Uint<64>>; // positional numeric claim values last; 0 IS a valid value
+  }
+
+  /// Freshness window (seconds), sealed at deploy by the top-level
+  /// constructor. 0 disables the freshness check.
+  export sealed ledger freshnessWindow: Uint<64>;
+  export ledger claimsVault: Map<Bytes<32>, ClaimEntry>;
+  export ledger nullifiers: Set<Bytes<32>>;
+
+  witness getAttestationWitness(): [Claim, Vector<M, Schnorr_SchnorrSignature>, Bytes<32>];
+  witness getHolderSecret(): Bytes<32>;
+
+  /// Pseudonymous holder identity: hashToCurve over a domain-separated holder
+  /// secret. The resulting binding is the on-chain pseudonym for claim entries.
+  circuit deriveHolder(secret: Bytes<32>): Field {
+    return jubjubPointX(hashToCurve<Vector<2, Bytes<32>>>([pad(32, "thoth:holder:v1"), secret]));
+  }
+
+  /// Reconstruct the flat signed message: a 5-field fixed header followed by
+  /// the `present` flags and the values mapped to `Field`. Tuple/vector spread
+  /// (`...`) appends the flags and values, so at specialization
+  /// `[header..., present..., values...]` has length 5 + 2*V, which must equal
+  /// K (enforced by the embedder). This is the single wire shape the attestor
+  /// must mirror.
+  export pure circuit buildMessage(c: Claim): Vector<K, Field> {
+    const header: Vector<5, Field> =
+            [c.version as Field,
+             c.kind as Field,
+             c.timestamp as Field,
+             degradeToTransient(c.nonce),
+             degradeToTransient(c.evidenceHash),];
+    const presentFields: Vector<V, Field> = map((p: Boolean) => p as Field, c.present);
+    const valuesFields: Vector<V, Field> = map((v: Uint<64>) => v as Field, c.values);
+    return [...header, ...presentFields, ...valuesFields];
+  }
+
+  /// The Poseidon challenge hash over (announcement, public key, message).
+  /// Delegates to the generic schnorr module's pure circuit so off-chain
+  /// signing and the in-circuit verifier share a single implementation.
+  /// Exported here for signing parity (the attestor signs
+  /// c = cFull mod 2^248 via the same layout the in-circuit verifier computes).
+  export pure circuit schnorrChallenge(
+                        ann_x: Field,
+                        ann_y: Field,
+                        pk_x: Field,
+                        pk_y: Field,
+                        msg: Vector<K, Field>
+                        ): Field {
+    return Schnorr_schnorrChallenge<K>(ann_x, ann_y, pk_x, pk_y, msg);
+  }
+
+  /// Claim id = persistentCommit(claim, rand) — must match the id
+  /// verifyAttestation stores under. Exported pure for test parity.
+  export pure circuit computeId(claim: Claim, rand: Bytes<32>): Bytes<32> {
+    return persistentCommit<Claim>(claim, rand);
+  }
+
+  /// Derive a holder off-chain identically to the in-circuit derivation.
+  /// Exported pure for test parity.
+  export pure circuit holderOf(secret: Bytes<32>): Field {
+    return deriveHolder(secret);
+  }
+
+  /// Verify an attested claim, on replay + freshness gates, then store it.
+  export circuit verifyAttestation(): [] {
+    const [claim, sigs, rand] = getAttestationWitness();
+    assert(claim.version == 1, "Unsupported claim version");
+    assert(claim.kind == 1, "Unsupported kind");
+
+    const msg = buildMessage(claim);
+    assert(Registry_countValidSignatures(msg, sigs) >= (N as Uint<64>),
+           "Insufficient valid signatures"
+           );
+
+    if (disclose(freshnessWindow != 0)) {
+      assert(blockTimeGte(disclose(claim.timestamp as Uint<64>)), "Timestamp in the future");
+      assert(blockTimeLt(disclose((claim.timestamp + freshnessWindow) as Uint<64>)),
+             "Timestamp too old"
+             );
+    }
+
+    const nullifier = persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:nonce:"), claim.nonce]);
+    assert(!nullifiers.member(disclose(nullifier)), "Nonce replay");
+    nullifiers.insert(disclose(nullifier));
+
+    const id = persistentCommit<Claim>(claim, rand);
+    assert(!claimsVault.member(id), "Claim already accepted");
+    claimsVault.insert(
+      id,
+      ClaimEntry { holder: disclose(deriveHolder(getHolderSecret())),
+                   timestamp: disclose(claim.timestamp) }
+      );
+  }
+
+  /// Prove the caller owns a vaulted claim and re-hydrate it in-circuit
+  /// iReturns the claim so app predicates can read `values` directly.
+  /// Consumes no nullifier, so opening is repeatable (apps that need
+  /// "use once" enforce it with their own holder-keyed state — see README).
+  /// Never re-export this as a top-level contract entry point: its return
+  /// value is tainted and would force a disclose that reveals every value.
+  export circuit openClaim(id: Bytes<32>): Claim {
+    const [claim,, commitRand] = getAttestationWitness();
+    const key = disclose(id);
+    assert(claimsVault.member(key), "Unknown claim");
+    assert(claimsVault.lookup(key).holder == disclose(deriveHolder(getHolderSecret())),
+           "Claim not bound to caller"
+           );
+    assert(persistentCommit<Claim>(claim, commitRand) == key, "Claim does not match id");
+    return claim;
+  }
+}

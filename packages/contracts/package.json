@@ -1,0 +1,43 @@
+{
+  "name": "@thoth/contracts",
+  "version": "0.0.0",
+  "description": "Thoth Compact modules: N-of-M attestation, attestor registry, and Schnorr verification.",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "files": [
+    "attestation.compact",
+    "attestor_registry.compact",
+    "schnorr.compact",
+    "examples/",
+    "README.md"
+  ],
+  "scripts": {
+    "compact": "compact compile test/mocks/MockAttestation.compact artifacts/mock_attestation",
+    "compact:no-zk": "compact compile --skip-zk test/mocks/MockAttestation.compact artifacts/mock_attestation",
+    "pretest": "npm run compact:no-zk",
+    "test": "vitest run",
+    "types": "tsc --noEmit",
+    "check": "npm run check:biome && npm run check:compact",
+    "check:fix": "npm run check:fix:biome && npm run check:fix:compact",
+    "check:ci": "npm run check:biome && npm run check:compact",
+    "check:biome": "biome check .",
+    "check:fix:biome": "biome check . --write",
+    "check:compact": "compact format -c .",
+    "check:fix:compact": "compact format ."
+  },
+  "keywords": [
+    "midnight",
+    "compact",
+    "attestation",
+    "zero-knowledge",
+    "zk"
+  ],
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.10",
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@types/node": "^26.2.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

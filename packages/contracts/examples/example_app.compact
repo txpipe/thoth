@@ -1,0 +1,52 @@
+// Example: embedding the Thoth Attestation module into a top-level contract.
+//
+// The app fixes, at embed time:
+//   #V = 3 value slots, #K = 11 signed-message fields (must equal 2*V + 5),
+//   #M = 3 attestor signature slots, #N = 2 (2-of-3 threshold).
+//
+// The top-level constructor pins the registry keys (sealed) and the freshness
+// window (sealed, 0 = disabled) exactly once at deploy.
+//
+// To expose the module's types, ledgers, and pure circuits to the app's
+// TypeScript driver, re-export them at the top level (see the `export { ... }`
+// lines). The `message` pure circuit gives the app/attestor the exact flat
+// `Vector<K, Field>` a signature commits to — golden-vector testable.
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+//           K=11 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "../attestation"<11, 3, 2, 3> prefix A_;
+
+import "../attestor_registry"<3, 11> prefix R_;
+
+export { A_Claim, A_ClaimEntry };
+
+export { A_freshnessWindow, A_claimsVault, A_nullifiers };
+
+// Registry seals are read by the registry module, not re-exported here; the
+// app's driver typically does not need direct access to the key vector.
+
+// Attestation entry point — verifies signatures, replay, freshness, vaults.
+export circuit verifyAttestation(): [] {
+  A_verifyAttestation();
+}
+
+// The exact flat signed message for a claim — exported pure so the
+// off-chain / attestor side and tests can reproduce it byte-for-byte.
+export pure circuit message(a: A_Claim): Vector<11, Field> {
+  return A_buildMessage(a);
+}
+
+// Presence is now per-slot and natively readable: an app predicate over a
+// vaulted claim simply reads `c.present[i]` (true = values[i] was measured,
+// even if the value itself is 0). Compose this inside your own circuits over
+// `A_openClaim` — see test/mocks/MockAttestation.compact for a demo.
+
+// Deploy-time witness providing the 3 attestor public keys.
+witness seedKeys(): Vector<3, JubjubPoint>;
+
+constructor() {
+  A_freshnessWindow = disclose(0); // 0 = no freshness window
+  R_keys = disclose(seedKeys());
+}

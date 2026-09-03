@@ -78,17 +78,6 @@
   },
   "overrides": [
     {
-      "includes": ["src/index.ts"],
-      "linter": {
-        "rules": {
-          "performance": {
-            "noBarrelFile": "off",
-            "noReExportAll": "off"
-          }
-        }
-      }
-    },
-    {
       "includes": ["*.config.ts", "*.config.js", "*.config.mjs"],
       "linter": {
         "rules": {
