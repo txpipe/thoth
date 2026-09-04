@@ -1,0 +1,25 @@
+{
+  "name": "@thoth/core",
+  "version": "0.0.0",
+  "description": "Core attestor types and definitions for Thoth.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.5.4"
+  }
+}

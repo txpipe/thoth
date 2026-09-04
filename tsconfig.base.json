@@ -6,6 +6,8 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "strict": true,
+    "declaration": true,
+    "declarationMap": true,
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
