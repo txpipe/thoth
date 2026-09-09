@@ -1,11 +1,10 @@
 # Thoth
 
-Private N-of-M attestation for Midnight — attestors certify facts, not decisions.
+Private N-of-M attestation for Midnight.
 
 Thoth is a plugin layer that lets Midnight contracts accept externally attested
 information with ZK privacy: the same attested value can prove different
-predicates, and the underlying data never leaves the
-user's machine.
+predicates, and the underlying data never leaves the user's machine.
 
 ## What it is
 
@@ -48,21 +47,26 @@ was observed, and the application defines the predicate over it.
 ```
 thoth/
 ├── packages/                   # @thoth/* npm workspace packages
-│   └── contracts/              # @thoth/contracts — Compact on-chain layer
-│       ├── attestation.compact     # N-of-M verification, replay/freshness control, claims vault
-│       ├── attestor_registry.compact  # pinned attestor keys + signature counting
-│       ├── schnorr.compact         # Jubjub Schnorr verification polyfill
-│       ├── examples/example_app.compact  # 2-of-3 example embedding
-│       ├── test/                   # simulator tests + helpers
-│       └── README.md               # how to embed the modules in your own contract
+│   ├── attestor/              # @thoth/attestor — host: key boundary, instances, helpers
+│   ├── client/                # @thoth/client — dApp-side TrustedSet (in progress)
+│   ├── contracts/             # @thoth/contracts — Compact on-chain modules
+│   │   ├── attestation.compact     # N-of-M verification, replay/freshness control, claims vault
+│   │   ├── attestor_registry.compact  # pinned attestor keys + signature counting
+│   │   ├── schnorr.compact         # Jubjub Schnorr verification polyfill
+│   │   ├── examples/example_app.compact  # 2-of-3 example embedding
+│   │   ├── test/                   # simulator tests + helpers
+│   │   └── README.md               # how to embed the modules in your own contract
+│   ├── core/                  # @thoth/core — keyless claim/envelope types
+│   ├── signatures/            # @thoth/signatures — wire signature scheme types (in progress)
 ├── docs/DESIGN.md              # design overview & decisions
 ├── tsconfig.base.json          # shared TypeScript compiler options for all packages
 └── package.json                # repo root: npm workspace + shared scripts, CI
 ```
 
-The repo is an npm workspace monorepo: every `@thoth/*` package lives under
-`packages/` — `contracts/` is the `@thoth/contracts` package, and future
-packages (attestor SDK, client SDK) slot in beside it.
+The repo is an npm workspace monorepo: the active `@thoth/*` packages — `core`,
+`attestor`, and `contracts` — live under `packages/` and are wired into the root
+`workspaces`. `client` and `signatures` are in progress and not yet part of the
+workspace.
 
 ## The contracts
 
@@ -73,7 +77,7 @@ Three embeddable Compact modules plus a top-level example (`packages/contracts/R
 | `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and freshness (`freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)` |
 | `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` — counts only, no threshold |
 | `schnorr.compact` | `schnorr` | Jubjub Schnorr verification polyfill (generic `Vector<#n, Field>`) |
-| `examples/example_app.compact` | top-level | Example app embedding `Attestation<9, 3, 2, 3>` (2-of-3) |
+| `examples/example_app.compact` | top-level | Example app embedding `Attestation<11, 3, 2, 3>` (2-of-3) |
 
 ## Development
 
@@ -90,8 +94,11 @@ vitest, and biome on every push/PR.
 
 ## Docs
 
-- `docs/DESIGN.md` — overview of the design and decisions
-- `packages/contracts/README.md` — contract semantics, module parameters, deploy wiring
+- `docs/DESIGN.md` — design overview and decisions
+- `AGENTS.md` — guide for AI coding agents working in this repo
+- `packages/core/README.md` — the keyless internal law (`@thoth/core/claim`)
+- `packages/attestor/README.md` — the host: key boundary, instances, helpers
+- `packages/contracts/README.md` — the on-chain Compact modules: semantics, module parameters, deploy wiring
 
 ## Name origin
 
