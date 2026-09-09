@@ -1,121 +1,18 @@
-import { z } from 'zod';
+import type { z } from 'zod';
+import type { FlatMessage } from './claim.js';
 
 /**
- * A Compact `Vector<K, Field>` flat signed message.
+ * The signed-message type of an attestor definition.
  *
- * `K` and the field order are per-kind wire law: they are fixed by the target
- * contract's `buildMessage` and mirrored by `AttestorDefinition.message`.
+ * Derived from the definition object's `message()` return type, so the whole
+ * host stack (signer, key pair, attestation) picks up a custom message type
+ * from the definition automatically — the definition is the single source of
+ * truth. For standard kinds this is the default `FlatMessage`.
  *
- * The `readonly` annotation is a type-level "do not mutate" promise.
- *
- * @see attestation.compact — `buildMessage` defines the wire layout a kind's
- *   `message()` must reproduce.
+ * @typeParam D — an {@link AttestorDefinition}.
  */
-export type FlatMessage = readonly bigint[];
-
-/**
- * The fixed claim shape every kind is expected to sign.
- *
- * Mirror of `attestation.compact`'s `Claim` struct: a 5-field header (version,
- * kind, timestamp, nonce, evidenceHash), a per-position `present` mask, and `V`
- * numeric `values`.
- *
- * This is the canonical shape kinds adopt unless they deviate.
- *
- * @typeParam V — the number of value slots (`attestation<#K, #V, #N, #M>`).
- * @see attestation.compact — the `Claim` struct this mirrors.
- */
-// biome-ignore lint/correctness/noUnusedVariables: phantom type param — carries the claim's value count `V`.
-export interface Claim<V extends number> {
-  /** Schema version of the claim format. Currently `1`. */
-  version: bigint;
-  /** Attestor kind identifier (e.g. `1` for the reclaim/zkFetch kind). */
-  kind: bigint;
-  /** Unix seconds at which the attestation was produced. */
-  timestamp: bigint;
-  /** Per-claim randomness; prevents signature/claim replay on-chain. */
-  nonce: Uint8Array;
-  /** Hash of the evidence artifacts; binds the claim to its evidence. */
-  evidenceHash: Uint8Array;
-  /** Per-position present mask; `present[i]` true means `values[i]` was populated. */
-  present: readonly boolean[];
-  /** Positional numeric claim values, exactly `V` of them. */
-  values: readonly bigint[];
-}
-
-/**
- * The raw, unparsed form of a {@link Claim}: the zod `input` of
- * {@link claimSchema}.
- *
- * Uses `number | bigint` for the numeric fields so both JSON/wire payloads and
- * `bigint`-carrying objects validate; {@link claimSchema} coerces them to
- * `bigint` on parse.
- *
- * @typeParam V — the number of value slots.
- */
-// biome-ignore lint/correctness/noUnusedVariables: phantom type param — carries the claim's value count `V`.
-export interface ClaimInput<V extends number> {
-  /** Schema version; a raw payload may omit it (defaults to {@link CLAIM_VERSION}). */
-  version: number | bigint;
-  /** Attestor kind identifier. */
-  kind: number | bigint;
-  /** Unix seconds at which the attestation was produced. */
-  timestamp: number | bigint;
-  /** Per-claim randomness, replay protection. */
-  nonce: Uint8Array;
-  /** Hash of the evidence artifacts. */
-  evidenceHash: Uint8Array;
-  /** Per-position present mask; length constrained to `V` by the schema. */
-  present: readonly boolean[];
-  /** Positional claim values; length constrained to `V` by the schema. */
-  values: readonly (number | bigint)[];
-}
-
-/**
- * The current claim schema version, applied by {@link claimSchema} when a raw
- * payload omits `version`.
- */
-export const CLAIM_VERSION = 1n;
-
-/**
- * Zod schema for a fixed `V` claim.
- *
- * Runtime validator + type source: `z.output` is a {@link Claim}, `z.input` a
- * {@link ClaimInput}. Kinds use it as their `claim` schema (or an extended
- * schema) so client-proposed claims are validated against the canonical shape.
- *
- * @param v — the number of value slots; constrains `present` and `values` to
- *   length `v`.
- * @returns a schema whose output is a {@link Claim}: validates the fixed shape
- *   and coerces the numeric fields to `bigint`.
- */
-export function claimSchema<V extends number>(
-  v: V,
-): z.ZodType<Claim<V>, z.core.$ZodTypeInternals<Claim<V>, ClaimInput<V>>> {
-  const schema = z
-    .object({
-      version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
-      kind: z.union([z.number(), z.bigint()]),
-      timestamp: z.union([z.number(), z.bigint()]),
-      nonce: z.instanceof(Uint8Array),
-      evidenceHash: z.instanceof(Uint8Array),
-      present: z.array(z.boolean()).length(v),
-      values: z.array(z.union([z.number(), z.bigint()])).length(v),
-    })
-    .transform((input) => ({
-      version: BigInt(input.version),
-      kind: BigInt(input.kind),
-      timestamp: BigInt(input.timestamp),
-      nonce: input.nonce,
-      evidenceHash: input.evidenceHash,
-      present: input.present,
-      values: input.values.map((value) => BigInt(value)),
-    }));
-  return schema as unknown as z.ZodType<
-    Claim<V>,
-    z.core.$ZodTypeInternals<Claim<V>, ClaimInput<V>>
-  >;
-}
+export type MessageOf<D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>> =
+  ReturnType<D['message']>;
 
 /**
  * The input submitted to an attestor for evaluation.
@@ -154,6 +51,7 @@ export interface AttestationInput<P, E, C> {
  * @typeParam P — policy schema.
  * @typeParam E — evidence schema.
  * @typeParam C — claim schema.
+ * @typeParam Msg — the signed-message type; defaults to {@link FlatMessage}.
  * @see @thoth/attestor — where a definition is instantiated alongside its key.
  */
 export interface AttestorDefinition<
@@ -161,6 +59,7 @@ export interface AttestorDefinition<
   P extends z.ZodType,
   E extends z.ZodType,
   C extends z.ZodType,
+  Msg = FlatMessage,
 > {
   /** Stable, versioned identifier for this kind of attestation. */
   readonly kind: K;
@@ -186,13 +85,15 @@ export interface AttestorDefinition<
   verify(input: AttestationInput<z.output<P>, z.output<E>, z.output<C>>): void | Promise<void>;
 
   /**
-   * The kind's wire law: encode the parsed claim into the exact flat field
-   * vector the target contract's `buildMessage` verifies the signature over.
+   * The kind's wire law: encode the parsed claim into the exact message shape
+   * the target contract's signature verifies over. Standard kinds produce a
+   * flat field vector ({@link FlatMessage}); a kind may opt into another
+   * message type via the definition's `Msg` parameter.
    *
    * @param claim — the parsed claim to encode.
-   * @returns the flat message the signer commits to.
+   * @returns the message the signer commits to.
    */
-  message(claim: z.output<C>): FlatMessage;
+  message(claim: z.output<C>): Msg;
 }
 
 /**
@@ -233,14 +134,15 @@ export interface AttestorDescriptor<
  *   survived `verify` and was signed).
  * @typeParam PK — the attesting public key.
  * @typeParam S — the signature scheme type.
+ * @typeParam Msg — the signed-message type; defaults to {@link FlatMessage}.
  */
-export interface Attestation<K, C, PK, S> {
+export interface Attestation<K, C, PK, S, Msg = FlatMessage> {
   /** The attestor kind that produced this attestation. */
   kind: K;
   /** The parsed claim that was verified and is now certified. */
   claim: C;
-  /** The flat message the signature commits to (`definition.message(claim)`). */
-  message: FlatMessage;
+  /** The message the signature commits to (`definition.message(claim)`). */
+  message: Msg;
   /** The public key whose signature is attached. */
   publicKey: PK;
   /** The signature over `message`, produced by the holder of `publicKey`. */
