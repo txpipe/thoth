@@ -1,6 +1,10 @@
 # @thoth/contracts
 
-The Thoth Compact on-chain layer, distributed as an npm package of **Compact
+The Thoth Compact on-chain layer: the embeddable Compact module set that
+verifies N-of-M attestations in-circuit. This is the on-chain counterpart to
+the TypeScript packages — `@thoth/core` defines the claim law this layer
+verifies, `@thoth/attestor` hosts the signing keys, and `@thoth/client` is how
+a dApp addresses the attestors. Distributed as an npm package of **Compact
 source modules**. There is nothing compiled here — you embed the modules into
 your own `.compact` contracts and compile as part of your own DApp build.
 
