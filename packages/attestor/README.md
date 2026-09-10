@@ -82,9 +82,28 @@ The attestation lifecycle — parse schemas, `verify`, sign `message(claim)` —
 owned by each kind's package: core and host declare only the interface contract
 (*verify before sign, throw to reject*), and each kind supplies its `attest`.
 
+## Design rationale
+
+- **Composition, not inheritance.** A kind is three pieces — the keyless
+  `AttestorDefinition` law, the `AttestorSigner` key boundary, and the
+  deployable `Attestor` instance — instead of one inherited class. Definitions
+  stay plain, stubbable, and serializable, and a single law is reused by many
+  deployed instances.
+- **The instance and its public key.** The public key is the value the client
+  maps to an on-chain registry slot; the `id` is a separate, plain identifier
+  for client-side addressing. The keyed machinery (signer + public key) is
+  paired into one `KeyPair` at construction, so a wrong public-key pairing is
+  impossible rather than caught late at N-of-M verification.
+- **KeyPair is host-side; the producer lives in the kind.** `KeyPair<PK, S>`
+  describes how the attestor host is put together — it is not a wire shape
+  (`@thoth/signatures` holds those). The concrete key producer (`derivePublicKey`,
+  the signer, `makeKeyPair(sk)`) belongs to the attestor **kind** package,
+  which instantiates these generics with the scheme's wire types.
+
 ## Links
 
 - [Thoth (repo root)](https://github.com/txpipe-shop/thoth) — overall architecture and docs
-- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — the key-boundary and instance design decisions
-- [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core) — the business card definitions this package instantiates alongside keys
+- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — architecture overview, flow, and out-of-scope
+- [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core) — the keyless law this package instantiates alongside keys
 - [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts) — the on-chain registry that verifies the signatures positionally
+- [`@thoth/signatures`](https://github.com/txpipe-shop/thoth/tree/main/packages/signatures) — the wire signature scheme types (in progress)

@@ -108,9 +108,10 @@ thoth/
 
 - Per-package `README.md` (npm convention): what it is, install, types/concepts,
   usage, links. Written for humans; do not dump APIs (JSDoc covers that).
-- Design decisions and their rationale go in `docs/DESIGN.md`, under "Design
-  decisions". If a decision changes the public surface, update DESIGN.md and the
-  affected package READMEs together.
+- Design decisions and their rationale live in the **package README that owns
+  them** (e.g. `packages/attestor/README.md` "Design rationale"). If a decision
+  changes the public surface, update the affected package READMEs together.
+  `docs/DESIGN.md` keeps only the architecture overview, flow, and out-of-scope.
 - JSDoc lives inline in source; there is no generated API doc site (TypeDoc
   intentionally deferred — packages are small).
 

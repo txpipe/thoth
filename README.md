@@ -94,7 +94,7 @@ vitest, and biome on every push/PR.
 
 ## Docs
 
-- `docs/DESIGN.md` — design overview and decisions
+- `docs/DESIGN.md` — design overview
 - `AGENTS.md` — guide for AI coding agents working in this repo
 - `packages/core/README.md` — the keyless internal law (`@thoth/core/claim`)
 - `packages/attestor/README.md` — the host: key boundary, instances, helpers

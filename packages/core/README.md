@@ -29,6 +29,17 @@ The package exposes two entry points:
   - `claimToMessage` — encode a parsed `Claim` into the exact `FlatMessage` the contract's `buildMessage` verifies
   - `FlatMessage` — a Compact `Vector<K, Field>` as a `readonly bigint[]`
 
+### The flat message type
+
+`FlatMessage` is the **default** signed-message type. It's the default for a
+`Msg` generic threaded through `AttestorDefinition`, `AttestorSigner`, `KeyPair`
+and `Attestation`, so a standard kind never mentions it. A kind that needs a
+different message shape opts in by giving its `message()` another return type
+(derived via `MessageOf<D>`), and the whole host stack agrees with the
+definition. `claimToMessage` is the canonical encoder for the standard shape —
+it mirrors the contract's `buildMessage` byte-for-byte, guarded by the parity
+test in the contracts suite.
+
 ```ts
 import { claimSchema, claimToMessage } from '@thoth/core/claim';
 import type { Claim } from '@thoth/core/claim';
@@ -48,6 +59,6 @@ const def: AttestorDefinition<'zkfetch', z.ZodType, z.ZodType, z.ZodType> = {
 ## Links
 
 - [Thoth (repo root)](https://github.com/txpipe-shop/thoth) — overall architecture and docs
-- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — design overview and decisions
+- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — design overview
 - [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor) — the host (key boundary, instances)
 - [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts) — the on-chain Compact modules the claim shape mirrors
