@@ -56,8 +56,7 @@ thoth/
 │   │   ├── examples/example_app.compact  # 2-of-3 example embedding
 │   │   ├── test/                   # simulator tests + helpers
 │   │   └── README.md               # how to embed the modules in your own contract
-│   ├── core/                  # @thoth/core — keyless claim/envelope types
-│   ├── signatures/            # @thoth/signatures — wire signature scheme types (in progress)
+│   └── core/                  # @thoth/core — keyless claim/envelope types
 ├── docs/DESIGN.md              # design overview & decisions
 ├── tsconfig.base.json          # shared TypeScript compiler options for all packages
 └── package.json                # repo root: npm workspace + shared scripts, CI
@@ -65,8 +64,7 @@ thoth/
 
 The repo is an npm workspace monorepo: the active `@thoth/*` packages — `core`,
 `attestor`, and `contracts` — live under `packages/` and are wired into the root
-`workspaces`. `client` and `signatures` are in progress and not yet part of the
-workspace.
+`workspaces`. `client` is in progress and not yet part of the workspace.
 
 ## The contracts
 

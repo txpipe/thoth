@@ -14,9 +14,8 @@ Thoth is a private N-of-M attestation system for Midnight. Three layers:
   (`schnorr.compact`).
 - **Attestor SDK** — `packages/attestor` + `packages/core`: the types and
   interfaces attestor *kinds* implement to provide attestation. Kinds verify
-  evidence and sign a canonical claim. (`packages/signatures` — wire signature
-  scheme types — and `packages/client` — dApp-side `TrustedSet` — are
-  placeholders, not yet in `workspaces`.)
+  evidence and sign a canonical claim. (`packages/client` — dApp-side
+  `TrustedSet` — is a placeholder, not yet in `workspaces`.)
 
 Attestors certify facts, not decisions: a claim is a canonical statement of
 what was observed; the application defines the predicate over it.
@@ -58,9 +57,8 @@ thoth/
 │   ├── attestor/       # @thoth/attestor  — host: key boundary, instances, helpers
 │   ├── client/         # @thoth/client    — dApp-side TrustedSet (placeholder, not in workspaces)
 │   ├── contracts/      # @thoth/contracts — Compact modules (+ tests)
-│   ├── core/           # @thoth/core      — keyless claim/envelope types
-│   │   └── src/claim.ts                   — claim types served at @thoth/core/claim
-│   └── signatures/     # @thoth/signatures — wire signature scheme types (placeholder, not in workspaces)
+│   └── core/           # @thoth/core      — keyless claim/envelope types
+│       └── src/claim.ts                   — claim types served at @thoth/core/claim
 ├── docs/DESIGN.md      # design overview & decisions
 ├── README.md           # human-oriented overview
 └── AGENTS.md           # this file
@@ -71,8 +69,8 @@ thoth/
 - **One package per directory** under `packages/`. *Active* packages must be
   added to the root `package.json` `workspaces` array or they are silently
   skipped by the root `types`/`build` scripts. Dirs present on disk but absent
-  from `workspaces` (currently `client`, `signatures`) are **placeholders** —
-  intentionally not compiled.
+  from `workspaces` (currently `client`) are **placeholders** — intentionally
+  not compiled.
 - **`@midnight-ntwrk/compact-runtime` is pinned to `0.16.0`** everywhere
   (root, contracts, core). Off-chain code that mirrors an in-circuit primitive
   (e.g. `degradeToTransient`) only matches the circuit at the **same pinned

@@ -95,10 +95,11 @@ owned by each kind's package: core and host declare only the interface contract
   paired into one `KeyPair` at construction, so a wrong public-key pairing is
   impossible rather than caught late at N-of-M verification.
 - **KeyPair is host-side; the producer lives in the kind.** `KeyPair<PK, S>`
-  describes how the attestor host is put together — it is not a wire shape
-  (`@thoth/signatures` holds those). The concrete key producer (`derivePublicKey`,
-  the signer, `makeKeyPair(sk)`) belongs to the attestor **kind** package,
-  which instantiates these generics with the scheme's wire types.
+  describes how the attestor host is put together — it is not a wire shape.
+  The concrete key producer (`derivePublicKey`, the signer, `makeKeyPair(sk)`)
+  belongs to the attestor **kind** package, which instantiates these generics
+  with the scheme's wire types (e.g. `JubjubPoint` from
+  `@midnight-ntwrk/compact-runtime`).
 
 ## Links
 
@@ -106,4 +107,3 @@ owned by each kind's package: core and host declare only the interface contract
 - [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — architecture overview, flow, and out-of-scope
 - [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core) — the keyless law this package instantiates alongside keys
 - [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts) — the on-chain registry that verifies the signatures positionally
-- [`@thoth/signatures`](https://github.com/txpipe-shop/thoth/tree/main/packages/signatures) — the wire signature scheme types (in progress)
