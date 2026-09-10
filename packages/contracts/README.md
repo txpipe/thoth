@@ -93,6 +93,18 @@ per value slot; `present[i] = true` means `values[i]` was populated (its value
 may still be `0`). The message length is `K = 5 + 2*V` (5 header fields, V
 presence flags, V values) — fixed when a contract embeds the module.
 
+## Design notes
+
+- **The claim is the entire message.** Everything the contract inspects —
+  freshness (`timestamp`), replay protection (`nonce`), source binding
+  (`evidenceHash`), and kind/version — is inside the signed field vector.
+  Kinds must not rely on un-signed side-channels: any data the contract needs
+  has to be a field of the message the attestor signs.
+- **Registry slots are positional.** `attestor_registry` verifies
+  `signatures[i]` against `keys[i]` — a signature is valid *only* in the slot
+  holding its signer's public key. The client therefore places each collected
+  signature at the index equal to its attestor's registry slot order.
+
 ## Reading presence in-circuit
 
 `present` is native `Vector<V, Boolean>`, so an app predicate over a vaulted
