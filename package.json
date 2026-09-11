@@ -4,6 +4,7 @@
   "private": true,
   "workspaces": [
     "packages/attestor",
+    "packages/client",
     "packages/contracts",
     "packages/core"
   ],
