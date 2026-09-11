@@ -43,11 +43,11 @@ biome on every push/PR.
 ## Gotchas
 
 - **Stale `dist/` footgun** — workspaces resolve each other through
-  `node_modules/@thoth/*` ⇒ `exports` ⇒ `dist/`, and `npm run types` is
-  `tsc --noEmit` (never rebuilds). After editing a package's `src/` that others
-  depend on, rebuild it first (`npm run build --workspace=packages/<name>`);
-  a stale `dist/index.d.ts` produces confusing errors like "Generic type
-  requires N type argument(s)".
+  `node_modules/@thoth/*` ⇒ `exports` ⇒ `dist/`. The root `build`/`types`
+  scripts rebuild `@thoth/core` first (the only dependency-producing package), so
+  consumers see fresh types; if a *new* workspace dependency appears, add its
+  package to the build-first chain. A stale `dist/index.d.ts` still produces
+  confusing errors like "Generic type requires N type argument(s)".
 
 ## Repository layout
 
