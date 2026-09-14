@@ -5,13 +5,16 @@ import type {
   AttestorDescriptor,
   MessageOf,
 } from '@thoth/core';
+import type { FlatMessage } from '@thoth/core/claim';
 import type { z } from 'zod';
+import { AttestationMismatchError, AttestorNotInTrustedSetError } from './errors.js';
 
 /**
- * The client's pinned set of attestors, in on-chain registry-slot order.
+ * The client's pinned set of attestors.
  *
- * Ordering is load-bearing: the client must submit collected signatures at the
- * index matching each attestor's `registryIndex`.
+ * An unordered collection: the array carries no order — each member's
+ * `registryIndex` is its on-chain registry slot, never its position in this
+ * list.
  *
  * @typeParam D — the attestor definition type for every member.
  * @typeParam PK — the public-key type.
@@ -20,8 +23,31 @@ export interface TrustedSet<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
   PK,
 > {
-  /** Ordered (registry-slot) list of the attestors the client may query. */
+  /** The attestors the client may query. */
   attestors: readonly AttestorDescriptor<D, PK>[];
+}
+
+/**
+ * Find the descriptor for a named attestor in the trusted set.
+ *
+ * The seam's name→descriptor resolution, so a kind SDK can support
+ * string-named endpoints (`proof.attest("txpipeEndpoint", …)`) without
+ * re-checking membership at every call site.
+ *
+ * @param trusted — the trusted set to search.
+ * @param id — the attestor instance id (non-cryptographic).
+ * @returns the descriptor whose `id` matches.
+ * @throws {@link AttestorNotInTrustedSetError} if no member has that `id`.
+ */
+export function attestorOf<
+  const D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
+  PK,
+>(trusted: TrustedSet<D, PK>, id: string): AttestorDescriptor<D, PK> {
+  const found = trusted.attestors.find((attestor) => attestor.id === id);
+  if (found === undefined) {
+    throw new AttestorNotInTrustedSetError(id);
+  }
+  return found;
 }
 
 /**
@@ -58,207 +84,63 @@ export interface AttestorTransport<
 }
 
 /**
- * The collected, positionally-ordered set of attestations, ready for submission.
+ * One collected attestation paired with the registry slot it answered from.
  *
- * `signatures[i]` holds the signature from registry slot `i` (or `null` when
- * that slot did not vouch), so the vector aligns with the on-chain registry's
- * positional verification. `claim` and `message` are the single certified
- * values all collected signatures commit to.
- *
- * @typeParam C — the certified claim type.
- * @typeParam Msg — the signed-message type.
- * @typeParam PK — the public-key type.
+ * @typeParam K — the attestor kind.
+ * @typeParam C — the certified claim.
+ * @typeParam PK — the attesting public key.
  * @typeParam S — the signature scheme type.
+ * @typeParam Msg — the signed-message type; defaults to {@link FlatMessage}.
  */
-export interface AttestationBundle<C, Msg, PK, S> {
-  /** The certified claim all collected signatures vouch for. */
-  claim: C;
-  /** The single message the collected signatures commit to. */
-  message: Msg;
-  /** Signature per registry slot; `null` when that slot did not vouch. */
-  signatures: (S | null)[];
-  /** Public key per registry slot; `null` when that slot did not vouch. */
-  publicKeys: (PK | null)[];
-  /** The registry slots that actually vouched, ascending. */
-  registryIndexes: number[];
+export interface CollectedAttestation<K, C, PK, S, Msg = FlatMessage> {
+  /** The registry slot the attestation was collected from. */
+  readonly registryIndex: number;
+  /** The attested artifact collected from that slot. */
+  readonly attestation: Attestation<K, C, PK, S, Msg>;
 }
 
 /**
- * A transport call failed for a specific attestor (network error, timeout, …).
+ * Validate one attestation against its descriptor and tag it with its slot.
  *
- * A rejection by the attestor's own `verify` is also surfaced here — this
- * package does not distinguish the reasons; it only reports reachability.
- */
-export class AttestorUnavailableError extends Error {
-  /** The id of the attestor that could not be reached. */
-  readonly attestorId: string;
-  /** The underlying failure. */
-  readonly cause: unknown;
-
-  /**
-   * @param attestorId — the failing attestor's id.
-   * @param cause — the underlying failure.
-   */
-  constructor(attestorId: string, cause: unknown) {
-    super(`attestor "${attestorId}" unavailable`);
-    this.attestorId = attestorId;
-    this.cause = cause;
-  }
-}
-
-/**
- * A collected attestation failed a structural integrity check.
+ * The client's per-attestation validity primitive: it checks that the
+ * attestation comes from the pinned key (`'public-key'`), that its
+ * `registryIndex` names a real slot in the trusted set (`'registry-index'`),
+ * and — when given `expectedMessage` — that the attestor signed the message
+ * the caller asked for (`'message'`).
  *
- * `reason` discriminates the failing check: the returned public key does not
- * match the descriptor's (`'public-key'`), the signed message disagrees with
- * the other collected attestations (`'message'`), or the attestor's
- * `registryIndex` is outside the trusted set's slot range (`'registry-index'`).
+ * @param options — the trusted set, the attestor that was asked, the returned
+ *   attestation, and optionally the expected signed message.
+ * @returns the slot-tagged {@link CollectedAttestation}.
+ * @throws {@link AttestationMismatchError} if a check fails; the `reason`
+ *   discriminates which one.
  */
-export class AttestationMismatchError extends Error {
-  /** The id of the offending attestor. */
-  readonly attestorId: string;
-  /** Which integrity check failed. */
-  readonly reason: 'public-key' | 'message' | 'registry-index';
-
-  /**
-   * @param attestorId — the offending attestor's id.
-   * @param reason — the failed check.
-   */
-  constructor(attestorId: string, reason: 'public-key' | 'message' | 'registry-index') {
-    super(`attestation from "${attestorId}" failed ${reason} check`);
-    this.attestorId = attestorId;
-    this.reason = reason;
-  }
-}
-
-/**
- * Fewer than the required threshold of valid attestations were collected.
- */
-export class ThresholdNotMetError extends Error {
-  /** How many valid attestations were collected. */
-  readonly had: number;
-  /** The threshold N required. */
-  readonly needed: number;
-  /** The attestors that could not be reached during collection. */
-  readonly unavailable: readonly AttestorUnavailableError[];
-
-  /**
-   * @param had — how many valid attestations were collected.
-   * @param needed — the threshold N required.
-   * @param unavailable — the attestors that could not be reached.
-   */
-  constructor(had: number, needed: number, unavailable: readonly AttestorUnavailableError[]) {
-    super(`threshold not met: ${had}/${needed}`);
-    this.had = had;
-    this.needed = needed;
-    this.unavailable = unavailable;
-  }
-}
-
-/**
- * Request attestations from every attestor in the trusted set, in parallel, and
- * assemble the positionally-ordered bundle once at least `threshold` converge.
- *
- * Every attestor is queried (no early-exit); transport failures are recorded,
- * not fatal. A returned attestation is kept only if its public key matches the
- * descriptor's and its signed message agrees with the other kept attestations.
- * If fewer than `threshold` valid attestations remain, a
- * {@link ThresholdNotMetError} is thrown. The input is forwarded raw — this
- * package does not validate it against the definition's schemas.
- *
- * @param options — the trusted set, the N-of-M threshold (N), the raw input,
- *   and the transport.
- * @returns the positionally-ordered {@link AttestationBundle}.
- * @throws {@link ThresholdNotMetError} if fewer than `threshold` valid
- *   attestations were collected.
- * @throws {@link AttestationMismatchError} if a kept attestation fails a
- *   structural integrity check.
- */
-export async function collectAttestations<
+export function resolveAttestation<
   const D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
   PK,
   S,
 >(options: {
-  /** The trusted set; its order defines the registry slots. */
-  trusted: TrustedSet<D, PK>;
-  /** The N-of-M threshold (N). */
-  threshold: number;
-  /** The raw (unparsed) input to forward to every attestor. */
-  input: AttestationInput<z.input<D['policy']>, z.input<D['evidence']>, z.input<D['claim']>>;
-  /** How the client reaches the attestors. */
-  transport: AttestorTransport<D, PK, S>;
-}): Promise<AttestationBundle<z.output<D['claim']>, MessageOf<D>, PK, S>> {
-  const { trusted, threshold, input, transport } = options;
+  /** The trusted set; its size bounds the valid registry slots. */
+  readonly trusted: TrustedSet<D, PK>;
+  /** The attestor that was asked. */
+  readonly attestor: AttestorDescriptor<D, PK>;
+  /** The attestation returned for that attestor. */
+  readonly attestation: Attestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>;
+  /** The message the attestor was expected to sign; checked when provided. */
+  readonly expectedMessage?: MessageOf<D>;
+}): CollectedAttestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>> {
+  const { trusted, attestor, attestation, expectedMessage } = options;
 
-  if (threshold < 1) {
-    throw new ThresholdNotMetError(0, threshold, []);
+  if (!structuredEquals(attestation.publicKey, attestor.publicKey)) {
+    throw new AttestationMismatchError(attestor.id, 'public-key');
+  }
+  if (expectedMessage !== undefined && !structuredEquals(attestation.message, expectedMessage)) {
+    throw new AttestationMismatchError(attestor.id, 'message');
+  }
+  if (attestor.registryIndex < 0 || attestor.registryIndex >= trusted.attestors.length) {
+    throw new AttestationMismatchError(attestor.id, 'registry-index');
   }
 
-  const outcomes = await Promise.allSettled(
-    trusted.attestors.map((attestor) =>
-      transport.request(attestor, input).then(
-        (attestation) => ({ attestor, attestation }) as const,
-        (cause: unknown) => {
-          throw new AttestorUnavailableError(attestor.id, cause);
-        },
-      ),
-    ),
-  );
-
-  const successes: {
-    attestor: AttestorDescriptor<D, PK>;
-    attestation: Attestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>;
-  }[] = [];
-  const unavailable: AttestorUnavailableError[] = [];
-
-  for (const outcome of outcomes) {
-    if (outcome.status === 'fulfilled') {
-      successes.push(outcome.value);
-    } else {
-      unavailable.push(outcome.reason as AttestorUnavailableError);
-    }
-  }
-
-  let reference: Attestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>> | null = null;
-  for (const { attestor, attestation } of successes) {
-    if (!structuredEquals(attestation.publicKey, attestor.publicKey)) {
-      throw new AttestationMismatchError(attestor.id, 'public-key');
-    }
-    if (reference !== null && !structuredEquals(attestation.message, reference.message)) {
-      throw new AttestationMismatchError(attestor.id, 'message');
-    }
-    reference ??= attestation;
-  }
-
-  if (successes.length < threshold) {
-    throw new ThresholdNotMetError(successes.length, threshold, unavailable);
-  }
-  if (reference === null) {
-    // threshold >= 1 means at least one success, which always sets `reference`.
-    throw new ThresholdNotMetError(0, threshold, unavailable);
-  }
-
-  const m = trusted.attestors.length;
-  const signatures: (S | null)[] = new Array<S | null>(m).fill(null);
-  const publicKeys: (PK | null)[] = new Array<PK | null>(m).fill(null);
-  const registryIndexes: number[] = [];
-
-  for (const { attestor, attestation } of successes) {
-    if (attestor.registryIndex < 0 || attestor.registryIndex >= m) {
-      throw new AttestationMismatchError(attestor.id, 'registry-index');
-    }
-    signatures[attestor.registryIndex] = attestation.signature;
-    publicKeys[attestor.registryIndex] = attestation.publicKey;
-    registryIndexes.push(attestor.registryIndex);
-  }
-
-  return {
-    claim: reference.claim,
-    message: reference.message,
-    signatures,
-    publicKeys,
-    registryIndexes: registryIndexes.sort(),
-  };
+  return { registryIndex: attestor.registryIndex, attestation };
 }
 
 /**

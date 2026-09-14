@@ -3,15 +3,9 @@
 Client-side base for the Thoth N-of-M attestation system.
 
 Thoth lets Midnight contracts accept externally attested information with ZK
-privacy. `@thoth/client` is the **generic dApp-side base**: the types and
-collection routine a client uses to address the attestors in its trusted set
-and assemble the N-of-M signature set — with none of the key-bearing or host
-machinery, and no dependency on any particular attestor kind or signature
-scheme.
-
-Kind-specific SDKs (e.g. a zkTLS client) build *on top* of this package: they
-wire a concrete transport and kind-typed trusted set, and add their own
-prove/attest ergonomics.
+privacy. `@thoth/client` is the **dApp-side generic base**: the types and the
+per-attestation validity primitive a client uses to address the attestors in
+its trusted set and assemble the N-of-M signature set.
 
 ## Install
 
@@ -21,62 +15,96 @@ npm install @thoth/client
 
 ## What's in it
 
-- `TrustedSet<D, PK>` — the client's pinned attestors, in **on-chain
-  registry-slot order**. Each member is an
+- `TrustedSet<D, PK>` — the client's pinned attestors. It is **unordered**: the
+  array carries no order — each member's `registryIndex` is its on-chain
+  registry slot, never its position in the list. Each member is an
   [`AttestorDescriptor`](https://github.com/txpipe-shop/thoth/tree/main/packages/core):
   `id`, its keyless `definition`, its `publicKey`, and its `registryIndex`.
+- `attestorOf(trusted, id)` — resolve a string-named attestor to its descriptor.
 - `AttestorTransport<D, PK, S>` — the seam between the client and a remote
-  attestor: `request(attestor, input): Promise<Attestation>`. This package
-  declares the seam only; a kind SDK or the app supplies the concrete transport
-  (HTTP, in-process, mock). The host-side mirror is `Attestor.attest` in
-  `@thoth/attestor` — both agree through `@thoth/core` types.
-- `collectAttestations({ trusted, threshold, input, transport })` — fires a
-  request at **every** attestor in the trusted set in parallel, keeps the
-  attestations that pass structural checks (public key matches the descriptor,
-  all collected sign the same message), and **throws if fewer than `threshold`
-  (#N) valid attestations are collected**. The raw `input` is forwarded as-is —
-  the attestor is the law.
-- `AttestationBundle<C, Msg, PK, S>` — the positional submission payload:
-  `claim`, `message`, and slot-aligned `signatures`/`publicKeys` vectors
-  (`null` where a slot did not vouch), plus the vouching `registryIndexes`.
-  `signatures[i]` lines up with the on-chain registry's positional verification.
-- Errors: `ThresholdNotMetError`, `AttestorUnavailableError`,
-  `AttestationMismatchError`.
+  attestor: `request(attestor, input): Promise<Attestation>`. A kind SDK or the
+  app supplies the concrete transport. The host-side mirror is `Attestor.attest` in `@thoth/attestor`.
+- `resolveAttestation({ trusted, attestor, attestation, expectedMessage? })` —
+  the per-attestation validity primitive: checks the signing key, the
+  `registryIndex` bounds, and (optionally) that the signed message is the one
+  you asked for, then tags the attestation with its slot as a
+  `CollectedAttestation`.
+- `CollectedAttestation<K, C, PK, S, Msg>` — the collection output shape:
+  an `Attestation` plus the `registryIndex` it belongs to.
+- Errors: `AttestationMismatchError` (thrown by `resolveAttestation`; `reason`
+  is `'public-key' | 'message' | 'registry-index'`),
+  `AttestorNotInTrustedSetError` — exported from `@thoth/client/errors`.
 
-## Usage
+## For kind SDK authors
+
+Kind-specific SDKs (e.g. a zkTLS client) build *on top of* this package: they
+wire a concrete transport, drive the fan-out in their own async runtime, apply
+their own threshold policy, and add their own prove/attest ergonomics.
+
+### Implement the transport
+
+The single interface a kind SDK must supply is `AttestorTransport`. Both sides
+of it speak `@thoth/core` types, so it mirrors the host-side `Attestor.attest`
+exactly: a descriptor and the raw input in, an `Attestation` out (or throw).
+A minimal HTTP implementation:
 
 ```ts
-import { collectAttestations, type TrustedSet } from '@thoth/client';
+import type { Attestation, AttestationInput } from '@thoth/core';
+import type { AttestorDescriptor, AttestorTransport } from '@thoth/client';
 
-const trusted: TrustedSet<MyDefinition, MyPublicKey> = {
-  attestors: [descriptor0, descriptor1, descriptor2], // registry slots 0..2
+const httpTransport: AttestorTransport<MyDefinition, MyPublicKey, MySignature> = {
+  async request(
+    attestor: AttestorDescriptor<MyDefinition, MyPublicKey>,
+    input: AttestationInput<MyPolicy, MyEvidence, MyClaim>,
+  ): Promise<Attestation<MyDefinition['kind'], MyClaim, MyPublicKey, MySignature, MyMessage>> {
+    const res = await fetch(`${attestor.id}/attest`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) throw new Error(`attestor ${attestor.id} rejected: ${res.status}`);
+    return res.json();
+  },
 };
-
-const bundle = await collectAttestations({
-  trusted,
-  threshold: 2, // N-of-M: 2-of-3
-  input: { policy, evidence, claim }, // raw, forwarded as-is
-  transport: myTransport, // AttestorTransport instance from your kind SDK
-});
-
-// bundle.signatures[i] is the signature from registry slot i (null if absent)
 ```
 
-The client does **not** verify signatures — the on-chain contract is the
-verifier, and it checks them positionally against the pinned registry keys.
+### Resolve string-named endpoints
 
-## Out of scope
+`attestorOf(trusted, id)` is the name→descriptor lookup behind a friendly
+`proof.attest("txpipeEndpoint", …)` API, without each SDK re-checking
+membership:
 
-- Off-chain signature verification (the contract verifies)
-- Kind-specific logic: proof generation, policy validation, string-named
-  attestor endpoints (`attest("endpoint", …)`) — those live in the kind SDK
-  (e.g. `@thoth/zkTLS`) on top of this package
-- Claim construction and input validation (the attestor's `verify` is the law)
+```ts
+const attestor = attestorOf(trusted, 'txpipeEndpoint'); // throws AttestorNotInTrustedSetError if not pinned
+```
+
+### Vetting one attestation (optional)
+
+`resolveAttestation` is the only collection logic this package owns: it vets a
+single pairing — the returned public key matches the descriptor, the signed
+message is the one you asked for (when `expectedMessage` is given), and the
+slot is in range — and tags it with its `registryIndex`. Fan-out, aggregation,
+and threshold stay yours:
+
+```ts
+import { AttestationMismatchError } from '@thoth/client/errors';
+
+try {
+  const collected = resolveAttestation({ trusted, attestor, attestation });
+  // collected.registryIndex  →  the on-chain slot to place this signature at
+} catch (error) {
+  if (error instanceof AttestationMismatchError) {
+    // report / drop the offending attestor; the contract decides anyway
+    return;
+  }
+  throw error;
+}
+```
 
 ## Links
 
 - [Thoth (repo root)](https://github.com/txpipe-shop/thoth) — overall architecture and docs
 - [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — the registry-slot positional design
 - [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core) — `AttestorDescriptor`, `Attestation`, `AttestationInput`
-- [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor) — the host-side `Attest`/`Attestor` these types mirror
+- [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor) — the host-side `Attestor`/`Attest` these types mirror
 - [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts) — the on-chain registry that verifies the signatures positionally
