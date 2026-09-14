@@ -55,7 +55,7 @@ biome on every push/PR.
 thoth/
 ├── packages/
 │   ├── attestor/       # @thoth/attestor  — host: key boundary, instances, helpers
-│   ├── client/         # @thoth/client    — dApp-side TrustedSet (placeholder, not in workspaces)
+│   ├── client/         # @thoth/client    — dApp-side seam: TrustedSet, transport, primitives
 │   ├── contracts/      # @thoth/contracts — Compact modules (+ tests)
 │   └── core/           # @thoth/core      — keyless claim/envelope types
 │       └── src/claim.ts                   — claim types served at @thoth/core/claim
@@ -69,8 +69,7 @@ thoth/
 - **One package per directory** under `packages/`. *Active* packages must be
   added to the root `package.json` `workspaces` array or they are silently
   skipped by the root `types`/`build` scripts. Dirs present on disk but absent
-  from `workspaces` (currently `client`) are **placeholders** — intentionally
-  not compiled.
+  from `workspaces` are **placeholders** — intentionally not compiled.
 - **`@midnight-ntwrk/compact-runtime` is pinned to `0.16.0`** everywhere
   (root, contracts, core). Off-chain code that mirrors an in-circuit primitive
   (e.g. `degradeToTransient`) only matches the circuit at the **same pinned
@@ -105,7 +104,12 @@ thoth/
 ## Docs conventions
 
 - Per-package `README.md` (npm convention): what it is, install, types/concepts,
-  usage, links. Written for humans; do not dump APIs (JSDoc covers that).
+  and links. A `usage` section belongs when the package is consumed directly;
+  the packages that exist as a **base for kind-specific implementations**
+  (`core`, `attestor`, `client`) document the *implementer* seam instead — e.g.
+  `packages/client/README.md` "For kind SDK authors" — and may drop a usage
+  section entirely (`core` does). Written for humans; do not dump APIs (JSDoc
+  covers that).
 - Design decisions and their rationale live in the **package README that owns
   them** (e.g. `packages/attestor/README.md` "Design rationale"). If a decision
   changes the public surface, update the affected package READMEs together.
