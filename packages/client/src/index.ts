@@ -7,7 +7,11 @@ import type {
 } from '@thoth/core';
 import type { FlatMessage } from '@thoth/core/claim';
 import type { z } from 'zod';
-import { AttestationMismatchError, AttestorNotInTrustedSetError } from './errors.js';
+import {
+  AttestationMismatchError,
+  AttestorNotInTrustedSetError,
+  InvalidTrustedSetError,
+} from './errors.js';
 
 /**
  * The client's pinned set of attestors.
@@ -25,6 +29,43 @@ export interface TrustedSet<
 > {
   /** The attestors the client may query. */
   attestors: readonly AttestorDescriptor<D, PK>[];
+}
+
+/**
+ * Assemble a checked {@link TrustedSet} from its descriptors.
+ *
+ * Ensure a trusted set is  * well-formed by construction: it rejects an
+ * empty set, two members sharing an `id`, two members claiming the same
+ * registry slot, and any `registryIndex` outside the set's own slot range.
+ * Uniqueness is what keeps downstream placement deterministic; see {@link AttestorDescriptor.registryIndex}.
+ *
+ * @param attestors — the descriptors to assemble.
+ * @returns the validated trusted set.
+ * @throws {@link InvalidTrustedSetError} if a construction invariant fails.
+ */
+export function buildTrustedSet<
+  const D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
+  PK,
+>(attestors: readonly AttestorDescriptor<D, PK>[]): TrustedSet<D, PK> {
+  if (attestors.length === 0) {
+    throw new InvalidTrustedSetError('', 'empty');
+  }
+  const ids = new Set<string>();
+  const slots = new Set<number>();
+  for (const attestor of attestors) {
+    if (ids.has(attestor.id)) {
+      throw new InvalidTrustedSetError(attestor.id, 'duplicate-id');
+    }
+    if (attestor.registryIndex < 0 || attestor.registryIndex >= attestors.length) {
+      throw new InvalidTrustedSetError(attestor.id, 'registry-index');
+    }
+    if (slots.has(attestor.registryIndex)) {
+      throw new InvalidTrustedSetError(attestor.id, 'duplicate-slot');
+    }
+    ids.add(attestor.id);
+    slots.add(attestor.registryIndex);
+  }
+  return { attestors };
 }
 
 /**

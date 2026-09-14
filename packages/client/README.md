@@ -20,6 +20,9 @@ npm install @thoth/client
   registry slot, never its position in the list. Each member is an
   [`AttestorDescriptor`](https://github.com/txpipe-shop/thoth/tree/main/packages/core):
   `id`, its keyless `definition`, its `publicKey`, and its `registryIndex`.
+- `buildTrustedSet(attestors)` — assemble the checked trusted set: rejects an
+  empty set, duplicate ids, duplicate or out-of-range `registryIndex` slots
+  (`InvalidTrustedSetError`, from `@thoth/client/errors`).
 - `attestorOf(trusted, id)` — resolve a string-named attestor to its descriptor.
 - `AttestorTransport<D, PK, S>` — the seam between the client and a remote
   attestor: `request(attestor, input): Promise<Attestation>`. A kind SDK or the
@@ -33,13 +36,27 @@ npm install @thoth/client
   an `Attestation` plus the `registryIndex` it belongs to.
 - Errors: `AttestationMismatchError` (thrown by `resolveAttestation`; `reason`
   is `'public-key' | 'message' | 'registry-index'`),
-  `AttestorNotInTrustedSetError` — exported from `@thoth/client/errors`.
+  `AttestorNotInTrustedSetError`, `InvalidTrustedSetError` (thrown by
+  `buildTrustedSet`) — exported from `@thoth/client/errors`.
 
 ## For kind SDK authors
 
 Kind-specific SDKs (e.g. a zkTLS client) build *on top of* this package: they
 wire a concrete transport, drive the fan-out in their own async runtime, apply
 their own threshold policy, and add their own prove/attest ergonomics.
+
+### Assemble the trusted set
+
+`buildTrustedSet(attestors)` is the one construction helper every kind SDK
+shares: it rejects an empty set, duplicate ids, duplicate `registryIndex`
+slots, and out-of-range slots, so a `TrustedSet` is valid by construction (or
+not built at all).
+
+```ts
+import { buildTrustedSet } from '@thoth/client';
+
+const trusted = buildTrustedSet(descriptors); // throws InvalidTrustedSetError if malformed
+```
 
 ### Implement the transport
 
