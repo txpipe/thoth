@@ -5,6 +5,27 @@
   "type": "module",
   "license": "MIT",
   "private": true,
+  "author": "TxPipe-Shop",
+  "keywords": [
+    "thoth",
+    "midnight",
+    "compact",
+    "attestation",
+    "zero-knowledge",
+    "zk"
+  ],
+  "homepage": "https://github.com/txpipe-shop/thoth#readme",
+  "bugs": {
+    "url": "https://github.com/txpipe-shop/thoth/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/txpipe-shop/thoth.git",
+    "directory": "packages/contracts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
   "files": [
     "attestation.compact",
     "attestor_registry.compact",
@@ -26,16 +47,10 @@
     "check:compact": "compact format -c .",
     "check:fix:compact": "compact format ."
   },
-  "keywords": [
-    "midnight",
-    "compact",
-    "attestation",
-    "zero-knowledge",
-    "zk"
-  ],
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",
     "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@thoth/core": "*",
     "@types/node": "^26.2.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"

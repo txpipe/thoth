@@ -1,6 +1,10 @@
 # @thoth/contracts
 
-The Thoth Compact on-chain layer, distributed as an npm package of **Compact
+The Thoth Compact on-chain layer: the embeddable Compact module set that
+verifies N-of-M attestations in-circuit. This is the on-chain counterpart to
+the TypeScript packages — `@thoth/core` defines the claim law this layer
+verifies, `@thoth/attestor` hosts the signing keys, and `@thoth/client` is how
+a dApp addresses the attestors. Distributed as an npm package of **Compact
 source modules**. There is nothing compiled here — you embed the modules into
 your own `.compact` contracts and compile as part of your own DApp build.
 
@@ -88,6 +92,18 @@ message (same order, sizes, presence-flag semantics, and the two
 per value slot; `present[i] = true` means `values[i]` was populated (its value
 may still be `0`). The message length is `K = 5 + 2*V` (5 header fields, V
 presence flags, V values) — fixed when a contract embeds the module.
+
+## Design notes
+
+- **The claim is the entire message.** Everything the contract inspects —
+  freshness (`timestamp`), replay protection (`nonce`), source binding
+  (`evidenceHash`), and kind/version — is inside the signed field vector.
+  Kinds must not rely on un-signed side-channels: any data the contract needs
+  has to be a field of the message the attestor signs.
+- **Registry slots are positional.** `attestor_registry` verifies
+  `signatures[i]` against `keys[i]` — a signature is valid *only* in the slot
+  holding its signer's public key. The client therefore places each collected
+  signature at the index equal to its attestor's registry slot order.
 
 ## Reading presence in-circuit
 

@@ -1,0 +1,51 @@
+{
+  "name": "@thoth/core",
+  "version": "0.0.0",
+  "description": "Core types and definitions for the Thoth N-of-M attestation system.",
+  "type": "module",
+  "license": "MIT",
+  "author": "TxPipe-Shop",
+  "keywords": [
+    "thoth",
+    "midnight",
+    "attestation",
+    "zero-knowledge",
+    "zk"
+  ],
+  "homepage": "https://github.com/txpipe-shop/thoth#readme",
+  "bugs": {
+    "url": "https://github.com/txpipe-shop/thoth/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/txpipe-shop/thoth.git",
+    "directory": "packages/core"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./claim": {
+      "types": "./dist/claim.d.ts",
+      "import": "./dist/claim.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "zod": "^4.5.4"
+  }
+}

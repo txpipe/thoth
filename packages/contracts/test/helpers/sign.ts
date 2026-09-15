@@ -1,7 +1,8 @@
 // Off-chain Jubjub-Schnorr signing with exact in-circuit parity.
 //
 // Mirrors the contract's verify path (schnorr.compact + attestation.compact):
-//   msg  = pureCircuits.message(claim)                  — flat Vector<K, Field>
+//   msg  = the flat Vector<K, Field> being committed to (produced by
+//          pureCircuits.message(claim) or the off-chain claimToMessage)
 //   c    = pureCircuits.schnorrChallenge(ann, pk, msg) — Poseidon challenge;
 //          the in-circuit `truncateChallenge` reduces it mod 2^248 (the
 //          getSchnorrReduction witness supplies q, r). We reproduce the same
@@ -9,9 +10,10 @@
 //   s    = (k + c*sk) % JUBJUB_ORDER
 //   signature = { announcement: k*G, response: s }
 //
-// The message + challenge are computed with the contract's own compiled pure
-// circuits — never a hand-rolled encoding — so a signature produced here must
-// verify in-circuit.
+// The message is computed with the contract's own compiled pure circuit
+// (`pureCircuits.message`), or supplied directly (e.g. from
+// `@thoth/core/claim`'s `claimToMessage`) — never a hand-rolled encoding — so
+// a signature produced here must verify in-circuit.
 import { createHash } from 'node:crypto';
 import { ecMulGenerator } from '@midnight-ntwrk/compact-runtime';
 import { type A_Claim, pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
@@ -31,17 +33,35 @@ const hashToScalar = (seed: string): bigint => {
 
 export const derivePublicKey = (sk: bigint): JubjubPoint => ecMulGenerator(sk);
 
-export const signClaim = (
+/**
+ * Sign an arbitrary flat message with the given secret key.
+ *
+ * The message is used as-is (not re-derived from a claim), so callers can sign
+ * a message produced by `claimToMessage` (the off-chain encoder) and verify it
+ * against the contract's own `buildMessage`.
+ *
+ * @param sk — the secret key.
+ * @param msg — the flat message to commit to.
+ * @param kSeed — deterministic nonce seed for reproducible fixtures.
+ * @returns the derived public key plus the Schnorr signature over `msg`.
+ */
+export const signMessage = (
   sk: bigint,
-  claim: A_Claim,
+  msg: readonly bigint[],
   kSeed = sk.toString(16),
 ): { pk: JubjubPoint; signature: SchnorrSignature } => {
   const pk = derivePublicKey(sk);
-  const msg = pureCircuits.message(claim);
   const k = hashToScalar(kSeed);
   const announcement = ecMulGenerator(k);
-  const cFull = pureCircuits.schnorrChallenge(announcement.x, announcement.y, pk.x, pk.y, msg);
+  const cFull = pureCircuits.schnorrChallenge(announcement.x, announcement.y, pk.x, pk.y, [...msg]);
   const c = cFull % TWO_248;
   const response = (k + c * sk) % JUBJUB_ORDER;
   return { pk, signature: { announcement, response } };
 };
+
+export const signClaim = (
+  sk: bigint,
+  claim: A_Claim,
+  kSeed = sk.toString(16),
+): { pk: JubjubPoint; signature: SchnorrSignature } =>
+  signMessage(sk, pureCircuits.message(claim), kSeed);
