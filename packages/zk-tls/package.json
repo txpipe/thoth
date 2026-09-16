@@ -1,0 +1,55 @@
+{
+  "name": "@thoth/zk-tls",
+  "version": "0.0.0",
+  "description": "zkFetch attestor kind for the Thoth N-of-M attestation system.",
+  "type": "module",
+  "license": "MIT",
+  "author": "TxPipe-Shop",
+  "keywords": [
+    "thoth",
+    "midnight",
+    "attestation",
+    "zero-knowledge",
+    "zk",
+    "zkfetch",
+    "reclaim"
+  ],
+  "homepage": "https://github.com/txpipe-shop/thoth#readme",
+  "bugs": {
+    "url": "https://github.com/txpipe-shop/thoth/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/txpipe-shop/thoth.git",
+    "directory": "packages/zk-tls"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    "./attestor": {
+      "types": "./dist/attestor/index.d.ts",
+      "import": "./dist/attestor/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@reclaimprotocol/attestor-core": "5.0.8",
+    "@thoth/attestor": "*",
+    "@thoth/client": "*",
+    "@thoth/core": "*",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

@@ -6,7 +6,8 @@
     "packages/attestor",
     "packages/client",
     "packages/contracts",
-    "packages/core"
+    "packages/core",
+    "packages/zk-tls"
   ],
   "description": "Private N-of-M attestation for Midnight — a TypeScript monorepo.",
   "type": "module",
