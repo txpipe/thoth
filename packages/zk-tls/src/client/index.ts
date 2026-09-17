@@ -12,6 +12,7 @@ import type {
 } from '../index.js';
 import {
   assertEvidenceMatchesPolicy,
+  claimUrl,
   deriveClaimFromEvidence,
   parsedEvidenceView,
   zkFetchEvidenceSchema,
@@ -76,7 +77,8 @@ export interface ZkFetchProver {
    * Fetch `request` and return the canonical evidence it attests.
    *
    * @param request — what to fetch and which fields to reveal/redact.
-   * @returns canonical evidence, or throws if the fetch/attest fails.
+   * @returns canonical evidence attesting `request.url`'s origin, or throws
+   *   if the fetch/attest fails.
    */
   prove(request: ZkFetchRequest): Promise<ZkFetchEvidence>;
 }
@@ -124,6 +126,27 @@ export const toCanonicalEvidence = (raw: RawZkFetchProof): ZkFetchEvidence => {
     attestorAddress: addressFromWitnessId(witness.id),
     responseText: raw.responseText ?? raw.extractedParameterValues?.data ?? undefined,
   };
+};
+
+/**
+ * The URL the signed evidence attests is the one the request asked for.
+ *
+ * A prover returns canonical evidence for the interaction it witnessed; this
+ * keeps that evidence honest against the caller's request before any
+ * attestation is collected. Origin (scheme + host + port) is compared, so a
+ * redirect or a differing path still passes, while a mismatched host is
+ * caught early.
+ *
+ * @param evidence — canonical evidence from the prover.
+ * @param request — what the caller asked the client to prove.
+ * @throws if the evidence attests a different origin than requested.
+ */
+const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetchRequest): void => {
+  const asked = new URL(request.url).origin;
+  const attested = new URL(claimUrl(evidence.claim)).origin;
+  if (asked !== attested) {
+    throw new Error(`prover returned evidence for ${attested}, not the requested ${asked}`);
+  }
 };
 
 /**
@@ -246,6 +269,9 @@ export interface ZkFetchClient<V extends number, PK, S> {
   /**
    * Obtain evidence for an HTTPS request through the configured prover.
    *
+   * The evidence must attest `request.url`'s origin — enforced here, so a
+   * prover answering for a different origin never reaches an attestor.
+   *
    * @param request — what to fetch and which of its fields to reveal/redact.
    * @returns a proof handle whose `attest` fan-out collects the N-of-M set.
    */
@@ -266,9 +292,9 @@ export interface ZkFetchClient<V extends number, PK, S> {
  * const attestment = await proof.attest('txpipeEndpoint', 'eryxEndpoint', 'midnightFoundation');
  * ```
  *
- * `init` validates the policy once; `proveReq` shapes the prover's output
- * through the evidence schema so only canonical evidence ever reaches an
- * attestor.
+ * `init` validates the policy and its slot map once; `proveReq` shapes the
+ * prover's output through the evidence schema and binds it to the requested
+ * URL, so only canonical, matching evidence ever reaches an attestor.
  */
 export const zkFetchClient = {
   /**
@@ -279,15 +305,25 @@ export const zkFetchClient = {
    * @typeParam S — the signature scheme's signature type.
    * @param config — trusted set, transport, policy, slot count, and prover.
    * @returns a client ready to `proveReq`.
+   * @throws if the policy is invalid or a policy slot exceeds `valueSlots`.
    */
   init: <const V extends number, PK, S>(
     config: ZkFetchClientConfig<V, PK, S>,
   ): ZkFetchClient<V, PK, S> => {
     const { trusted, transport, policy, valueSlots, prover } = config;
     const checkedPolicy = zkFetchPolicySchema.parse(policy);
+    // Same guard `deriveClaimFromEvidence` enforces later — fail at init
+    // instead of on the first `attest()`.
+    const outOfRange = checkedPolicy.slots.find((slot) => slot.slot >= valueSlots);
+    if (outOfRange !== undefined) {
+      throw new Error(
+        `policy slot ${outOfRange.slot} is out of the claim's ${valueSlots} value slots`,
+      );
+    }
     return {
       proveReq: async (request): Promise<ZkFetchClientProof<V, PK, S>> => {
         const evidence = zkFetchEvidenceSchema.parse(await prover.prove(request));
+        assertEvidenceMatchesRequest(evidence, request);
         return {
           evidence,
           attest: async (...ids) =>

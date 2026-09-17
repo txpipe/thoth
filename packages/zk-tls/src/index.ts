@@ -251,7 +251,7 @@ const hexToBytes = (hex: string): Uint8Array =>
  * @returns the attested URL.
  * @throws if the parameters do not carry a non-empty `url`.
  */
-const claimUrl = (claim: ProviderClaimData): string => {
+export const claimUrl = (claim: ProviderClaimData): string => {
   let parameters: Readonly<{ url?: string }>;
   try {
     parameters = JSON.parse(claim.parameters) as Readonly<{ url?: string }>;

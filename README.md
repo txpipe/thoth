@@ -48,7 +48,7 @@ was observed, and the application defines the predicate over it.
 thoth/
 ├── packages/                   # @thoth/* npm workspace packages
 │   ├── attestor/              # @thoth/attestor — host: key boundary, instances, helpers
-│   ├── client/                # @thoth/client — dApp-side TrustedSet (in progress)
+│   ├── client/                # @thoth/client — dApp-side seam: TrustedSet, transport, primitives
 │   ├── contracts/             # @thoth/contracts — Compact on-chain modules
 │   │   ├── attestation.compact     # N-of-M verification, replay/freshness control, claims vault
 │   │   ├── attestor_registry.compact  # pinned attestor keys + signature counting
@@ -56,15 +56,16 @@ thoth/
 │   │   ├── examples/example_app.compact  # 2-of-3 example embedding
 │   │   ├── test/                   # simulator tests + helpers
 │   │   └── README.md               # how to embed the modules in your own contract
-│   └── core/                  # @thoth/core — keyless claim/envelope types
+│   ├── core/                  # @thoth/core — keyless claim/envelope types
+│   └── zk-tls/                # @thoth/zk-tls — zkFetch kind: shared logic + attestor + client
 ├── docs/DESIGN.md              # design overview & decisions
 ├── tsconfig.base.json          # shared TypeScript compiler options for all packages
 └── package.json                # repo root: npm workspace + shared scripts, CI
 ```
 
 The repo is an npm workspace monorepo: the active `@thoth/*` packages — `core`,
-`attestor`, and `contracts` — live under `packages/` and are wired into the root
-`workspaces`. `client` is in progress and not yet part of the workspace.
+`attestor`, `client`, `contracts`, and `zk-tls` — live under `packages/` and are
+wired into the root `workspaces`.
 
 ## The contracts
 
@@ -96,7 +97,9 @@ vitest, and biome on every push/PR.
 - `AGENTS.md` — guide for AI coding agents working in this repo
 - `packages/core/README.md` — the keyless internal law (`@thoth/core/claim`)
 - `packages/attestor/README.md` — the host: key boundary, instances, helpers
+- `packages/client/README.md` — the dApp-side base: trusted set, transport, resolution
 - `packages/contracts/README.md` — the on-chain Compact modules: semantics, module parameters, deploy wiring
+- `packages/zk-tls/README.md` — the concrete zkFetch kind: shared logic, attestor, client
 
 ## Name origin
 

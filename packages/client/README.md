@@ -41,7 +41,7 @@ npm install @thoth/client
 
 ## For kind SDK authors
 
-Kind-specific SDKs (e.g. a zkTLS client) build *on top of* this package: they
+Kind-specific SDKs (e.g. [`@thoth/zk-tls`](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls)) build *on top of* this package: they
 wire a concrete transport, drive the fan-out in their own async runtime, apply
 their own threshold policy, and add their own prove/attest ergonomics.
 

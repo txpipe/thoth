@@ -28,7 +28,7 @@ Run everything from the repo root (npm workspace):
 - `npm install` — install all workspaces
 - `npm run types` — typecheck every package (`tsc --noEmit` per workspace)
 - `npm test` — compiles the mock contract (via `pretest` → `npm run compact`),
-  then runs vitest (contract simulator tests)
+  then runs vitest (contract simulator + zk-tls kind tests)
 - `npm run check` — biome format/lint + `compact format -c` check
 - `npm run check:fix` — auto-fix biome + compact formatting
 - `npm run build` — build all packages that have a `build` script (`tsc`),

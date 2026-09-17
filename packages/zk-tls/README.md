@@ -38,6 +38,8 @@ add their side's machinery:
   - `parseDisclosedValue(value, rule)` — the parse law: a disclosed string
     becomes the claim's numeric slot value, or `null` when unparseable or out
     of the wire's `Uint<64>` range.
+  - `claimUrl(claim)` — the URL a signed claim attests, decoded from its
+    parameters.
   - Types: `ZkFetchDefinition`, `ProviderClaimData`, `ZkFetchEvidence`,
     `VerifiedEvidence`, `ZkFetchPolicy`, `ZkFetchSlot`.
 - **`@thoth/zk-tls/attestor`** — the attestor (host) side:
@@ -56,9 +58,11 @@ add their side's machinery:
     claim's length.
 - **`@thoth/zk-tls/client`** — the dApp side: `zkFetchClient`,
   `toCanonicalEvidence`, `addressFromWitnessId`, and the prover/config types.
-  The client does **not** re-verify the Reclaim signature — it is the side
-  that ran the witnessed interaction, and each pinned attestor verifies the
-  evidence before signing.
+  `init` validates the policy (including its slot map against the claim
+  length) once; `proveReq` binds the prover's evidence to the requested URL's
+  origin. The client does **not** re-verify the Reclaim signature — it is the
+  side that ran the witnessed interaction, and each pinned attestor verifies
+  the evidence before signing.
 
 ## Usage
 
