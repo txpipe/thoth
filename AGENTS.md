@@ -14,8 +14,9 @@ Thoth is a private N-of-M attestation system for Midnight. Three layers:
   (`schnorr.compact`).
 - **Attestor SDK** — `packages/attestor` + `packages/core`: the types and
   interfaces attestor *kinds* implement to provide attestation. Kinds verify
-  evidence and sign a canonical claim. (`packages/client` — dApp-side
-  `TrustedSet` — is a placeholder, not yet in `workspaces`.)
+  evidence and sign a canonical claim. (`packages/client` — the dApp-side
+  `TrustedSet` seam — and `packages/zk-tls` — the zkFetch kind — are active
+  workspaces.)
 
 Attestors certify facts, not decisions: a claim is a canonical statement of
 what was observed; the application defines the predicate over it.
@@ -27,7 +28,7 @@ Run everything from the repo root (npm workspace):
 - `npm install` — install all workspaces
 - `npm run types` — typecheck every package (`tsc --noEmit` per workspace)
 - `npm test` — compiles the mock contract (via `pretest` → `npm run compact`),
-  then runs vitest (contract simulator tests)
+  then runs vitest (contract simulator + zk-tls kind tests)
 - `npm run check` — biome format/lint + `compact format -c` check
 - `npm run check:fix` — auto-fix biome + compact formatting
 - `npm run build` — build all packages that have a `build` script (`tsc`),
@@ -44,10 +45,11 @@ biome on every push/PR.
 
 - **Stale `dist/` footgun** — workspaces resolve each other through
   `node_modules/@thoth/*` ⇒ `exports` ⇒ `dist/`. The root `build`/`types`
-  scripts rebuild `@thoth/core` first (the only dependency-producing package), so
-  consumers see fresh types; if a *new* workspace dependency appears, add its
-  package to the build-first chain. A stale `dist/index.d.ts` still produces
-  confusing errors like "Generic type requires N type argument(s)".
+  scripts rebuild the dependency-producing packages first (`core`, `attestor`,
+  `client`), so consumers — e.g. `zk-tls`, which depends on all three — see
+  fresh types; if a *new* workspace dependency appears, add its package to the
+  build-first chain. A stale `dist/index.d.ts` still produces confusing errors
+  like "Generic type requires N type argument(s)".
 
 ## Repository layout
 
@@ -57,8 +59,9 @@ thoth/
 │   ├── attestor/       # @thoth/attestor  — host: key boundary, instances, helpers
 │   ├── client/         # @thoth/client    — dApp-side seam: TrustedSet, transport, primitives
 │   ├── contracts/      # @thoth/contracts — Compact modules (+ tests)
-│   └── core/           # @thoth/core      — keyless claim/envelope types
-│       └── src/claim.ts                   — claim types served at @thoth/core/claim
+│   ├── core/           # @thoth/core      — keyless claim/envelope types
+│   │   └── src/claim.ts                   — claim types served at @thoth/core/claim
+│   └── zk-tls/         # @thoth/zk-tls    — zkFetch kind: attestor law + client (fixture-backed tests)
 ├── docs/DESIGN.md      # design overview & decisions
 ├── README.md           # human-oriented overview
 └── AGENTS.md           # this file
