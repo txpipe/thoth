@@ -209,8 +209,12 @@ export const zkFetchPolicySchema = z.object({
   claimKind: z.bigint().optional(),
 });
 
-const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean =>
-  allowedHosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => {
+  const lower = host.toLowerCase();
+  return allowedHosts.some(
+    (allowed) => lower === allowed.toLowerCase() || lower.endsWith(`.${allowed.toLowerCase()}`),
+  );
+};
 
 const hexToBytes = (hex: string): Uint8Array =>
   new Uint8Array(Buffer.from(hex.replace(/^0x/, ''), 'hex'));
@@ -351,24 +355,40 @@ const canonicalJson = (value: unknown): string => {
 const sha256Hex = (data: string): string =>
   createHash('sha256').update(data, 'utf-8').digest('hex');
 
+/** The contract's value type is `Uint<64>`; only non-negative values below 2^64 are certifiable. */
+const UINT64_MAX = 1n << 64n;
+
 /**
  * Parse a disclosed string value into the claim's numeric slot value.
  *
- * Returns `null` when the value cannot be interpreted under the rule — such a
- * disclosure is not certifiable and its slot stays unpresent, rather than the
- * attestor guessing a numeric reading.
+ * Returns `null` when the value cannot be interpreted under the rule or falls
+ * outside the wire's `Uint<64>` range `[0, 2^64)` — such a disclosure is not
+ * certifiable and its slot stays unpresent, rather than the attestor guessing
+ * a numeric reading or signing a value the contract can never verify.
  *
  * @param value — the disclosed string value.
  * @param rule — how to interpret it.
- * @returns the numeric value, or `null` when unparseable.
+ * @returns the numeric value, or `null` when unparseable or out of range.
  */
 const parseDisclosedValue = (value: string, rule: ZkFetchParseRule): bigint | null => {
   switch (rule) {
-    case 'int':
-      return /^[+-]?\d+$/.test(value) ? BigInt(value) : null;
+    case 'int': {
+      if (!/^\d+$/.test(value)) {
+        return null;
+      }
+      const big = BigInt(value);
+      return big < UINT64_MAX ? big : null;
+    }
     case 'float': {
       const parsed = Number.parseFloat(value);
-      return Number.isFinite(parsed) ? BigInt(Math.round(parsed)) : null;
+      if (!Number.isFinite(parsed)) {
+        return null;
+      }
+      const rounded = Math.round(parsed);
+      if (rounded < 0 || rounded >= UINT64_MAX) {
+        return null;
+      }
+      return BigInt(rounded);
     }
   }
 };
@@ -488,7 +508,8 @@ export const assertEvidenceMatchesPolicy = (
   if (!hostAllowed(host, policy.allowedHosts)) {
     throw new Error(`attested host ${host} not in allowlist [${policy.allowedHosts.join(', ')}]`);
   }
-  if (!policy.attestorAddresses.includes(verified.attestorAddress.toLowerCase())) {
+  const attestorAddress = verified.attestorAddress.toLowerCase();
+  if (!policy.attestorAddresses.some((pinned) => pinned.toLowerCase() === attestorAddress)) {
     throw new Error(
       `attestor address ${verified.attestorAddress} not in pinned witnesses [${policy.attestorAddresses.join(
         ', ',
