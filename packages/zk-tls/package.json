@@ -38,6 +38,10 @@
     "./attestor": {
       "types": "./dist/attestor/index.d.ts",
       "import": "./dist/attestor/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
     }
   },
   "scripts": {
