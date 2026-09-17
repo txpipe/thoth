@@ -30,7 +30,8 @@ obtained, the attestor checks it and, if satisfied, signs a claim derived from i
 its own key — its signature is the attestation. Attestors are defined by the *kind* of
 verification they can perform:
 
-- **zkFetch** — verifies a client's fetch proof from a data source
+- **zkFetch** — verifies a client's fetch proof from a data source; this kind
+  ships as [`@thoth/zk-tls`](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls)
 - **effectStream** — certifies events observed on another blockchain
 - **band** — checks a client-proposed value against the attestor's own data source,
   within a bound
