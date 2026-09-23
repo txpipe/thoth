@@ -18,8 +18,7 @@ module attestor_registry<#M, #K> {
   /// The M attestor public keys, pinned at deploy by the top-level constructor.
   export sealed ledger keys: Vector<M, JubjubPoint>;
 
-  /// Whether one signature verifies against its registry slot (stdlib
-  /// Jubjub-Schnorr; an empty slot never verifies).
+  /// Whether one signature verifies against its registry slot.
   circuit slotValid(
             msg: Vector<K, Field>,
             sig: JubjubSchnorrSignature,
