@@ -6,6 +6,7 @@ import {
   createConstructorContext,
   dummyContractAddress,
   type Effects,
+  type JubjubPoint,
   type StateValue,
 } from '@midnight-ntwrk/compact-runtime';
 import { Contract, type Ledger, ledger } from '../../artifacts/mock_attestation/contract/index.js';
@@ -35,7 +36,7 @@ export class MockAttestationSim {
   // construction goes through this factory.
   static async create(
     privateState: PrivateState,
-    registryKeys: { x: bigint; y: bigint }[],
+    registryKeys: JubjubPoint[],
     freshnessWindow = 0n,
   ): Promise<MockAttestationSim> {
     const contract = new Contract<PrivateState>(makeWitnesses(registryKeys, freshnessWindow));

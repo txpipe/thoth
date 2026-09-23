@@ -1,7 +1,7 @@
 {
   "name": "@thoth/contracts",
   "version": "0.0.0",
-  "description": "Thoth Compact modules: N-of-M attestation, and attestor registry.",
+  "description": "Thoth Compact modules: N-of-M attestation and attestor registry.",
   "type": "module",
   "license": "MIT",
   "private": true,

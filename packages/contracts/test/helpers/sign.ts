@@ -1,6 +1,9 @@
 // Off-chain Jubjub-Schnorr signing via the runtime's `jubjubSchnorrSign`, the
-// counterpart of the stdlib `jubjubSchnorrVerify` the registry counts with
-// (same pinned compact-runtime version ⇒ same challenge hash and reduction).
+// counterpart of the stdlib `jubjubSchnorrVerify` the registry counts with.
+// Both hash (R, pk, msg) identically. The signer reduces the challenge mod the
+// Jubjub order; the compiled verifier feeds the unreduced hash to `ecMul`,
+// which is equivalent because pk lies in the prime-order subgroup
+// (c·pk == (c mod r)·pk). The simulator tests exercise this end to end.
 //
 // The message is computed with the contract's own compiled pure circuit
 // (`pureCircuits.message`), or supplied directly (e.g. from

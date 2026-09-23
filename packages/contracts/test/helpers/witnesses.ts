@@ -1,4 +1,4 @@
-import type { WitnessContext } from '@midnight-ntwrk/compact-runtime';
+import type { JubjubPoint, WitnessContext } from '@midnight-ntwrk/compact-runtime';
 import type {
   A_Claim,
   Ledger,
@@ -9,7 +9,7 @@ import type { PrivateState } from './private-state.js';
 export type WitnessBase = WitnessContext<Ledger, PrivateState>;
 
 export const makeWitnesses = (
-  registryKeys: { x: bigint; y: bigint }[],
+  registryKeys: JubjubPoint[],
   freshnessWindow = 0n,
 ): Witnesses<PrivateState> => ({
   getAttestationWitness: ({
@@ -26,7 +26,7 @@ export const makeWitnesses = (
     privateState.holderSecret,
   ],
 
-  seedKeys: ({ privateState }: WitnessBase): [PrivateState, { x: bigint; y: bigint }[]] => [
+  seedKeys: ({ privateState }: WitnessBase): [PrivateState, JubjubPoint[]] => [
     privateState,
     registryKeys,
   ],

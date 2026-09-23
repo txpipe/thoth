@@ -53,7 +53,7 @@ export type SignedClaim = {
 
 // Dummy signature for an empty slot: identity announcement, zero response —
 // it can never verify against a non-empty registry slot.
-const DUMMY_SIGNATURE: JubjubSchnorrSignature = {
+export const DUMMY_SIGNATURE: JubjubSchnorrSignature = {
   announcement: { x: 0n, y: 1n },
   response: 0n,
 };

@@ -86,6 +86,14 @@ describe('mock attestation', () => {
       ).rejects.toThrow('Insufficient valid signatures');
     });
 
+    it('rejects the same key signing into two slots (positional verification)', async () => {
+      const claim = makeClaim();
+      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[0], null], randomBytes(32));
+      await expect(
+        sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
+      ).rejects.toThrow('Insufficient valid signatures');
+    });
+
     it('rejects a signature from an unregistered key', async () => {
       const outsider = makeNotaryKey();
       const claim = makeClaim();

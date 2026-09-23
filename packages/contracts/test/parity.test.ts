@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { claimToMessage } from '@thoth/core/claim';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
-import { idOf, makeClaim, makeNotaryKey } from './helpers/fixtures.js';
+import { DUMMY_SIGNATURE, idOf, makeClaim, makeNotaryKey } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
 import { MockAttestationSim } from './helpers/sim.js';
@@ -18,9 +18,6 @@ import { MockAttestationSim } from './helpers/sim.js';
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 const registryKeys = notaryKeys.map((k) => k.pk);
 const holder = randomBytes(32);
-
-// A signature that can never verify against a non-empty registry slot.
-const DUMMY_SIGNATURE = { announcement: { x: 0n, y: 1n }, response: 0n };
 
 const claims = [
   makeClaim(),
