@@ -34,13 +34,18 @@ export interface ZkFetchRequest {
   url: string;
   /** HTTP method; defaults to `GET`. */
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH';
+  /** Request body; signed into the claim's parameters. */
+  body?: string;
   /** Headers revealed to the verifier. */
   publicHeaders?: Readonly<Record<string, string>>;
   /** Headers hidden from the verifier (e.g. authorization). */
   secretHeaders?: Readonly<Record<string, string>>;
   /** Response patterns whose named groups become the disclosed values. */
   responseMatches?: readonly { type: 'regex' | 'contains'; value: string }[];
-  /** Response slices the witness redacts; redacted values are never disclosed. */
+  /**
+   * Slices of the response revealed to the witness — Reclaim's reveal
+   * whitelist: everything not selected here stays hidden from the proof.
+   */
   responseRedactions?: readonly { regex?: string; jsonPath?: string; xPath?: string }[];
   /** Arbitrary context signed into the claim (e.g. a label). */
   context?: Readonly<Record<string, unknown>>;

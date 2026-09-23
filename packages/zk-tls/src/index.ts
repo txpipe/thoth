@@ -128,16 +128,6 @@ export interface ZkFetchDefinition {
   message(claim: Claim<number>): FlatMessage;
 }
 
-/** A response redaction selection as declared in the claim's signed parameters. */
-interface ResponseRedaction {
-  /** Select a regex match from the response; named groups name the fields it hides. */
-  regex?: string;
-  /** Retrieve the item at a dot-notated JSON path; its leaf names the hidden field. */
-  jsonPath?: string;
-  /** Select an HTML node by xpath. */
-  xPath?: string;
-}
-
 /**
  * The parsed view of evidence, used for claim derivation and policy checks.
  *
@@ -156,9 +146,9 @@ export interface VerifiedEvidence {
   /** The captured HTTP transcript, when the evidence carried one. */
   responseText?: string;
   /**
-   * The extracted values the attestor can certify, keyed by named regex group;
-   * already excludes redacted fields (which the proof's parameters mark as
-   * hidden from the attestor).
+   * The values the witness extracted from the response it saw, keyed by named
+   * regex group. The witness computes them over the redacted transcript and the
+   * claim signature covers them, so they are certifiable as they are.
    */
   disclosedValues: Readonly<Record<string, string>>;
   /** Claim identifier. */
@@ -264,122 +254,28 @@ export const claimUrl = (claim: ProviderClaimData): string => {
   return parameters.url;
 };
 
-const NAMED_GROUP = /\(\?<([A-Za-z][A-Za-z0-9_]*)>/g;
-
 /**
- * Extract the named-group names a regex pattern declares.
- *
- * Redaction and extraction patterns use `(?<name>…)` groups; the group names
- * are the field identifiers claim derivation keys on.
- *
- * @param pattern — the regex source.
- * @returns the named-group names, in order of appearance.
- */
-const namedGroups = (pattern: string): string[] => {
-  const names: string[] = [];
-  for (const match of pattern.matchAll(NAMED_GROUP)) {
-    const name = match[1];
-    if (name !== undefined) {
-      names.push(name);
-    }
-  }
-  return names;
-};
-
-/**
- * The field names a redaction xPath hides.
- *
- * Mirrors the jsonPath leaf rule: an xPath names the node it selects, so the
- * hidden field is the selected node's local name — the last attribute/step
- * token of the expression (e.g. `/html/body/div[@id='x']/span` -> `span`,
- * `//price/@value` -> `value`). Returns an empty list when no name can be
- * derived; the caller then falls closed rather than certify a value the
- * witness may have hidden.
- *
- * @param expression — the redaction's xPath.
- * @returns the derived hidden field names, or `[]` when undecodable.
- */
-const xPathFieldNames = (expression: string): string[] => {
-  const last =
-    expression
-      .split('/')
-      .filter((step) => step !== '' && step !== '.')
-      .at(-1) ?? '';
-  const attribute = last.startsWith('@') ? last.slice(1) : last;
-  const name = attribute.replace(/\[.*$/, '').replace(/[^A-Za-z0-9_.-]/g, '');
-  return name !== '' && name !== '*' ? [name] : [];
-};
-
-/**
- * Read the disclosed values the signed claim carries, dropping redacted fields.
+ * Read the values the witness extracted from the response it saw.
  *
  * The signature already binds `claim.context`; this parser only interprets it.
- * Redaction is client-side in Reclaim — the attestor only ever sees selected
- * slices — so the *signed parameters* (`responseRedactions`) are the rule for
- * which extracted names are hidden and must never be certified. A redaction
- * names its fields through named regex groups, a JSON-path leaf, or an xPath
- * node name; a group-less regex names every disclosed value it matches; an
- * undecodable xPath falls closed (nothing is certified).
+ * Reclaim redacts client-side — `responseRedactions` selects the slices the
+ * witness sees and the rest of the response never reaches it — so the extracted
+ * values are the witness's own computation over the redacted transcript.
+ * Nothing is dropped here: the reveal whitelist already did the hiding.
  *
  * @param claim — signed claim data whose context carries `extractedParameters`.
- * @returns the certifiable disclosed values; redacted names are dropped.
+ * @returns the certifiable disclosed values.
  */
 const disclosedValuesOf = (claim: ProviderClaimData): Readonly<Record<string, string>> => {
-  let parameters: Readonly<{ responseRedactions?: readonly ResponseRedaction[] }>;
   let context: Readonly<{ extractedParameters?: Readonly<Record<string, string>> }>;
   try {
-    parameters = JSON.parse(claim.parameters) as Readonly<{
-      responseRedactions?: readonly ResponseRedaction[];
-    }>;
     context = JSON.parse(claim.context) as Readonly<{
       extractedParameters?: Readonly<Record<string, string>>;
     }>;
   } catch {
-    throw new Error('claim parameters or context are not valid JSON');
+    throw new Error('claim context is not valid JSON');
   }
-  const extracted = context.extractedParameters ?? {};
-  const redacted = new Set<string>();
-  const groupless: RegExp[] = [];
-  for (const redaction of parameters.responseRedactions ?? []) {
-    if (typeof redaction.regex === 'string' && redaction.regex !== '') {
-      const groups = namedGroups(redaction.regex);
-      if (groups.length === 0) {
-        groupless.push(new RegExp(redaction.regex));
-      } else {
-        for (const name of groups) {
-          redacted.add(name);
-        }
-      }
-    }
-    if (typeof redaction.jsonPath === 'string' && redaction.jsonPath !== '') {
-      const leaf = redaction.jsonPath.split('.').at(-1);
-      if (leaf !== undefined && leaf !== '') {
-        redacted.add(leaf);
-      }
-    }
-    if (typeof redaction.xPath === 'string' && redaction.xPath !== '') {
-      const names = xPathFieldNames(redaction.xPath);
-      if (names.length === 0) {
-        // Undecodable selector: fall closed — none of the extracted values can
-        // be certified, as any of them may be the one the witness hid.
-        return {};
-      }
-      for (const name of names) {
-        redacted.add(name);
-      }
-    }
-  }
-  const disclosed: Record<string, string> = {};
-  for (const [name, value] of Object.entries(extracted)) {
-    if (redacted.has(name)) {
-      continue;
-    }
-    if (groupless.some((pattern) => pattern.test(value))) {
-      continue;
-    }
-    disclosed[name] = value;
-  }
-  return disclosed;
+  return context.extractedParameters ?? {};
 };
 
 /**
@@ -496,8 +392,8 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
  * the claim to the verified artifacts. `version`/`kind` come from the policy
  * (`claimVersion`/`claimKind`, defaulting to 1). The nonce is **deterministic**
  * in the evidence (SHA-256 over `identifier + canonicalHash`). A slot whose
- * disclosure is absent (or was redacted) stays unpresent — redacted fields are
- * never certified.
+ * disclosure is absent stays unpresent — the evidence only ever carries what
+ * the witness saw.
  *
  * @typeParam V — the claim's value-slot count.
  * @param options — the parsed evidence view, the policy, and the slot count.
