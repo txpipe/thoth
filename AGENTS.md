@@ -10,8 +10,7 @@ Thoth is a private N-of-M attestation system for Midnight. Three layers:
 - **Contract layer** — `packages/contracts` (`@thoth/contracts`): embeddable
   Compact modules that verify N-of-M signatures over a flat signed message
   (`attestation.compact`), count valid signatures against a pinned key vector
-  (`attestor_registry.compact`), and verify Jubjub-Schnorr signatures
-  (`schnorr.compact`).
+  (`attestor_registry.compact`) with the stdlib `jubjubSchnorrVerify`.
 - **Attestor SDK** — `packages/attestor` + `packages/core`: the types and
   interfaces attestor *kinds* implement to provide attestation. Kinds verify
   evidence and sign a canonical claim. (`packages/client` — the dApp-side
@@ -73,10 +72,11 @@ thoth/
   added to the root `package.json` `workspaces` array or they are silently
   skipped by the root `types`/`build` scripts. Dirs present on disk but absent
   from `workspaces` are **placeholders** — intentionally not compiled.
-- **`@midnight-ntwrk/compact-runtime` is pinned to `0.16.0`** everywhere
+- **`@midnight-ntwrk/compact-runtime` is pinned to `0.19.0`** everywhere
   (root, contracts, core). Off-chain code that mirrors an in-circuit primitive
-  (e.g. `degradeToTransient`) only matches the circuit at the **same pinned
-  version** — do not bump one workspace in isolation.
+  (e.g. `degradeToTransient`, `jubjubSchnorrSign`) only matches the circuit at
+  the **same pinned version** — do not bump one workspace in isolation. The
+  matching Compact compiler is `0.34.0` (README + both CI workflows).
 - **Claim types are keyless.** `@thoth/core` carries no signing key; anything
   that commits to a message delegates to the kind's `message()`. Keep it that
   way.

@@ -5,7 +5,6 @@ import type {
   Witnesses,
 } from '../../artifacts/mock_attestation/contract/index.js';
 import type { PrivateState } from './private-state.js';
-import { TWO_248 } from './sign.js';
 
 export type WitnessBase = WitnessContext<Ledger, PrivateState>;
 
@@ -25,14 +24,6 @@ export const makeWitnesses = (
   getHolderSecret: ({ privateState }: WitnessBase): [PrivateState, Uint8Array] => [
     privateState,
     privateState.holderSecret,
-  ],
-
-  getSchnorrReduction: (
-    { privateState }: WitnessBase,
-    challengeHash: bigint,
-  ): [PrivateState, [bigint, bigint]] => [
-    privateState,
-    [challengeHash / TWO_248, challengeHash % TWO_248],
   ],
 
   seedKeys: ({ privateState }: WitnessBase): [PrivateState, { x: bigint; y: bigint }[]] => [

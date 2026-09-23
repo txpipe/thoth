@@ -39,7 +39,7 @@ describe('claimToMessage parity', () => {
   });
 
   describe('end-to-end accept (level 2)', () => {
-    it('accepts signatures made over claimToMessage output', () => {
+    it('accepts signatures made over claimToMessage output', async () => {
       const commitRand = randomBytes(32);
       const claim = makeClaim({ values: [111n, 222n, 333n], present: [true, true, true] });
       const msg = claimToMessage(claim);
@@ -51,8 +51,8 @@ describe('claimToMessage parity', () => {
         DUMMY_SIGNATURE, // empty third slot — never verifies
       ];
 
-      const sim = new MockAttestationSim(createPrivateState(holder), registryKeys);
-      sim.call('verifyAttestation', {
+      const sim = await MockAttestationSim.create(createPrivateState(holder), registryKeys);
+      await sim.call('verifyAttestation', {
         claim,
         signatures,
         commitRand,

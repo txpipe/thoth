@@ -11,13 +11,12 @@ your own `.compact` contracts and compile as part of your own DApp build.
 | File | Module | Role |
 |------|--------|------|
 | `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and freshness (`freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)`. The claim can be opened at any time to access the values. |
-| `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` over a `Vector<K, Field>` message. Counts only — no threshold |
-| `schnorr.compact` | `schnorr` | Jubjub Schnorr verification polyfill (generic `Vector<#n, Field>`) |
+| `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` over a `Vector<K, Field>` message, verified with the stdlib `jubjubSchnorrVerify` (compiler ≥ 0.32; developed against 0.34.0). Counts only — no threshold |
 
-The modules form a single import graph (`attestation` → `attestor_registry` →
-`schnorr`), so they are always installed as one package. Import them by path
-from your contract; do not copy them into your project (you would then be
-forking the attestation semantics).
+The modules form a single import graph (`attestation` → `attestor_registry`), so
+they are always installed as one package. Import them by path from your
+contract; do not copy them into your project (you would then be forking the
+attestation semantics).
 
 ## Installation
 

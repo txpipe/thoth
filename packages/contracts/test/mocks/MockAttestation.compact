@@ -2,7 +2,7 @@
 // modules, specialized to V=3 values, K=11 message fields, M=3 signatures,
 // N=2 threshold (2-of-3). Exists only to give the modules a top-level shell to
 // compile against and to re-export the pure parity surface (`message`,
-// `schnorrChallenge`, `computeId`, `holderOf`) plus types and ledger fields
+// `computeId`, `holderOf`) plus types and ledger fields
 // the simulator/tests need.
 pragma language_version >= 0.22;
 
@@ -23,16 +23,6 @@ export circuit verifyAttestation(): [] {
 
 export pure circuit message(a: A_Claim): Vector<11, Field> {
   return A_buildMessage(a);
-}
-
-export pure circuit schnorrChallenge(
-                      ann_x: Field,
-                      ann_y: Field,
-                      pk_x: Field,
-                      pk_y: Field,
-                      msg: Vector<11, Field>
-                      ): Field {
-  return A_schnorrChallenge(ann_x, ann_y, pk_x, pk_y, msg);
 }
 
 export pure circuit computeId(a: A_Claim, rand: Bytes<32>): Bytes<32> {

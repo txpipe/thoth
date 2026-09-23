@@ -31,7 +31,6 @@ pragma language_version >= 0.22;
 
 module attestation<#K, #V, #N, #M> {
   import CompactStandardLibrary;
-  import "schnorr" prefix Schnorr_;
   import "attestor_registry"<M, K> prefix Registry_;
 
   export struct ClaimEntry {
@@ -55,7 +54,7 @@ module attestation<#K, #V, #N, #M> {
   export ledger claimsVault: Map<Bytes<32>, ClaimEntry>;
   export ledger nullifiers: Set<Bytes<32>>;
 
-  witness getAttestationWitness(): [Claim, Vector<M, Schnorr_SchnorrSignature>, Bytes<32>];
+  witness getAttestationWitness(): [Claim, Vector<M, JubjubSchnorrSignature>, Bytes<32>];
   witness getHolderSecret(): Bytes<32>;
 
   /// Pseudonymous holder identity: hashToCurve over a domain-separated holder
@@ -80,21 +79,6 @@ module attestation<#K, #V, #N, #M> {
     const presentFields: Vector<V, Field> = map((p: Boolean) => p as Field, c.present);
     const valuesFields: Vector<V, Field> = map((v: Uint<64>) => v as Field, c.values);
     return [...header, ...presentFields, ...valuesFields];
-  }
-
-  /// The Poseidon challenge hash over (announcement, public key, message).
-  /// Delegates to the generic schnorr module's pure circuit so off-chain
-  /// signing and the in-circuit verifier share a single implementation.
-  /// Exported here for signing parity (the attestor signs
-  /// c = cFull mod 2^248 via the same layout the in-circuit verifier computes).
-  export pure circuit schnorrChallenge(
-                        ann_x: Field,
-                        ann_y: Field,
-                        pk_x: Field,
-                        pk_y: Field,
-                        msg: Vector<K, Field>
-                        ): Field {
-    return Schnorr_schnorrChallenge<K>(ann_x, ann_y, pk_x, pk_y, msg);
   }
 
   /// Claim id = persistentCommit(claim, rand) — must match the id

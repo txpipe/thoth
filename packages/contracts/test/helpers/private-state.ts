@@ -1,13 +1,9 @@
+import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js';
-
-export type SchnorrSignature = {
-  announcement: { x: bigint; y: bigint };
-  response: bigint;
-};
 
 export type PrivateState = {
   readonly claim: A_Claim | null;
-  readonly signatures: SchnorrSignature[];
+  readonly signatures: JubjubSchnorrSignature[];
   readonly commitRand: Uint8Array;
   readonly holderSecret: Uint8Array;
 };

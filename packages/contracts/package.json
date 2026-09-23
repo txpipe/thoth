@@ -1,7 +1,7 @@
 {
   "name": "@thoth/contracts",
   "version": "0.0.0",
-  "description": "Thoth Compact modules: N-of-M attestation, attestor registry, and Schnorr verification.",
+  "description": "Thoth Compact modules: N-of-M attestation, and attestor registry.",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -29,7 +29,6 @@
   "files": [
     "attestation.compact",
     "attestor_registry.compact",
-    "schnorr.compact",
     "examples/",
     "README.md"
   ],
@@ -49,7 +48,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",
-    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@midnight-ntwrk/compact-runtime": "0.19.0",
     "@thoth/core": "*",
     "@types/node": "^26.2.0",
     "typescript": "^5.9.3",
