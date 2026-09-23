@@ -33,8 +33,8 @@
     "README.md"
   ],
   "scripts": {
-    "compact": "compact compile test/mocks/MockAttestation.compact artifacts/mock_attestation",
-    "compact:no-zk": "compact compile --skip-zk test/mocks/MockAttestation.compact artifacts/mock_attestation",
+    "compact": "compact compile +0.34.0 test/mocks/MockAttestation.compact artifacts/mock_attestation",
+    "compact:no-zk": "compact compile +0.34.0 --skip-zk test/mocks/MockAttestation.compact artifacts/mock_attestation",
     "pretest": "npm run compact:no-zk",
     "test": "vitest run",
     "types": "tsc --noEmit",
