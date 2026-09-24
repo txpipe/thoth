@@ -14,6 +14,7 @@ import type { Attestor, KeyPair } from '@thoth/attestor';
 import { descriptorOf } from '@thoth/attestor';
 import type { AttestorTransport, SignatureVerifier, TrustedSet } from '@thoth/client';
 import { buildTrustedSet } from '@thoth/client';
+import { AttestorFailureError } from '@thoth/client/errors';
 import type { FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
 import {
@@ -32,7 +33,7 @@ import {
   type ZkFetchProver,
   zkFetchClient,
 } from '@thoth/zk-tls/client';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type TestWitness, testWitness } from './helpers/witness.js';
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -233,6 +234,16 @@ const reasons = async (attempt: Promise<unknown>): Promise<string[]> => {
 };
 
 describe('zkFetch attestor + client', () => {
+  // The fixtures observe at OBSERVED_AT; the client checks the intent window
+  // against the wall clock, so pin it (timers stay real).
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(OBSERVED_AT * 1000);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const attestors = ['attestor-0', 'attestor-1', 'attestor-2'].map((id, i) =>
     zkFetchAttestor({
       id,
@@ -251,7 +262,7 @@ describe('zkFetch attestor + client', () => {
 
   /** An in-process transport; records every payload and can delay or tamper. */
   const transportOf = (
-    options: { delays?: Record<string, number>; tamper?: Tamper } = {},
+    options: { delays?: Record<string, number>; tamper?: Tamper; down?: string[] } = {},
   ): AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> & {
     sent: unknown[];
   } => {
@@ -264,12 +275,19 @@ describe('zkFetch attestor + client', () => {
         if (!instance) {
           throw new Error(`transport: unknown attestor ${attestor.id}`);
         }
+        if (options.down?.includes(attestor.id)) {
+          throw new Error('connect ECONNREFUSED');
+        }
         await new Promise((resolve) => setTimeout(resolve, options.delays?.[attestor.id] ?? 0));
-        const attestation = await instance.attest(
-          input as Parameters<
-            Attestor<ZkFetchDefinition, FakePublicKey, FakeSignature>['attest']
-          >[0],
-        );
+        const attestation = await instance
+          .attest(
+            input as Parameters<
+              Attestor<ZkFetchDefinition, FakePublicKey, FakeSignature>['attest']
+            >[0],
+          )
+          .catch((e: unknown) => {
+            throw new AttestorFailureError(attestor.id, 'rejected', e);
+          });
         return options.tamper ? options.tamper(attestor.id, attestation) : attestation;
       },
     };
@@ -360,7 +378,7 @@ describe('zkFetch attestor + client', () => {
       }),
     });
     expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([
-      expect.stringMatching(/attestor-1.*did not return a valid attestation/),
+      expect.stringMatching(/attestor-1.*invalid signature/),
     ]);
   });
 
@@ -485,5 +503,130 @@ describe('zkFetch attestor + client', () => {
     const { claim } = await clientOf({ operators: operators([{}, {}]) }).attest(REQUEST, INTENT);
     expect(claim.values).toEqual([0n, 0n, 0n]);
     expect(claim.present).toEqual([false, false, false]);
+  });
+
+  describe('resilience', () => {
+    const down: ZkFetchProver = { prove: () => Promise.reject(new Error('witness offline')) };
+    const hanging: ZkFetchProver = { prove: () => new Promise(() => {}) };
+    const three = (values: Record<string, string>[] = []) => ({
+      ...operators([values[0] ?? { stars: '0' }, values[1] ?? { stars: '0' }]),
+      'attestor-2': { prover: witnessProver(w0, values[2]), witnessAddress: w0.address },
+    });
+
+    it('falls back to the third operator when one is down', async () => {
+      const { collected, failures } = await clientOf({
+        operators: { ...three(), 'attestor-0': { prover: down, witnessAddress: w0.address } },
+      }).attest(REQUEST, INTENT);
+      expect(collected.map((c) => c.registryIndex)).toEqual([1, 2]);
+      expect(failures).toMatchObject([{ attestorId: 'attestor-0', reason: 'unreachable' }]);
+      expect(String(failures[0])).toMatch(/witness offline/);
+    });
+
+    it('reports an unreachable attestor and completes with the third', async () => {
+      const { collected, failures } = await clientOf({
+        transport: transportOf({ down: ['attestor-1'] }),
+        operators: three(),
+      }).attest(REQUEST, INTENT);
+      expect(collected.map((c) => c.registryIndex)).toEqual([0, 2]);
+      expect(failures).toMatchObject([{ attestorId: 'attestor-1', reason: 'unreachable' }]);
+    });
+
+    it('falls back to the third operator when one disagrees, and says so', async () => {
+      const { claim, collected, failures } = await clientOf({
+        operators: three([{ stars: '7' }, { stars: '42' }, { stars: '42' }]),
+      }).attest(REQUEST, INTENT);
+      expect(claim.values).toEqual([42n, 0n, 0n]);
+      expect(collected.map((c) => c.registryIndex)).toEqual([1, 2]);
+      expect(failures).toMatchObject([{ attestorId: 'attestor-0', reason: 'message' }]);
+      expect(String(failures[0])).toMatch(/attestor-0.*different message/);
+    });
+
+    it('reports an attestor that rejects the request, with its reason', async () => {
+      // attestor-1 pins w1; this operator's prover runs through w0.
+      const { collected, failures } = await clientOf({
+        operators: {
+          ...three(),
+          'attestor-1': { prover: witnessProver(w0), witnessAddress: w0.address },
+        },
+      }).attest(REQUEST, INTENT);
+      expect(collected.map((c) => c.registryIndex)).toEqual([0, 2]);
+      expect(failures).toMatchObject([{ attestorId: 'attestor-1', reason: 'rejected' }]);
+      expect(String(failures[0])).toMatch(/rejected the request.*not trusted by this attestor/);
+    });
+
+    it('keeps a valid result through another operator timing out', async () => {
+      const { collected, failures } = await clientOf({
+        timeoutMs: 20,
+        operators: { ...three(), 'attestor-0': { prover: hanging, witnessAddress: w0.address } },
+      }).attest(REQUEST, INTENT);
+      expect(collected.map((c) => c.registryIndex)).toEqual([1, 2]);
+      expect(failures).toMatchObject([{ attestorId: 'attestor-0', reason: 'unreachable' }]);
+      expect(String(failures[0])).toMatch(/timed out after 20ms/);
+    });
+
+    it('contacts every operator at once and returns once the threshold is met', async () => {
+      const contacted: string[] = [];
+      const recorded = Object.fromEntries(
+        Object.entries(three()).map(([id, op]) => [
+          id,
+          {
+            ...op,
+            prover: {
+              prove: (request) => {
+                contacted.push(id);
+                return op.prover.prove(request);
+              },
+            } satisfies ZkFetchProver,
+          },
+        ]),
+      );
+      const slow = transportOf({ delays: { 'attestor-0': 1_000 } });
+      const started = performance.now();
+      const { collected } = await clientOf({
+        contactAll: true,
+        transport: slow,
+        operators: recorded,
+      }).attest(REQUEST, INTENT);
+      expect(contacted).toHaveLength(3);
+      expect(collected.map((c) => c.registryIndex)).toEqual([1, 2]);
+      expect(performance.now() - started).toBeLessThan(500);
+    });
+
+    it('waits for the contacted operators by default', async () => {
+      const { collected } = await clientOf({
+        transport: transportOf({ delays: { 'attestor-0': 30 } }),
+        operators: three(),
+      }).attest(REQUEST, INTENT);
+      expect(collected.map((c) => c.registryIndex)).toEqual([0, 1]);
+    });
+
+    it('fails fast on an intent whose window already ended', async () => {
+      const contacted: string[] = [];
+      const client = clientOf({
+        operators: {
+          'attestor-0': {
+            prover: {
+              prove: (r) => {
+                contacted.push('attestor-0');
+                return witnessProver(w0).prove(r);
+              },
+            },
+            witnessAddress: w0.address,
+          },
+          'attestor-1': operators()['attestor-1'],
+        },
+      });
+      vi.setSystemTime((OBSERVED_AT + 61) * 1000);
+      await expect(client.attest(REQUEST, INTENT)).rejects.toThrow(/intent window.*expired/);
+      expect(contacted).toEqual([]);
+    });
+
+    it('gives up once the intent window expires mid-call', async () => {
+      vi.setSystemTime((OBSERVED_AT + 60) * 1000 - 30);
+      const attempt = clientOf({
+        operators: { ...three(), 'attestor-0': { prover: hanging, witnessAddress: w0.address } },
+      }).attest(REQUEST, INTENT);
+      await expect(attempt).rejects.toThrow(/intent window.*expired/);
+    });
   });
 });

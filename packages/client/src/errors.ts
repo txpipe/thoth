@@ -76,3 +76,43 @@ export class InvalidTrustedSetError extends Error {
     this.reason = reason;
   }
 }
+
+/** Why an attestor's answer did not count; see {@link AttestorFailureError}. */
+export type AttestorFailureReason = 'unreachable' | 'rejected' | 'message' | 'signature';
+
+/**
+ * One attestor did not contribute to a threshold attestation.
+ *
+ * `reason` discriminates what went wrong: the attestor (or the session feeding
+ * it) could not be reached or timed out (`'unreachable'`), it refused the
+ * request (`'rejected'`), it signed a different message than the one that won
+ * (`'message'`), or its signature does not verify under its pinned key
+ * (`'signature'`). The underlying error, if any, is the `cause`.
+ *
+ * A transport throws this with `'rejected'` when the attestor answered with a
+ * refusal; anything else a transport throws is treated as `'unreachable'`.
+ */
+export class AttestorFailureError extends Error {
+  /** The id of the failed attestor. */
+  readonly attestorId: string;
+  /** What went wrong. */
+  readonly reason: AttestorFailureReason;
+
+  /**
+   * @param attestorId — the failed attestor's id.
+   * @param reason — what went wrong.
+   * @param cause — the underlying error, whose message is appended.
+   */
+  constructor(attestorId: string, reason: AttestorFailureReason, cause?: unknown) {
+    const detail: Record<AttestorFailureReason, string> = {
+      unreachable: 'was unreachable',
+      rejected: 'rejected the request',
+      message: 'returned a different message',
+      signature: 'returned an invalid signature',
+    };
+    const why = cause instanceof Error ? `: ${cause.message}` : '';
+    super(`attestor "${attestorId}" ${detail[reason]}${why}`, { cause });
+    this.attestorId = attestorId;
+    this.reason = reason;
+  }
+}

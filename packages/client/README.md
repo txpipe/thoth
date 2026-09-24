@@ -43,7 +43,9 @@ npm install @thoth/client
 - Errors: `AttestationMismatchError` (thrown by `resolveAttestation`; `reason`
   is `'public-key' | 'message' | 'registry-index' | 'signature'`),
   `AttestorNotInTrustedSetError`, `InvalidTrustedSetError` (thrown by
-  `buildTrustedSet`) — exported from `@thoth/client/errors`.
+  `buildTrustedSet`), and `AttestorFailureError` (why one attestor did not
+  count: `'unreachable' | 'rejected' | 'message' | 'signature'`) — exported
+  from `@thoth/client/errors`.
 
 ## For kind SDK authors
 
@@ -75,6 +77,7 @@ A minimal HTTP implementation:
 ```ts
 import type { Attestation, AttestationInput } from '@thoth/core';
 import type { AttestorDescriptor, AttestorTransport } from '@thoth/client';
+import { AttestorFailureError } from '@thoth/client/errors';
 
 const httpTransport: AttestorTransport<MyDefinition, MyPublicKey, MySignature> = {
   async request(
@@ -86,11 +89,17 @@ const httpTransport: AttestorTransport<MyDefinition, MyPublicKey, MySignature> =
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(input),
     });
-    if (!res.ok) throw new Error(`attestor ${attestor.id} rejected: ${res.status}`);
+    if (!res.ok) {
+      // A refusal, not an outage: the kind client reports it as 'rejected'.
+      throw new AttestorFailureError(attestor.id, 'rejected', new Error(await res.text()));
+    }
     return res.json();
   },
 };
 ```
+
+Throw `AttestorFailureError` with `'rejected'` when the attestor answered with
+a refusal; anything else the transport throws counts as `'unreachable'`.
 
 ### Resolve string-named endpoints
 

@@ -5,6 +5,8 @@ import type {
   TrustedSet,
 } from '@thoth/client';
 import { attestorOf, resolveAttestation, thresholdGroup } from '@thoth/client';
+import type { AttestationMismatchError } from '@thoth/client/errors';
+import { AttestorFailureError } from '@thoth/client/errors';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { claimSchema, claimToMessage } from '@thoth/core/claim';
@@ -252,6 +254,8 @@ export interface Attestment<V extends number, PK, S> {
   readonly message: FlatMessage;
   /** The agreeing attestations, one per registry slot, sorted by slot. */
   readonly collected: readonly ZkFetchCollectedAttestation<V, PK, S>[];
+  /** Why each operator that answered before the threshold was met did not count. */
+  readonly failures: readonly AttestorFailureError[];
 }
 
 /**
@@ -288,9 +292,16 @@ export interface ZkFetchClientConfig<V extends number, PK, S> {
   /**
    * One operator per attestor, keyed by attestor id. Every id must be in
    * `trusted`. The client contacts the first `threshold` operators, in this
-   * order.
+   * order, and the next ones only as earlier ones fail or disagree.
    */
   readonly operators: Readonly<Record<string, ZkFetchOperator>>;
+  /** Contact every operator at once instead of `threshold` first. Defaults to `false`. */
+  readonly contactAll?: boolean;
+  /**
+   * How long one operator (session plus attestor) may take before it counts
+   * as unreachable. Unset, an operator may run until the intent window ends.
+   */
+  readonly timeoutMs?: number;
 }
 
 /**
@@ -309,14 +320,17 @@ export interface ZkFetchClient<V extends number, PK, S> {
    * request context under `INTENT_CONTEXT_KEY`. Runs one witnessed session per
    * contacted operator concurrently, sends each operator's evidence to its
    * attestor, verifies every returned signature, and groups the results by
-   * exact message.
+   * exact message. While no message can still reach the threshold, it
+   * contacts the next operator. Every operator works under the same intent;
+   * the call never retries with a fresh one.
    *
    * @param request — what to fetch and which of its fields to reveal/redact.
    *   Secret headers go to the provers only, never to an attestor.
    * @param intent — the holder commitment and the observation window.
-   * @returns the threshold attestation.
-   * @throws `AggregateError` if no message reaches the threshold; `errors`
-   *   holds one safe, generic error per failed operator.
+   * @returns the threshold attestation, as soon as the threshold is met.
+   * @throws `AggregateError` if no message reaches the threshold once every
+   *   operator has answered, or if the intent window ends first; `errors`
+   *   holds an {@link AttestorFailureError} per failed operator.
    */
   attest(request: ZkFetchRequest, intent: ZkFetchIntentInput): Promise<Attestment<V, PK, S>>;
 }
@@ -362,6 +376,7 @@ export const zkFetchClient = {
     config: ZkFetchClientConfig<V, PK, S>,
   ): ZkFetchClient<V, PK, S> => {
     const { trusted, transport, policy, valueSlots, threshold, verifier, operators } = config;
+    const { contactAll = false, timeoutMs } = config;
     const checkedPolicy = zkFetchPolicySchema.parse(policy);
     // Same guard `deriveClaimFromEvidence` enforces later — fail at init
     // instead of on the first `attest()`.
@@ -380,10 +395,15 @@ export const zkFetchClient = {
         `threshold ${threshold} cannot be met by ${resolved.length} configured operators`,
       );
     }
-    // ponytail: contacts exactly `threshold` operators; fallback to the rest is #45.
-    const contacted = resolved.slice(0, threshold);
     return {
       attest: async (request, input) => {
+        const windowEndMs = Number(input.windowEnd) * 1000;
+        if (Date.now() > windowEndMs) {
+          throw new AggregateError(
+            [],
+            `intent window expired at ${input.windowEnd}; no operator was contacted`,
+          );
+        }
         const intent: ZkFetchIntent = {
           policyDigest: policyDigestOf(checkedPolicy),
           requestBinding: requestBindingOf({
@@ -400,9 +420,20 @@ export const zkFetchClient = {
           ...request,
           context: { ...request.context, [INTENT_CONTEXT_KEY]: intentDigestOf(intent) },
         };
-        const results = await Promise.allSettled(
-          contacted.map(async ({ attestor, operator }) => {
-            const evidence = zkFetchEvidenceSchema.parse(await operator.prover.prove(bound));
+
+        /** One operator end to end; every failure becomes an `AttestorFailureError`. */
+        const attempt = async ({ attestor, operator }: (typeof resolved)[number]) => {
+          const as =
+            (reason: AttestorFailureError['reason']) =>
+            (e: unknown): never => {
+              throw new AttestorFailureError(
+                attestor.id,
+                e instanceof AttestorFailureError ? e.reason : reason,
+              );
+            };
+          const raw = await operator.prover.prove(bound).catch(as('unreachable'));
+          const { evidence, claim } = await (async () => {
+            const evidence = zkFetchEvidenceSchema.parse(raw);
             assertEvidenceMatchesRequest(evidence, request);
             if (evidence.attestorAddress.toLowerCase() !== operator.witnessAddress.toLowerCase()) {
               throw new Error(`evidence for "${attestor.id}" is not from its pinned witness`);
@@ -413,16 +444,19 @@ export const zkFetchClient = {
               intent,
               valueSlots,
             });
-            // The attestor is the law: it re-parses these with its own schemas,
-            // which accept the already-parsed (superset) shapes. The schemas'
-            // *input* types are the looser pre-parse form, so the payload is
-            // bridged here. Secret headers never enter it.
-            const payload = {
-              policy: checkedPolicy,
-              evidence,
-              claim,
-            } as unknown as ZkFetchAttestationInput;
-            const attestation = await transport.request(attestor, payload);
+            return { evidence, claim };
+          })().catch(as('rejected'));
+          // The attestor is the law: it re-parses these with its own schemas,
+          // which accept the already-parsed (superset) shapes. The schemas'
+          // *input* types are the looser pre-parse form, so the payload is
+          // bridged here. Secret headers never enter it.
+          const payload = {
+            policy: checkedPolicy,
+            evidence,
+            claim,
+          } as unknown as ZkFetchAttestationInput;
+          const attestation = await transport.request(attestor, payload).catch(as('unreachable'));
+          try {
             const collected = resolveAttestation({
               trusted,
               attestor,
@@ -430,30 +464,147 @@ export const zkFetchClient = {
               expectedMessage: claimToMessage(claim),
               verifier,
             });
-            return { claim, collected };
-          }),
-        );
-        const answered = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
-        const collected = answered.map((a) => a.collected);
-        const group = thresholdGroup(collected, threshold);
-        const first = group?.[0];
-        if (group === undefined || first === undefined) {
-          throw new AggregateError(
-            results.flatMap((r, i) =>
-              r.status === 'rejected'
-                ? [
-                    new Error(
-                      `attestor "${contacted[i]?.attestor.id}" did not return a valid attestation`,
+            return { id: attestor.id, claim, collected };
+          } catch (e) {
+            const mismatch = (e as AttestationMismatchError).reason;
+            return as(mismatch === 'message' ? 'message' : 'signature')(e);
+          }
+        };
+
+        /** `attempt`, failing as unreachable after `timeoutMs`. */
+        const timed = (next: (typeof resolved)[number]) => {
+          if (timeoutMs === undefined) {
+            return attempt(next);
+          }
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () =>
+                reject(
+                  new AttestorFailureError(
+                    next.attestor.id,
+                    'unreachable',
+                    new Error(`timed out after ${timeoutMs}ms`),
+                  ),
+                ),
+              timeoutMs,
+            );
+          });
+          return Promise.race([attempt(next), timeout]).finally(() => clearTimeout(timer));
+        };
+
+        const answered: Awaited<ReturnType<typeof attempt>>[] = [];
+        const failures: AttestorFailureError[] = [];
+        const pending = [...resolved];
+        let inFlight = 0;
+        let expiry: ReturnType<typeof setTimeout> | undefined;
+
+        return new Promise<Attestment<V, PK, S>>((resolve, reject) => {
+          let done = false;
+          const finish = (settle: () => void) => {
+            if (!done) {
+              done = true;
+              clearTimeout(expiry);
+              settle();
+            }
+          };
+          /** Largest number of distinct slots agreeing on one message so far. */
+          const agreeing = (): number => {
+            const collected = answered.map((a) => a.collected);
+            for (let k = threshold; k > 0; k--) {
+              if (thresholdGroup(collected, k) !== undefined) {
+                return k;
+              }
+            }
+            return 0;
+          };
+          const step = () => {
+            if (done) {
+              return;
+            }
+            const group = thresholdGroup(
+              answered.map((a) => a.collected),
+              threshold,
+            );
+            const first = group?.[0];
+            if (group !== undefined && first !== undefined) {
+              const message = first.attestation.message;
+              const disagreeing = answered
+                .filter((a) => String(a.collected.attestation.message) !== String(message))
+                .map((a) => new AttestorFailureError(a.id, 'message'));
+              // Return our own proposal, not the attestor's echo of it.
+              const claim =
+                answered.find((a) => a.collected === first)?.claim ?? first.attestation.claim;
+              finish(() =>
+                resolve({
+                  claim,
+                  message,
+                  collected: group,
+                  failures: [...failures, ...disagreeing],
+                }),
+              );
+              return;
+            }
+            // Keep enough operators in flight that one message could still reach the threshold.
+            for (let need = threshold - agreeing() - inFlight; need > 0; need--) {
+              const next = pending.shift();
+              if (next === undefined) {
+                break;
+              }
+              launch(next);
+            }
+            if (inFlight === 0) {
+              finish(() =>
+                reject(
+                  new AggregateError(
+                    failures,
+                    `threshold of ${threshold} not met: no message was signed by ${threshold} distinct registry slots`,
+                  ),
+                ),
+              );
+            }
+          };
+          const launch = (next: (typeof resolved)[number]) => {
+            inFlight++;
+            timed(next)
+              .then(
+                (result) => answered.push(result),
+                (e: unknown) =>
+                  failures.push(
+                    // A prover that throws synchronously escapes `attempt`'s wrapping.
+                    e instanceof AttestorFailureError
+                      ? e
+                      : new AttestorFailureError(next.attestor.id, 'unreachable'),
+                  ),
+              )
+              .finally(() => {
+                inFlight--;
+                step();
+              });
+          };
+          const untilExpiry = windowEndMs - Date.now();
+          // ponytail: setTimeout caps at ~24.8 days; longer windows get no expiry timer.
+          if (untilExpiry < 2 ** 31) {
+            expiry = setTimeout(
+              () =>
+                finish(() =>
+                  reject(
+                    new AggregateError(
+                      failures,
+                      `intent window expired at ${input.windowEnd} before the threshold of ${threshold} was met`,
                     ),
-                  ]
-                : [],
-            ),
-            `threshold of ${threshold} not met: no message was signed by ${threshold} distinct registry slots`,
-          );
-        }
-        // Return our own proposal, not the attestor's echo of it.
-        const claim = answered.find((a) => a.collected === first)?.claim ?? first.attestation.claim;
-        return { claim, message: first.attestation.message, collected: group };
+                  ),
+                ),
+              untilExpiry,
+            );
+          }
+          if (contactAll) {
+            for (const next of pending.splice(0)) {
+              launch(next);
+            }
+          }
+          step();
+        });
       },
     };
   },

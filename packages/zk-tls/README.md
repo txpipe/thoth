@@ -149,14 +149,14 @@ const client = zkFetchClient.init({
   transport,          // how to reach each attestor
   policy,
   valueSlots: 3,
-  threshold: 2,       // the contract's N
+  threshold: 2,       // the contract's N; init rejects more than the operators can meet
   verifier,           // { verify(publicKey, message, signature): boolean }
   operators: {
     txpipe: { prover: zkFetchProver({ witnessUrl: txpipeWitnessUrl }), witnessAddress: txpipeWitness },
     eryx: { prover: zkFetchProver({ witnessUrl: eryxWitnessUrl }), witnessAddress: eryxWitness },
   },
 });
-const { claim, message, collected } = await client.attest(
+const { claim, message, collected, failures } = await client.attest(
   { url: 'https://api.strava.com/…', secretHeaders: { authorization } },
   { holder, windowStart, windowEnd }, // holder: the dApp's 32-byte holder commitment
 );
@@ -174,10 +174,24 @@ One call:
 5. groups the results by exact message and counts distinct registry slots only.
 
 `collected` holds the agreeing attestations sorted by registry slot, ready for
-the positional registry. If no message reaches the threshold, `attest` throws
-an `AggregateError` whose `errors` hold a generic reason for each failed
-operator without copying errors from provers or transports. The
-client contacts the first `threshold` operators in `operators` order.
+the positional registry.
+
+The client contacts the first `threshold` operators in `operators` order, and
+the next one whenever an operator fails or disagrees, until one message reaches
+the threshold. `contactAll: true` contacts every operator at once instead;
+either way the call returns as soon as the threshold is met. `timeoutMs` bounds
+each operator; a late or failed operator never discards another's valid
+result. Every operator works under the same intent — the call never retries
+with a fresh one — and it gives up once the intent window ends (an intent that
+already ended fails before any operator is contacted).
+
+Each operator that did not count gets an `AttestorFailureError` (from
+`@thoth/client/errors`) whose `reason` says whether it was `'unreachable'`
+(including timeouts), `'rejected'` the request (the message carries its reason),
+returned a different `'message'`, or an invalid `'signature'`. On success they
+are in `failures`; otherwise `attest` throws an `AggregateError` whose `errors`
+hold them.
+The client copies no arbitrary prover or transport errors into these failures.
 
 ## Concepts
 

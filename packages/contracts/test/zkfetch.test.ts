@@ -8,7 +8,7 @@ import type { FlatMessage } from '@thoth/core/claim';
 import type { ZkFetchDefinition } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { type ZkFetchOperator, zkFetchClient } from '@thoth/zk-tls/client';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type TestWitness, testWitness } from '../../zk-tls/test/helpers/witness.js';
 import { DUMMY_SIGNATURE, holderCommitment, idOf, makeNotaryKey } from './helpers/fixtures.js';
 import { createPrivateState, type SchnorrSignature } from './helpers/private-state.js';
@@ -48,6 +48,15 @@ const transport: AttestorTransport<ZkFetchDefinition, JubjubPoint, SchnorrSignat
 };
 
 describe('zkFetch attestation in the simulator', () => {
+  // The client checks the intent window against the wall clock; pin it.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(OBSERVED_AT * 1000);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('accepts a threshold attestation from two independent witnesses', async () => {
     const operator = (witness: TestWitness): ZkFetchOperator => ({
       witnessAddress: witness.address,
