@@ -3,8 +3,8 @@
 // policy checks.
 //
 // These exercise the shared surface, not the Reclaim signature machinery —
-// that is covered by `pipeline.test.ts` via the attestor, using a real
-// witnessed fixture.
+// that is covered via the attestor by `pipeline.test.ts` (a real witnessed
+// fixture) and `witness.test.ts` (local test-key witnesses).
 
 import {
   assertEvidenceMatchesPolicy,
