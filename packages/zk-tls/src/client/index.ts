@@ -423,16 +423,18 @@ export const zkFetchClient = {
               claim,
             } as unknown as ZkFetchAttestationInput;
             const attestation = await transport.request(attestor, payload);
-            return resolveAttestation({
+            const collected = resolveAttestation({
               trusted,
               attestor,
               attestation,
               expectedMessage: claimToMessage(claim),
               verifier,
             });
+            return { claim, collected };
           }),
         );
-        const collected = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+        const answered = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+        const collected = answered.map((a) => a.collected);
         const group = thresholdGroup(collected, threshold);
         const first = group?.[0];
         if (group === undefined || first === undefined) {
@@ -441,7 +443,8 @@ export const zkFetchClient = {
             `threshold of ${threshold} not met: no message was signed by ${threshold} distinct registry slots`,
           );
         }
-        const claim = first.attestation.claim as Claim<V>;
+        // Return our own proposal, not the attestor's echo of it.
+        const claim = answered.find((a) => a.collected === first)?.claim ?? first.attestation.claim;
         return { claim, message: first.attestation.message, collected: group };
       },
     };

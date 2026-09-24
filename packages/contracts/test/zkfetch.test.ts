@@ -10,7 +10,7 @@ import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { type ZkFetchOperator, zkFetchClient } from '@thoth/zk-tls/client';
 import { describe, expect, it } from 'vitest';
 import { type TestWitness, testWitness } from '../../zk-tls/test/helpers/witness.js';
-import { holderCommitment, idOf, makeNotaryKey } from './helpers/fixtures.js';
+import { DUMMY_SIGNATURE, holderCommitment, idOf, makeNotaryKey } from './helpers/fixtures.js';
 import { createPrivateState, type SchnorrSignature } from './helpers/private-state.js';
 import { type JubjubPoint, signMessage, verifyMessage } from './helpers/sign.js';
 import { MockAttestationSim } from './helpers/sim.js';
@@ -97,10 +97,7 @@ describe('zkFetch attestation in the simulator', () => {
       // Positional: slot i verifies against key i; the unanswered slot never verifies.
       signatures: notaryKeys.map(
         (_, slot) =>
-          collected.find((c) => c.registryIndex === slot)?.attestation.signature ?? {
-            announcement: { x: 0n, y: 1n },
-            response: 0n,
-          },
+          collected.find((c) => c.registryIndex === slot)?.attestation.signature ?? DUMMY_SIGNATURE,
       ),
       commitRand,
       holderSecret,

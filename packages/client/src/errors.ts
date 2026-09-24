@@ -1,3 +1,6 @@
+/** Which {@link AttestationMismatchError} check failed. */
+export type MismatchReason = 'public-key' | 'message' | 'registry-index' | 'signature';
+
 /**
  * A collected attestation failed a structural integrity check.
  *
@@ -11,16 +14,13 @@ export class AttestationMismatchError extends Error {
   /** The id of the offending attestor. */
   readonly attestorId: string;
   /** Which integrity check failed. */
-  readonly reason: 'public-key' | 'message' | 'registry-index' | 'signature';
+  readonly reason: MismatchReason;
 
   /**
    * @param attestorId — the offending attestor's id.
    * @param reason — the failed check.
    */
-  constructor(
-    attestorId: string,
-    reason: 'public-key' | 'message' | 'registry-index' | 'signature',
-  ) {
+  constructor(attestorId: string, reason: MismatchReason) {
     super(`attestation from "${attestorId}" failed ${reason} check`);
     this.attestorId = attestorId;
     this.reason = reason;
