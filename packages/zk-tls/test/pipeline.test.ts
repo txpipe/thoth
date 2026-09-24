@@ -397,7 +397,10 @@ describe('zkFetch attestor + client', () => {
   it('never combines signatures over different messages', async () => {
     const client = clientOf({ operators: operators([{ stars: '42' }, { stars: '7' }]) });
     // Both attestors answer validly, each over its own witness's reading.
-    expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([]);
+    expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([
+      expect.stringMatching(/attestor-0.*different message/),
+      expect.stringMatching(/attestor-1.*different message/),
+    ]);
   });
 
   it('sends no secret header to a signer or into an error', async () => {

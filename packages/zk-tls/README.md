@@ -275,6 +275,17 @@ The kind lands in the middle of the Thoth layering:
   attestor; the witness part means nothing to other kinds, so the
   `operators` map lives in the zkFetch client config, not in `@thoth/client`'s
   trusted set.
+- **Fallback on demand, one intent per call.** By default the client contacts
+  only `threshold` operators and adds one whenever no message can still reach
+  the threshold, so a healthy set costs `threshold` witnessed sessions;
+  `contactAll` trades sessions for latency. Every operator witnesses under the
+  same intent and the call never retries with a fresh one, so the agreeing
+  signatures always commit to one observation window and nonce.
+- **Rejected versus unreachable.** A transport cannot know what an arbitrary
+  error means, so only an explicit `AttestorFailureError('rejected')` counts
+  as a refusal; everything else a transport throws is `'unreachable'`. The
+  client's own pre-send evidence checks apply the attestor's law, so they
+  report `'rejected'` too.
 - **Strict input.** Dramatically fewer shapes to reason about at a trust
   boundary, and no witness-address decoding inside the verifier.
 

@@ -84,10 +84,11 @@ export type AttestorFailureReason = 'unreachable' | 'rejected' | 'message' | 'si
  * One attestor did not contribute to a threshold attestation.
  *
  * `reason` discriminates what went wrong: the attestor (or the session feeding
- * it) could not be reached or timed out (`'unreachable'`), it refused the
- * request (`'rejected'`), it signed a different message than the one that won
- * (`'message'`), or its signature does not verify under its pinned key
- * (`'signature'`). The underlying error, if any, is the `cause`.
+ * it) could not be reached or timed out (`'unreachable'`), the request was
+ * refused under the kind's law — by the attestor, or by the client applying
+ * the same checks to the evidence before sending it (`'rejected'`) — it signed
+ * a different message than the others (`'message'`), or its signature does not
+ * verify under its pinned key (`'signature'`). The underlying error, if any, is the `cause`.
  *
  * A transport throws this with `'rejected'` when the attestor answered with a
  * refusal; anything else a transport throws is treated as `'unreachable'`.

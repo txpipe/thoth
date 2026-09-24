@@ -5,8 +5,7 @@ import type {
   TrustedSet,
 } from '@thoth/client';
 import { attestorOf, resolveAttestation, thresholdGroup } from '@thoth/client';
-import type { AttestationMismatchError } from '@thoth/client/errors';
-import { AttestorFailureError } from '@thoth/client/errors';
+import { AttestationMismatchError, AttestorFailureError } from '@thoth/client/errors';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { claimSchema, claimToMessage } from '@thoth/core/claim';
@@ -386,7 +385,8 @@ export const zkFetchClient = {
         `policy slot ${outOfRange.slot} is out of the claim's ${valueSlots} value slots`,
       );
     }
-    const resolved = Object.entries(operators).map(([id, operator]) => ({
+    type Contact = { attestor: (typeof trusted.attestors)[number]; operator: ZkFetchOperator };
+    const resolved: Contact[] = Object.entries(operators).map(([id, operator]) => ({
       attestor: attestorOf(trusted, id),
       operator,
     }));
@@ -422,8 +422,8 @@ export const zkFetchClient = {
         };
 
         /** One operator end to end; every failure becomes an `AttestorFailureError`. */
-        const attempt = async ({ attestor, operator }: (typeof resolved)[number]) => {
-          const as =
+        const attempt = async ({ attestor, operator }: Contact) => {
+          const failAs =
             (reason: AttestorFailureError['reason']) =>
             (e: unknown): never => {
               throw new AttestorFailureError(
@@ -431,7 +431,7 @@ export const zkFetchClient = {
                 e instanceof AttestorFailureError ? e.reason : reason,
               );
             };
-          const raw = await operator.prover.prove(bound).catch(as('unreachable'));
+          const raw = await operator.prover.prove(bound).catch(failAs('unreachable'));
           const { evidence, claim } = await (async () => {
             const evidence = zkFetchEvidenceSchema.parse(raw);
             assertEvidenceMatchesRequest(evidence, request);
@@ -445,7 +445,7 @@ export const zkFetchClient = {
               valueSlots,
             });
             return { evidence, claim };
-          })().catch(as('rejected'));
+          })().catch(failAs('rejected'));
           // The attestor is the law: it re-parses these with its own schemas,
           // which accept the already-parsed (superset) shapes. The schemas'
           // *input* types are the looser pre-parse form, so the payload is
@@ -455,7 +455,9 @@ export const zkFetchClient = {
             evidence,
             claim,
           } as unknown as ZkFetchAttestationInput;
-          const attestation = await transport.request(attestor, payload).catch(as('unreachable'));
+          const attestation = await transport
+            .request(attestor, payload)
+            .catch(failAs('unreachable'));
           try {
             const collected = resolveAttestation({
               trusted,
@@ -466,13 +468,13 @@ export const zkFetchClient = {
             });
             return { id: attestor.id, claim, collected };
           } catch (e) {
-            const mismatch = (e as AttestationMismatchError).reason;
-            return as(mismatch === 'message' ? 'message' : 'signature')(e);
+            const toMessage = e instanceof AttestationMismatchError && e.reason === 'message';
+            return failAs(toMessage ? 'message' : 'signature')(e);
           }
         };
 
         /** `attempt`, failing as unreachable after `timeoutMs`. */
-        const timed = (next: (typeof resolved)[number]) => {
+        const timed = (next: Contact) => {
           if (timeoutMs === undefined) {
             return attempt(next);
           }
@@ -518,6 +520,11 @@ export const zkFetchClient = {
             }
             return 0;
           };
+          /** With no winner, operators that answered differing messages each disagree. */
+          const split = (): AttestorFailureError[] =>
+            new Set(answered.map((a) => String(a.collected.attestation.message))).size > 1
+              ? answered.map((a) => new AttestorFailureError(a.id, 'message'))
+              : [];
           const step = () => {
             if (done) {
               return;
@@ -557,14 +564,14 @@ export const zkFetchClient = {
               finish(() =>
                 reject(
                   new AggregateError(
-                    failures,
+                    [...failures, ...split()],
                     `threshold of ${threshold} not met: no message was signed by ${threshold} distinct registry slots`,
                   ),
                 ),
               );
             }
           };
-          const launch = (next: (typeof resolved)[number]) => {
+          const launch = (next: Contact) => {
             inFlight++;
             timed(next)
               .then(
@@ -590,7 +597,7 @@ export const zkFetchClient = {
                 finish(() =>
                   reject(
                     new AggregateError(
-                      failures,
+                      [...failures, ...split()],
                       `intent window expired at ${input.windowEnd} before the threshold of ${threshold} was met`,
                     ),
                   ),
