@@ -73,7 +73,7 @@ Three embeddable Compact modules plus a top-level example (`packages/contracts/R
 
 | File | Module | Role |
 |------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and freshness (`freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)` |
+| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, enforces the sealed policy, the holder and the observation window (`maxWindow`, `freshnessWindow`), controls replay (`nullifiers`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)` |
 | `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` — counts only, no threshold |
 | `schnorr.compact` | `schnorr` | Jubjub Schnorr verification polyfill (generic `Vector<#n, Field>`) |
 | `examples/example_app.compact` | top-level | Example app embedding `Attestation<11, 3, 2, 3>` (2-of-3) |

@@ -78,13 +78,13 @@ witness seedKeys(): Vector<3, JubjubPoint>;
 
 witness freshWindow(): Uint<64>;
 
-witness sealedPolicy(): Bytes<32>;
+witness seedPolicy(): Bytes<32>;
 
-witness sealedMaxWindow(): Uint<32>;
+witness seedMaxWindow(): Uint<32>;
 
 constructor() {
   A_freshnessWindow = disclose(freshWindow());
-  A_policyDigest = disclose(sealedPolicy());
-  A_maxWindow = disclose(sealedMaxWindow());
+  A_policyDigest = disclose(seedPolicy());
+  A_maxWindow = disclose(seedMaxWindow());
   R_keys = disclose(seedKeys());
 }

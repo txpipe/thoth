@@ -52,12 +52,12 @@ export const makeWitnesses = (
     sealed.freshnessWindow,
   ],
 
-  sealedPolicy: ({ privateState }: WitnessBase): [PrivateState, Uint8Array] => [
+  seedPolicy: ({ privateState }: WitnessBase): [PrivateState, Uint8Array] => [
     privateState,
     sealed.policyDigest,
   ],
 
-  sealedMaxWindow: ({ privateState }: WitnessBase): [PrivateState, bigint] => [
+  seedMaxWindow: ({ privateState }: WitnessBase): [PrivateState, bigint] => [
     privateState,
     sealed.maxWindow,
   ],

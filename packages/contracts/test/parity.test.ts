@@ -21,7 +21,7 @@ import { MockAttestationSim } from './helpers/sim.js';
 
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 const registryKeys = notaryKeys.map((k) => k.pk);
-const holder = TEST_HOLDER_SECRET;
+const holderSecret = TEST_HOLDER_SECRET;
 
 // A signature that can never verify against a non-empty registry slot.
 const DUMMY_SIGNATURE = { announcement: { x: 0n, y: 1n }, response: 0n };
@@ -92,12 +92,12 @@ describe('claimToMessage parity', () => {
         DUMMY_SIGNATURE, // empty third slot — never verifies
       ];
 
-      const sim = new MockAttestationSim(createPrivateState(holder), registryKeys);
+      const sim = new MockAttestationSim(createPrivateState(holderSecret), registryKeys);
       sim.call('verifyAttestation', {
         claim,
         signatures,
         commitRand,
-        holderSecret: holder,
+        holderSecret,
       });
 
       expect(sim.ledgerView().A_claimsVault.member(idOf(claim, commitRand))).toBe(true);

@@ -59,7 +59,8 @@ import "attestor_registry"<3, 14> prefix R_;
 ```
 
 See `examples/example_app.compact` for a complete top-level embedding that
-pins registry keys, the policy digest and the window bounds in the constructor, re-exports the
+pins registry keys, the policy digest and the window bounds in the constructor,
+re-exports the
 module types/ledgers/pure circuits, and exports a `verifyAttestation` entry
 point.
 
@@ -113,8 +114,10 @@ presence flags, V values) — fixed when a contract embeds the module.
   exported pure circuit and gives only the commitment to the client. It is a
   different hash from the vault pseudonym (`holderOf`).
 - **What stays public.** The vault stores the holder pseudonym and the claim's
-  `windowEnd` (as `timestamp`). Claims by the same holder share a pseudonym, so
-  they are linkable; Thoth makes no unlinkability claim.
+  `windowEnd` (as `timestamp`). The block-time checks also put `windowStart`
+  and `windowEnd + freshnessWindow` in the public transcript. Claims by the same
+  holder share a pseudonym, so they are linkable; Thoth makes no unlinkability
+  claim.
   Kinds must not rely on un-signed side-channels: any data the contract needs
   has to be a field of the message the attestor signs.
 - **Registry slots are positional.** `attestor_registry` verifies
@@ -138,7 +141,8 @@ flag disagrees with an asserted predicate can never pass signature verification.
 ## Deploy wiring
 
 `policyDigest`, `maxWindow`, `freshnessWindow` (Attestation) and `keys`
-(Registry) are **sealed** ledgers set exactly once in the top-level constructor. See `examples/example_app.compact`
+(Registry) are **sealed** ledgers set exactly once in the top-level constructor.
+See `examples/example_app.compact`
 for the full wiring.
 
 ## Opening a vaulted claim

@@ -79,9 +79,13 @@ in zero knowledge, that:
 
 - each signature is valid and comes from a **distinct** attestor in the registry —
   so the N-of-M threshold holds against exactly the attestors the app pinned;
-- the claim's nonce has not been used before — no replay;
-- optionally, that the claim is **fresh**, within the app's configured time window,
-  checked against block time.
+- the claim was attested under the app's **policy** (sealed policy digest);
+- the claim is bound to the caller — its holder commitment is derived from the
+  caller's holder secret;
+- the observation window is well-formed, no longer than the app's maximum, and
+  contains the block time: at least `windowStart` and earlier than `windowEnd`
+  plus the app's freshness window;
+- the claim's nonce has not been used before — no replay.
 
 Only if those checks pass does the app's predicate run over the claim values, as
 private witness data. The claim values are never stored on-chain — only their

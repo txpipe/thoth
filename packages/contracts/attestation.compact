@@ -15,7 +15,8 @@
 //     and a window that doesn't contain the block time: the block time must be
 //     at least `windowStart` and earlier than `windowEnd + freshnessWindow`;
 //   - reject nonce replay via the nullifiers set;
-//   - store { holder, timestamp = windowEnd } in the claimsVault. Nothing is returned:
+//   - store { holder, timestamp = windowEnd } in the claimsVault; windowStart and
+//     windowEnd + freshnessWindow are disclosed to the block-time checks. Nothing is returned:
 //     the app composes its own predicates over the claim via `openClaim`.
 //
 // Signature counting is delegated to the registry; the threshold decision
@@ -142,7 +143,7 @@ module attestation<#K, #V, #N, #M> {
     assert(claim.version == 1, "Unsupported claim version");
     assert(claim.kind == 1, "Unsupported kind");
     assert(claim.policyDigest == policyDigest, "Wrong policy digest");
-    assert(claim.holder == holderCommitment(secret), "Claim not bound to caller");
+    assert(claim.holder == holderCommitment(secret), "Holder mismatch");
     assert(claim.windowStart <= claim.windowEnd, "Window inverted");
     assert(claim.windowEnd - claim.windowStart <= maxWindow, "Window too long");
 
