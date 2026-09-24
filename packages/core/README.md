@@ -24,10 +24,34 @@ The package exposes two entry points:
   - `AttestorDescriptor<D, PK>` — the client-facing face of an attestor: everything a client needs to address it
   - `Attestation<K, C, PK, S>` — the signed artifact an attestor produces and a client collects
 - **`@thoth/core/claim`**:
-  - `Claim<V>` / `ClaimInput<V>` — the canonical claim: 5-field header (version, kind, timestamp, nonce, evidenceHash), a `present` mask, and `V` numeric `values`
-  - `claimSchema<V>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape
+  - `Claim<V>` / `ClaimInput<V>` — the canonical claim: an 8-field header (version, kind, policyDigest, requestBinding, holder, nonce, windowStart, windowEnd), a `present` mask, and `V` numeric `values`
+  - `claimSchema<V>(v?)` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape; omit `v` to accept any value count
   - `claimToMessage` — encode a parsed `Claim` into the exact `FlatMessage` the contract's `buildMessage` verifies
   - `FlatMessage` — a Compact `Vector<K, Field>` as a `readonly bigint[]`
+
+### The claim layout
+
+The claim is *common*: it holds only facts every attestor observing the same
+intent shares, and nothing specific to one piece of evidence, so independent
+observations of the same fact sign the same message. In wire order:
+
+| Field | Size | Meaning |
+| --- | --- | --- |
+| `version`, `kind` | 1 field each | schema version and kind code (both `1` today) |
+| `policyDigest` | 32 bytes | digest of the policy the claim was attested under |
+| `requestBinding` | 32 bytes | digest of the certified request identity |
+| `holder` | 32 bytes | the holder commitment the claim is bound to |
+| `nonce` | 32 bytes | the operation nonce; replay protection |
+| `windowStart`, `windowEnd` | Unix seconds | the observation window |
+| `present` | `V` flags | `present[i]` means slot `i` was measured, even if its value is `0` |
+| `values` | `V` fields | the numeric values |
+
+`claimToMessage` maps each 32-byte field to one field element with
+`degradeToTransient`, exactly as the circuit does, so a message is `2*V + 8`
+fields long. Encoding vectors in `test/claim-vectors.json` pin known claims to
+their field vectors; the contracts parity test checks the encoder and the
+circuit against them. The kinds decide what the 32-byte fields hold — the core
+stays keyless and knows nothing of policies or requests.
 
 ### The flat message type
 

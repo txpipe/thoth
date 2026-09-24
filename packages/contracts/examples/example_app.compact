@@ -1,7 +1,7 @@
 // Example: embedding the Thoth Attestation module into a top-level contract.
 //
 // The app fixes, at embed time:
-//   #V = 3 value slots, #K = 11 signed-message fields (must equal 2*V + 5),
+//   #V = 3 value slots, #K = 14 signed-message fields (must equal 2*V + 8),
 //   #M = 3 attestor signature slots, #N = 2 (2-of-3 threshold).
 //
 // The top-level constructor pins the registry keys (sealed) and the freshness
@@ -15,10 +15,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=11 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "../attestation"<11, 3, 2, 3> prefix A_;
+//           K=14 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "../attestation"<14, 3, 2, 3> prefix A_;
 
-import "../attestor_registry"<3, 11> prefix R_;
+import "../attestor_registry"<3, 14> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
@@ -34,7 +34,7 @@ export circuit verifyAttestation(): [] {
 
 // The exact flat signed message for a claim — exported pure so the
 // off-chain / attestor side and tests can reproduce it byte-for-byte.
-export pure circuit message(a: A_Claim): Vector<11, Field> {
+export pure circuit message(a: A_Claim): Vector<14, Field> {
   return A_buildMessage(a);
 }
 

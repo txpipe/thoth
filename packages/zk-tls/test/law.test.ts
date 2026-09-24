@@ -13,10 +13,21 @@ import {
   parsedEvidenceView,
   type VerifiedEvidence,
   type ZkFetchEvidence,
+  type ZkFetchIntent,
   type ZkFetchPolicy,
 } from '@thoth/zk-tls';
 import { assertClaimMatchesDisclosures } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
+
+/** Claim derivation copies the intent into the header; its values don't matter here. */
+const INTENT: ZkFetchIntent = {
+  policyDigest: new Uint8Array(32),
+  requestBinding: new Uint8Array(32),
+  holder: new Uint8Array(32),
+  nonce: new Uint8Array(32),
+  windowStart: 0n,
+  windowEnd: 0n,
+};
 
 /** A signed-shape claim whose parameters/context are JSON I control. */
 const claimWith = (parameters: unknown, context: unknown): ProviderClaimData => ({
@@ -47,7 +58,6 @@ const verifiedOf = (
   attestorAddress: '0xc340fc267cacbb9e3101adced0c7728f7e63b63d',
   disclosedValues,
   identifier: claim.identifier,
-  canonicalHash: 'ab'.repeat(32),
 });
 
 describe('parse law (through deriveClaimFromEvidence)', () => {
@@ -59,6 +69,7 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
         attestorAddresses: ['0xc340fc267cacbb9e3101adced0c7728f7e63b63d'],
         slots: [{ slot: 0, name: 'v', parse }],
       },
+      intent: INTENT,
       valueSlots: 1,
     });
     return { present: claim.present[0] ?? false, value: claim.values[0] ?? 0n };
@@ -147,6 +158,7 @@ describe('deriveClaimFromEvidence', () => {
     const claim = deriveClaimFromEvidence({
       verified,
       policy: policy([{ slot: 0, name: 'distance', parse: 'float' }]),
+      intent: INTENT,
       valueSlots: 2,
     });
     expect(claim.values).toEqual([12n, 0n]);
@@ -161,6 +173,7 @@ describe('deriveClaimFromEvidence', () => {
     const claim = deriveClaimFromEvidence({
       verified,
       policy: policy([{ slot: 0, name: 'time', parse: 'int' }]),
+      intent: INTENT,
       valueSlots: 2,
     });
     expect(claim.values).toEqual([300n, 0n]);
@@ -173,6 +186,7 @@ describe('deriveClaimFromEvidence', () => {
       deriveClaimFromEvidence({
         verified,
         policy: policy([{ slot: 1, name: 'a', parse: 'int' }]),
+        intent: INTENT,
         valueSlots: 1,
       }),
     ).toThrow(/out of the claim's 1 value slots/);

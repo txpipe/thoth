@@ -2,8 +2,10 @@
 // and `@thoth/zk-tls/client`): verify a real witnessed Reclaim proof, derive and
 // collect the N-of-M attestation set, and assert the kind's rejection paths.
 //
-// Uses `examples/demo-attestation/fixtures/` — a genuine, offline-verifiable
-// HTTPS fetch witnessed by a Reclaim witness (no network needed).
+// Signature verification uses `examples/demo-attestation/fixtures/` — a
+// genuine, offline-verifiable HTTPS fetch witnessed by a Reclaim witness. The
+// client flow fakes the witness at the prover interface with a test key, since
+// it must sign the intent-bound context the client builds.
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +16,8 @@ import { buildTrustedSet } from '@thoth/client';
 import type { FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
 import {
+  INTENT_CONTEXT_KEY,
+  intentDigestOf,
   type ZkFetchDefinition,
   type ZkFetchPolicy,
   zkFetchClaimSchema,
@@ -27,6 +31,7 @@ import {
   zkFetchClient,
 } from '@thoth/zk-tls/client';
 import { describe, expect, it } from 'vitest';
+import { testWitness } from './helpers/witness.js';
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = join(
@@ -41,12 +46,41 @@ const FIXTURE_PATH = join(
 );
 const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Record<string, unknown>;
 
+const witness = testWitness(`0x${'11'.repeat(32)}`);
+const OBSERVED_AT = 1_786_000_000;
+const INTENT = {
+  holder: new Uint8Array(32).fill(0xaa),
+  windowStart: BigInt(OBSERVED_AT - 60),
+  windowEnd: BigInt(OBSERVED_AT + 60),
+};
+
 const policy = (
-  slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'data', parse: 'float', optional: true }],
+  slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'stars', parse: 'int', optional: true }],
 ): ZkFetchPolicy => ({
   allowedHosts: ['api.github.com'],
-  attestorAddresses: [(fixture as { attestorAddress: string }).attestorAddress],
+  attestorAddresses: [witness.address],
   slots,
+});
+
+/**
+ * A prover backed by the test witness: it signs the request it is handed
+ * (including the intent-bound context), observing `values` at `url`.
+ */
+const witnessProver = (
+  values: Record<string, string> = { stars: '0' },
+  url?: string,
+): ZkFetchProver => ({
+  prove: (request) =>
+    witness.sign({
+      values,
+      timestampS: OBSERVED_AT,
+      parameters: {
+        url: url ?? request.url,
+        method: request.method ?? 'GET',
+        body: request.body ?? '',
+      },
+      context: request.context,
+    }),
 });
 
 type FakePublicKey = { id: string };
@@ -106,7 +140,6 @@ describe('verifyZkFetchProof', () => {
     const verified = await verifyZkFetchProof(evidence);
     expect(verified.identifier).toBe(evidence.claim.identifier);
     expect(verified.disclosedValues).toHaveProperty('data');
-    expect(verified.canonicalHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('rejects an invalid signature', async () => {
@@ -121,14 +154,35 @@ describe('zkFetch claim schema', () => {
     const claim = zkFetchClaimSchema.parse({
       version: 1,
       kind: 1,
-      timestamp: 1_786_122_944,
+      policyDigest: new Uint8Array(32),
+      requestBinding: new Uint8Array(32),
+      holder: new Uint8Array(32),
       nonce: new Uint8Array(32),
-      evidenceHash: new Uint8Array(32),
+      windowStart: 1_786_122_944,
+      windowEnd: 1_786_123_000,
       present: [true, false],
       values: [12, 0],
     });
     expect(claim.values).toEqual([12n, 0n]);
     expect(claim.present).toEqual([true, false]);
+    expect(claim.windowEnd).toBe(1_786_123_000n);
+  });
+
+  it('rejects a 32-byte field of the wrong length', () => {
+    expect(() =>
+      zkFetchClaimSchema.parse({
+        version: 1,
+        kind: 1,
+        policyDigest: new Uint8Array(31),
+        requestBinding: new Uint8Array(32),
+        holder: new Uint8Array(32),
+        nonce: new Uint8Array(32),
+        windowStart: 0,
+        windowEnd: 0,
+        present: [],
+        values: [],
+      }),
+    ).toThrow(/32 bytes/);
   });
 });
 
@@ -150,16 +204,28 @@ describe('zkFetch attestor + client', () => {
     },
   };
 
-  const prove = (): ReturnType<ReturnType<typeof zkFetchClient.init>['proveReq']> =>
+  const prove = (
+    prover = witnessProver(),
+  ): ReturnType<ReturnType<typeof zkFetchClient.init>['proveReq']> =>
     zkFetchClient
-      .init({
-        trusted,
-        transport,
-        policy: policy(),
-        valueSlots: 3,
-        prover: { prove: async () => zkFetchEvidenceSchema.parse(fixture) } satisfies ZkFetchProver,
-      })
-      .proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' });
+      .init({ trusted, transport, policy: policy(), valueSlots: 3, prover })
+      .proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' }, INTENT);
+
+  it('binds the witnessed session to a fresh intent', async () => {
+    const [first, second] = await Promise.all([prove(), prove()]);
+    const context = JSON.parse(first.evidence.claim.context);
+    expect(context[INTENT_CONTEXT_KEY]).toBe(intentDigestOf(first.intent));
+    expect(first.intent.holder).toEqual(INTENT.holder);
+    expect(first.intent.nonce).not.toEqual(second.intent.nonce);
+  });
+
+  it('attests a claim in the common layout', async () => {
+    const proof = await prove(witnessProver({ stars: '42' }));
+    const { claim, message } = await proof.attest();
+    expect(claim).toMatchObject({ ...proof.intent, present: [true, false, false] });
+    expect(claim.values).toEqual([42n, 0n, 0n]);
+    expect(message).toHaveLength(14);
+  });
 
   it('collects one agreeing attestation per pinned attestor', async () => {
     const attestment = await prove().then((proof) => proof.attest());
@@ -188,33 +254,37 @@ describe('zkFetch attestor + client', () => {
       transport,
       policy: { ...policy(), allowedHosts: ['evil.example'] },
       valueSlots: 3,
-      prover: { prove: async () => zkFetchEvidenceSchema.parse(fixture) },
+      prover: witnessProver(),
     });
     await expect(
       hostile
-        .proveReq({ url: 'https://api.github.com/x', method: 'GET' })
+        .proveReq({ url: 'https://api.github.com/x', method: 'GET' }, INTENT)
         .then((proof) => proof.attest()),
     ).rejects.toThrow(/not in allowlist/);
   });
 
-  it('binds the evidence to the requested URL origin (same origin, other path)', async () => {
-    const proof = await prove();
-    expect(proof.evidence.claim.identifier).toBe(
-      (fixture.claim as { identifier: string }).identifier,
+  it('refuses evidence for a different origin than requested', async () => {
+    await expect(prove(witnessProver(undefined, 'https://other.example/x'))).rejects.toThrow(
+      /not the requested/,
     );
   });
 
-  it('refuses evidence for a different origin than requested', async () => {
-    const client = zkFetchClient.init({
+  it('refuses evidence observed outside the intent window', async () => {
+    const late = zkFetchClient.init({
       trusted,
       transport,
       policy: policy(),
       valueSlots: 3,
-      prover: { prove: async () => zkFetchEvidenceSchema.parse(fixture) } satisfies ZkFetchProver,
+      prover: witnessProver(),
     });
     await expect(
-      client.proveReq({ url: 'https://other.example/x', method: 'GET' }),
-    ).rejects.toThrow(/not the requested/);
+      late
+        .proveReq(
+          { url: 'https://api.github.com/x' },
+          { ...INTENT, windowStart: BigInt(OBSERVED_AT + 1), windowEnd: BigInt(OBSERVED_AT + 60) },
+        )
+        .then((proof) => proof.attest()),
+    ).rejects.toThrow(/outside the intent window/);
   });
 
   it('refuses a policy slot beyond the claim length at init', () => {
@@ -222,15 +292,15 @@ describe('zkFetch attestor + client', () => {
       zkFetchClient.init({
         trusted,
         transport,
-        policy: policy([{ slot: 5, name: 'data', parse: 'float', optional: true }]),
+        policy: policy([{ slot: 5, name: 'stars', parse: 'int', optional: true }]),
         valueSlots: 3,
-        prover: { prove: async () => zkFetchEvidenceSchema.parse(fixture) } satisfies ZkFetchProver,
+        prover: witnessProver(),
       }),
     ).toThrow(/out of the claim's 3 value slots/);
   });
 
   it('signs a derived claim and attests only what was disclosed', async () => {
-    const proof = await prove();
+    const proof = await prove(witnessProver({}));
     const attestment = await proof.attest();
     const { present, values } = attestment.claim;
     expect(values.length).toBe(3);

@@ -8,9 +8,10 @@
 //   - verify >= #N of #M signatures from the appended AttestorRegistry over the
 //     frozen flat message built by `buildMessage` (this module's contract law);
 //   - reject nonce replay via the nullifiers set;
-//   - reject stale/future timestamps when the sealed `freshnessWindow` is set
-//     (0 disables the check);
-//   - store { holder, timestamp } in the claimsVault. Nothing is returned:
+//   - reject stale/future observation windows when the sealed
+//     `freshnessWindow` is set (0 disables the check), measured from
+//     `windowEnd`;
+//   - store { holder, timestamp = windowEnd } in the claimsVault. Nothing is returned:
 //     the app composes its own predicates over the claim via `openClaim`.
 //
 // Signature counting is delegated to the registry; the threshold decision
@@ -18,7 +19,7 @@
 // attestor must mirror, per the documented wire layout below.
 //
 // Module parameters (import "attestation"<K, V, N, M>):
-//   #K — signed-message length in fields. Must equal 2*V + 5 (the 5-field
+//   #K — signed-message length in fields. Must equal 2*V + 8 (the 8-field
 //        header in buildMessage, the V `present` fields, and the V value
 //        fields). This is what the registry's countValidSignatures verifies
 //        over.
@@ -42,9 +43,12 @@ module attestation<#K, #V, #N, #M> {
   export struct Claim {
     version: Uint<8>; // schema version (1)
     kind: Uint<8>; // attestor kind (1 = reclaim-attestor)
-    timestamp: Uint<32>; // Unix seconds of the attestation
-    nonce: Bytes<32>; // per-claim randomness (replay protection)
-    evidenceHash: Bytes<32>; // hash of the evidence artifacts (binding)
+    policyDigest: Bytes<32>; // SHA-256 of the policy the claim was attested under
+    requestBinding: Bytes<32>; // SHA-256 of the certified request identity
+    holder: Bytes<32>; // holder commitment the claim is bound to
+    nonce: Bytes<32>; // operation nonce (replay protection)
+    windowStart: Uint<32>; // observation window start, Unix seconds
+    windowEnd: Uint<32>; // observation window end, Unix seconds
     present: Vector<V, Boolean>; // present[i] = values[i] was populated (measured), even if 0
     values: Vector<V, Uint<64>>; // positional numeric claim values last; 0 IS a valid value
   }
@@ -64,19 +68,26 @@ module attestation<#K, #V, #N, #M> {
     return jubjubPointX(hashToCurve<Vector<2, Bytes<32>>>([pad(32, "thoth:holder:v1"), secret]));
   }
 
-  /// Reconstruct the flat signed message: a 5-field fixed header followed by
-  /// the `present` flags and the values mapped to `Field`. Tuple/vector spread
-  /// (`...`) appends the flags and values, so at specialization
-  /// `[header..., present..., values...]` has length 5 + 2*V, which must equal
-  /// K (enforced by the embedder). This is the single wire shape the attestor
-  /// must mirror.
+  /// Reconstruct the flat signed message. Wire layout, in order:
+  ///   [0] version  [1] kind
+  ///   [2] degradeToTransient(policyDigest)  [3] degradeToTransient(requestBinding)
+  ///   [4] degradeToTransient(holder)        [5] degradeToTransient(nonce)
+  ///   [6] windowStart  [7] windowEnd
+  ///   [8 .. 8+V)    present flags (1/0)
+  ///   [8+V .. 8+2V) values
+  /// so at specialization the message has length 8 + 2*V, which must equal K
+  /// (enforced by the embedder). This is the single wire shape the attestor
+  /// must mirror (`@thoth/core/claim`'s `claimToMessage`).
   export pure circuit buildMessage(c: Claim): Vector<K, Field> {
-    const header: Vector<5, Field> =
+    const header: Vector<8, Field> =
             [c.version as Field,
              c.kind as Field,
-             c.timestamp as Field,
+             degradeToTransient(c.policyDigest),
+             degradeToTransient(c.requestBinding),
+             degradeToTransient(c.holder),
              degradeToTransient(c.nonce),
-             degradeToTransient(c.evidenceHash),];
+             c.windowStart as Field,
+             c.windowEnd as Field,];
     const presentFields: Vector<V, Field> = map((p: Boolean) => p as Field, c.present);
     const valuesFields: Vector<V, Field> = map((v: Uint<64>) => v as Field, c.values);
     return [...header, ...presentFields, ...valuesFields];
@@ -121,9 +132,9 @@ module attestation<#K, #V, #N, #M> {
            );
 
     if (disclose(freshnessWindow != 0)) {
-      assert(blockTimeGte(disclose(claim.timestamp as Uint<64>)), "Timestamp in the future");
-      assert(blockTimeLt(disclose((claim.timestamp + freshnessWindow) as Uint<64>)),
-             "Timestamp too old"
+      assert(blockTimeGte(disclose(claim.windowEnd as Uint<64>)), "Window in the future");
+      assert(blockTimeLt(disclose((claim.windowEnd + freshnessWindow) as Uint<64>)),
+             "Window too old"
              );
     }
 
@@ -136,7 +147,7 @@ module attestation<#K, #V, #N, #M> {
     claimsVault.insert(
       id,
       ClaimEntry { holder: disclose(deriveHolder(getHolderSecret())),
-                   timestamp: disclose(claim.timestamp) }
+                   timestamp: disclose(claim.windowEnd) }
       );
   }
 

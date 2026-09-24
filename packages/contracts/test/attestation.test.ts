@@ -31,27 +31,24 @@ describe('mock attestation', () => {
   });
 
   describe('buildMessage (frozen wire shape)', () => {
-    it('returns exactly K=11 fields in the frozen order', () => {
+    it('returns exactly K=14 fields in the frozen order', () => {
       const claim = makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] });
       const msg = pureCircuits.message(claim);
-      expect(msg).toHaveLength(11);
-      // [version, kind, timestamp, nonce, evidenceHash, p0, p1, p2, v0, v1, v2]
+      expect(msg).toHaveLength(14);
+      // [version, kind, policyDigest, requestBinding, holder, nonce, windowStart, windowEnd,
+      //  p0, p1, p2, v0, v1, v2]
       expect(msg[0]).toBe(1n);
       expect(msg[1]).toBe(1n);
-      expect(msg[2]).toBe(claim.timestamp);
-      expect(msg[5]).toBe(1n);
-      expect(msg[6]).toBe(1n);
-      expect(msg[7]).toBe(1n);
-      expect(msg[8]).toBe(100n);
-      expect(msg[9]).toBe(200n);
-      expect(msg[10]).toBe(300n);
+      expect(msg[6]).toBe(claim.windowStart);
+      expect(msg[7]).toBe(claim.windowEnd);
+      expect(msg.slice(8)).toEqual([1n, 1n, 1n, 100n, 200n, 300n]);
     });
 
     it('distinguishes absent (present all false) from a genuine 0 value', () => {
       const absent = makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] });
       const presentZero = makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] });
       expect(pureCircuits.message(absent)).not.toEqual(pureCircuits.message(presentZero));
-      expect(pureCircuits.message(presentZero)[5]).toBe(1n);
+      expect(pureCircuits.message(presentZero)[8]).toBe(1n);
     });
   });
 
@@ -147,34 +144,34 @@ describe('mock attestation', () => {
       sim = new MockAttestationSim(createPrivateState(holder), registryKeys, WINDOW);
     });
 
-    it('accepts a timestamp inside the window', () => {
+    it('accepts a window ending inside the freshness window', () => {
       sim.now = Number(nowSeconds());
-      sim.call('verifyAttestation', attWith(makeClaim({ timestamp: nowSeconds() - 60n })));
+      sim.call('verifyAttestation', attWith(makeClaim({ windowEnd: nowSeconds() - 60n })));
     });
 
-    it('rejects a future timestamp', () => {
+    it('rejects a window ending in the future', () => {
       sim.now = Number(nowSeconds());
       expect(() =>
-        sim.call('verifyAttestation', attWith(makeClaim({ timestamp: nowSeconds() + 86400n }))),
-      ).toThrow('Timestamp in the future');
+        sim.call('verifyAttestation', attWith(makeClaim({ windowEnd: nowSeconds() + DAY }))),
+      ).toThrow('Window in the future');
     });
 
-    it('rejects a stale timestamp (older than the 30-day window)', () => {
+    it('rejects a window ending before the 30-day freshness window', () => {
       sim.now = Number(nowSeconds());
       expect(() =>
-        sim.call('verifyAttestation', attWith(makeClaim({ timestamp: nowSeconds() - 31n * DAY }))),
-      ).toThrow('Timestamp too old');
+        sim.call('verifyAttestation', attWith(makeClaim({ windowEnd: nowSeconds() - 31n * DAY }))),
+      ).toThrow('Window too old');
     });
   });
 
   describe('claim vault content', () => {
-    it('stores holder and timestamp under the claim id', () => {
+    it('stores holder and windowEnd (as the timestamp) under the claim id', () => {
       const claim = makeClaim();
       const signed = signClaim(claim, notaryKeys, randomBytes(32));
       sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
       const entry = sim.ledgerView().A_claimsVault.lookup(idOf(claim, signed.commitRand));
       expect(entry.holder).toBe(holderOf(holder));
-      expect(entry.timestamp).toBe(claim.timestamp);
+      expect(entry.timestamp).toBe(claim.windowEnd);
     });
   });
 

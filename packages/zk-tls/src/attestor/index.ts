@@ -6,8 +6,10 @@ import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
 import {
+  assertEvidenceMatchesIntent,
   assertEvidenceMatchesPolicy,
   deriveClaimFromEvidence,
+  intentOf,
   parseDisclosedValue,
   parsedEvidenceView,
   type VerifiedEvidence,
@@ -90,13 +92,53 @@ export const assertClaimMatchesDisclosures = (options: {
 };
 
 /**
+ * Derive the claim this attestor signs, after running the kind's checks in
+ * order and rejecting at the first failure: the Reclaim signature, the pinned
+ * witness, the allowed host and required disclosures
+ * ({@link assertEvidenceMatchesPolicy}), the intent binding, request binding
+ * and window ({@link assertEvidenceMatchesIntent}), and finally that the
+ * client's proposed claim equals the claim derived here.
+ *
+ * The intent is read off the proposed claim; the evidence signature is what
+ * makes it trustworthy.
+ *
+ * @param input — the parsed policy, evidence and proposed claim.
+ * @returns the derived claim (equal to the proposal).
+ * @throws with a descriptive message on the first failed check.
+ */
+const checkAndDerive = async (
+  input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number>>,
+): Promise<Claim<number>> => {
+  const { policy, evidence, claim: proposed } = input;
+  const verified = await verifyZkFetchProof(evidence);
+  assertEvidenceMatchesPolicy(verified, policy);
+  const intent = intentOf(proposed);
+  assertEvidenceMatchesIntent(verified, intent);
+  assertClaimMatchesDisclosures({
+    claim: proposed,
+    disclosures: verified.disclosedValues,
+    policy,
+  });
+  const derived = deriveClaimFromEvidence({
+    verified,
+    policy,
+    intent,
+    valueSlots: proposed.values.length,
+  });
+  const expected = claimToMessage(derived);
+  const actual = claimToMessage(proposed);
+  if (expected.length !== actual.length || expected.some((field, i) => field !== actual[i])) {
+    throw new Error('proposed claim does not match the claim derived from the evidence');
+  }
+  return derived;
+};
+
+/**
  * Create the zkFetch attestor kind's shareable definition.
  *
- * `verify` implements the kind's check: verify the evidence
- * ({@link verifyZkFetchProof}), check it against the policy
- * ({@link assertEvidenceMatchesPolicy}), and enforce that the client-proposed claim
- * matches the disclosed values ({@link assertClaimMatchesDisclosures}).
- * `message` encodes a claim into its flat field vector via `claimToMessage`.
+ * `verify` implements the kind's check (see {@link zkFetchAttestor} for the
+ * order). `message` encodes a claim into its flat field vector via
+ * `claimToMessage`.
  *
  * @returns the shareable definition; instantiate it with `@thoth/attestor`'s
  *   `buildAttestor` (see {@link zkFetchAttestor}).
@@ -108,13 +150,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
     evidence: zkFetchEvidenceSchema,
     claim: zkFetchClaimSchema,
     verify: async (input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number>>) => {
-      const verified = await verifyZkFetchProof(input.evidence);
-      assertEvidenceMatchesPolicy(verified, input.policy);
-      assertClaimMatchesDisclosures({
-        claim: input.claim,
-        disclosures: verified.disclosedValues,
-        policy: input.policy,
-      });
+      await checkAndDerive(input);
     },
     message: (claim: Claim<number>): FlatMessage => claimToMessage(claim),
   });
@@ -123,11 +159,20 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
 /**
  * Build a deployable zkFetch attestor instance.
  *
- * Specialization of `@thoth/attestor`'s `buildAttestor` that knows the kind:
- * it rejects proposals that do not match the disclosures, derives the
- * *authoritative* claim from the verified evidence (deterministic nonce,
- * evidence-bound hash) sized to the proposed claim's own length, and signs
- * `message(claim)` with the key pair's signer.
+ * Specialization of `@thoth/attestor`'s `buildAttestor` that knows the kind.
+ * For each request it checks, in order, rejecting at the first failure:
+ *
+ * 1. the Reclaim signature is valid;
+ * 2. the signer is a pinned witness;
+ * 3. the attested host is allowed, and the required disclosures are present
+ *    and parseable;
+ * 4. the signed context carries the intent digest;
+ * 5. the signed request matches the request binding;
+ * 6. the window is not inverted and the witness observed inside it;
+ * 7. the proposed claim equals the claim the attestor derives itself.
+ *
+ * It then signs `message(claim)` of its own derived claim with the key pair's
+ * signer.
  *
  * @typeParam PK — the signature scheme's public key type.
  * @typeParam S — the signature scheme's signature type.
@@ -154,15 +199,7 @@ export function zkFetchAttestor<PK, S>(parts: {
       const policy = definition.policy.parse(input.policy);
       const evidence = definition.evidence.parse(input.evidence);
       const proposed = definition.claim.parse(input.claim);
-      // One full check pass (ECDSA + policy + disclosures cross-check).
-      await definition.verify({ policy, evidence, claim: proposed });
-      // Claim derivation only needs the pure parsed view.
-      const verified = parsedEvidenceView(evidence);
-      const claim = deriveClaimFromEvidence({
-        verified,
-        policy,
-        valueSlots: proposed.values.length,
-      });
+      const claim = await checkAndDerive({ policy, evidence, claim: proposed });
       const message = claimToMessage(claim);
       const signature = await signer.sign(message);
       return { kind: definition.kind, claim, message, publicKey, signature };

@@ -125,7 +125,10 @@ thoth/
 - Contract logic is tested with the **simulator** via vitest in
   `packages/contracts/test/`. The mock top-level shell
   (`packages/contracts/test/mocks/MockAttestation.compact`) specializes the
-  modules (V=3, K=11, M=3, N=2) so tests run against real artifacts.
+  modules (V=3, K=14, M=3, N=2) so tests run against real artifacts.
+- Encoding vectors live in `packages/core/test/claim-vectors.json`;
+  `packages/contracts/test/parity.test.ts` checks both the core encoder and
+  the circuit against them.
 - `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
   compiled pure circuits — never hand-roll the message encoding; use
   `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.

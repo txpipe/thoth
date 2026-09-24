@@ -40,10 +40,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//            K=11 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "node_modules/@thoth/contracts/attestation"<11, 3, 2, 3> prefix A_;
+//            K=14 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "node_modules/@thoth/contracts/attestation"<14, 3, 2, 3> prefix A_;
 
-import "node_modules/@thoth/contracts/attestor_registry"<3, 11> prefix R_;
+import "node_modules/@thoth/contracts/attestor_registry"<3, 14> prefix R_;
 ```
 
 If the package is hoisted elsewhere by your package manager, add the package
@@ -54,8 +54,8 @@ export COMPACT_PATH="$(node -p 'require.resolve("@thoth/contracts/package.json")
 ```
 
 ```compact
-import "attestation"<11, 3, 2, 3> prefix A_;
-import "attestor_registry"<3, 11> prefix R_;
+import "attestation"<14, 3, 2, 3> prefix A_;
+import "attestor_registry"<3, 14> prefix R_;
 ```
 
 See `examples/example_app.compact` for a complete top-level embedding that
@@ -67,7 +67,7 @@ point.
 
 `attestation<#K, #V, #N, #M>` — embed as `import "attestation"<K, V, N, M>`:
 
-- `#K` — signed-message length in fields (`K` must equal `2*V + 5`)
+- `#K` — signed-message length in fields (`K` must equal `2*V + 8`)
 - `#V` — number of claim value slots (`Claim.values: Vector<V, Uint<64>>`)
 - `#N` — the app's N-of-M threshold
 - `#M` — number of attestor signatures supplied / registry key slots
@@ -80,24 +80,30 @@ All are fixed when a contract embeds the module.
 `Vector<K, Field>` fields, in this order:
 
 ```
-[ version, kind, timestamp,
-  degradeToTransient(nonce), degradeToTransient(evidenceHash),
-  present[0] as Field, ..., present[N-1] as Field,
-  values[0] as Field, ..., values[N-1] as Field ]
+[ version, kind,
+  degradeToTransient(policyDigest), degradeToTransient(requestBinding),
+  degradeToTransient(holder), degradeToTransient(nonce),
+  windowStart, windowEnd,
+  present[0] as Field, ..., present[V-1] as Field,
+  values[0] as Field, ..., values[V-1] as Field ]
 ```
 
 The attestor MUST reproduce this exact flat field vector to sign the same
-message (same order, sizes, presence-flag semantics, and the two
+message (same order, sizes, presence-flag semantics, and the four
 `degradeToTransient` transforms). `present` is a `Vector<V, Boolean>`: one flag
 per value slot; `present[i] = true` means `values[i]` was populated (its value
-may still be `0`). The message length is `K = 5 + 2*V` (5 header fields, V
+may still be `0`). The message length is `K = 8 + 2*V` (8 header fields, V
 presence flags, V values) — fixed when a contract embeds the module.
 
 ## Design notes
 
 - **The claim is the entire message.** Everything the contract inspects —
-  freshness (`timestamp`), replay protection (`nonce`), source binding
-  (`evidenceHash`), and kind/version — is inside the signed field vector.
+  freshness (measured from `windowEnd`), replay protection (`nonce`), and
+  kind/version — is inside the signed field vector. `policyDigest`,
+  `requestBinding` and `holder` are signed too; the contract does not check
+  them yet.
+- **What stays public.** The vault stores the holder pseudonym and a claim
+  timestamp, which is the claim's `windowEnd`. Claims are not unlinkable.
   Kinds must not rely on un-signed side-channels: any data the contract needs
   has to be a field of the message the attestor signs.
 - **Registry slots are positional.** `attestor_registry` verifies

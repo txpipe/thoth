@@ -6,10 +6,14 @@
 // simulator: the contract ignores the submitted message and re-derives
 // `buildMessage(claim)` in-circuit, so acceptance is only possible if the
 // off-chain encoder is byte-identical to the contract's own.
+//
+// The encoding vectors (`packages/core/test/claim-vectors.json`) pin known
+// claims to their expected field vectors; both encoders must reproduce them.
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { claimToMessage } from '@thoth/core/claim';
 import { describe, expect, it } from 'vitest';
-import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
+import { type A_Claim, pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import { idOf, makeClaim, makeNotaryKey } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
@@ -21,6 +25,35 @@ const holder = randomBytes(32);
 
 // A signature that can never verify against a non-empty registry slot.
 const DUMMY_SIGNATURE = { announcement: { x: 0n, y: 1n }, response: 0n };
+
+type Vector = {
+  name: string;
+  claim: Record<'version' | 'kind' | 'windowStart' | 'windowEnd', string> &
+    Record<'policyDigest' | 'requestBinding' | 'holder' | 'nonce', string> & {
+      present: boolean[];
+      values: string[];
+    };
+  message: string[];
+};
+
+const vectors = JSON.parse(
+  readFileSync(new URL('../../core/test/claim-vectors.json', import.meta.url), 'utf-8'),
+) as Vector[];
+
+const bytes = (hex: string): Uint8Array => new Uint8Array(Buffer.from(hex, 'hex'));
+
+const claimOf = ({ claim }: Vector): A_Claim => ({
+  version: BigInt(claim.version),
+  kind: BigInt(claim.kind),
+  policyDigest: bytes(claim.policyDigest),
+  requestBinding: bytes(claim.requestBinding),
+  holder: bytes(claim.holder),
+  nonce: bytes(claim.nonce),
+  windowStart: BigInt(claim.windowStart),
+  windowEnd: BigInt(claim.windowEnd),
+  present: claim.present,
+  values: claim.values.map(BigInt),
+});
 
 const claims = [
   makeClaim(),
@@ -35,6 +68,14 @@ describe('claimToMessage parity', () => {
       for (const claim of claims) {
         expect(claimToMessage(claim)).toEqual(pureCircuits.message(claim));
       }
+    });
+  });
+
+  describe('encoding vectors', () => {
+    it.each(vectors)('$name', (vector) => {
+      const expected = vector.message.map(BigInt);
+      expect(claimToMessage(claimOf(vector))).toEqual(expected);
+      expect(pureCircuits.message(claimOf(vector))).toEqual(expected);
     });
   });
 

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
-import { CLAIM_VERSION } from '@thoth/core/claim';
+import { CLAIM_VERSION, claimSchema } from '@thoth/core/claim';
 import { z } from 'zod';
 
 /**
@@ -71,36 +71,13 @@ export const zkFetchEvidenceSchema = z.object({
 });
 
 /**
- * The zkFetch kind's claim schema.
- *
- * Mirror of `@thoth/core/claim`'s `claimSchema` minus the exact-length
- * constraints (see issue #26).
+ * The zkFetch kind's claim schema: `@thoth/core/claim`'s `claimSchema` without
+ * a pinned value count (see issue #26), so one attestor serves any `#V`.
  */
 export const zkFetchClaimSchema: z.ZodType<
   Claim<number>,
   z.core.$ZodTypeInternals<Claim<number>, ClaimInput<number>>
-> = z
-  .object({
-    version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
-    kind: z.union([z.number(), z.bigint()]),
-    timestamp: z.union([z.number(), z.bigint()]),
-    nonce: z.instanceof(Uint8Array),
-    evidenceHash: z.instanceof(Uint8Array),
-    present: z.array(z.boolean()),
-    values: z.array(z.union([z.number(), z.bigint()])),
-  })
-  .transform((input) => ({
-    version: BigInt(input.version),
-    kind: BigInt(input.kind),
-    timestamp: BigInt(input.timestamp),
-    nonce: input.nonce,
-    evidenceHash: input.evidenceHash,
-    present: input.present,
-    values: input.values.map((value) => BigInt(value)),
-  })) as unknown as z.ZodType<
-  Claim<number>,
-  z.core.$ZodTypeInternals<Claim<number>, ClaimInput<number>>
->;
+> = claimSchema<number>();
 
 /**
  * The zkFetch kind's definition type, as produced by the attestor-side
@@ -132,7 +109,7 @@ export interface ZkFetchDefinition {
  * The parsed view of evidence, used for claim derivation and policy checks.
  *
  * Everything claim derivation needs from {@link ZkFetchEvidence} — the
- * disclosed values, the canonical hash, the identifier — with none of the
+ * disclosed values and the signed claim data — with none of the
  * ECDSA signature work (this builder performs no signature check; the caller
  * decides what trust to place in the result). The attestor calls it after
  * {@link verifyZkFetchProof}; the client calls it to build the deterministic
@@ -153,9 +130,34 @@ export interface VerifiedEvidence {
   disclosedValues: Readonly<Record<string, string>>;
   /** Claim identifier. */
   identifier: string;
-  /** SHA-256 (hex) over the canonical serialization of the evidence; the claim's `evidenceHash`. */
-  canonicalHash: string;
 }
+
+/**
+ * What one attestation is about, fixed by the browser before any witness is
+ * contacted.
+ *
+ * Every field lands in the common claim unchanged. The intent's digest
+ * ({@link intentDigestOf}) goes into the Reclaim request context under
+ * {@link INTENT_CONTEXT_KEY}, so the witness signature binds each witnessed
+ * session to this intent.
+ */
+export interface ZkFetchIntent {
+  /** SHA-256 of the policy's canonical serialization ({@link policyDigestOf}). */
+  policyDigest: Uint8Array;
+  /** SHA-256 of the certified request identity ({@link requestBindingOf}). */
+  requestBinding: Uint8Array;
+  /** The 32-byte holder commitment, derived by the dApp from the holder secret. */
+  holder: Uint8Array;
+  /** A random 32-byte operation nonce. */
+  nonce: Uint8Array;
+  /** Observation window start, Unix seconds. */
+  windowStart: bigint;
+  /** Observation window end, Unix seconds. */
+  windowEnd: bigint;
+}
+
+/** The signed-context key that carries the intent digest. */
+export const INTENT_CONTEXT_KEY = 'thothIntent';
 
 /** How a disclosed string value is interpreted for a claim slot. */
 export type ZkFetchParseRule = 'int' | 'float';
@@ -279,29 +281,19 @@ const disclosedValuesOf = (claim: ProviderClaimData): Readonly<Record<string, st
 };
 
 /**
- * Canonically serialize a value for hashing.
- *
- * Deterministic for the plain data evidence carries; `bigint` and `Uint8Array`
- * survive so future evidence shapes hash stably too. Rejects cycles.
+ * Canonically serialize plain data for hashing: object keys sorted, `bigint`
+ * as decimal strings, `undefined` members dropped.
  */
-const canonicalJson = (value: unknown): string => {
-  const seen = new WeakSet<object>();
-  return JSON.stringify(value, (_key, v) => {
+const canonicalJson = (value: unknown): string =>
+  JSON.stringify(value, (_key, v: unknown) => {
     if (typeof v === 'bigint') {
-      return `0x${v.toString(16)}`;
+      return v.toString();
     }
-    if (v instanceof Uint8Array) {
-      return { $bytes: Buffer.from(v).toString('hex') };
-    }
-    if (typeof v === 'object' && v !== null) {
-      if (seen.has(v)) {
-        throw new Error('circular structure while canonicalizing');
-      }
-      seen.add(v);
+    if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+      return Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
     }
     return v;
-  }) as string;
-};
+  });
 
 /**
  * SHA-256 of a string, hex-encoded.
@@ -311,6 +303,70 @@ const canonicalJson = (value: unknown): string => {
  */
 const sha256Hex = (data: string): string =>
   createHash('sha256').update(data, 'utf-8').digest('hex');
+
+const bytesToHex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
+
+/**
+ * The policy digest a claim signs: SHA-256 of the policy's canonical
+ * serialization (validated, unknown fields stripped, keys sorted).
+ *
+ * @param policy — the policy.
+ * @returns the 32-byte digest.
+ */
+export const policyDigestOf = (policy: ZkFetchPolicy): Uint8Array =>
+  hexToBytes(sha256Hex(canonicalJson(zkFetchPolicySchema.parse(policy))));
+
+/**
+ * The request binding a claim signs: SHA-256 of the certified request
+ * identity — method, URL and body. Independent witnessed sessions of the same
+ * request produce the same value.
+ *
+ * @param request — the method, URL and body (empty when absent).
+ * @returns the 32-byte digest.
+ */
+export const requestBindingOf = (request: {
+  method: string;
+  url: string;
+  body: string;
+}): Uint8Array =>
+  hexToBytes(
+    sha256Hex(canonicalJson({ method: request.method, url: request.url, body: request.body })),
+  );
+
+/**
+ * The intent's canonical digest, carried in the signed Reclaim context under
+ * {@link INTENT_CONTEXT_KEY}.
+ *
+ * @param intent — the intent.
+ * @returns the lower-hex SHA-256 digest.
+ */
+export const intentDigestOf = (intent: ZkFetchIntent): string =>
+  sha256Hex(
+    canonicalJson({
+      policyDigest: bytesToHex(intent.policyDigest),
+      requestBinding: bytesToHex(intent.requestBinding),
+      holder: bytesToHex(intent.holder),
+      nonce: bytesToHex(intent.nonce),
+      windowStart: intent.windowStart,
+      windowEnd: intent.windowEnd,
+    }),
+  );
+
+/**
+ * The intent a claim carries. The intent fields are claim fields, so an
+ * attestor reads the client's intent straight off the proposed claim.
+ *
+ * @param claim — a claim.
+ * @returns the claim's intent.
+ */
+export const intentOf = (claim: Claim<number>): ZkFetchIntent => ({
+  policyDigest: claim.policyDigest,
+  requestBinding: claim.requestBinding,
+  holder: claim.holder,
+  nonce: claim.nonce,
+  windowStart: claim.windowStart,
+  windowEnd: claim.windowEnd,
+});
 
 /** The contract's value type is `Uint<64>`; only non-negative values below 2^64 are certifiable. */
 const UINT64_MAX = 1n << 64n;
@@ -357,46 +413,40 @@ export const parseDisclosedValue = (value: string, rule: ZkFetchParseRule): bigi
  * The parsed view of {@link ZkFetchEvidence} that claim derivation and policy
  * checks operate on.
  *
- * Everything needed — the disclosed values, the canonical hash, the
- * identifier — with none of the ECDSA signature work. This builder performs
- * no signature check itself: the attestor calls it *after*
- * `verifyZkFetchProof`; a caller that uses it without verifying is certifying
- * by derivation against attestors that each verified (see the client).
+ * This builder performs no signature check itself: the attestor calls it
+ * *after* `verifyZkFetchProof`; a caller that uses it without verifying is
+ * certifying by derivation against attestors that each verified (see the
+ * client).
  *
  * @param evidence — canonicalized proof artifacts.
  * @returns the verified-evidence view.
  */
-export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence => {
-  const canonical = {
-    claim: evidence.claim,
-    signatureHex: evidence.signatureHex,
-    attestorAddress: evidence.attestorAddress,
-    responseText: evidence.responseText ?? null,
-  };
-  return {
-    claim: evidence.claim,
-    attestorAddress: evidence.attestorAddress,
-    responseText: evidence.responseText,
-    disclosedValues: disclosedValuesOf(evidence.claim),
-    identifier: evidence.claim.identifier,
-    canonicalHash: sha256Hex(canonicalJson(canonical)),
-  };
-};
+export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence => ({
+  claim: evidence.claim,
+  attestorAddress: evidence.attestorAddress,
+  responseText: evidence.responseText,
+  disclosedValues: disclosedValuesOf(evidence.claim),
+  identifier: evidence.claim.identifier,
+});
 
 /**
- * Derive the canonical {@link Claim} the attestor signs from parsed evidence.
+ * Derive the common {@link Claim} the attestor signs from parsed evidence.
  *
- * The claim is a statement of what was observed, not what the client proposed:
- * `values`/`present` come straight from the policy-declared disclosures, the
- * timestamp is the fetch's (`evidence.timestampS`), and `evidenceHash` binds
- * the claim to the verified artifacts. `version`/`kind` come from the policy
- * (`claimVersion`/`claimKind`, defaulting to 1). The nonce is **deterministic**
- * in the evidence (SHA-256 over `identifier + canonicalHash`). A slot whose
- * disclosure is absent stays unpresent — the evidence only ever carries what
- * the witness saw.
+ * The claim carries nothing specific to one piece of evidence, so two
+ * witnesses observing the same intent and disclosing the same values derive
+ * byte-identical claims. `values`/`present` come straight from the
+ * policy-declared disclosures; the header comes from the intent, except
+ * `policyDigest`, which is recomputed from the policy, and `version`/`kind`,
+ * which come from the policy (`claimVersion`/`claimKind`, defaulting to 1). A
+ * slot whose disclosure is absent stays unpresent — the evidence only ever
+ * carries what the witness saw.
+ *
+ * This does not check that the evidence is bound to the intent; see
+ * {@link assertEvidenceMatchesIntent}.
  *
  * @typeParam V — the claim's value-slot count.
- * @param options — the parsed evidence view, the policy, and the slot count.
+ * @param options — the parsed evidence view, the policy, the intent, and the
+ *   slot count.
  * @returns the derived claim.
  * @throws if a policy slot is out of the claim's value range.
  */
@@ -405,10 +455,12 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   verified: VerifiedEvidence;
   /** The policy declaring the slot map. */
   policy: ZkFetchPolicy;
+  /** The intent the evidence was witnessed under. */
+  intent: ZkFetchIntent;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
 }): Claim<V> => {
-  const { verified, policy, valueSlots } = options;
+  const { verified, policy, intent, valueSlots } = options;
   const outOfRange = policy.slots.find((slot) => slot.slot >= valueSlots);
   if (outOfRange !== undefined) {
     throw new Error(
@@ -432,9 +484,8 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   return {
     version: policy.claimVersion ?? CLAIM_VERSION,
     kind: policy.claimKind ?? 1n,
-    timestamp: BigInt(verified.claim.timestampS),
-    nonce: hexToBytes(sha256Hex(`${verified.identifier}:${verified.canonicalHash}`)),
-    evidenceHash: hexToBytes(verified.canonicalHash),
+    ...intent,
+    policyDigest: policyDigestOf(policy),
     present,
     values,
   } as Claim<V>;
@@ -493,4 +544,54 @@ export const assertEvidenceMatchesPolicy = (
     throw new Error(`captured response exceeds maxResponseBytes (${policy.maxResponseBytes})`);
   }
   return host;
+};
+
+const bytesEqual = (a: Uint8Array, b: Uint8Array): boolean =>
+  a.length === b.length && a.every((byte, i) => byte === b[i]);
+
+/**
+ * Check the witnessed session is bound to the intent.
+ *
+ * The witness signed the claim data, so everything read here is witnessed:
+ * the signed context must carry the intent digest, the signed request must
+ * match the intent's request binding, and the witness's observation time must
+ * fall inside the intent window.
+ *
+ * @param verified — the evidence view (see {@link parsedEvidenceView}).
+ * @param intent — the intent the client claims the session was run under.
+ * @throws with a descriptive message on the first mismatch.
+ */
+export const assertEvidenceMatchesIntent = (
+  verified: VerifiedEvidence,
+  intent: ZkFetchIntent,
+): void => {
+  const { claim } = verified;
+  let context: Readonly<Record<string, unknown>>;
+  let parameters: Readonly<{ method?: unknown; url?: unknown; body?: unknown }>;
+  try {
+    context = JSON.parse(claim.context) as Readonly<Record<string, unknown>>;
+    parameters = JSON.parse(claim.parameters) as typeof parameters;
+  } catch {
+    throw new Error('claim context or parameters are not valid JSON');
+  }
+  if (context[INTENT_CONTEXT_KEY] !== intentDigestOf(intent)) {
+    throw new Error('signed context does not carry the intent digest');
+  }
+  const signedRequest = {
+    method: String(parameters.method ?? ''),
+    url: String(parameters.url ?? ''),
+    body: String(parameters.body ?? ''),
+  };
+  if (!bytesEqual(requestBindingOf(signedRequest), intent.requestBinding)) {
+    throw new Error('signed request does not match the request binding');
+  }
+  if (intent.windowStart > intent.windowEnd) {
+    throw new Error(`observation window is inverted [${intent.windowStart}, ${intent.windowEnd}]`);
+  }
+  const observedAt = BigInt(claim.timestampS);
+  if (observedAt < intent.windowStart || observedAt > intent.windowEnd) {
+    throw new Error(
+      `witness observation at ${observedAt} is outside the intent window [${intent.windowStart}, ${intent.windowEnd}]`,
+    );
+  }
 };

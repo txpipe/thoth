@@ -17,11 +17,13 @@ export type FlatMessage = readonly bigint[];
 /**
  * The fixed claim shape every kind is expected to sign.
  *
- * Mirror of `attestation.compact`'s `Claim` struct: a 5-field header (version,
- * kind, timestamp, nonce, evidenceHash), a per-position `present` mask, and `V`
- * numeric `values`.
+ * Mirror of `attestation.compact`'s `Claim` struct: an 8-field header
+ * (version, kind, policyDigest, requestBinding, holder, nonce, windowStart,
+ * windowEnd), a per-position `present` mask, and `V` numeric `values`.
  *
- * This is the canonical shape kinds adopt unless they deviate.
+ * The claim is *common*: it carries only facts every attestor observing the
+ * same intent shares, and nothing specific to one piece of evidence, so
+ * independent observations of the same fact sign the same message.
  *
  * @typeParam V — the number of value slots (`attestation<#K, #V, #N, #M>`).
  * @see attestation.compact — the `Claim` struct this mirrors.
@@ -32,12 +34,18 @@ export interface Claim<V extends number> {
   version: bigint;
   /** Attestor kind identifier (e.g. `1` for the reclaim/zkFetch kind). */
   kind: bigint;
-  /** Unix seconds at which the attestation was produced. */
-  timestamp: bigint;
-  /** Per-claim randomness; prevents signature/claim replay on-chain. */
+  /** 32-byte digest of the policy the claim was attested under. */
+  policyDigest: Uint8Array;
+  /** 32-byte digest of the certified request identity. */
+  requestBinding: Uint8Array;
+  /** 32-byte holder commitment the claim is bound to. */
+  holder: Uint8Array;
+  /** 32-byte operation nonce; prevents replay on-chain. */
   nonce: Uint8Array;
-  /** Hash of the evidence artifacts; binds the claim to its evidence. */
-  evidenceHash: Uint8Array;
+  /** Start of the observation window, Unix seconds. */
+  windowStart: bigint;
+  /** End of the observation window, Unix seconds. */
+  windowEnd: bigint;
   /** Per-position present mask; `present[i]` true means `values[i]` was populated. */
   present: readonly boolean[];
   /** Positional numeric claim values, exactly `V` of them. */
@@ -60,12 +68,18 @@ export interface ClaimInput<V extends number> {
   version: number | bigint;
   /** Attestor kind identifier. */
   kind: number | bigint;
-  /** Unix seconds at which the attestation was produced. */
-  timestamp: number | bigint;
-  /** Per-claim randomness, replay protection. */
+  /** 32-byte policy digest. */
+  policyDigest: Uint8Array;
+  /** 32-byte request binding. */
+  requestBinding: Uint8Array;
+  /** 32-byte holder commitment. */
+  holder: Uint8Array;
+  /** 32-byte operation nonce. */
   nonce: Uint8Array;
-  /** Hash of the evidence artifacts. */
-  evidenceHash: Uint8Array;
+  /** Start of the observation window, Unix seconds. */
+  windowStart: number | bigint;
+  /** End of the observation window, Unix seconds. */
+  windowEnd: number | bigint;
   /** Per-position present mask; length constrained to `V` by the schema. */
   present: readonly boolean[];
   /** Positional claim values; length constrained to `V` by the schema. */
@@ -78,37 +92,49 @@ export interface ClaimInput<V extends number> {
  */
 export const CLAIM_VERSION = 1n;
 
+const bytes32 = z.instanceof(Uint8Array).refine((b) => b.length === 32, 'must be 32 bytes');
+const numeric = z.union([z.number(), z.bigint()]);
+
 /**
- * Zod schema for a fixed `V` claim.
+ * Zod schema for a claim, optionally pinned to `V` value slots.
  *
  * Runtime validator + type source: `z.output` is a {@link Claim}, `z.input` a
  * {@link ClaimInput}. Kinds use it as their `claim` schema (or an extended
  * schema) so client-proposed claims are validated against the canonical shape.
  *
  * @param v — the number of value slots; constrains `present` and `values` to
- *   length `v`.
+ *   length `v`. Omit it to accept any (equal) length.
  * @returns a schema whose output is a {@link Claim}: validates the fixed shape
  *   and coerces the numeric fields to `bigint`.
  */
 export function claimSchema<V extends number>(
-  v: V,
+  v?: V,
 ): z.ZodType<Claim<V>, z.core.$ZodTypeInternals<Claim<V>, ClaimInput<V>>> {
+  const present = z.array(z.boolean());
+  const values = z.array(numeric);
   const schema = z
     .object({
-      version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
-      kind: z.union([z.number(), z.bigint()]),
-      timestamp: z.union([z.number(), z.bigint()]),
-      nonce: z.instanceof(Uint8Array),
-      evidenceHash: z.instanceof(Uint8Array),
-      present: z.array(z.boolean()).length(v),
-      values: z.array(z.union([z.number(), z.bigint()])).length(v),
+      version: numeric.default(CLAIM_VERSION),
+      kind: numeric,
+      policyDigest: bytes32,
+      requestBinding: bytes32,
+      holder: bytes32,
+      nonce: bytes32,
+      windowStart: numeric,
+      windowEnd: numeric,
+      present: v === undefined ? present : present.length(v),
+      values: v === undefined ? values : values.length(v),
     })
+    .refine((c) => c.present.length === c.values.length, 'present and values differ in length')
     .transform((input) => ({
       version: BigInt(input.version),
       kind: BigInt(input.kind),
-      timestamp: BigInt(input.timestamp),
+      policyDigest: input.policyDigest,
+      requestBinding: input.requestBinding,
+      holder: input.holder,
       nonce: input.nonce,
-      evidenceHash: input.evidenceHash,
+      windowStart: BigInt(input.windowStart),
+      windowEnd: BigInt(input.windowEnd),
       present: input.present,
       values: input.values.map((value) => BigInt(value)),
     }));
@@ -122,10 +148,10 @@ export function claimSchema<V extends number>(
  * Encode a parsed {@link Claim} into the flat signed-message field vector.
  *
  * The canonical default for kinds whose `message` is exactly the canonical
- * `Claim` shape: a 5-field header (version, kind, timestamp, and the two
- * byte fields mapped via {@link !degradeToTransient}, exactly as
- * `attestation.compact`'s `buildMessage` does), followed by the `present`
- * flags (`1`/`0`) and the `values`. The result has length `2*V + 5`, which is
+ * `Claim` shape: an 8-field header (version, kind, the four 32-byte fields
+ * mapped via {@link !degradeToTransient} exactly as `attestation.compact`'s
+ * `buildMessage` does, windowStart, windowEnd), followed by the `present`
+ * flags (`1`/`0`) and the `values`. The result has length `2*V + 8`, which is
  * the signed-message length `K` the target contract is specialized with.
  *
  * Kinds that extend the claim or use a different layout keep their own
@@ -134,16 +160,19 @@ export function claimSchema<V extends number>(
  *
  * @param claim — a parsed {@link Claim}.
  * @returns the flat message the signer commits to and the contract verifies.
- * @throws if `claim.nonce` or `claim.evidenceHash` is not exactly 32 bytes
- *   (the `degradeToTransient` precondition).
+ * @throws if a 32-byte field is not exactly 32 bytes (the `degradeToTransient`
+ *   precondition).
  */
 export function claimToMessage<V extends number>(claim: Claim<V>): FlatMessage {
   return [
     claim.version,
     claim.kind,
-    claim.timestamp,
+    degradeToTransient(claim.policyDigest),
+    degradeToTransient(claim.requestBinding),
+    degradeToTransient(claim.holder),
     degradeToTransient(claim.nonce),
-    degradeToTransient(claim.evidenceHash),
+    claim.windowStart,
+    claim.windowEnd,
     ...claim.present.map((p) => (p ? 1n : 0n)),
     ...claim.values,
   ];

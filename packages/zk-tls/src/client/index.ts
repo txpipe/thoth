@@ -8,13 +8,19 @@ import type {
   ProviderClaimData,
   ZkFetchDefinition,
   ZkFetchEvidence,
+  ZkFetchIntent,
   ZkFetchPolicy,
 } from '../index.js';
 import {
+  assertEvidenceMatchesIntent,
   assertEvidenceMatchesPolicy,
   claimUrl,
   deriveClaimFromEvidence,
+  INTENT_CONTEXT_KEY,
+  intentDigestOf,
   parsedEvidenceView,
+  policyDigestOf,
+  requestBindingOf,
   zkFetchEvidenceSchema,
   zkFetchPolicySchema,
 } from '../index.js';
@@ -49,6 +55,23 @@ export interface ZkFetchRequest {
   responseRedactions?: readonly { regex?: string; jsonPath?: string; xPath?: string }[];
   /** Arbitrary context signed into the claim (e.g. a label). */
   context?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * What the caller supplies to build an intent; the client adds the policy
+ * digest, the request binding and a random operation nonce.
+ */
+export interface ZkFetchIntentInput {
+  /**
+   * The 32-byte holder commitment, computed by the dApp from the holder secret
+   * with the contract's exported pure derivation. The client never sees the
+   * secret.
+   */
+  holder: Uint8Array;
+  /** Observation window start, Unix seconds. */
+  windowStart: bigint;
+  /** Observation window end, Unix seconds. */
+  windowEnd: bigint;
 }
 
 /**
@@ -157,10 +180,10 @@ const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetc
 /**
  * Build the claim proposal the client sends to every attestor.
  *
- * Runs the policy check and derives the canonical claim. The client
+ * Runs the policy and intent checks and derives the common claim. The client
  * deliberately does **not** re-verify the Reclaim ECDSA signature, and each
  * pinned attestor verifies the evidence before signing.
- * Because the claim (incl. its nonce) is deterministic in the evidence, the
+ * Because the claim is deterministic in the intent and the disclosures, the
  * proposal is byte-identical to what each attestor will sign, so the client
  * can precompute the expected message and vet each returned attestation
  * against it (`resolveAttestation`'s `expectedMessage`).
@@ -176,13 +199,16 @@ const buildClaimProposal = async <V extends number>(options: {
   evidence: ZkFetchEvidence;
   /** The shared policy every attestor in the set enforces. */
   policy: ZkFetchPolicy;
+  /** The intent the evidence was witnessed under. */
+  intent: ZkFetchIntent;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
 }): Promise<Claim<V>> => {
-  const { evidence, policy, valueSlots } = options;
+  const { evidence, policy, intent, valueSlots } = options;
   const verified = parsedEvidenceView(evidence);
   assertEvidenceMatchesPolicy(verified, policy);
-  const derived = deriveClaimFromEvidence({ verified, policy, valueSlots });
+  assertEvidenceMatchesIntent(verified, intent);
+  const derived = deriveClaimFromEvidence({ verified, policy, intent, valueSlots });
   return claimSchema(valueSlots).parse(derived);
 };
 
@@ -254,6 +280,8 @@ export interface ZkFetchClientConfig<V extends number, PK, S> {
 export interface ZkFetchClientProof<V extends number, PK, S> {
   /** The canonical evidence the proof produced. */
   readonly evidence: ZkFetchEvidence;
+  /** The intent the evidence was witnessed under. */
+  readonly intent: ZkFetchIntent;
   /**
    * Ask the pinned attestors to attest this evidence.
    *
@@ -274,13 +302,20 @@ export interface ZkFetchClient<V extends number, PK, S> {
   /**
    * Obtain evidence for an HTTPS request through the configured prover.
    *
-   * The evidence must attest `request.url`'s origin — enforced here, so a
-   * prover answering for a different origin never reaches an attestor.
+   * Builds the intent (policy digest, request binding, holder, a random
+   * operation nonce, and the window) and puts its digest into the signed
+   * request context under `INTENT_CONTEXT_KEY`. The evidence must attest
+   * `request.url`'s origin — enforced here, so a prover answering for a
+   * different origin never reaches an attestor.
    *
    * @param request — what to fetch and which of its fields to reveal/redact.
+   * @param intent — the holder commitment and the observation window.
    * @returns a proof handle whose `attest` fan-out collects the N-of-M set.
    */
-  proveReq(request: ZkFetchRequest): Promise<ZkFetchClientProof<V, PK, S>>;
+  proveReq(
+    request: ZkFetchRequest,
+    intent: ZkFetchIntentInput,
+  ): Promise<ZkFetchClientProof<V, PK, S>>;
 }
 
 /**
@@ -293,7 +328,7 @@ export interface ZkFetchClient<V extends number, PK, S> {
  * const client = zkFetchClient.init({
  *   trusted, transport, policy, valueSlots, prover,
  * });
- * const proof = await client.proveReq({ url, method, headers });
+ * const proof = await client.proveReq({ url, method }, { holder, windowStart, windowEnd });
  * const attestment = await proof.attest('txpipeEndpoint', 'eryxEndpoint', 'midnightFoundation');
  * ```
  *
@@ -326,17 +361,35 @@ export const zkFetchClient = {
       );
     }
     return {
-      proveReq: async (request): Promise<ZkFetchClientProof<V, PK, S>> => {
-        const evidence = zkFetchEvidenceSchema.parse(await prover.prove(request));
+      proveReq: async (request, input): Promise<ZkFetchClientProof<V, PK, S>> => {
+        const intent: ZkFetchIntent = {
+          policyDigest: policyDigestOf(checkedPolicy),
+          requestBinding: requestBindingOf({
+            method: request.method ?? 'GET',
+            url: request.url,
+            body: request.body ?? '',
+          }),
+          holder: input.holder,
+          nonce: crypto.getRandomValues(new Uint8Array(32)),
+          windowStart: input.windowStart,
+          windowEnd: input.windowEnd,
+        };
+        const bound = {
+          ...request,
+          context: { ...request.context, [INTENT_CONTEXT_KEY]: intentDigestOf(intent) },
+        };
+        const evidence = zkFetchEvidenceSchema.parse(await prover.prove(bound));
         assertEvidenceMatchesRequest(evidence, request);
         return {
           evidence,
+          intent,
           attest: async (...ids) =>
             collectAttestations({
               trusted,
               transport,
               evidence,
               policy: checkedPolicy,
+              intent,
               valueSlots,
               ids,
             }),
@@ -383,13 +436,15 @@ const collectAttestations = async <V extends number, PK, S>(options: {
   evidence: ZkFetchEvidence;
   /** The shared policy every attestor in the set enforces. */
   policy: ZkFetchPolicy;
+  /** The intent the evidence was witnessed under. */
+  intent: ZkFetchIntent;
   /** The claim's value-slot count. */
   valueSlots: V;
   /** Attestor ids to query; empty means every pinned attestor. */
   ids: string[];
 }): Promise<Attestment<V, PK, S>> => {
-  const { trusted, transport, evidence, policy, valueSlots, ids } = options;
-  const claim = await buildClaimProposal({ evidence, policy, valueSlots });
+  const { trusted, transport, evidence, policy, intent, valueSlots, ids } = options;
+  const claim = await buildClaimProposal({ evidence, policy, intent, valueSlots });
   const message = claimToMessage(claim);
   const targetIds = ids.length > 0 ? ids : trusted.attestors.map((a) => a.id);
   const collected: ZkFetchCollectedAttestation<V, PK, S>[] = [];
