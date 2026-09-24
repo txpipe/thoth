@@ -2,7 +2,7 @@
 // modules, specialized to V=3 values, K=14 message fields, M=3 signatures,
 // N=2 threshold (2-of-3). Exists only to give the modules a top-level shell to
 // compile against and to re-export the pure parity surface (`message`,
-// `schnorrChallenge`, `computeId`, `holderOf`) plus types and ledger fields
+// `schnorrChallenge`, `computeId`, `holderOf`, `holderCommitment`) plus types and ledger fields
 // the simulator/tests need.
 pragma language_version >= 0.22;
 
@@ -15,7 +15,7 @@ import "../../attestor_registry"<3, 14> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
-export { A_freshnessWindow, A_claimsVault, A_nullifiers };
+export { A_freshnessWindow, A_policyDigest, A_maxWindow, A_claimsVault, A_nullifiers };
 
 export circuit verifyAttestation(): [] {
   A_verifyAttestation();
@@ -41,6 +41,10 @@ export pure circuit computeId(a: A_Claim, rand: Bytes<32>): Bytes<32> {
 
 export pure circuit holderOf(secret: Bytes<32>): Field {
   return A_holderOf(secret);
+}
+
+export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
+  return A_holderCommitment(secret);
 }
 
 // App-predicate demo: open a vaulted claim in-circuit and read several value
@@ -74,7 +78,13 @@ witness seedKeys(): Vector<3, JubjubPoint>;
 
 witness freshWindow(): Uint<64>;
 
+witness sealedPolicy(): Bytes<32>;
+
+witness sealedMaxWindow(): Uint<32>;
+
 constructor() {
   A_freshnessWindow = disclose(freshWindow());
+  A_policyDigest = disclose(sealedPolicy());
+  A_maxWindow = disclose(sealedMaxWindow());
   R_keys = disclose(seedKeys());
 }

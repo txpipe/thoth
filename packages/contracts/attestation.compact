@@ -7,10 +7,14 @@
 // Responsibilities:
 //   - verify >= #N of #M signatures from the appended AttestorRegistry over the
 //     frozen flat message built by `buildMessage` (this module's contract law);
+//   - reject a claim attested under another policy than the sealed
+//     `policyDigest`;
+//   - reject a claim whose holder commitment isn't derived from the caller's
+//     holder secret (`holderCommitment`);
+//   - reject an inverted window, a window longer than the sealed `maxWindow`,
+//     and a window that doesn't contain the block time: the block time must be
+//     at least `windowStart` and earlier than `windowEnd + freshnessWindow`;
 //   - reject nonce replay via the nullifiers set;
-//   - reject stale/future observation windows when the sealed
-//     `freshnessWindow` is set (0 disables the check), measured from
-//     `windowEnd`;
 //   - store { holder, timestamp = windowEnd } in the claimsVault. Nothing is returned:
 //     the app composes its own predicates over the claim via `openClaim`.
 //
@@ -54,8 +58,12 @@ module attestation<#K, #V, #N, #M> {
   }
 
   /// Freshness window (seconds), sealed at deploy by the top-level
-  /// constructor. 0 disables the freshness check.
+  /// constructor: a claim is accepted until `windowEnd + freshnessWindow`.
   export sealed ledger freshnessWindow: Uint<64>;
+  /// The policy digest every accepted claim must carry, sealed at deploy.
+  export sealed ledger policyDigest: Bytes<32>;
+  /// Maximum observation window length (seconds), sealed at deploy.
+  export sealed ledger maxWindow: Uint<32>;
   export ledger claimsVault: Map<Bytes<32>, ClaimEntry>;
   export ledger nullifiers: Set<Bytes<32>>;
 
@@ -66,6 +74,12 @@ module attestation<#K, #V, #N, #M> {
   /// secret. The resulting binding is the on-chain pseudonym for claim entries.
   circuit deriveHolder(secret: Bytes<32>): Field {
     return jubjubPointX(hashToCurve<Vector<2, Bytes<32>>>([pad(32, "thoth:holder:v1"), secret]));
+  }
+
+  /// Holder commitment signed into the claim: a domain-separated hash of the
+  /// holder secret. Distinct from the vault pseudonym (`deriveHolder`).
+  export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
+    return persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:holder-commit:v1"), secret]);
   }
 
   /// Reconstruct the flat signed message. Wire layout, in order:
@@ -120,23 +134,25 @@ module attestation<#K, #V, #N, #M> {
     return deriveHolder(secret);
   }
 
-  /// Verify an attested claim, on replay + freshness gates, then store it.
+  /// Verify an attested claim against the policy, holder, window, signature
+  /// and replay gates, then store it.
   export circuit verifyAttestation(): [] {
     const [claim, sigs, rand] = getAttestationWitness();
+    const secret = getHolderSecret();
     assert(claim.version == 1, "Unsupported claim version");
     assert(claim.kind == 1, "Unsupported kind");
+    assert(claim.policyDigest == policyDigest, "Wrong policy digest");
+    assert(claim.holder == holderCommitment(secret), "Claim not bound to caller");
+    assert(claim.windowStart <= claim.windowEnd, "Window inverted");
+    assert(claim.windowEnd - claim.windowStart <= maxWindow, "Window too long");
 
     const msg = buildMessage(claim);
     assert(Registry_countValidSignatures(msg, sigs) >= (N as Uint<64>),
            "Insufficient valid signatures"
            );
 
-    if (disclose(freshnessWindow != 0)) {
-      assert(blockTimeGte(disclose(claim.windowEnd as Uint<64>)), "Window in the future");
-      assert(blockTimeLt(disclose((claim.windowEnd + freshnessWindow) as Uint<64>)),
-             "Window too old"
-             );
-    }
+    assert(blockTimeGte(disclose(claim.windowStart as Uint<64>)), "Window in the future");
+    assert(blockTimeLt(disclose((claim.windowEnd + freshnessWindow) as Uint<64>)), "Window too old");
 
     const nullifier = persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:nonce:"), claim.nonce]);
     assert(!nullifiers.member(disclose(nullifier)), "Nonce replay");
@@ -146,8 +162,7 @@ module attestation<#K, #V, #N, #M> {
     assert(!claimsVault.member(id), "Claim already accepted");
     claimsVault.insert(
       id,
-      ClaimEntry { holder: disclose(deriveHolder(getHolderSecret())),
-                   timestamp: disclose(claim.windowEnd) }
+      ClaimEntry { holder: disclose(deriveHolder(secret)), timestamp: disclose(claim.windowEnd) }
       );
   }
 

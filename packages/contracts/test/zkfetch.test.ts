@@ -10,7 +10,7 @@ import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { zkFetchClient } from '@thoth/zk-tls/client';
 import { describe, expect, it } from 'vitest';
 import { testWitness } from '../../zk-tls/test/helpers/witness.js';
-import { idOf, makeNotaryKey } from './helpers/fixtures.js';
+import { holderCommitment, idOf, makeNotaryKey } from './helpers/fixtures.js';
 import { createPrivateState, type SchnorrSignature } from './helpers/private-state.js';
 import { type JubjubPoint, signMessage } from './helpers/sign.js';
 import { MockAttestationSim } from './helpers/sim.js';
@@ -61,23 +61,25 @@ describe('zkFetch attestation in the simulator', () => {
           }),
       },
     });
+    const holderSecret = randomBytes(32);
     const proof = await client.proveReq(
       { url: 'https://api.example.com/v1/account' },
       {
-        holder: randomBytes(32),
+        holder: holderCommitment(holderSecret),
         windowStart: BigInt(OBSERVED_AT - 60),
         windowEnd: BigInt(OBSERVED_AT + 60),
       },
     );
     const { claim, collected } = await proof.attest();
 
-    const holderSecret = randomBytes(32);
     const commitRand = randomBytes(32);
     const contractClaim = { ...claim, present: [...claim.present], values: [...claim.values] };
     const sim = new MockAttestationSim(
       createPrivateState(holderSecret),
       notaryKeys.map((k) => k.pk),
+      { policyDigest: claim.policyDigest },
     );
+    sim.now = OBSERVED_AT;
     sim.call('verifyAttestation', {
       claim: contractClaim,
       signatures: [

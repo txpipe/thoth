@@ -9,9 +9,16 @@ import { TWO_248 } from './sign.js';
 
 export type WitnessBase = WitnessContext<Ledger, PrivateState>;
 
+// Values the mock constructor seals at deploy.
+export type SealedConfig = {
+  policyDigest: Uint8Array;
+  maxWindow: bigint;
+  freshnessWindow: bigint;
+};
+
 export const makeWitnesses = (
   registryKeys: { x: bigint; y: bigint }[],
-  freshnessWindow = 0n,
+  sealed: SealedConfig,
 ): Witnesses<PrivateState> => ({
   getAttestationWitness: ({
     privateState,
@@ -42,6 +49,16 @@ export const makeWitnesses = (
 
   freshWindow: ({ privateState }: WitnessBase): [PrivateState, bigint] => [
     privateState,
-    freshnessWindow,
+    sealed.freshnessWindow,
+  ],
+
+  sealedPolicy: ({ privateState }: WitnessBase): [PrivateState, Uint8Array] => [
+    privateState,
+    sealed.policyDigest,
+  ],
+
+  sealedMaxWindow: ({ privateState }: WitnessBase): [PrivateState, bigint] => [
+    privateState,
+    sealed.maxWindow,
   ],
 });

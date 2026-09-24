@@ -8,8 +8,9 @@ import {
 } from '@midnight-ntwrk/compact-runtime';
 import type * as ocrt from '@midnight-ntwrk/onchain-runtime-v3';
 import { Contract, type Ledger, ledger } from '../../artifacts/mock_attestation/contract/index.js';
+import { TEST_SEALED } from './fixtures.js';
 import type { PrivateState } from './private-state.js';
-import { makeWitnesses } from './witnesses.js';
+import { makeWitnesses, type SealedConfig } from './witnesses.js';
 
 const ADDR = dummyContractAddress();
 const COIN_PK = '0'.repeat(64);
@@ -19,8 +20,8 @@ export class MockAttestationSim {
   private lastEffects: Effects | null = null;
   private lastSigs: PrivateState['signatures'] | null = null;
 
-  // Block-time override (seconds). Leave null to use the runtime default;
-  // set it (e.g. to the claim timestamp ± offsets) to test freshness.
+  // Block-time override (seconds). Leave null to use the runtime default
+  // (wall-clock now); set it to test the observation window.
   now: number | null = null;
 
   readonly contract: Contract<PrivateState>;
@@ -28,9 +29,11 @@ export class MockAttestationSim {
   constructor(
     privateState: PrivateState,
     registryKeys: { x: bigint; y: bigint }[],
-    freshnessWindow = 0n,
+    sealed: Partial<SealedConfig> = {},
   ) {
-    this.contract = new Contract<PrivateState>(makeWitnesses(registryKeys, freshnessWindow));
+    this.contract = new Contract<PrivateState>(
+      makeWitnesses(registryKeys, { ...TEST_SEALED, ...sealed }),
+    );
     const deploy = this.contract.initialState(createConstructorContext(privateState, COIN_PK));
     this.state = deploy.currentContractState.data;
   }

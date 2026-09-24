@@ -10,7 +10,7 @@ your own `.compact` contracts and compile as part of your own DApp build.
 
 | File | Module | Role |
 |------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and freshness (`freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)`. The claim can be opened at any time to access the values. |
+| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, enforces the sealed policy (`policyDigest`), the holder and the observation window (`maxWindow`, `freshnessWindow`), controls replay (`nullifiers`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)`. The claim can be opened at any time to access the values. |
 | `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` over a `Vector<K, Field>` message. Counts only — no threshold |
 | `schnorr.compact` | `schnorr` | Jubjub Schnorr verification polyfill (generic `Vector<#n, Field>`) |
 
@@ -59,7 +59,7 @@ import "attestor_registry"<3, 14> prefix R_;
 ```
 
 See `examples/example_app.compact` for a complete top-level embedding that
-pins registry keys and the freshness window in the constructor, re-exports the
+pins registry keys, the policy digest and the window bounds in the constructor, re-exports the
 module types/ledgers/pure circuits, and exports a `verifyAttestation` entry
 point.
 
@@ -97,13 +97,24 @@ presence flags, V values) — fixed when a contract embeds the module.
 
 ## Design notes
 
-- **The claim is the entire message.** Everything the contract inspects —
-  freshness (measured from `windowEnd`), replay protection (`nonce`), and
-  kind/version — is inside the signed field vector. `policyDigest`,
-  `requestBinding` and `holder` are signed too; the contract does not check
-  them yet.
-- **What stays public.** The vault stores the holder pseudonym and a claim
-  timestamp, which is the claim's `windowEnd`. Claims are not unlinkable.
+- **The claim is the entire message.** Everything the contract inspects is
+  inside the signed field vector. `verifyAttestation` rejects a claim unless:
+  - `version` and `kind` are supported;
+  - `policyDigest` equals the sealed `policyDigest`;
+  - `holder` equals `holderCommitment(secret)` for the caller's holder secret,
+    so a copied claim is useless without that secret;
+  - `windowStart <= windowEnd` and the window is at most the sealed `maxWindow`;
+  - the block time is at least `windowStart` and earlier than
+    `windowEnd + freshnessWindow`;
+  - at least `#N` signatures verify and the `nonce` hasn't been used.
+
+  `requestBinding` is signed but not checked by the contract.
+- **Holder commitment.** The dApp computes `holderCommitment(secret)` with the
+  exported pure circuit and gives only the commitment to the client. It is a
+  different hash from the vault pseudonym (`holderOf`).
+- **What stays public.** The vault stores the holder pseudonym and the claim's
+  `windowEnd` (as `timestamp`). Claims by the same holder share a pseudonym, so
+  they are linkable; Thoth makes no unlinkability claim.
   Kinds must not rely on un-signed side-channels: any data the contract needs
   has to be a field of the message the attestor signs.
 - **Registry slots are positional.** `attestor_registry` verifies
@@ -126,8 +137,8 @@ flag disagrees with an asserted predicate can never pass signature verification.
 
 ## Deploy wiring
 
-Both `freshnessWindow` (Attestation) and `keys` (Registry) are **sealed** ledgers
-set exactly once in the top-level constructor. See `examples/example_app.compact`
+`policyDigest`, `maxWindow`, `freshnessWindow` (Attestation) and `keys`
+(Registry) are **sealed** ledgers set exactly once in the top-level constructor. See `examples/example_app.compact`
 for the full wiring.
 
 ## Opening a vaulted claim

@@ -9,14 +9,15 @@ import {
   makeNotaryKey,
   nowSeconds,
   signClaim,
+  TEST_HOLDER_SECRET,
+  TEST_SEALED,
 } from './helpers/fixtures.js';
 import { createPrivateState, type PrivateState } from './helpers/private-state.js';
 import { MockAttestationSim } from './helpers/sim.js';
 
-const DAY = 86400n;
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 const registryKeys = notaryKeys.map((k) => k.pk);
-const holder = randomBytes(32);
+const holder = TEST_HOLDER_SECRET;
 
 let sim: MockAttestationSim;
 
@@ -132,34 +133,66 @@ describe('mock attestation', () => {
     });
   });
 
-  describe('freshness window', () => {
-    const WINDOW = 30n * DAY; // 30-day window, matching the sealed witness value
+  describe('policy, holder and window', () => {
+    const FRESHNESS = TEST_SEALED.freshnessWindow;
+    const MAX_WINDOW = TEST_SEALED.maxWindow;
+    const now = nowSeconds();
 
     const attWith = (claim: A_Claim, overrides: Partial<PrivateState> = {}) => {
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
       return ps({ ...signed, holderSecret: holder, ...overrides });
     };
+    const window = (windowStart: bigint, windowEnd: bigint) =>
+      attWith(makeClaim({ windowStart, windowEnd }));
 
     beforeEach(() => {
-      sim = new MockAttestationSim(createPrivateState(holder), registryKeys, WINDOW);
+      sim.now = Number(now);
     });
 
-    it('accepts a window ending inside the freshness window', () => {
-      sim.now = Number(nowSeconds());
-      sim.call('verifyAttestation', attWith(makeClaim({ windowEnd: nowSeconds() - 60n })));
+    it('rejects a claim attested under another policy', () => {
+      const claim = makeClaim({ policyDigest: randomBytes(32) });
+      expect(() => sim.call('verifyAttestation', attWith(claim))).toThrow('Wrong policy digest');
     });
 
-    it('rejects a window ending in the future', () => {
-      sim.now = Number(nowSeconds());
+    it('rejects a caller whose holder secret does not match the claim', () => {
       expect(() =>
-        sim.call('verifyAttestation', attWith(makeClaim({ windowEnd: nowSeconds() + DAY }))),
-      ).toThrow('Window in the future');
+        sim.call('verifyAttestation', attWith(makeClaim(), { holderSecret: randomBytes(32) })),
+      ).toThrow('Claim not bound to caller');
     });
 
-    it('rejects a window ending before the 30-day freshness window', () => {
-      sim.now = Number(nowSeconds());
+    it('rejects an inverted window', () => {
+      expect(() => sim.call('verifyAttestation', window(now, now - 60n))).toThrow(
+        'Window inverted',
+      );
+    });
+
+    it('accepts a window of exactly the maximum length', () => {
+      sim.call('verifyAttestation', window(now - MAX_WINDOW, now));
+    });
+
+    it('rejects a window longer than the maximum', () => {
+      expect(() => sim.call('verifyAttestation', window(now - MAX_WINDOW - 1n, now))).toThrow(
+        'Window too long',
+      );
+    });
+
+    it('accepts a block time equal to windowStart', () => {
+      sim.call('verifyAttestation', window(now, now + 60n));
+    });
+
+    it('rejects a window starting after the block time', () => {
+      expect(() => sim.call('verifyAttestation', window(now + 1n, now + 60n))).toThrow(
+        'Window in the future',
+      );
+    });
+
+    it('accepts a block time just before windowEnd + freshnessWindow', () => {
+      sim.call('verifyAttestation', window(now - FRESHNESS - 60n, now - FRESHNESS + 1n));
+    });
+
+    it('rejects a window that ended freshnessWindow ago or earlier', () => {
       expect(() =>
-        sim.call('verifyAttestation', attWith(makeClaim({ windowEnd: nowSeconds() - 31n * DAY }))),
+        sim.call('verifyAttestation', window(now - FRESHNESS - 60n, now - FRESHNESS)),
       ).toThrow('Window too old');
     });
   });

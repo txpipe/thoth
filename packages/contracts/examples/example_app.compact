@@ -4,8 +4,9 @@
 //   #V = 3 value slots, #K = 14 signed-message fields (must equal 2*V + 8),
 //   #M = 3 attestor signature slots, #N = 2 (2-of-3 threshold).
 //
-// The top-level constructor pins the registry keys (sealed) and the freshness
-// window (sealed, 0 = disabled) exactly once at deploy.
+// The top-level constructor pins, exactly once at deploy (all sealed): the
+// registry keys, the expected policy digest, the maximum observation window
+// and the freshness window.
 //
 // To expose the module's types, ledgers, and pure circuits to the app's
 // TypeScript driver, re-export them at the top level (see the `export { ... }`
@@ -22,12 +23,13 @@ import "../attestor_registry"<3, 14> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
-export { A_freshnessWindow, A_claimsVault, A_nullifiers };
+export { A_freshnessWindow, A_policyDigest, A_maxWindow, A_claimsVault, A_nullifiers };
 
 // Registry seals are read by the registry module, not re-exported here; the
 // app's driver typically does not need direct access to the key vector.
 
-// Attestation entry point — verifies signatures, replay, freshness, vaults.
+// Attestation entry point — verifies policy, holder, window, signatures and
+// replay, then vaults the claim.
 export circuit verifyAttestation(): [] {
   A_verifyAttestation();
 }
@@ -38,6 +40,12 @@ export pure circuit message(a: A_Claim): Vector<14, Field> {
   return A_buildMessage(a);
 }
 
+// The holder commitment a claim must carry — the dApp derives it from the
+// holder secret and hands it to the client; the secret stays local.
+export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
+  return A_holderCommitment(secret);
+}
+
 // Presence is now per-slot and natively readable: an app predicate over a
 // vaulted claim simply reads `c.present[i]` (true = values[i] was measured,
 // even if the value itself is 0). Compose this inside your own circuits over
@@ -46,7 +54,12 @@ export pure circuit message(a: A_Claim): Vector<14, Field> {
 // Deploy-time witness providing the 3 attestor public keys.
 witness seedKeys(): Vector<3, JubjubPoint>;
 
+// Deploy-time witness providing the digest of the app's policy.
+witness seedPolicy(): Bytes<32>;
+
 constructor() {
-  A_freshnessWindow = disclose(0); // 0 = no freshness window
+  A_policyDigest = disclose(seedPolicy());
+  A_maxWindow = 3600; // observation windows up to 1 hour
+  A_freshnessWindow = 86400; // accepted until 1 day after windowEnd
   R_keys = disclose(seedKeys());
 }

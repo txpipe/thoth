@@ -6,8 +6,25 @@ import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js
 import { pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
 import type { SchnorrSignature } from './private-state.js';
 import { derivePublicKey, type JubjubPoint, signClaim as signSingle } from './sign.js';
+import type { SealedConfig } from './witnesses.js';
 
 export const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
+
+const DAY = 86400n;
+
+// The mock's default deploy-time seals: the policy every fixture claim is
+// attested under, a 1-day maximum window and a 30-day freshness window.
+export const TEST_SEALED: SealedConfig = {
+  policyDigest: randomBytes(32),
+  maxWindow: DAY,
+  freshnessWindow: 30n * DAY,
+};
+
+// The holder secret fixture claims are bound to by default.
+export const TEST_HOLDER_SECRET = randomBytes(32);
+
+export const holderCommitment = (secret: Uint8Array): Uint8Array =>
+  pureCircuits.holderCommitment(secret);
 
 export type NotaryKey = { sk: bigint; pk: JubjubPoint };
 
@@ -19,7 +36,8 @@ export const makeNotaryKey = (): NotaryKey => {
 // Build a valid `Claim` fixture. `values` is the raw vector (length 3 for this
 // embedding); `present` marks populated slots (present[i] = true means slot i
 // was measured). If any value is `0` it must still be marked present via
-// `present[i] = true`.
+// `present[i] = true`. The claim carries the sealed test policy and is bound to
+// `TEST_HOLDER_SECRET`.
 export const makeClaim = (
   overrides: Partial<Omit<A_Claim, 'values' | 'present'>> & {
     values?: bigint[];
@@ -31,9 +49,9 @@ export const makeClaim = (
   return {
     version: 1n,
     kind: 1n,
-    policyDigest: randomBytes(32),
+    policyDigest: TEST_SEALED.policyDigest,
     requestBinding: randomBytes(32),
-    holder: randomBytes(32),
+    holder: holderCommitment(TEST_HOLDER_SECRET),
     nonce: randomBytes(32),
     windowStart: nowSeconds() - 60n,
     windowEnd: nowSeconds(),
