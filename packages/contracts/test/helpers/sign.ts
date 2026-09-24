@@ -15,7 +15,7 @@
 // `@thoth/core/claim`'s `claimToMessage`) — never a hand-rolled encoding — so
 // a signature produced here must verify in-circuit.
 import { createHash } from 'node:crypto';
-import { ecMulGenerator } from '@midnight-ntwrk/compact-runtime';
+import { ecAdd, ecMul, ecMulGenerator } from '@midnight-ntwrk/compact-runtime';
 import { type A_Claim, pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
 import type { SchnorrSignature } from './private-state.js';
 
@@ -65,3 +65,25 @@ export const signClaim = (
   kSeed = sk.toString(16),
 ): { pk: JubjubPoint; signature: SchnorrSignature } =>
   signMessage(sk, pureCircuits.message(claim), kSeed);
+
+/**
+ * Verify a Schnorr signature off-chain, mirroring `schnorrVerifyOk`:
+ * `response·G == announcement + c·pk`, with `c` truncated to 248 bits.
+ *
+ * @param pk — the signer's public key.
+ * @param msg — the signed flat message.
+ * @param signature — the signature to check.
+ * @returns whether the signature verifies.
+ */
+export const verifyMessage = (
+  pk: JubjubPoint,
+  msg: readonly bigint[],
+  signature: SchnorrSignature,
+): boolean => {
+  const { announcement, response } = signature;
+  const c =
+    pureCircuits.schnorrChallenge(announcement.x, announcement.y, pk.x, pk.y, [...msg]) % TWO_248;
+  const lhs = ecMulGenerator(response);
+  const rhs = ecAdd(announcement, ecMul(pk, c));
+  return lhs.x === rhs.x && lhs.y === rhs.y;
+};

@@ -72,7 +72,7 @@ export function buildTrustedSet<
  * Find the descriptor for a named attestor in the trusted set.
  *
  * The seam's name→descriptor resolution, so a kind SDK can support
- * string-named endpoints (`proof.attest("txpipeEndpoint", …)`) without
+ * string-named endpoints (e.g. operators keyed by attestor id) without
  * re-checking membership at every call site.
  *
  * @param trusted — the trusted set to search.
@@ -141,16 +141,37 @@ export interface CollectedAttestation<K, C, PK, S, Msg = FlatMessage> {
 }
 
 /**
+ * Checks a signature under the attestor signature scheme.
+ *
+ * Kind-agnostic: the client verifies every returned signature with it before
+ * counting it toward a threshold.
+ *
+ * @typeParam PK — the public-key type.
+ * @typeParam S — the signature type.
+ * @typeParam Msg — the signed-message type; defaults to {@link FlatMessage}.
+ */
+export interface SignatureVerifier<PK, S, Msg = FlatMessage> {
+  /**
+   * @param publicKey — the key the signature must verify under.
+   * @param message — the signed message.
+   * @param signature — the signature to check.
+   * @returns whether `signature` is valid for `message` under `publicKey`.
+   */
+  verify(publicKey: PK, message: Msg, signature: S): boolean;
+}
+
+/**
  * Validate one attestation against its descriptor and tag it with its slot.
  *
  * The client's per-attestation validity primitive: it checks that the
  * attestation comes from the pinned key (`'public-key'`), that its
  * `registryIndex` names a real slot in the trusted set (`'registry-index'`),
- * and — when given `expectedMessage` — that the attestor signed the message
- * the caller asked for (`'message'`).
+ * that the attestor signed the message the caller asked for when given
+ * `expectedMessage` (`'message'`), and that the signature verifies under the
+ * pinned key when given a `verifier` (`'signature'`).
  *
  * @param options — the trusted set, the attestor that was asked, the returned
- *   attestation, and optionally the expected signed message.
+ *   attestation, and optionally the expected signed message and a verifier.
  * @returns the slot-tagged {@link CollectedAttestation}.
  * @throws {@link AttestationMismatchError} if a check fails; the `reason`
  *   discriminates which one.
@@ -168,8 +189,10 @@ export function resolveAttestation<
   readonly attestation: Attestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>;
   /** The message the attestor was expected to sign; checked when provided. */
   readonly expectedMessage?: MessageOf<D>;
+  /** Verifies the signature under the attestor's pinned key; checked when provided. */
+  readonly verifier?: SignatureVerifier<PK, S, MessageOf<D>>;
 }): CollectedAttestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>> {
-  const { trusted, attestor, attestation, expectedMessage } = options;
+  const { trusted, attestor, attestation, expectedMessage, verifier } = options;
 
   if (!structuredEquals(attestation.publicKey, attestor.publicKey)) {
     throw new AttestationMismatchError(attestor.id, 'public-key');
@@ -180,8 +203,52 @@ export function resolveAttestation<
   if (attestor.registryIndex < 0 || attestor.registryIndex >= trusted.attestors.length) {
     throw new AttestationMismatchError(attestor.id, 'registry-index');
   }
+  if (
+    verifier !== undefined &&
+    !verifier.verify(attestor.publicKey, attestation.message, attestation.signature)
+  ) {
+    throw new AttestationMismatchError(attestor.id, 'signature');
+  }
 
   return { registryIndex: attestor.registryIndex, attestation };
+}
+
+/**
+ * Pick the first group of collected attestations that meets a threshold.
+ *
+ * Attestations are grouped by exact signed message, so signatures over
+ * different messages are never combined. Within a group each registry slot
+ * counts once. Verify each attestation (see {@link resolveAttestation}) before
+ * grouping; this function trusts its input.
+ *
+ * @typeParam K — the attestor kind.
+ * @typeParam C — the certified claim.
+ * @typeParam PK — the attesting public key.
+ * @typeParam S — the signature scheme type.
+ * @typeParam Msg — the signed-message type.
+ * @param collected — the verified, slot-tagged attestations, in any order.
+ * @param threshold — how many distinct slots must agree.
+ * @returns the agreeing attestations sorted by registry slot, one per slot, or
+ *   `undefined` if no message reaches the threshold.
+ */
+export function thresholdGroup<K, C, PK, S, Msg>(
+  collected: readonly CollectedAttestation<K, C, PK, S, Msg>[],
+  threshold: number,
+): CollectedAttestation<K, C, PK, S, Msg>[] | undefined {
+  const groups: CollectedAttestation<K, C, PK, S, Msg>[][] = [];
+  for (const entry of collected) {
+    const group = groups.find((g) =>
+      structuredEquals(g[0]?.attestation.message, entry.attestation.message),
+    );
+    if (group === undefined) {
+      groups.push([entry]);
+    } else if (!group.some((member) => member.registryIndex === entry.registryIndex)) {
+      group.push(entry);
+    }
+  }
+  return groups
+    .find((group) => group.length >= threshold)
+    ?.sort((a, b) => a.registryIndex - b.registryIndex);
 }
 
 /**

@@ -1,25 +1,32 @@
-// A single-witness zkFetch attestation in the common claim layout, collected
-// through the zk-tls client from two in-process attestors that sign with real
-// Jubjub-Schnorr keys, is accepted by the contract simulator.
+// A threshold zkFetch attestation, collected through the zk-tls client from two
+// operators — each with its own test-key witness and an in-process attestor
+// signing with a real Jubjub-Schnorr key — is accepted by the contract simulator.
 import { randomBytes } from 'node:crypto';
 import { descriptorOf } from '@thoth/attestor';
 import { type AttestorTransport, buildTrustedSet } from '@thoth/client';
 import type { FlatMessage } from '@thoth/core/claim';
 import type { ZkFetchDefinition } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
-import { zkFetchClient } from '@thoth/zk-tls/client';
+import { type ZkFetchOperator, zkFetchClient } from '@thoth/zk-tls/client';
 import { describe, expect, it } from 'vitest';
-import { testWitness } from '../../zk-tls/test/helpers/witness.js';
+import { type TestWitness, testWitness } from '../../zk-tls/test/helpers/witness.js';
 import { holderCommitment, idOf, makeNotaryKey } from './helpers/fixtures.js';
 import { createPrivateState, type SchnorrSignature } from './helpers/private-state.js';
-import { type JubjubPoint, signMessage } from './helpers/sign.js';
+import { type JubjubPoint, signMessage, verifyMessage } from './helpers/sign.js';
 import { MockAttestationSim } from './helpers/sim.js';
 
 const OBSERVED_AT = 1_786_000_000;
-const witness = testWitness(`0x${'11'.repeat(32)}`);
+const witnesses = [
+  testWitness(`0x${'11'.repeat(32)}`),
+  testWitness(`0x${'22'.repeat(32)}`),
+] as const;
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 
-const attestors = notaryKeys.slice(0, 2).map((key, i) =>
+const pairs = [
+  [witnesses[0], notaryKeys[0]],
+  [witnesses[1], notaryKeys[1]],
+] as const;
+const attestors = pairs.map(([witness, key], i) =>
   zkFetchAttestor<JubjubPoint, SchnorrSignature>({
     id: `attestor-${i}`,
     keyPair: {
@@ -41,16 +48,9 @@ const transport: AttestorTransport<ZkFetchDefinition, JubjubPoint, SchnorrSignat
 };
 
 describe('zkFetch attestation in the simulator', () => {
-  it('accepts a single-witness attestation signed by N attestors', async () => {
-    const client = zkFetchClient.init({
-      trusted: buildTrustedSet(attestors.map(descriptorOf)),
-      transport,
-      policy: {
-        allowedHosts: ['api.example.com'],
-        maxWindowSeconds: 120,
-        slots: [{ slot: 0, name: 'balance', parse: 'int' }],
-      },
-      valueSlots: 3,
+  it('accepts a threshold attestation from two independent witnesses', async () => {
+    const operator = (witness: TestWitness): ZkFetchOperator => ({
+      witnessAddress: witness.address,
       prover: {
         prove: (request) =>
           witness.sign({
@@ -61,8 +61,21 @@ describe('zkFetch attestation in the simulator', () => {
           }),
       },
     });
+    const client = zkFetchClient.init({
+      trusted: buildTrustedSet(attestors.map(descriptorOf)),
+      transport,
+      policy: {
+        allowedHosts: ['api.example.com'],
+        maxWindowSeconds: 120,
+        slots: [{ slot: 0, name: 'balance', parse: 'int' }],
+      },
+      valueSlots: 3,
+      threshold: 2,
+      verifier: { verify: verifyMessage },
+      operators: { 'attestor-0': operator(witnesses[0]), 'attestor-1': operator(witnesses[1]) },
+    });
     const holderSecret = randomBytes(32);
-    const proof = await client.proveReq(
+    const { claim, collected } = await client.attest(
       { url: 'https://api.example.com/v1/account' },
       {
         holder: holderCommitment(holderSecret),
@@ -70,7 +83,6 @@ describe('zkFetch attestation in the simulator', () => {
         windowEnd: BigInt(OBSERVED_AT + 60),
       },
     );
-    const { claim, collected } = await proof.attest();
 
     const commitRand = randomBytes(32);
     const contractClaim = { ...claim, present: [...claim.present], values: [...claim.values] };
@@ -82,11 +94,14 @@ describe('zkFetch attestation in the simulator', () => {
     sim.now = OBSERVED_AT;
     sim.call('verifyAttestation', {
       claim: contractClaim,
-      signatures: [
-        ...collected.map((c) => c.attestation.signature),
-        // Empty third slot — never verifies.
-        { announcement: { x: 0n, y: 1n }, response: 0n },
-      ],
+      // Positional: slot i verifies against key i; the unanswered slot never verifies.
+      signatures: notaryKeys.map(
+        (_, slot) =>
+          collected.find((c) => c.registryIndex === slot)?.attestation.signature ?? {
+            announcement: { x: 0n, y: 1n },
+            response: 0n,
+          },
+      ),
       commitRand,
       holderSecret,
     });

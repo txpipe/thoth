@@ -70,17 +70,18 @@ add their side's machinery. The prover runs a witnessed fetch:
     knows the kind and signs the attestor-derived claim at the proposed
     claim's length.
 - **`@thoth/zk-tls/client`** — the dApp side: `zkFetchClient`,
-  `toCanonicalEvidence`, `addressFromWitnessId`, and the prover/config types.
-  `init` validates the policy (including its slot map against the claim
-  length) once; `proveReq(request, { holder, windowStart, windowEnd })` builds
-  the intent, puts its digest in the signed request context, and binds the
-  prover's evidence to the requested URL's origin. The client does **not**
-  re-verify the Reclaim signature — it is the side that ran the witnessed
-  interaction, and each attestor verifies the evidence before signing.
+  `toCanonicalEvidence`, `addressFromWitnessId`, and the prover/operator/config
+  types. `init` validates the policy (including its slot map against the claim
+  length), the operators and the threshold once. `attest(request, { holder,
+  windowStart, windowEnd })` builds one intent, runs one witnessed session per
+  operator, and returns a threshold attestation (see [Client side](#client-side)).
+  The client does **not** re-verify the Reclaim signature — each attestor
+  verifies its own witness's evidence before signing — but it does verify every
+  attestor signature it counts.
 - **`@thoth/zk-tls/prover`** — the live evidence source:
   `zkFetchProver(config)` runs the Reclaim zkFetch protocol against a
   caller-chosen witness over WebSocket and returns canonical evidence for
-  the client's `prover` slot.
+  an operator's `prover` slot.
 
 ## Usage
 
@@ -135,16 +136,47 @@ const policy = zkFetchPolicySchema.parse({
 
 ### Client side
 
+Configure one operator per attestor: the prover that reaches that operator's
+witness, and the witness address its attestor pins. Operators are keyed by
+attestor id and stay out of the generic trusted set.
+
 ```ts
 import { zkFetchClient } from '@thoth/zk-tls/client';
+import { zkFetchProver } from '@thoth/zk-tls/prover';
 
-const client = zkFetchClient.init({ trusted, transport, policy, valueSlots: 3, prover });
-const proof = await client.proveReq(
-  { url: 'https://api.strava.com/…' },
+const client = zkFetchClient.init({
+  trusted,            // @thoth/client buildTrustedSet(...)
+  transport,          // how to reach each attestor
+  policy,
+  valueSlots: 3,
+  threshold: 2,       // the contract's N
+  verifier,           // { verify(publicKey, message, signature): boolean }
+  operators: {
+    txpipe: { prover: zkFetchProver({ witnessUrl: txpipeWitnessUrl }), witnessAddress: txpipeWitness },
+    eryx: { prover: zkFetchProver({ witnessUrl: eryxWitnessUrl }), witnessAddress: eryxWitness },
+  },
+});
+const { claim, message, collected } = await client.attest(
+  { url: 'https://api.strava.com/…', secretHeaders: { authorization } },
   { holder, windowStart, windowEnd }, // holder: the dApp's 32-byte holder commitment
 );
-const { claim, message, collected } = await proof.attest();
 ```
+
+One call:
+
+1. builds the intent and puts its digest in the signed request context;
+2. runs the witnessed sessions concurrently, one per contacted operator, and
+   refuses evidence that is not from that operator's pinned witness or not for
+   the requested origin;
+3. sends each operator's evidence and derived claim to its attestor — secret
+   headers go to the provers only, never to an attestor;
+4. checks each returned attestation's key, message and signature;
+5. groups the results by exact message and counts distinct registry slots only.
+
+`collected` holds the agreeing attestations sorted by registry slot, ready for
+the positional registry. If no message reaches the threshold, `attest` throws
+an `AggregateError` whose `errors` hold each failed operator's error. The
+client contacts the first `threshold` operators in `operators` order.
 
 ## Concepts
 
@@ -215,12 +247,19 @@ The kind lands in the middle of the Thoth layering:
   the attestor re-derives values from the verified disclosures and only accepts a
   proposal that matches (hence `assertClaimMatchesDisclosures`). The client
   cannot make the attestor certify a reading the evidence does not support.
-- **The client does not re-verify.** The client is the side that ran the
-  witnessed HTTPS interaction; each attestor checks the Reclaim ECDSA signature
-  and its configured witness address before signing. The client derives the deterministic
-  expected claim from the intent and the evidence and `resolveAttestation` forces every
-  returned attestation to commit to exactly that message — the on-chain N-of-M
-  threshold is the enforcement.
+- **The client does not re-verify the witness.** The client is the side that
+  ran the witnessed HTTPS interaction; each attestor checks the Reclaim ECDSA
+  signature and its configured witness address before signing. The client
+  derives the deterministic expected claim from the intent and each operator's
+  evidence, and `resolveAttestation` forces every returned attestation to
+  commit to exactly that message under a valid signature.
+- **Grouping, not trusting.** Two honest witnesses of the same fact produce the
+  same claim, so the client groups by exact message and never merges different
+  observations. A threshold counts registry slots, not responses.
+- **Operators are kind configuration.** A zkFetch operator is a witness plus an
+  attestor; the witness part means nothing to other kinds, so the
+  `operators` map lives in the zkFetch client config, not in `@thoth/client`'s
+  trusted set.
 - **Strict input.** Dramatically fewer shapes to reason about at a trust
   boundary, and no witness-address decoding inside the verifier.
 

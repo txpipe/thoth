@@ -1,5 +1,10 @@
-import type { AttestorTransport, CollectedAttestation, TrustedSet } from '@thoth/client';
-import { attestorOf, resolveAttestation } from '@thoth/client';
+import type {
+  AttestorTransport,
+  CollectedAttestation,
+  SignatureVerifier,
+  TrustedSet,
+} from '@thoth/client';
+import { attestorOf, resolveAttestation, thresholdGroup } from '@thoth/client';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { claimSchema, claimToMessage } from '@thoth/core/claim';
@@ -178,11 +183,11 @@ const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetc
 };
 
 /**
- * Build the claim proposal the client sends to every attestor.
+ * Build the claim proposal the client sends to one operator's attestor.
  *
  * Runs the policy and intent checks and derives the common claim. The client
- * deliberately does **not** re-verify the Reclaim ECDSA signature, and each
- * pinned attestor verifies the evidence before signing.
+ * deliberately does **not** re-verify the Reclaim ECDSA signature: each
+ * pinned attestor verifies its own witness's evidence before signing.
  * Because the claim is deterministic in the intent and the disclosures, the
  * proposal is byte-identical to what each attestor will sign, so the client
  * can precompute the expected message and vet each returned attestation
@@ -229,25 +234,35 @@ export type ZkFetchCollectedAttestation<V extends number, PK, S> = CollectedAtte
 >;
 
 /**
- * The collected attestation set for one claim.
+ * A threshold attestation: the common claim, its message, and the agreeing
+ * signatures.
  *
- * `claim`/`message` are the shared, deterministically derived claim and its
- * flat-message encoding; `collected` is one per attestor that answered. All
- * members must agree on `message` — the client enforces that via
- * `resolveAttestation`'s `expectedMessage`, and the registry counts signatures
- * over exactly this message.
+ * Every member of `collected` signed exactly `message`, each comes from a
+ * distinct registry slot, and they are sorted by slot, so the dApp can place
+ * them straight into the positional registry.
  *
  * @typeParam V — the claim's value-slot count.
  * @typeParam PK — the signature scheme's public-key type.
  * @typeParam S — the signature scheme's signature type.
  */
 export interface Attestment<V extends number, PK, S> {
-  /** The claim every attestor in this set signed. */
+  /** The claim every collected attestor signed. */
   readonly claim: Claim<V>;
   /** `claimToMessage(claim)` — the exact message the signatures commit to. */
   readonly message: FlatMessage;
-  /** The collected attestations, one per answered attestor. */
+  /** The agreeing attestations, one per registry slot, sorted by slot. */
   readonly collected: readonly ZkFetchCollectedAttestation<V, PK, S>[];
+}
+
+/**
+ * One operator: the prover that runs a witnessed session through its witness,
+ * and the witness address its attestor trusts.
+ */
+export interface ZkFetchOperator {
+  /** Runs the witnessed session through this operator's witness URL. */
+  readonly prover: ZkFetchProver;
+  /** The witness address this operator's attestor pins; evidence from any other is refused. */
+  readonly witnessAddress: string;
 }
 
 /**
@@ -266,33 +281,20 @@ export interface ZkFetchClientConfig<V extends number, PK, S> {
   readonly policy: ZkFetchPolicy;
   /** The claim's value-slot count (the target contract's `#V`). */
   readonly valueSlots: V;
-  /** Where evidence comes from (a fixture, or a live zkFetch provider). */
-  readonly prover: ZkFetchProver;
-}
-
-/**
- * A proof handle with pending attestation: the evidence plus the fan-out.
- *
- * @typeParam V — the claim's value-slot count.
- * @typeParam PK — the signature scheme's public-key type.
- * @typeParam S — the signature scheme's signature type.
- */
-export interface ZkFetchClientProof<V extends number, PK, S> {
-  /** The canonical evidence the proof produced. */
-  readonly evidence: ZkFetchEvidence;
-  /** The intent the evidence was witnessed under. */
-  readonly intent: ZkFetchIntent;
+  /** How many distinct registry slots must sign the same message (the contract's `N`). */
+  readonly threshold: number;
+  /** Checks each returned signature before it counts toward the threshold. */
+  readonly verifier: SignatureVerifier<PK, S>;
   /**
-   * Ask the pinned attestors to attest this evidence.
-   *
-   * @param ids — the attestor ids to query; defaults to every pinned attestor.
-   * @returns the collected attestations, or throws on the first rejection.
+   * One operator per attestor, keyed by attestor id. Every id must be in
+   * `trusted`. The client contacts the first `threshold` operators, in this
+   * order.
    */
-  attest(...ids: string[]): Promise<Attestment<V, PK, S>>;
+  readonly operators: Readonly<Record<string, ZkFetchOperator>>;
 }
 
 /**
- * The client, ready to prove a request.
+ * The client, ready to attest a request.
  *
  * @typeParam V — the claim's value-slot count.
  * @typeParam PK — the signature scheme's public-key type.
@@ -300,41 +302,47 @@ export interface ZkFetchClientProof<V extends number, PK, S> {
  */
 export interface ZkFetchClient<V extends number, PK, S> {
   /**
-   * Obtain evidence for an HTTPS request through the configured prover.
+   * Get a threshold attestation for an HTTPS request.
    *
-   * Builds the intent (policy digest, request binding, holder, a random
+   * Builds one intent (policy digest, request binding, holder, a random
    * operation nonce, and the window) and puts its digest into the signed
-   * request context under `INTENT_CONTEXT_KEY`. The evidence must attest
-   * `request.url`'s origin — enforced here, so a prover answering for a
-   * different origin never reaches an attestor.
+   * request context under `INTENT_CONTEXT_KEY`. Runs one witnessed session per
+   * contacted operator concurrently, sends each operator's evidence to its
+   * attestor, verifies every returned signature, and groups the results by
+   * exact message.
    *
    * @param request — what to fetch and which of its fields to reveal/redact.
+   *   Secret headers go to the provers only, never to an attestor.
    * @param intent — the holder commitment and the observation window.
-   * @returns a proof handle whose `attest` fan-out collects the N-of-M set.
+   * @returns the threshold attestation.
+   * @throws `AggregateError` if no message reaches the threshold; `errors`
+   *   holds each failed operator's error.
    */
-  proveReq(
-    request: ZkFetchRequest,
-    intent: ZkFetchIntentInput,
-  ): Promise<ZkFetchClientProof<V, PK, S>>;
+  attest(request: ZkFetchRequest, intent: ZkFetchIntentInput): Promise<Attestment<V, PK, S>>;
 }
 
 /**
- * The zkFetch client: prove a request, then collect the N-of-M attestation
- * set from the dApp's trusted attestors.
+ * The zkFetch client: one call runs a witnessed session per operator and
+ * returns a threshold attestation from the dApp's trusted attestors.
  *
  * ```ts
  * import { zkFetchClient } from '@thoth/zk-tls/client';
  *
  * const client = zkFetchClient.init({
- *   trusted, transport, policy, valueSlots, prover,
+ *   trusted, transport, policy, valueSlots, threshold: 2, verifier,
+ *   operators: {
+ *     txpipe: { prover: zkFetchProver({ witnessUrl }), witnessAddress },
+ *     eryx: { prover: zkFetchProver({ witnessUrl: eryxUrl }), witnessAddress: eryxAddress },
+ *   },
  * });
- * const proof = await client.proveReq({ url, method }, { holder, windowStart, windowEnd });
- * const attestment = await proof.attest('txpipeEndpoint', 'eryxEndpoint', 'midnightFoundation');
+ * const { claim, message, collected } = await client.attest(
+ *   { url, method },
+ *   { holder, windowStart, windowEnd },
+ * );
  * ```
  *
- * `init` validates the policy and its slot map once; `proveReq` shapes the
- * prover's output through the evidence schema and binds it to the requested
- * URL, so only canonical, matching evidence ever reaches an attestor.
+ * `init` validates the policy, its slot map, the operators and the threshold
+ * once.
  */
 export const zkFetchClient = {
   /**
@@ -343,14 +351,17 @@ export const zkFetchClient = {
    * @typeParam V — the claim's value-slot count.
    * @typeParam PK — the signature scheme's public-key type.
    * @typeParam S — the signature scheme's signature type.
-   * @param config — trusted set, transport, policy, slot count, and prover.
-   * @returns a client ready to `proveReq`.
-   * @throws if the policy is invalid or a policy slot exceeds `valueSlots`.
+   * @param config — trusted set, transport, policy, slot count, threshold,
+   *   verifier, and operators.
+   * @returns a client ready to `attest`.
+   * @throws if the policy is invalid, a policy slot exceeds `valueSlots`, an
+   *   operator is not in the trusted set, or the operators cannot meet the
+   *   threshold.
    */
   init: <const V extends number, PK, S>(
     config: ZkFetchClientConfig<V, PK, S>,
   ): ZkFetchClient<V, PK, S> => {
-    const { trusted, transport, policy, valueSlots, prover } = config;
+    const { trusted, transport, policy, valueSlots, threshold, verifier, operators } = config;
     const checkedPolicy = zkFetchPolicySchema.parse(policy);
     // Same guard `deriveClaimFromEvidence` enforces later — fail at init
     // instead of on the first `attest()`.
@@ -360,8 +371,19 @@ export const zkFetchClient = {
         `policy slot ${outOfRange.slot} is out of the claim's ${valueSlots} value slots`,
       );
     }
+    const resolved = Object.entries(operators).map(([id, operator]) => ({
+      attestor: attestorOf(trusted, id),
+      operator,
+    }));
+    if (!Number.isInteger(threshold) || threshold < 1 || threshold > resolved.length) {
+      throw new Error(
+        `threshold ${threshold} cannot be met by ${resolved.length} configured operators`,
+      );
+    }
+    // ponytail: contacts exactly `threshold` operators; fallback to the rest is #45.
+    const contacted = resolved.slice(0, threshold);
     return {
-      proveReq: async (request, input): Promise<ZkFetchClientProof<V, PK, S>> => {
+      attest: async (request, input) => {
         const intent: ZkFetchIntent = {
           policyDigest: policyDigestOf(checkedPolicy),
           requestBinding: requestBindingOf({
@@ -378,22 +400,49 @@ export const zkFetchClient = {
           ...request,
           context: { ...request.context, [INTENT_CONTEXT_KEY]: intentDigestOf(intent) },
         };
-        const evidence = zkFetchEvidenceSchema.parse(await prover.prove(bound));
-        assertEvidenceMatchesRequest(evidence, request);
-        return {
-          evidence,
-          intent,
-          attest: async (...ids) =>
-            collectAttestations({
-              trusted,
-              transport,
+        const results = await Promise.allSettled(
+          contacted.map(async ({ attestor, operator }) => {
+            const evidence = zkFetchEvidenceSchema.parse(await operator.prover.prove(bound));
+            assertEvidenceMatchesRequest(evidence, request);
+            if (evidence.attestorAddress.toLowerCase() !== operator.witnessAddress.toLowerCase()) {
+              throw new Error(`evidence for "${attestor.id}" is not from its pinned witness`);
+            }
+            const claim = await buildClaimProposal({
               evidence,
               policy: checkedPolicy,
               intent,
               valueSlots,
-              ids,
-            }),
-        };
+            });
+            // The attestor is the law: it re-parses these with its own schemas,
+            // which accept the already-parsed (superset) shapes. The schemas'
+            // *input* types are the looser pre-parse form, so the payload is
+            // bridged here. Secret headers never enter it.
+            const payload = {
+              policy: checkedPolicy,
+              evidence,
+              claim,
+            } as unknown as ZkFetchAttestationInput;
+            const attestation = await transport.request(attestor, payload);
+            return resolveAttestation({
+              trusted,
+              attestor,
+              attestation,
+              expectedMessage: claimToMessage(claim),
+              verifier,
+            });
+          }),
+        );
+        const collected = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+        const group = thresholdGroup(collected, threshold);
+        const first = group?.[0];
+        if (group === undefined || first === undefined) {
+          throw new AggregateError(
+            results.flatMap((r) => (r.status === 'rejected' ? [r.reason] : [])),
+            `threshold of ${threshold} not met: no message was signed by ${threshold} distinct registry slots`,
+          );
+        }
+        const claim = first.attestation.claim as Claim<V>;
+        return { claim, message: first.attestation.message, collected: group };
       },
     };
   },
@@ -408,56 +457,3 @@ export type ZkFetchAttestationInput = AttestationInput<
   z.input<ZkFetchDefinition['evidence']>,
   z.input<ZkFetchDefinition['claim']>
 >;
-
-/**
- * Fan out one evidence/claim proposal to the selected attestors and collect
- * the N-of-M set.
- *
- * For each target attestor: resolve it in the trusted set, forward the raw
- * input over the transport, and vet the returned attestation — signing key
- * matches the descriptor and the signed message is the one this claim
- * deterministically produces. The registry's signature threshold is the
- * contract's job; the client's job is that every collected attestation
- * commits to the *same* message.
- *
- * @typeParam V — the claim's value-slot count.
- * @typeParam PK — the signature scheme's public-key type.
- * @typeParam S — the signature scheme's signature type.
- * @param options — the trusted set, transport, evidence, policy, slot count, and target ids.
- * @returns the attestment: the shared claim/message plus the collected set.
- * @throws on the first rejected attestation (`AttestationMismatchError`).
- */
-const collectAttestations = async <V extends number, PK, S>(options: {
-  /** The dApp's pinned attestors. */
-  trusted: TrustedSet<ZkFetchDefinition, PK>;
-  /** How the client reaches each attestor. */
-  transport: AttestorTransport<ZkFetchDefinition, PK, S>;
-  /** The evidence to attest. */
-  evidence: ZkFetchEvidence;
-  /** The shared policy every attestor in the set enforces. */
-  policy: ZkFetchPolicy;
-  /** The intent the evidence was witnessed under. */
-  intent: ZkFetchIntent;
-  /** The claim's value-slot count. */
-  valueSlots: V;
-  /** Attestor ids to query; empty means every pinned attestor. */
-  ids: string[];
-}): Promise<Attestment<V, PK, S>> => {
-  const { trusted, transport, evidence, policy, intent, valueSlots, ids } = options;
-  const claim = await buildClaimProposal({ evidence, policy, intent, valueSlots });
-  const message = claimToMessage(claim);
-  const targetIds = ids.length > 0 ? ids : trusted.attestors.map((a) => a.id);
-  const collected: ZkFetchCollectedAttestation<V, PK, S>[] = [];
-  for (const id of targetIds) {
-    const attestor = attestorOf(trusted, id);
-    // The attestor is the law: it re-parses these with its own schemas, which
-    // accept the already-parsed (superset) shapes. The schemas' *input* types
-    // are the looser pre-parse form, so the payload is bridged here.
-    const input = { policy, evidence, claim } as unknown as ZkFetchAttestationInput;
-    const attestation = await transport.request(attestor, input);
-    collected.push(
-      resolveAttestation({ trusted, attestor, attestation, expectedMessage: message }),
-    );
-  }
-  return { claim, message, collected };
-};

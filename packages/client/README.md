@@ -27,23 +27,30 @@ npm install @thoth/client
 - `AttestorTransport<D, PK, S>` — the seam between the client and a remote
   attestor: `request(attestor, input): Promise<Attestation>`. A kind SDK or the
   app supplies the concrete transport. The host-side mirror is `Attestor.attest` in `@thoth/attestor`.
-- `resolveAttestation({ trusted, attestor, attestation, expectedMessage? })` —
+- `resolveAttestation({ trusted, attestor, attestation, expectedMessage?, verifier? })` —
   the per-attestation validity primitive: checks the signing key, the
   `registryIndex` bounds, and (optionally) that the signed message is the one
-  you asked for, then tags the attestation with its slot as a
-  `CollectedAttestation`.
+  you asked for and that the signature verifies, then tags the attestation
+  with its slot as a `CollectedAttestation`.
+- `SignatureVerifier<PK, S, Msg>` — `verify(publicKey, message, signature)`
+  for the attestor signature scheme; pass it to `resolveAttestation` so an
+  invalid signature is rejected before it counts.
+- `thresholdGroup(collected, threshold)` — group verified attestations by exact
+  message, count each registry slot once, and return the first group that
+  meets the threshold, sorted by slot (or `undefined`).
 - `CollectedAttestation<K, C, PK, S, Msg>` — the collection output shape:
   an `Attestation` plus the `registryIndex` it belongs to.
 - Errors: `AttestationMismatchError` (thrown by `resolveAttestation`; `reason`
-  is `'public-key' | 'message' | 'registry-index'`),
+  is `'public-key' | 'message' | 'registry-index' | 'signature'`),
   `AttestorNotInTrustedSetError`, `InvalidTrustedSetError` (thrown by
   `buildTrustedSet`) — exported from `@thoth/client/errors`.
 
 ## For kind SDK authors
 
 Kind-specific SDKs (e.g. [`@thoth/zk-tls`](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls)) build *on top of* this package: they
-wire a concrete transport, drive the fan-out in their own async runtime, apply
-their own threshold policy, and add their own prove/attest ergonomics.
+wire a concrete transport, drive the fan-out in their own async runtime, and
+add their own prove/attest ergonomics. Vetting one attestation and grouping
+the results toward a threshold are shared here.
 
 ### Assemble the trusted set
 
@@ -87,35 +94,36 @@ const httpTransport: AttestorTransport<MyDefinition, MyPublicKey, MySignature> =
 
 ### Resolve string-named endpoints
 
-`attestorOf(trusted, id)` is the name→descriptor lookup behind a friendly
-`proof.attest("txpipeEndpoint", …)` API, without each SDK re-checking
-membership:
+`attestorOf(trusted, id)` is the name→descriptor lookup behind string-keyed
+configuration (e.g. zk-tls operators keyed by attestor id), without each SDK
+re-checking membership:
 
 ```ts
 const attestor = attestorOf(trusted, 'txpipeEndpoint'); // throws AttestorNotInTrustedSetError if not pinned
 ```
 
-### Vetting one attestation (optional)
+### Vetting and counting
 
-`resolveAttestation` is the only collection logic this package owns: it vets a
-single pairing — the returned public key matches the descriptor, the signed
-message is the one you asked for (when `expectedMessage` is given), and the
-slot is in range — and tags it with its `registryIndex`. Fan-out, aggregation,
-and threshold stay yours:
+`resolveAttestation` vets a single pairing — the returned public key matches
+the descriptor, the signed message is the one you asked for (when
+`expectedMessage` is given), the signature verifies (when `verifier` is
+given), and the slot is in range — and tags it with its `registryIndex`.
+`thresholdGroup` then picks the agreeing set. Fan-out, retries and error
+reporting stay yours:
 
 ```ts
 import { AttestationMismatchError } from '@thoth/client/errors';
 
-try {
-  const collected = resolveAttestation({ trusted, attestor, attestation });
-  // collected.registryIndex  →  the on-chain slot to place this signature at
-} catch (error) {
-  if (error instanceof AttestationMismatchError) {
-    // report / drop the offending attestor; the contract decides anyway
-    return;
+const collected = [];
+for (const [attestor, attestation] of responses) {
+  try {
+    collected.push(resolveAttestation({ trusted, attestor, attestation, expectedMessage, verifier }));
+  } catch (error) {
+    if (!(error instanceof AttestationMismatchError)) throw error;
+    // report the offending attestor; it never counts
   }
-  throw error;
 }
+const agreeing = thresholdGroup(collected, threshold); // sorted by registry slot, or undefined
 ```
 
 ## Links

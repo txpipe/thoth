@@ -1,23 +1,25 @@
 // End-to-end tests over the package's shipped entry points (`@thoth/zk-tls/attestor`
 // and `@thoth/zk-tls/client`): verify a real witnessed Reclaim proof, derive and
-// collect the N-of-M attestation set, and assert the kind's rejection paths.
+// collect a threshold attestation from agreeing operators, and assert the
+// kind's rejection paths.
 //
 // Signature verification uses `examples/demo-attestation/fixtures/` — a
 // genuine, offline-verifiable HTTPS fetch witnessed by a Reclaim witness. The
-// client flow fakes the witness at the prover interface with a test key, since
-// it must sign the intent-bound context the client builds.
+// client flow fakes each operator's witness at the prover interface with a
+// test key, since it must sign the intent-bound context the client builds.
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Attestor, KeyPair } from '@thoth/attestor';
 import { descriptorOf } from '@thoth/attestor';
-import type { AttestorTransport } from '@thoth/client';
+import type { AttestorTransport, SignatureVerifier, TrustedSet } from '@thoth/client';
 import { buildTrustedSet } from '@thoth/client';
 import type { FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
 import {
   INTENT_CONTEXT_KEY,
   intentDigestOf,
+  intentOf,
   type ZkFetchDefinition,
   type ZkFetchPolicy,
   zkFetchClaimSchema,
@@ -31,7 +33,7 @@ import {
   zkFetchClient,
 } from '@thoth/zk-tls/client';
 import { describe, expect, it } from 'vitest';
-import { testWitness } from './helpers/witness.js';
+import { type TestWitness, testWitness } from './helpers/witness.js';
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = join(
@@ -46,7 +48,8 @@ const FIXTURE_PATH = join(
 );
 const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Record<string, unknown>;
 
-const witness = testWitness(`0x${'11'.repeat(32)}`);
+const w0 = testWitness(`0x${'11'.repeat(32)}`);
+const w1 = testWitness(`0x${'22'.repeat(32)}`);
 const OBSERVED_AT = 1_786_000_000;
 const INTENT = {
   holder: new Uint8Array(32).fill(0xaa),
@@ -63,10 +66,11 @@ const policy = (
 });
 
 /**
- * A prover backed by the test witness: it signs the request it is handed
+ * A prover backed by a test witness: it signs the request it is handed
  * (including the intent-bound context), observing `values` at `url`.
  */
 const witnessProver = (
+  witness: TestWitness,
   values: Record<string, string> = { stars: '0' },
   url?: string,
 ): ZkFetchProver => ({
@@ -86,10 +90,22 @@ const witnessProver = (
 type FakePublicKey = { id: string };
 type FakeSignature = string;
 
+const fakeSign = (id: string, message: FlatMessage): FakeSignature => `sig:${id}:${message.join()}`;
+
 const fakeKey = (id: string): KeyPair<FakePublicKey, FakeSignature, FlatMessage> => ({
   publicKey: { id },
-  signer: { sign: (message: FlatMessage): FakeSignature => `sig:${message.length}` },
+  signer: { sign: (message: FlatMessage): FakeSignature => fakeSign(id, message) },
 });
+
+const fakeVerifier: SignatureVerifier<FakePublicKey, FakeSignature> = {
+  verify: (publicKey, message, signature) => signature === fakeSign(publicKey.id, message),
+};
+
+/** Serialize a payload for substring checks: bigints and bytes become strings. */
+const dump = (value: unknown): string =>
+  JSON.stringify(value, (_key, v: unknown) =>
+    typeof v === 'bigint' ? v.toString() : v instanceof Uint8Array ? Buffer.from(v).toString() : v,
+  );
 
 describe('addressFromWitnessId', () => {
   it('decodes a plain 40-hex witness id', () => {
@@ -203,138 +219,255 @@ describe('zkFetch claim schema', () => {
   });
 });
 
+/** Await a rejected attest call and return its per-operator errors as strings. */
+const reasons = async (attempt: Promise<unknown>): Promise<string[]> => {
+  const error = await attempt.then(
+    () => {
+      throw new Error('expected the attest call to reject');
+    },
+    (e: unknown) => e,
+  );
+  expect(error).toBeInstanceOf(AggregateError);
+  expect(String(error)).toMatch(/threshold of 2 not met/);
+  return (error as AggregateError).errors.map(String);
+};
+
 describe('zkFetch attestor + client', () => {
   const attestors = ['attestor-0', 'attestor-1', 'attestor-2'].map((id, i) =>
     zkFetchAttestor({
       id,
       keyPair: fakeKey(id),
       registryIndex: i,
-      witnessAddress: witness.address,
+      witnessAddress: (i === 1 ? w1 : w0).address,
     }),
   );
   const byId = new Map(attestors.map((a) => [a.id, a]));
   const trusted = buildTrustedSet(attestors.map(descriptorOf));
-  const transport: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> = {
-    async request(attestor, input) {
-      const instance = byId.get(attestor.id);
-      if (!instance) {
-        throw new Error(`transport: unknown attestor ${attestor.id}`);
-      }
-      return instance.attest(
-        input as Parameters<Attestor<ZkFetchDefinition, FakePublicKey, FakeSignature>['attest']>[0],
-      );
-    },
+
+  type Tamper = (id: string, attestation: FakeAttestation) => FakeAttestation;
+  type FakeAttestation = Awaited<
+    ReturnType<Attestor<ZkFetchDefinition, FakePublicKey, FakeSignature>['attest']>
+  >;
+
+  /** An in-process transport; records every payload and can delay or tamper. */
+  const transportOf = (
+    options: { delays?: Record<string, number>; tamper?: Tamper } = {},
+  ): AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> & {
+    sent: unknown[];
+  } => {
+    const sent: unknown[] = [];
+    return {
+      sent,
+      async request(attestor, input) {
+        sent.push(input);
+        const instance = byId.get(attestor.id);
+        if (!instance) {
+          throw new Error(`transport: unknown attestor ${attestor.id}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, options.delays?.[attestor.id] ?? 0));
+        const attestation = await instance.attest(
+          input as Parameters<
+            Attestor<ZkFetchDefinition, FakePublicKey, FakeSignature>['attest']
+          >[0],
+        );
+        return options.tamper ? options.tamper(attestor.id, attestation) : attestation;
+      },
+    };
   };
 
-  const prove = (
-    prover = witnessProver(),
-  ): ReturnType<ReturnType<typeof zkFetchClient.init>['proveReq']> =>
-    zkFetchClient
-      .init({ trusted, transport, policy: policy(), valueSlots: 3, prover })
-      .proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' }, INTENT);
-
-  it('binds the witnessed session to a fresh intent', async () => {
-    const [first, second] = await Promise.all([prove(), prove()]);
-    const context = JSON.parse(first.evidence.claim.context);
-    expect(context[INTENT_CONTEXT_KEY]).toBe(intentDigestOf(first.intent));
-    expect(first.intent.holder).toEqual(INTENT.holder);
-    expect(first.intent.nonce).not.toEqual(second.intent.nonce);
+  const operators = (
+    values: [Record<string, string>, Record<string, string>] = [{ stars: '0' }, { stars: '0' }],
+  ) => ({
+    'attestor-0': {
+      prover: witnessProver(w0, values[0]),
+      witnessAddress: w0.address,
+    },
+    'attestor-1': {
+      prover: witnessProver(w1, values[1]),
+      witnessAddress: w1.address,
+    },
   });
 
-  it('attests a claim in the common layout', async () => {
-    const proof = await prove(witnessProver({ stars: '42' }));
-    const { claim, message } = await proof.attest();
-    expect(claim).toMatchObject({ ...proof.intent, present: [true, false, false] });
+  const clientOf = (
+    overrides: Partial<
+      Parameters<typeof zkFetchClient.init<3, FakePublicKey, FakeSignature>>[0]
+    > = {},
+  ) =>
+    zkFetchClient.init({
+      trusted,
+      transport: transportOf(),
+      policy: policy(),
+      valueSlots: 3,
+      threshold: 2,
+      verifier: fakeVerifier,
+      operators: operators(),
+      ...overrides,
+    });
+
+  const REQUEST = { url: 'https://api.github.com/repos/x', method: 'GET' } as const;
+
+  it('returns a threshold attestation from two agreeing witnesses', async () => {
+    const { claim, message, collected } = await clientOf({
+      operators: operators([{ stars: '42' }, { stars: '42' }]),
+    }).attest(REQUEST, INTENT);
+    expect(claim).toMatchObject({ holder: INTENT.holder, present: [true, false, false] });
     expect(claim.values).toEqual([42n, 0n, 0n]);
+    expect(message).toEqual(claimToMessage(claim));
     expect(message).toHaveLength(14);
+    expect(collected.map((c) => c.registryIndex)).toEqual([0, 1]);
+    for (const c of collected) {
+      expect(c.attestation.message).toEqual(message);
+    }
   });
 
-  it('collects one agreeing attestation per pinned attestor', async () => {
-    const attestment = await prove().then((proof) => proof.attest());
-    expect(attestment.collected.length).toBe(3);
-    expect(attestment.collected.every((c) => c.attestation.publicKey.id !== '')).toBe(true);
-    const message = claimToMessage(attestment.claim);
-    expect(attestment.collected.every((c) => c.attestation.message.length === message.length)).toBe(
-      true,
-    );
+  it('binds both witnessed sessions to one fresh intent', async () => {
+    const contexts: Record<string, unknown>[] = [];
+    const recording = (witness: TestWitness): ZkFetchProver => ({
+      prove: (request) => {
+        contexts.push({ ...request.context });
+        return witnessProver(witness).prove(request);
+      },
+    });
+    const client = clientOf({
+      operators: {
+        'attestor-0': { prover: recording(w0), witnessAddress: w0.address },
+        'attestor-1': { prover: recording(w1), witnessAddress: w1.address },
+      },
+    });
+    const first = await client.attest(REQUEST, INTENT);
+    const second = await client.attest(REQUEST, INTENT);
+    expect(contexts[0]?.[INTENT_CONTEXT_KEY]).toBe(intentDigestOf(intentOf(first.claim)));
+    expect(contexts[1]?.[INTENT_CONTEXT_KEY]).toBe(contexts[0]?.[INTENT_CONTEXT_KEY]);
+    expect(first.claim.nonce).not.toEqual(second.claim.nonce);
   });
 
-  it('lets the caller select which attestors to query', async () => {
-    const attestment = await prove().then((proof) => proof.attest('attestor-0', 'attestor-2'));
-    expect(attestment.collected.map((c) => c.registryIndex)).toEqual([0, 2]);
+  it('orders signatures by registry slot whatever order responses arrive in', async () => {
+    const { collected } = await clientOf({
+      transport: transportOf({ delays: { 'attestor-0': 30 } }),
+      operators: {
+        'attestor-1': operators()['attestor-1'],
+        'attestor-0': operators()['attestor-0'],
+      },
+    }).attest(REQUEST, INTENT);
+    expect(collected.map((c) => c.registryIndex)).toEqual([0, 1]);
   });
 
-  it('refuses to attest to an attestor outside the trusted set', async () => {
-    await expect(prove().then((proof) => proof.attest('ghost'))).rejects.toThrow(
-      /not in the trusted set/,
-    );
+  it('never counts an invalid signature toward the threshold', async () => {
+    const client = clientOf({
+      transport: transportOf({
+        tamper: (id, attestation) =>
+          id === 'attestor-1' ? { ...attestation, signature: 'forged' } : attestation,
+      }),
+    });
+    expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([
+      expect.stringMatching(/attestor-1.*signature check/),
+    ]);
+  });
+
+  it('counts two responses from the same registry slot once', async () => {
+    const [first, second] = attestors.map(descriptorOf);
+    if (first === undefined || second === undefined) {
+      throw new Error('fixture: expected two attestors');
+    }
+    const shared: TrustedSet<ZkFetchDefinition, FakePublicKey> = {
+      attestors: [first, { ...second, registryIndex: first.registryIndex }],
+    };
+    // Both attestors answer validly; the shared slot alone keeps the count at 1.
+    expect(await reasons(clientOf({ trusted: shared }).attest(REQUEST, INTENT))).toEqual([]);
+  });
+
+  it('never combines signatures over different messages', async () => {
+    const client = clientOf({ operators: operators([{ stars: '42' }, { stars: '7' }]) });
+    // Both attestors answer validly, each over its own witness's reading.
+    expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([]);
+  });
+
+  it('sends no secret header to a signer or into an error', async () => {
+    const SECRET = 'Bearer top-secret-token';
+    const transport = transportOf({
+      tamper: (id, attestation) =>
+        id === 'attestor-1' ? { ...attestation, signature: 'forged' } : attestation,
+    });
+    const error = await clientOf({ transport })
+      .attest({ ...REQUEST, secretHeaders: { authorization: SECRET } }, INTENT)
+      .catch((e: unknown) => e);
+    expect(transport.sent).toHaveLength(2);
+    expect(dump(transport.sent)).not.toContain(SECRET);
+    expect(error).toBeInstanceOf(Error);
+    expect(
+      dump({ error: String(error), errors: (error as AggregateError).errors?.map(String) }),
+    ).not.toContain(SECRET);
+  });
+
+  it('refuses evidence from a witness other than the pinned one', async () => {
+    const client = clientOf({
+      operators: {
+        ...operators(),
+        'attestor-1': {
+          prover: witnessProver(w0),
+          witnessAddress: w1.address,
+        },
+      },
+    });
+    expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([
+      expect.stringMatching(/not from its pinned witness/),
+    ]);
+  });
+
+  it('refuses an operator outside the trusted set at init', () => {
+    expect(() =>
+      clientOf({ operators: { ...operators(), ghost: operators()['attestor-0'] } }),
+    ).toThrow(/not in the trusted set/);
+  });
+
+  it('refuses a threshold the operators cannot meet at init', () => {
+    expect(() => clientOf({ threshold: 3 })).toThrow(/threshold 3/);
   });
 
   it('refuses when the policy does not fit the evidence (host)', async () => {
-    const hostile = zkFetchClient.init({
-      trusted,
-      transport,
-      policy: { ...policy(), allowedHosts: ['evil.example'] },
-      valueSlots: 3,
-      prover: witnessProver(),
-    });
-    await expect(
-      hostile
-        .proveReq({ url: 'https://api.github.com/x', method: 'GET' }, INTENT)
-        .then((proof) => proof.attest()),
-    ).rejects.toThrow(/not in allowlist/);
+    const hostile = clientOf({ policy: { ...policy(), allowedHosts: ['evil.example'] } });
+    expect(await reasons(hostile.attest(REQUEST, INTENT))).toEqual([
+      expect.stringMatching(/not in allowlist/),
+      expect.stringMatching(/not in allowlist/),
+    ]);
   });
 
   it('refuses evidence for a different origin than requested', async () => {
-    await expect(prove(witnessProver(undefined, 'https://other.example/x'))).rejects.toThrow(
-      /not the requested/,
-    );
+    const client = clientOf({
+      operators: {
+        ...operators(),
+        'attestor-1': {
+          prover: witnessProver(w1, undefined, 'https://other.example/x'),
+          witnessAddress: w1.address,
+        },
+      },
+    });
+    expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([
+      expect.stringMatching(/not the requested/),
+    ]);
   });
 
   it('refuses evidence observed outside the intent window', async () => {
-    const late = zkFetchClient.init({
-      trusted,
-      transport,
-      policy: policy(),
-      valueSlots: 3,
-      prover: witnessProver(),
+    const late = clientOf().attest(REQUEST, {
+      ...INTENT,
+      windowStart: BigInt(OBSERVED_AT + 1),
+      windowEnd: BigInt(OBSERVED_AT + 60),
     });
-    await expect(
-      late
-        .proveReq(
-          { url: 'https://api.github.com/x' },
-          { ...INTENT, windowStart: BigInt(OBSERVED_AT + 1), windowEnd: BigInt(OBSERVED_AT + 60) },
-        )
-        .then((proof) => proof.attest()),
-    ).rejects.toThrow(/outside the intent window/);
+    expect(await reasons(late)).toEqual([
+      expect.stringMatching(/outside the intent window/),
+      expect.stringMatching(/outside the intent window/),
+    ]);
   });
 
   it('refuses a policy slot beyond the claim length at init', () => {
     expect(() =>
-      zkFetchClient.init({
-        trusted,
-        transport,
-        policy: policy([{ slot: 5, name: 'stars', parse: 'int', optional: true }]),
-        valueSlots: 3,
-        prover: witnessProver(),
-      }),
+      clientOf({ policy: policy([{ slot: 5, name: 'stars', parse: 'int', optional: true }]) }),
     ).toThrow(/out of the claim's 3 value slots/);
   });
 
   it('signs a derived claim and attests only what was disclosed', async () => {
-    const proof = await prove(witnessProver({}));
-    const attestment = await proof.attest();
-    const { present, values } = attestment.claim;
-    expect(values.length).toBe(3);
-    expect(values.every((v) => v === 0n)).toBe(true);
-    expect(present.every((p) => p === false)).toBe(true);
-  });
-
-  it('agrees on the flat message across every attestor', async () => {
-    const attestment = await prove().then((proof) => proof.attest());
-    const message = claimToMessage(attestment.claim);
-    for (const collected of attestment.collected) {
-      expect(collected.attestation.message).toEqual(message);
-    }
+    const { claim } = await clientOf({ operators: operators([{}, {}]) }).attest(REQUEST, INTENT);
+    expect(claim.values).toEqual([0n, 0n, 0n]);
+    expect(claim.present).toEqual([false, false, false]);
   });
 });

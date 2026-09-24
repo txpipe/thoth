@@ -3,20 +3,24 @@
  *
  * `reason` discriminates the failing check: the returned public key does not
  * match the descriptor's (`'public-key'`), the signed message disagrees with
- * the other collected attestation's (`'message'`), or the attestor's
- * `registryIndex` is outside the trusted set's slot range (`'registry-index'`).
+ * the other collected attestation's (`'message'`), the attestor's
+ * `registryIndex` is outside the trusted set's slot range (`'registry-index'`),
+ * or the signature does not verify under the attestor's key (`'signature'`).
  */
 export class AttestationMismatchError extends Error {
   /** The id of the offending attestor. */
   readonly attestorId: string;
   /** Which integrity check failed. */
-  readonly reason: 'public-key' | 'message' | 'registry-index';
+  readonly reason: 'public-key' | 'message' | 'registry-index' | 'signature';
 
   /**
    * @param attestorId — the offending attestor's id.
    * @param reason — the failed check.
    */
-  constructor(attestorId: string, reason: 'public-key' | 'message' | 'registry-index') {
+  constructor(
+    attestorId: string,
+    reason: 'public-key' | 'message' | 'registry-index' | 'signature',
+  ) {
     super(`attestation from "${attestorId}" failed ${reason} check`);
     this.attestorId = attestorId;
     this.reason = reason;
