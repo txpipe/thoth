@@ -1,7 +1,7 @@
 // Test-key witnesses: local secp256k1 keys stand in for Reclaim witnesses and
 // sign provider claim data. Drives the zkFetch attestor offline and
 // deterministically: intent binding, request binding, observation window,
-// witness pinning, and the common claim two witnesses agree on.
+// operator witness trust, and the common claim two witnesses agree on.
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
 import {
@@ -14,6 +14,7 @@ import {
   type ZkFetchEvidence,
   type ZkFetchIntent,
   type ZkFetchPolicy,
+  zkFetchPolicySchema,
 } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
@@ -25,10 +26,9 @@ const bob = testWitness(`0x${'22'.repeat(32)}`);
 const REQUEST = { url: 'https://api.example.com/v1/account', method: 'GET', body: '' };
 const OBSERVED_AT = 1_786_000_000;
 
-const policy = (...pinned: string[]): ZkFetchPolicy => ({
-  allowedHosts: ['api.example.com'],
+const policy = (allowedHosts: readonly string[] = ['api.example.com']): ZkFetchPolicy => ({
+  allowedHosts,
   maxWindowSeconds: 120,
-  attestorAddresses: pinned.length > 0 ? pinned : [alice.address, bob.address],
   slots: [
     { slot: 0, name: 'balance', parse: 'int' },
     { slot: 1, name: 'score', parse: 'float', optional: true },
@@ -59,14 +59,18 @@ const observe = (
     ...overrides,
   });
 
-const attestor = zkFetchAttestor({
-  id: 'attestor-0',
-  keyPair: {
-    publicKey: 'pk-0',
-    signer: { sign: (message: FlatMessage): string => `sig:${message.join(',')}` },
-  },
-  registryIndex: 0,
-});
+const makeAttestor = (witnessAddress: string) =>
+  zkFetchAttestor({
+    id: 'attestor-0',
+    keyPair: {
+      publicKey: 'pk-0',
+      signer: { sign: (message: FlatMessage): string => `sig:${message.join(',')}` },
+    },
+    registryIndex: 0,
+    witnessAddress,
+  });
+const attestor = makeAttestor(alice.address);
+const bobAttestor = makeAttestor(bob.address);
 
 const derive = (evidence: ZkFetchEvidence, p: ZkFetchPolicy, intent: ZkFetchIntent): Claim<3> =>
   deriveClaimFromEvidence({
@@ -81,8 +85,9 @@ const attest = (
   p: ZkFetchPolicy,
   intent: ZkFetchIntent,
   claim: Claim<3> = derive(evidence, p, intent),
+  instance = attestor,
 ) =>
-  attestor.attest({ policy: p, evidence, claim } as unknown as Parameters<
+  instance.attest({ policy: p, evidence, claim } as unknown as Parameters<
     typeof attestor.attest
   >[0]);
 
@@ -147,6 +152,8 @@ describe('zkFetch attestor', () => {
       await observe(bob, intent, { timestampS: OBSERVED_AT + 30 }),
       p,
       intent,
+      undefined,
+      bobAttestor,
     );
     expect(fromBob.message).toEqual(fromAlice.message);
   });
@@ -155,7 +162,7 @@ describe('zkFetch attestor', () => {
     const p = policy();
     const intent = intentFor(p);
     const base = claimToMessage(derive(await observe(alice, intent), p, intent));
-    const other = policy(alice.address);
+    const other = policy(['example.com']);
     const variants = [
       derive(await observe(alice, intent, { values: { balance: '1', score: '7.6' } }), p, intent),
       derive(await observe(alice, intent, { values: { balance: '0' } }), p, intent),
@@ -172,12 +179,44 @@ describe('zkFetch attestor', () => {
     }
   });
 
-  it('rejects a witness the policy does not pin', async () => {
-    const p = policy(alice.address);
+  it('rejects a witness other than the one configured on the attestor', async () => {
+    const p = policy();
     const intent = intentFor(p);
     await expect(attest(await observe(bob, intent), p, intent)).rejects.toThrow(
-      /not in pinned witnesses/,
+      /not trusted by this attestor/,
     );
+  });
+
+  it('ignores a client-supplied witness address', async () => {
+    const p = { ...policy(), attestorAddresses: [bob.address] };
+    expect(zkFetchPolicySchema.parse(p)).not.toHaveProperty('attestorAddresses');
+    const intent = intentFor(p);
+    await expect(attest(await observe(bob, intent), p, intent)).rejects.toThrow(
+      /not trusted by this attestor/,
+    );
+    await expect(attest(await observe(alice, intent), p, intent)).resolves.toHaveProperty(
+      'signature',
+    );
+  });
+
+  it('signs under two dApp policies without changing its witness configuration', async () => {
+    const first = policy();
+    const second: ZkFetchPolicy = {
+      allowedHosts: ['example.com'],
+      maxWindowSeconds: 120,
+      slots: [{ slot: 0, name: 'score', parse: 'float' }],
+    };
+    const firstIntent = intentFor(first);
+    const secondIntent = intentFor(second);
+    const firstAttestation = await attest(await observe(alice, firstIntent), first, firstIntent);
+    const secondAttestation = await attest(
+      await observe(alice, secondIntent),
+      second,
+      secondIntent,
+    );
+    expect(firstAttestation.claim.values).toEqual([0n, 8n, 0n]);
+    expect(secondAttestation.claim.values).toEqual([8n, 0n, 0n]);
+    expect(secondAttestation.message).not.toEqual(firstAttestation.message);
   });
 
   it('rejects evidence claiming another witness address', async () => {

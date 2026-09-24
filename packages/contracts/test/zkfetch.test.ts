@@ -27,6 +27,7 @@ const attestors = notaryKeys.slice(0, 2).map((key, i) =>
       signer: { sign: (message: FlatMessage) => signMessage(key.sk, message).signature },
     },
     registryIndex: i,
+    witnessAddress: witness.address,
   }),
 );
 const transport: AttestorTransport<ZkFetchDefinition, JubjubPoint, SchnorrSignature> = {
@@ -47,7 +48,6 @@ describe('zkFetch attestation in the simulator', () => {
       policy: {
         allowedHosts: ['api.example.com'],
         maxWindowSeconds: 120,
-        attestorAddresses: [witness.address],
         slots: [{ slot: 0, name: 'balance', parse: 'int' }],
       },
       valueSlots: 3,

@@ -93,8 +93,8 @@ export const assertClaimMatchesDisclosures = (options: {
 
 /**
  * Derive the claim this attestor signs, after running the kind's checks in
- * order and rejecting at the first failure: the Reclaim signature, the pinned
- * witness, the allowed host and required disclosures
+ * order and rejecting at the first failure: the Reclaim signature, this
+ * instance's witness, the allowed host and required disclosures
  * ({@link assertEvidenceMatchesPolicy}), the intent binding, request binding
  * and window ({@link assertEvidenceMatchesIntent}), and finally that the
  * client's proposed claim equals the claim derived here.
@@ -103,14 +103,19 @@ export const assertClaimMatchesDisclosures = (options: {
  * makes it trustworthy.
  *
  * @param input — the parsed policy, evidence and proposed claim.
+ * @param witnessAddress — the witness this attestor instance trusts.
  * @returns the derived claim (equal to the proposal).
  * @throws with a descriptive message on the first failed check.
  */
 const checkAndDerive = async (
   input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number>>,
+  witnessAddress: string,
 ): Promise<Claim<number>> => {
   const { policy, evidence, claim: proposed } = input;
   const verified = await verifyZkFetchProof(evidence);
+  if (verified.attestorAddress.toLowerCase() !== witnessAddress.toLowerCase()) {
+    throw new Error(`witness ${verified.attestorAddress} is not trusted by this attestor`);
+  }
   assertEvidenceMatchesPolicy(verified, policy);
   const intent = intentOf(proposed);
   assertEvidenceMatchesIntent(verified, intent, policy.maxWindowSeconds);
@@ -134,23 +139,27 @@ const checkAndDerive = async (
 };
 
 /**
- * Create the zkFetch attestor kind's shareable definition.
+ * Create a zkFetch attestor definition bound to one trusted witness.
  *
  * `verify` implements the kind's check (see {@link zkFetchAttestor} for the
  * order). `message` encodes a claim into its flat field vector via
  * `claimToMessage`.
  *
- * @returns the shareable definition; instantiate it with `@thoth/attestor`'s
+ * @param witnessAddress — the witness this definition trusts.
+ * @returns the definition; instantiate it with `@thoth/attestor`'s
  *   `buildAttestor` (see {@link zkFetchAttestor}).
  */
-export function createZkFetchDefinition(): ZkFetchDefinition {
+export function createZkFetchDefinition(witnessAddress: string): ZkFetchDefinition {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(witnessAddress)) {
+    throw new Error('witnessAddress must be a 0x-prefixed 40-hex address');
+  }
   return defineAttestor({
     kind: 'zk-fetch@1',
     policy: zkFetchPolicySchema,
     evidence: zkFetchEvidenceSchema,
     claim: zkFetchClaimSchema,
     verify: async (input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number>>) => {
-      await checkAndDerive(input);
+      await checkAndDerive(input, witnessAddress);
     },
     message: (claim: Claim<number>): FlatMessage => claimToMessage(claim),
   });
@@ -163,7 +172,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  * For each request it checks, in order, rejecting at the first failure:
  *
  * 1. the Reclaim signature is valid;
- * 2. the signer is a pinned witness;
+ * 2. the signer is this instance's configured witness;
  * 3. the attested host is allowed, and the required disclosures are present
  *    and parseable;
  * 4. the signed context carries the intent digest;
@@ -176,7 +185,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  *
  * @typeParam PK — the signature scheme's public key type.
  * @typeParam S — the signature scheme's signature type.
- * @param parts — instance id, key material, and registry slot.
+ * @param parts — instance id, key material, registry slot, and witness address.
  * @returns a working `Attestor` for the kind.
  */
 export function zkFetchAttestor<PK, S>(parts: {
@@ -186,9 +195,11 @@ export function zkFetchAttestor<PK, S>(parts: {
   keyPair: KeyPair<PK, S, FlatMessage>;
   /** Slot index of this attestor's key in the on-chain registry. */
   registryIndex: number;
+  /** Reclaim witness address this instance trusts. */
+  witnessAddress: string;
 }): Attestor<ZkFetchDefinition, PK, S> {
-  const { id, keyPair, registryIndex } = parts;
-  const definition = createZkFetchDefinition();
+  const { id, keyPair, registryIndex, witnessAddress } = parts;
+  const definition = createZkFetchDefinition(witnessAddress);
   const publicKey = keyPair.publicKey;
   return buildAttestor({
     id,
@@ -199,7 +210,7 @@ export function zkFetchAttestor<PK, S>(parts: {
       const policy = definition.policy.parse(input.policy);
       const evidence = definition.evidence.parse(input.evidence);
       const proposed = definition.claim.parse(input.claim);
-      const claim = await checkAndDerive({ policy, evidence, claim: proposed });
+      const claim = await checkAndDerive({ policy, evidence, claim: proposed }, witnessAddress);
       const message = claimToMessage(claim);
       const signature = await signer.sign(message);
       return { kind: definition.kind, claim, message, publicKey, signature };

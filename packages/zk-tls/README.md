@@ -6,8 +6,8 @@ attestor.
 Thoth lets Midnight contracts accept externally attested information with ZK
 privacy. `@thoth/zk-tls` is the kind that vouches for **what a zk-fetch proof
 actually disclosed**: it verifies the Reclaim witness's signature over an HTTPS
-fetch, enforces the attestor's policy (host allowlist, pinned witnesses, a
-disclosure→slot map), checks the witnessed session is bound to the client's
+fetch, checks the witness chosen by the attestor operator, enforces the dApp's
+policy (host allowlist and disclosure→slot map), and checks the session is bound to the client's
 intent, and signs the common Thoth `Claim` with the attestor's own key. It is
 the Thoth-side consumer of
 [Reclaim Protocol](https://github.com/reclaimprotocol) zk-fetch proofs.
@@ -33,7 +33,7 @@ add their side's machinery. The prover runs a witnessed fetch:
   - Schemas: `zkFetchEvidenceSchema`, `zkFetchPolicySchema`,
     `zkFetchClaimSchema`.
   - `assertEvidenceMatchesPolicy(verified, policy)` — HTTPS against the host
-    allowlist, pinned witness, required slots must be certifiable (disclosed
+    allowlist, required slots must be certifiable (disclosed
     and parseable; optional slots may be absent and are signed unpresent),
     size bound.
   - `assertEvidenceMatchesIntent(verified, intent, policy.maxWindowSeconds)` — the signed context
@@ -61,11 +61,11 @@ add their side's machinery. The prover runs a witnessed fetch:
     (`VerifiedEvidence.disclosedValues`).
   - `assertClaimMatchesDisclosures({ claim, disclosures, policy })` — enforce
     that a client-proposed claim says exactly what the evidence disclosed.
-  - `createZkFetchDefinition()` — the shareable definition: the three schemas
-    plus the `verify` step (verify proof → check policy → check intent → check
+  - `createZkFetchDefinition(witnessAddress)` — the definition for one operator-configured
+    witness: the three schemas plus the `verify` step (verify proof → check witness → check policy → check intent → check
     the proposed claim equals the derived one) and a `message` that encodes the
     claim into the flat message via `claimToMessage`.
-  - `zkFetchAttestor({ id, keyPair, registryIndex })` — a deployable
+  - `zkFetchAttestor({ id, keyPair, registryIndex, witnessAddress })` — a deployable
     instance: a specialization of `@thoth/attestor`'s `buildAttestor` that
     knows the kind and signs the attestor-derived claim at the proposed
     claim's length.
@@ -76,7 +76,7 @@ add their side's machinery. The prover runs a witnessed fetch:
   the intent, puts its digest in the signed request context, and binds the
   prover's evidence to the requested URL's origin. The client does **not**
   re-verify the Reclaim signature — it is the side that ran the witnessed
-  interaction, and each pinned attestor verifies the evidence before signing.
+  interaction, and each attestor verifies the evidence before signing.
 - **`@thoth/zk-tls/prover`** — the live evidence source:
   `zkFetchProver(config)` runs the Reclaim zkFetch protocol against a
   caller-chosen witness over WebSocket and returns canonical evidence for
@@ -95,6 +95,7 @@ const attestor = zkFetchAttestor({
   id: 'zkFetch-strava-1',
   keyPair,
   registryIndex: 0,
+  witnessAddress: '0x…40 hex…', // the Reclaim witness this operator trusts
 });
 ```
 
@@ -102,7 +103,7 @@ const attestor = zkFetchAttestor({
 checks in order, rejecting at the first failure:
 
 1. the Reclaim signature is valid;
-2. the signer is a pinned witness;
+2. the signer is this instance's configured witness;
 3. the attested host is allowed, and the required slots are disclosed and
    parseable;
 4. the signed context carries the intent digest;
@@ -114,7 +115,10 @@ It then signs its own derived claim. The intent is read off the proposed claim:
 its fields are claim fields, and the witness signature over the context digest
 is what makes them trustworthy.
 
-The policy pins the witness trust:
+The dApp's policy describes which data it wants certified. The attestor operator
+configures the witness address on its instance, so a client cannot change witness
+trust by changing the policy. The same instance can attest under different
+well-formed dApp policies without reconfiguration.
 
 ```ts
 import { zkFetchPolicySchema } from '@thoth/zk-tls/attestor';
@@ -122,7 +126,6 @@ import { zkFetchPolicySchema } from '@thoth/zk-tls/attestor';
 const policy = zkFetchPolicySchema.parse({
   allowedHosts: ['api.strava.com'],
   maxWindowSeconds: 120,
-  attestorAddresses: ['0x…40 hex…'],      // which Reclaim witness may sign evidence
   slots: [
     { slot: 0, name: 'distance', parse: 'float' },
     { slot: 1, name: 'moving_time', parse: 'int' },
@@ -179,12 +182,10 @@ const { claim, message, collected } = await proof.attest();
   evidence disclosed; the app's predicate over the claim slots is the decision.
   A slot whose disclosure is absent (or unparseable under the policy rule) is
   signed as *unpresent* rather than guessed.
-- **One policy per trusted set.** N-of-M only means "N independent attestors
-  agree on the same signed message". The contract cannot see what a slot means,
-  so every attestor in a pinned trusted set must share the exact same law —
-  same `V`, slot map, parse rules, and encoding. Message equality then enforces
-  semantic agreement in practice: different interpretations of the same evidence
-  produce different messages, and the registry refuses to count them together.
+- **One policy per attestation.** N-of-M means "N independent attestors agree
+  on the same signed message". The dApp sends the same policy to its trusted
+  set for a given attestation. The policy digest commits the claim to its slot
+  map and parse rules, while each operator independently chooses its witness.
 
 ## Design rationale
 
@@ -200,9 +201,9 @@ The kind lands in the middle of the Thoth layering:
   N-of-M of these → @thoth/contracts registry (Midnight)
 ```
 
-- **Composition with the host.** The definition is the shareable law; the
-  `KeyPair` + `registryIndex` make the deployable instance. Nothing here owns a
-  private key — `@thoth/attestor`'s `AttestorSigner` is the key boundary.
+- **Composition with the host.** The definition binds the common law to the
+  operator's `witnessAddress`. The `KeyPair` and `registryIndex` complete the
+  deployable instance. `@thoth/attestor`'s `AttestorSigner` owns the signing key.
 - **Shared logic at the root.** The `@thoth/zk-tls` root holds what both sides
   need (schemas, policy check, claim derivation, parse law); a client-only app
   never imports `@thoth/attestor` or the host machinery, and the Reclaim
@@ -215,8 +216,8 @@ The kind lands in the middle of the Thoth layering:
   proposal that matches (hence `assertClaimMatchesDisclosures`). The client
   cannot make the attestor certify a reading the evidence does not support.
 - **The client does not re-verify.** The client is the side that ran the
-  witnessed HTTPS interaction; the Reclaim ECDSA signature is checked by each
-  pinned attestor before it signs. The client derives the deterministic
+  witnessed HTTPS interaction; each attestor checks the Reclaim ECDSA signature
+  and its configured witness address before signing. The client derives the deterministic
   expected claim from the intent and the evidence and `resolveAttestation` forces every
   returned attestation to commit to exactly that message — the on-chain N-of-M
   threshold is the enforcement.
