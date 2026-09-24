@@ -51,13 +51,16 @@ a claim is used, so the same attested value can feed different predicates in
 different applications.
 
 On the other side is the *client* — the component that runs on the user's machine,
-inside the dApp. It first obtains evidence of a fact (typically
-by using ZkFetch to fetch the data it needs and obtain a proof of that connection). It
-then sends that evidence to the attestors in its dApp's trusted set, collects
-the N signatures it needs per the dApp's
-deploy-time threshold, and hands the claim together with those signatures to the
-Midnight contract as private witness data. The contract's predicate runs over the
-attested values without any of them ever being revealed on-chain.
+inside the dApp. For zkFetch, it creates one intent containing the policy digest,
+request binding, holder commitment, nonce, and observation window. It runs a
+separate witnessed fetch for each operator it contacts, with the same intent
+digest in each witness-signed context. Each attestor accepts evidence only from
+its pinned witness, checks the policy and intent, derives the claim, and signs
+its canonical message with its own registry key. The client collects N valid
+signatures over the same message from distinct registry slots and hands the
+claim and signatures to the Midnight contract as private witness data. The
+contract's predicate runs over the attested values without revealing them
+on-chain.
 
 Of course, relying on one single attestor would be almost the same as having no
 attestors at all, so our approach aims to create an *attestor network* that can be
@@ -101,23 +104,28 @@ attestors, and contract — so a signature produced off-chain verifies on-chain.
 sequenceDiagram
     participant Client
     participant API as 3rd Party API
-    participant Attestor
+    participant WitnessA as Witness A
+    participant WitnessB as Witness B
+    participant AttestorA as Attestor A
+    participant AttestorB as Attestor B
     participant Contract
 
-    Note over Client,API: Step 1 — obtain evidence from a data source
-    Client->>API: zkFetch request
-    API-->>Client: zkFetch response
-
-    Note over Client,Attestor: Step 2 — request attestation (N-of-M)
-    loop for each attestor in the dApp's trusted set
-        Client->>Attestor: build(evidence)
-        Attestor-->>Client: signature over claim
-    end
-
-    Note over Client,Contract: Step 3 — submit to the contract
-    Client->>Contract: claim + N signatures (private witness data)
-    Note over Contract: verify
-    Note over Contract: run predicate
+    Note over Client,AttestorB: One intent binds policy, request, holder, nonce and window
+    Client->>WitnessA: zkFetch request with intent digest
+    WitnessA->>API: witnessed fetch
+    API-->>WitnessA: response
+    WitnessA-->>Client: signed evidence A
+    Client->>WitnessB: same request and intent digest
+    WitnessB->>API: witnessed fetch
+    API-->>WitnessB: response
+    WitnessB-->>Client: signed evidence B
+    Client->>AttestorA: evidence A and proposed claim
+    AttestorA-->>Client: signature over canonical message
+    Client->>AttestorB: evidence B and proposed claim
+    AttestorB-->>Client: signature over same message
+    Client->>Contract: claim and N signatures (private witness data)
+    Note over Contract: Check policy, holder, window and N distinct registry keys
+    Note over Contract: Run predicate over private values
 ```
 
 ## Out of scope

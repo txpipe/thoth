@@ -125,7 +125,12 @@ thoth/
 - Contract logic is tested with the **simulator** via vitest in
   `packages/contracts/test/`. The mock top-level shell
   (`packages/contracts/test/mocks/MockAttestation.compact`) specializes the
-  modules (V=3, K=14, M=3, N=2) so tests run against real artifacts.
+  modules (V=3 values, K=14 signed message fields, M=3 registry slots,
+  N=2 threshold) so tests run against real artifacts.
+- `packages/contracts/test/zkfetch.test.ts` crosses both seams: two independent
+  test-key witnesses feed the zkFetch client and attestors, and their collected
+  Jubjub signatures are submitted positionally to the simulator. Its altered
+  claim cases use fresh ledgers so nonce replay cannot hide a broken binding.
 - Encoding vectors live in `packages/core/test/claim-vectors.json`;
   `packages/contracts/test/parity.test.ts` checks both the core encoder and
   the circuit against them.

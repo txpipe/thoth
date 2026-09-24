@@ -57,7 +57,7 @@ describe('zkFetch attestation in the simulator', () => {
     vi.useRealTimers();
   });
 
-  it('accepts a threshold attestation from two independent witnesses', async () => {
+  it('accepts two independent witnesses and rejects changes to their claim', async () => {
     const operator = (witness: TestWitness): ZkFetchOperator => ({
       witnessAddress: witness.address,
       prover: {
@@ -95,6 +95,12 @@ describe('zkFetch attestation in the simulator', () => {
 
     const commitRand = randomBytes(32);
     const contractClaim = { ...claim, present: [...claim.present], values: [...claim.values] };
+    // Positional: slot i verifies against key i; the unanswered slot never verifies.
+    const signatures = notaryKeys.map(
+      (_, slot) =>
+        collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
+        DUMMY_SIGNATURE,
+    );
     const sim = new MockAttestationSim(
       createPrivateState(holderSecret),
       notaryKeys.map((k) => k.pk),
@@ -103,16 +109,70 @@ describe('zkFetch attestation in the simulator', () => {
     sim.now = OBSERVED_AT;
     sim.call('verifyAttestation', {
       claim: contractClaim,
-      // Positional: slot i verifies against key i; the unanswered slot never verifies.
-      signatures: notaryKeys.map(
-        (_, slot) =>
-          collected.find((c) => c.registryIndex === slot)?.attestation.signature ?? DUMMY_SIGNATURE,
-      ),
+      signatures,
       commitRand,
       holderSecret,
     });
 
     expect(claim.present).toEqual([true, false, false]);
+    expect(claim.values).toEqual([0n, 0n, 0n]);
     expect(sim.ledgerView().A_claimsVault.member(idOf(contractClaim, commitRand))).toBe(true);
+
+    const changedBytes = (bytes: Uint8Array): Uint8Array => {
+      const changed = Uint8Array.from(bytes);
+      changed[0] = (changed[0] ?? 0) ^ 1;
+      return changed;
+    };
+    const mutations = [
+      {
+        name: 'values',
+        claim: { ...contractClaim, values: [1n, 0n, 0n] },
+        error: 'Insufficient valid signatures',
+      },
+      {
+        name: 'presence flags',
+        claim: { ...contractClaim, present: [false, false, false] },
+        error: 'Insufficient valid signatures',
+      },
+      {
+        name: 'policy',
+        claim: { ...contractClaim, policyDigest: changedBytes(claim.policyDigest) },
+        error: 'Wrong policy digest',
+      },
+      {
+        name: 'holder',
+        claim: { ...contractClaim, holder: changedBytes(claim.holder) },
+        error: 'Holder mismatch',
+      },
+      {
+        name: 'request',
+        claim: { ...contractClaim, requestBinding: changedBytes(claim.requestBinding) },
+        error: 'Insufficient valid signatures',
+      },
+      {
+        name: 'window',
+        claim: { ...contractClaim, windowStart: claim.windowStart + 1n },
+        error: 'Insufficient valid signatures',
+      },
+    ];
+    for (const { name, claim: changedClaim, error } of mutations) {
+      // Each variant gets a fresh ledger so replay cannot mask a broken binding.
+      const changedSim = new MockAttestationSim(
+        createPrivateState(holderSecret),
+        notaryKeys.map((key) => key.pk),
+        { policyDigest: claim.policyDigest },
+      );
+      changedSim.now = OBSERVED_AT;
+      expect(
+        () =>
+          changedSim.call('verifyAttestation', {
+            claim: changedClaim,
+            signatures,
+            commitRand,
+            holderSecret,
+          }),
+        name,
+      ).toThrow(error);
+    }
   });
 });
