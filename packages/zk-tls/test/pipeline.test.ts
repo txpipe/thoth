@@ -184,6 +184,23 @@ describe('zkFetch claim schema', () => {
       }),
     ).toThrow(/32 bytes/);
   });
+
+  it('rejects a window outside the circuit Uint<32> range', () => {
+    expect(() =>
+      zkFetchClaimSchema.parse({
+        version: 1,
+        kind: 1,
+        policyDigest: new Uint8Array(32),
+        requestBinding: new Uint8Array(32),
+        holder: new Uint8Array(32),
+        nonce: new Uint8Array(32),
+        windowStart: 0,
+        windowEnd: 2n ** 32n,
+        present: [],
+        values: [],
+      }),
+    ).toThrow(/Uint<32>/);
+  });
 });
 
 describe('zkFetch attestor + client', () => {

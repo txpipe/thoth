@@ -46,8 +46,8 @@ biome on every push/PR.
 - **Stale `dist/` footgun** — workspaces resolve each other through
   `node_modules/@thoth/*` ⇒ `exports` ⇒ `dist/`. The root `build`/`types`
   scripts rebuild the dependency-producing packages first (`core`, `attestor`,
-  `client`), so consumers — e.g. `zk-tls`, which depends on all three — see
-  fresh types; if a *new* workspace dependency appears, add its package to the
+  `client`, then `zk-tls`), so consumers — e.g. `zk-tls`, which depends on the
+  first three, and the contracts tests, which import `zk-tls` — see fresh types; if a *new* workspace dependency appears, add its package to the
   build-first chain. A stale `dist/index.d.ts` still produces confusing errors
   like "Generic type requires N type argument(s)".
 

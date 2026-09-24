@@ -94,6 +94,8 @@ export const CLAIM_VERSION = 1n;
 
 const bytes32 = z.instanceof(Uint8Array).refine((b) => b.length === 32, 'must be 32 bytes');
 const numeric = z.union([z.number(), z.bigint()]);
+/** Unix seconds as the circuit's `Uint<32>`. */
+const seconds = numeric.refine((n) => n >= 0 && n < 2 ** 32, 'must fit Uint<32>');
 
 /**
  * Zod schema for a claim, optionally pinned to `V` value slots.
@@ -120,8 +122,8 @@ export function claimSchema<V extends number>(
       requestBinding: bytes32,
       holder: bytes32,
       nonce: bytes32,
-      windowStart: numeric,
-      windowEnd: numeric,
+      windowStart: seconds,
+      windowEnd: seconds,
       present: v === undefined ? present : present.length(v),
       values: v === undefined ? values : values.length(v),
     })
