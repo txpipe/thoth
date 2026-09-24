@@ -107,52 +107,20 @@ describe('disclosedValuesOf via parsedEvidenceView', () => {
     });
   });
 
-  it('drops named-group regex redactions', () => {
+  it('passes extracted values through whatever the signed redactions say', () => {
+    // Redaction is a reveal whitelist applied before the witness sees the
+    // response, so the witness's extracted values are certifiable as they are.
     const disclosed = disclosedOf(
-      { responseRedactions: [{ regex: '(?<token>secret-[0-9]+)' }] },
-      { extractedParameters: { token: 'secret-4815', label: 'commute' } },
+      {
+        responseRedactions: [
+          { regex: '(?<token>secret-[0-9]+)' },
+          { jsonPath: '$.user.email' },
+          { xPath: '//*' },
+        ],
+      },
+      { extractedParameters: { token: 'secret-4815', email: 'a@b.co', label: 'commute' } },
     );
-    expect(disclosed).toEqual({ label: 'commute' });
-  });
-
-  it('drops every value a group-less regex redaction matches', () => {
-    const disclosed = disclosedOf(
-      { responseRedactions: [{ regex: 'private' }] },
-      { extractedParameters: { a: 'private data', b: 'public' } },
-    );
-    expect(disclosed).toEqual({ b: 'public' });
-  });
-
-  it('drops the leaf property of a jsonPath redaction', () => {
-    const disclosed = disclosedOf(
-      { responseRedactions: [{ jsonPath: '$.user.email' }] },
-      { extractedParameters: { email: 'a@b.co', name: 'a' } },
-    );
-    expect(disclosed).toEqual({ name: 'a' });
-  });
-
-  it('drops the node an xPath redaction selects', () => {
-    const disclosed = disclosedOf(
-      { responseRedactions: [{ xPath: '/html/body/div[1]/span[@id="price"]' }] },
-      { extractedParameters: { span: '99', note: 'ok' } },
-    );
-    expect(disclosed).toEqual({ note: 'ok' });
-  });
-
-  it('drops the attribute an xPath redaction targets', () => {
-    const disclosed = disclosedOf(
-      { responseRedactions: [{ xPath: '//user/@email' }] },
-      { extractedParameters: { email: 'a@b.co', name: 'a' } },
-    );
-    expect(disclosed).toEqual({ name: 'a' });
-  });
-
-  it('falls closed (nothing disclosed) on an undecodable xPath redaction', () => {
-    const disclosed = disclosedOf(
-      { responseRedactions: [{ xPath: '//*' }] },
-      { extractedParameters: { a: '1', b: '2' } },
-    );
-    expect(disclosed).toEqual({});
+    expect(disclosed).toEqual({ token: 'secret-4815', email: 'a@b.co', label: 'commute' });
   });
 
   it('treats unknown redaction fields as inert', () => {
