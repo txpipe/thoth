@@ -217,6 +217,12 @@ export interface ZkFetchPolicy {
   claimKind?: bigint;
 }
 
+/**
+ * Runtime validator + type source for {@link ZkFetchPolicy}.
+ *
+ * Both sides parse the shared policy through it: the client at `init`, the
+ * attestor before running its checks.
+ */
 export const zkFetchPolicySchema = z.object({
   allowedHosts: z.array(z.string()).min(1),
   slots: z
