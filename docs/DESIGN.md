@@ -51,12 +51,12 @@ a claim is used, so the same attested value can feed different predicates in
 different applications.
 
 On the other side is the *client* — the component that runs on the user's machine,
-inside the dApp. It first obtains evidence of a fact (typically
-by using ZkFetch to fetch the data it needs and obtain a proof of that connection). It
-then sends that evidence to the attestors in its dApp's trusted set, collects
-the N signatures it needs per the dApp's
-deploy-time threshold, and hands the claim together with those signatures to the
-Midnight contract as private witness data. The contract's predicate runs over the
+inside the dApp. It first obtains evidence of a fact. In the zkFetch kind that means
+one fetch per attestor in its trusted set, each through that attestor's own Reclaim
+witness; the client keeps only what the witnesses agree on. It then sends each
+attestor the evidence its own witness produced, collects the N signatures the dApp's
+deploy-time threshold requires, and hands the claim together with those signatures to
+the Midnight contract as private witness data. The contract's predicate runs over the
 attested values without any of them ever being revealed on-chain.
 
 Of course, relying on one single attestor would be almost the same as having no
@@ -100,13 +100,15 @@ sequenceDiagram
     participant Attestor
     participant Contract
 
-    Note over Client,API: Step 1 — obtain evidence from a data source
-    Client->>API: zkFetch request
-    API-->>Client: zkFetch response
+    Note over Client,API: Step 1 — evidence per attestor (zkFetch: through its own witness)
+    loop for each attestor's witness
+        Client->>API: zkFetch request
+        API-->>Client: zkFetch response
+    end
 
     Note over Client,Attestor: Step 2 — request attestation (N-of-M)
     loop for each attestor in the dApp's trusted set
-        Client->>Attestor: build(evidence)
+        Client->>Attestor: policy + its witness's evidence + claim
         Attestor-->>Client: signature over claim
     end
 

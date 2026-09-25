@@ -19,8 +19,10 @@ Five things go into `zkFetchClient.init`:
 - **`policy`.** The law every attestor in the set will check against; see below.
 - **`valueSlots`.** The value-slot count of the contract that consumes the
   claim, its `#V`.
-- **`prover`.** Where evidence comes from: `zkFetchProver({ witnessUrl })`, or
-  any object with a `prove(request)` method.
+- **`provers`.** Where evidence comes from, keyed by attestor id. Each entry
+  points at that attestor's own witness: `zkFetchProver({ witnessUrl })`, or any
+  object with a `prove(request)` method. Every attestor in `trusted` needs an
+  entry, and every entry needs an attestor.
 
 A complete setup:
 
@@ -46,7 +48,6 @@ const transport: AttestorTransport<ZkFetchDefinition, PublicKey, Signature> = {
 
 const policy = zkFetchPolicySchema.parse({
   allowedHosts: ['www.strava.com'],
-  attestorAddresses: ['0x…the Reclaim witness you pin…'],
   slots: [
     { slot: 0, name: 'distance', parse: 'float' },
     { slot: 1, name: 'movingTime', parse: 'int' },
@@ -58,7 +59,10 @@ const client = zkFetchClient.init({
   transport,
   policy,
   valueSlots: 2, // the contract's #V
-  prover: zkFetchProver({ witnessUrl: 'ws://localhost:8001/ws' }),
+  provers: {
+    'attestor-0': zkFetchProver({ witnessUrl: 'ws://localhost:8001/ws' }),
+    'attestor-1': zkFetchProver({ witnessUrl: 'ws://localhost:8002/ws' }),
+  },
 });
 
 const proof = await client.proveReq({
@@ -117,9 +121,15 @@ slot its attestor answered from. Place each signature at its slot in the
 contract's fixed signature vector and call `verifyAttestation` with the claim.
 See `@thoth/contracts` for the circuit and the registry wiring.
 
-The witness performs the TLS egress and signs the claim. Its address is what
-each policy pins in `attestorAddresses`, so choose a witness you trust, or run
-your own. See [attestor-guide.md](attestor-guide.md) for running one.
+Each attestor operator runs their own Reclaim witness and builds the attestor
+with that witness's key. The dApp points each attestor's prover at the matching
+witness URL, so the evidence an attestor receives comes from the one witness it
+trusts. See [attestor-guide.md](attestor-guide.md) for running one.
+
+`proveReq` also signs a fresh random nonce (`thothNonce`) into every witness's
+context, so one observation cannot be replayed as another. If the witnesses
+disagree on the request, context, or disclosed values, `proveReq` throws before
+contacting any attestor.
 
 A genuine committed proof lives at
 `../../../examples/demo-attestation/fixtures/fixture-github-repo-stats.json`.
@@ -160,6 +170,10 @@ const hostedProver = (client: ReclaimClient): ZkFetchProver => ({
 
 `@reclaimprotocol/zk-fetch` is AGPL-licensed and this package does not depend
 on it.
+
+This path lets Reclaim choose the witness per call, so it only fits a trusted
+set whose attestors all pin that witness key. A set of operators running their
+own witnesses needs one direct `zkFetchProver` per attestor instead.
 
 References:
 
