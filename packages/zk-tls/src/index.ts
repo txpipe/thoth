@@ -187,14 +187,12 @@ export interface ZkFetchSlot {
  * The policy under which a zkFetch attestor attests.
  *
  * The rule for "this evidence may be attested": only evidence whose host is
- * allowlisted, whose signing Reclaim witness is pinned, and whose disclosures
- * cover every declared slot, within any size bound.
+ * allowlisted and whose disclosures cover every declared slot, within any size
+ * bound.
  */
 export interface ZkFetchPolicy {
   /** Hosts the attested URL may target; exact or any subdomain suffix. */
   allowedHosts: readonly string[];
-  /** The Reclaim attestor addresses this zkFetch attestor trusts. */
-  attestorAddresses: readonly string[];
   /** Map extracted (disclosed) values onto claim slots. */
   slots: readonly ZkFetchSlot[];
   /** Upper bound on the captured response size in bytes. */
@@ -208,7 +206,6 @@ export interface ZkFetchPolicy {
 
 export const zkFetchPolicySchema = z.object({
   allowedHosts: z.array(z.string()).min(1),
-  attestorAddresses: z.array(z.string()).min(1),
   slots: z
     .array(
       z.object({
@@ -444,10 +441,9 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
  * Check evidence against the policy.
  *
  * Fails fast so the attestor does not waste work: the attested URL must be
- * HTTPS against an allowlisted host, the proof must carry a signature from a
- * pinned Reclaim witness, every *required* policy slot's disclosure must be
- * certifiable (present and parseable — optional slots may be absent and are
- * signed unpresent), and the captured response must fit any size bound.
+ * HTTPS against an allowlisted host, every *required* policy slot's disclosure
+ * must be certifiable (present and parseable — optional slots may be absent and
+ * are signed unpresent), and the captured response must fit any size bound.
  *
  * @param verified — the evidence view (see {@link parsedEvidenceView}).
  * @param policy — the policy.
@@ -465,14 +461,6 @@ export const assertEvidenceMatchesPolicy = (
   const host = url.hostname.toLowerCase();
   if (!hostAllowed(host, policy.allowedHosts)) {
     throw new Error(`attested host ${host} not in allowlist [${policy.allowedHosts.join(', ')}]`);
-  }
-  const attestorAddress = verified.attestorAddress.toLowerCase();
-  if (!policy.attestorAddresses.some((pinned) => pinned.toLowerCase() === attestorAddress)) {
-    throw new Error(
-      `attestor address ${verified.attestorAddress} not in pinned witnesses [${policy.attestorAddresses.join(
-        ', ',
-      )}]`,
-    );
   }
   for (const slot of policy.slots) {
     if (slot.optional) {

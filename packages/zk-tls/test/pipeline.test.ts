@@ -50,7 +50,6 @@ const policy = (
   slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'data', parse: 'float', optional: true }],
 ): ZkFetchPolicy => ({
   allowedHosts: ['api.github.com'],
-  attestorAddresses: [witness.address],
   slots,
 });
 
@@ -139,7 +138,12 @@ describe('zkFetch claim schema', () => {
 
 describe('zkFetch attestor + client', () => {
   const attestors = ['attestor-0', 'attestor-1', 'attestor-2'].map((id, i) =>
-    zkFetchAttestor({ id, keyPair: fakeKey(id), registryIndex: i }),
+    zkFetchAttestor({
+      id,
+      keyPair: fakeKey(id),
+      registryIndex: i,
+      witnessKey: `0x${'33'.repeat(32)}`,
+    }),
   );
   const byId = new Map(attestors.map((a) => [a.id, a]));
   const trusted = buildTrustedSet(attestors.map(descriptorOf));

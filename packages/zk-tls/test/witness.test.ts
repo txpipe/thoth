@@ -1,7 +1,7 @@
 // Test-key witnesses: local secp256k1 keys stand in for Reclaim witnesses and
-// sign provider claim data. Checks the existing zkFetch attestor accepts that
-// evidence unchanged — offline and deterministically — when the policy pins
-// the test witness, and rejects it when it does not.
+// sign provider claim data. Checks the zkFetch attestor accepts evidence signed
+// by the witness key it pins — offline and deterministically — and rejects
+// evidence from any other witness.
 import type { FlatMessage } from '@thoth/core/claim';
 import {
   deriveClaimFromEvidence,
@@ -16,14 +16,13 @@ import { type Observation, type TestWitness, testWitness } from './helpers/witne
 const alice = testWitness(`0x${'11'.repeat(32)}`);
 const bob = testWitness(`0x${'22'.repeat(32)}`);
 
-const policy = (pinned: string): ZkFetchPolicy => ({
+const policy: ZkFetchPolicy = {
   allowedHosts: ['api.example.com'],
-  attestorAddresses: [pinned],
   slots: [
     { slot: 0, name: 'balance', parse: 'int' },
     { slot: 1, name: 'score', parse: 'float', optional: true },
   ],
-});
+};
 
 const observe = (
   witness: TestWitness,
@@ -44,16 +43,16 @@ const attestor = zkFetchAttestor({
     signer: { sign: (message: FlatMessage): string => `sig:${message.join(',')}` },
   },
   registryIndex: 0,
+  witnessKey: `0x${'11'.repeat(32)}`,
 });
 
-const attest = (evidence: ZkFetchEvidence, pinned: string) => {
-  const pinnedPolicy = policy(pinned);
+const attest = (evidence: ZkFetchEvidence) => {
   const claim = deriveClaimFromEvidence({
     verified: parsedEvidenceView(evidence),
-    policy: pinnedPolicy,
+    policy,
     valueSlots: 3,
   });
-  return attestor.attest({ policy: pinnedPolicy, evidence, claim } as unknown as Parameters<
+  return attestor.attest({ policy, evidence, claim } as unknown as Parameters<
     typeof attestor.attest
   >[0]);
 };
@@ -85,8 +84,8 @@ describe('test-key witness', () => {
     );
   });
 
-  it('is accepted and signed by the attestor when the policy pins it', async () => {
-    const attestation = await attest(await observe(alice), alice.address);
+  it('is accepted and signed by the attestor whose witness it is', async () => {
+    const attestation = await attest(await observe(alice));
     expect(attestation.claim.timestamp).toBe(1_786_000_000n);
     // A present zero stays present.
     expect(attestation.claim.present).toEqual([true, true, false]);
@@ -94,14 +93,12 @@ describe('test-key witness', () => {
     expect(attestation.signature).toMatch(/^sig:/);
   });
 
-  it('is rejected when the policy does not pin it', async () => {
-    await expect(attest(await observe(bob), alice.address)).rejects.toThrow(
-      /not in pinned witnesses/,
-    );
+  it('is rejected when signed by another witness', async () => {
+    await expect(attest(await observe(bob))).rejects.toThrow(/not this attestor's witness/);
   });
 
   it('is rejected when it claims another witness address', async () => {
     const forged = { ...(await observe(bob)), attestorAddress: alice.address };
-    await expect(attest(forged, alice.address)).rejects.toThrow(/Invalid claim signature/);
+    await expect(attest(forged)).rejects.toThrow(/Invalid claim signature/);
   });
 });

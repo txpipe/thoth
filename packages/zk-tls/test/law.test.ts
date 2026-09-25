@@ -56,7 +56,6 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
       verified: verifiedOf(claimWith({}, {}), { v: value }),
       policy: {
         allowedHosts: ['api.github.com'],
-        attestorAddresses: ['0xc340fc267cacbb9e3101adced0c7728f7e63b63d'],
         slots: [{ slot: 0, name: 'v', parse }],
       },
       valueSlots: 1,
@@ -135,7 +134,6 @@ describe('disclosedValuesOf via parsedEvidenceView', () => {
 describe('deriveClaimFromEvidence', () => {
   const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
     allowedHosts: ['api.github.com'],
-    attestorAddresses: ['0xc340fc267cacbb9e3101adced0c7728f7e63b63d'],
     slots,
   });
 
@@ -182,7 +180,6 @@ describe('deriveClaimFromEvidence', () => {
 describe('assertClaimMatchesDisclosures', () => {
   const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
     allowedHosts: ['api.github.com'],
-    attestorAddresses: ['0xc340fc267cacbb9e3101adced0c7728f7e63b63d'],
     slots,
   });
 
@@ -218,7 +215,6 @@ describe('assertClaimMatchesDisclosures', () => {
 describe('assertEvidenceMatchesPolicy', () => {
   const policy: ZkFetchPolicy = {
     allowedHosts: ['api.github.com'],
-    attestorAddresses: ['0xc340fc267cacbb9e3101adced0c7728f7e63b63d'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
   };
 
@@ -259,19 +255,6 @@ describe('assertEvidenceMatchesPolicy', () => {
     expect(() => assertEvidenceMatchesPolicy(verified('https://notgithub.com/x'), policy)).toThrow(
       /not in allowlist/,
     );
-  });
-
-  it('rejects a witness that is not pinned', () => {
-    const rogue = verifiedOf(
-      claimWith({ url: 'https://api.github.com/x' }, { extractedParameters: { distance: '1' } }),
-      { distance: '1' },
-    );
-    expect(() =>
-      assertEvidenceMatchesPolicy(rogue, {
-        ...policy,
-        attestorAddresses: ['0x1111111111111111111111111111111111111111'],
-      }),
-    ).toThrow(/not in pinned witnesses/);
   });
 
   it('refuses a required slot whose disclosure is missing or unparseable', () => {

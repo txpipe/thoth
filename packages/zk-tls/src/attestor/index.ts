@@ -1,5 +1,9 @@
 import type { proto } from '@reclaimprotocol/attestor-core';
-import { assertValidClaimSignatures } from '@reclaimprotocol/attestor-core';
+import {
+  assertValidClaimSignatures,
+  SelectedServiceSignatureType,
+  SIGNATURES,
+} from '@reclaimprotocol/attestor-core';
 import type { Attestor, KeyPair } from '@thoth/attestor';
 import { buildAttestor, defineAttestor } from '@thoth/attestor';
 import type { AttestationInput } from '@thoth/core';
@@ -21,6 +25,11 @@ import {
 
 const hexToBytes = (hex: string): Uint8Array =>
   new Uint8Array(Buffer.from(hex.replace(/^0x/, ''), 'hex'));
+
+const witnessAddressOf = (witnessKey: string): string => {
+  const scheme = SIGNATURES[SelectedServiceSignatureType];
+  return scheme.getAddress(scheme.getPublicKey(witnessKey)).toLowerCase();
+};
 
 /**
  * Verify a zkFetch proof and extract the values it disclosed.
@@ -124,14 +133,15 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  * Build a deployable zkFetch attestor instance.
  *
  * Specialization of `@thoth/attestor`'s `buildAttestor` that knows the kind:
- * it rejects proposals that do not match the disclosures, derives the
- * *authoritative* claim from the verified evidence (deterministic nonce,
- * evidence-bound hash) sized to the proposed claim's own length, and signs
- * `message(claim)` with the key pair's signer.
+ * it accepts evidence only from the operator's own Reclaim witness, rejects
+ * proposals that do not match the disclosures, derives the *authoritative*
+ * claim from the verified evidence (deterministic nonce, evidence-bound hash)
+ * sized to the proposed claim's own length, and signs `message(claim)` with
+ * the key pair's signer.
  *
  * @typeParam PK — the signature scheme's public key type.
  * @typeParam S — the signature scheme's signature type.
- * @param parts — instance id, key material, and registry slot.
+ * @param parts — instance id, key material, registry slot, and witness key.
  * @returns a working `Attestor` for the kind.
  */
 export function zkFetchAttestor<PK, S>(parts: {
@@ -141,8 +151,11 @@ export function zkFetchAttestor<PK, S>(parts: {
   keyPair: KeyPair<PK, S, FlatMessage>;
   /** Slot index of this attestor's key in the on-chain registry. */
   registryIndex: number;
+  /** The operator's own Reclaim witness key (`0x` + 32-byte hex secp256k1). */
+  witnessKey: string;
 }): Attestor<ZkFetchDefinition, PK, S> {
-  const { id, keyPair, registryIndex } = parts;
+  const { id, keyPair, registryIndex, witnessKey } = parts;
+  const witnessAddress = witnessAddressOf(witnessKey);
   const definition = createZkFetchDefinition();
   const publicKey = keyPair.publicKey;
   return buildAttestor({
@@ -156,6 +169,11 @@ export function zkFetchAttestor<PK, S>(parts: {
       const proposed = definition.claim.parse(input.claim);
       // One full check pass (ECDSA + policy + disclosures cross-check).
       await definition.verify({ policy, evidence, claim: proposed });
+      if (evidence.attestorAddress.toLowerCase() !== witnessAddress) {
+        throw new Error(
+          `evidence signed by witness ${evidence.attestorAddress}, not this attestor's witness ${witnessAddress}`,
+        );
+      }
       // Claim derivation only needs the pure parsed view.
       const verified = parsedEvidenceView(evidence);
       const claim = deriveClaimFromEvidence({

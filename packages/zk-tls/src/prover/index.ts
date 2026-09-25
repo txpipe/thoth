@@ -23,8 +23,9 @@ export interface ZkFetchProverConfig {
    * WebSocket URL of the Reclaim witness that performs the TLS connection and
    * signs the claim.
    *
-   * The witness's address — not this URL — is what a policy pins in
-   * `attestorAddresses`, so choose one you trust (or run your own).
+   * Each attestor instance trusts one witness key, so point this at the
+   * witness that attestor trusts — one you run yourself, or one whose key the
+   * operator pinned.
    */
   witnessUrl: string | URL;
   /**
