@@ -48,7 +48,14 @@ export interface ZkFetchRequest {
   publicHeaders?: Readonly<Record<string, string>>;
   /** Headers hidden from the verifier (e.g. authorization). */
   secretHeaders?: Readonly<Record<string, string>>;
-  /** Response patterns whose named groups become the disclosed values. */
+  /**
+   * Response patterns whose named groups become the disclosed values.
+   *
+   * The revealed slice is signed into every witness's claim, so it must be
+   * identical across independent fetches. Whole responses carry per-request
+   * headers such as rate limits, dates, and request ids, which make witnesses
+   * disagree.
+   */
   responseMatches?: readonly { type: 'regex' | 'contains'; value: string }[];
   /**
    * Slices of the response revealed to the witness — Reclaim's reveal

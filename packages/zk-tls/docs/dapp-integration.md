@@ -103,6 +103,14 @@ semantics:
 A policy slot is certifiable only when a `responseMatches` group extracted the
 value from a revealed slice; name the slot exactly like the regex group.
 
+Whatever you reveal must be identical across independent fetches, because each
+witness signs the revealed slice into the claim's context. A whole-response
+`(?<data>.*)` match is not safe: HTTP headers carry per-request values such as
+rate limits, dates, and request ids, so two witnesses derive different
+identifiers and `proveReq` rejects the set with `witnesses disagree`. Reveal
+only the field the policy binds, and prefer values the origin returns
+deterministically.
+
 ## Building the policy
 
 Every attestor in a trusted set will enforce the same policy. Field docs live in
