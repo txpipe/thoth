@@ -39,6 +39,8 @@ add their side's machinery. The prover runs a witnessed fetch:
   - `assertEvidenceMatchesIntent(verified, intent, policy.maxWindowSeconds)` — the signed context
     carries the intent digest, the signed request matches the request
     binding, and the witness observed inside the policy-bounded intent window.
+  - `assertIntentWindow(intent, policy.maxWindowSeconds)` — check the window
+    before starting a witnessed session.
   - `deriveClaimFromEvidence({ verified, policy, intent, valueSlots })` —
     derive the common `Claim` the attestor signs: the header from the intent
     (with `policyDigest` recomputed from the policy), values/present from the
@@ -191,7 +193,8 @@ Each operator that did not count gets an `AttestorFailureError` (from
 returned a different `'message'`, or an invalid `'signature'`. On success they
 are in `failures`; otherwise `attest` throws an `AggregateError` whose `errors`
 hold them.
-The client copies no arbitrary prover or transport errors into these failures.
+Failure details come from fixed client reasons or recognized transport codes.
+The client never copies an underlying exception into the public error.
 
 ## Concepts
 
@@ -285,8 +288,10 @@ The kind lands in the middle of the Thoth layering:
   error means, so only an explicit `AttestorFailureError('rejected')` counts
   as a refusal; everything else a transport throws is `'unreachable'`. The
   client's own pre-send evidence checks apply the attestor's law, so they
-  report `'rejected'` too. Arbitrary prover errors are classified without
-  copying their messages into public failures.
+  report `'rejected'` too. Transports may use the codes `untrusted-witness`,
+  `invalid-evidence`, `policy`, `intent`, or `claim` for specific refusals.
+  Other details map to a generic refusal. Arbitrary prover and transport
+  error messages do not enter public failures.
 - **Strict input.** Dramatically fewer shapes to reason about at a trust
   boundary, and no witness-address decoding inside the verifier.
 

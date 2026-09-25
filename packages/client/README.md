@@ -38,6 +38,8 @@ npm install @thoth/client
 - `thresholdGroup(collected, threshold)` — group verified attestations by exact
   message, count each registry slot once, and return the first group that
   meets the threshold, sorted by slot (or `undefined`).
+- `messagesEqual(a, b)` — the structural comparison used for grouping and
+  reporting disagreements.
 - `CollectedAttestation<K, C, PK, S, Msg>` — the collection output shape:
   an `Attestation` plus the `registryIndex` it belongs to.
 - Errors: `AttestationMismatchError` (thrown by `resolveAttestation`; `reason`
@@ -91,7 +93,7 @@ const httpTransport: AttestorTransport<MyDefinition, MyPublicKey, MySignature> =
     });
     if (!res.ok) {
       // A refusal, not an outage: the kind client reports it as 'rejected'.
-      throw new AttestorFailureError(attestor.id, 'rejected', await res.text());
+      throw new AttestorFailureError(attestor.id, 'rejected', 'refused');
     }
     return res.json();
   },
@@ -99,9 +101,10 @@ const httpTransport: AttestorTransport<MyDefinition, MyPublicKey, MySignature> =
 ```
 
 Throw `AttestorFailureError` with `'rejected'` when the attestor answered with
-a refusal; anything else the transport throws counts as `'unreachable'`. The
-kind client must remove request secrets from the detail before exposing the
-failure, and must not retain the underlying exception as a public cause.
+a refusal; anything else the transport throws counts as `'unreachable'`.
+Transport implementations should pass a controlled refusal code, never raw
+server text. Kind clients decide which codes they expose and do not retain
+the underlying exception as a public cause.
 
 ### Resolve string-named endpoints
 

@@ -546,6 +546,25 @@ const bytesEqual = (a: Uint8Array, b: Uint8Array): boolean =>
   a.length === b.length && a.every((byte, i) => byte === b[i]);
 
 /**
+ * Check an observation window against the policy's maximum length.
+ *
+ * @param window — the intended start and end, in Unix seconds.
+ * @param maxWindowSeconds — the policy's maximum window length.
+ * @throws if the window is inverted or longer than the policy permits.
+ */
+export const assertIntentWindow = (
+  window: Pick<ZkFetchIntent, 'windowStart' | 'windowEnd'>,
+  maxWindowSeconds: number,
+): void => {
+  if (window.windowStart > window.windowEnd) {
+    throw new Error(`observation window is inverted [${window.windowStart}, ${window.windowEnd}]`);
+  }
+  if (window.windowEnd - window.windowStart > BigInt(maxWindowSeconds)) {
+    throw new Error(`observation window exceeds the policy maximum of ${maxWindowSeconds} seconds`);
+  }
+};
+
+/**
  * Check the witnessed session is bound to the intent.
  *
  * The witness signed the claim data, so everything read here is witnessed:
@@ -583,12 +602,7 @@ export const assertEvidenceMatchesIntent = (
   if (!bytesEqual(requestBindingOf(signedRequest), intent.requestBinding)) {
     throw new Error('signed request does not match the request binding');
   }
-  if (intent.windowStart > intent.windowEnd) {
-    throw new Error(`observation window is inverted [${intent.windowStart}, ${intent.windowEnd}]`);
-  }
-  if (intent.windowEnd - intent.windowStart > BigInt(maxWindowSeconds)) {
-    throw new Error(`observation window exceeds the policy maximum of ${maxWindowSeconds} seconds`);
-  }
+  assertIntentWindow(intent, maxWindowSeconds);
   const observedAt = BigInt(claim.timestampS);
   if (observedAt < intent.windowStart || observedAt > intent.windowEnd) {
     throw new Error(

@@ -194,10 +194,10 @@ export function resolveAttestation<
 }): CollectedAttestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>> {
   const { trusted, attestor, attestation, expectedMessage, verifier } = options;
 
-  if (!structuredEquals(attestation.publicKey, attestor.publicKey)) {
+  if (!messagesEqual(attestation.publicKey, attestor.publicKey)) {
     throw new AttestationMismatchError(attestor.id, 'public-key');
   }
-  if (expectedMessage !== undefined && !structuredEquals(attestation.message, expectedMessage)) {
+  if (expectedMessage !== undefined && !messagesEqual(attestation.message, expectedMessage)) {
     throw new AttestationMismatchError(attestor.id, 'message');
   }
   if (attestor.registryIndex < 0 || attestor.registryIndex >= trusted.attestors.length) {
@@ -252,22 +252,14 @@ export function thresholdGroup<K, C, PK, S, Msg>(
 }
 
 /**
- * Compare signed messages with the same structural rule used by
- * {@link thresholdGroup}.
+ * Compare signed messages structurally. Supports primitives (including
+ * `bigint`), `Uint8Array`, arrays, and plain objects.
  *
  * @param a — the first signed message.
  * @param b — the second signed message.
  * @returns whether they contain the same fields in the same shape and order.
  */
-export function messagesEqual<Msg>(a: Msg, b: Msg): boolean {
-  return structuredEquals(a, b);
-}
-
-/**
- * Deep structural equality over the plain data used in attestations: primitives
- * (including `bigint`), `Uint8Array`, arrays, and plain objects.
- */
-const structuredEquals = (a: unknown, b: unknown): boolean => {
+export const messagesEqual = (a: unknown, b: unknown): boolean => {
   if (a === b) {
     return true;
   }
@@ -290,7 +282,7 @@ const structuredEquals = (a: unknown, b: unknown): boolean => {
       Array.isArray(a) &&
       Array.isArray(b) &&
       a.length === b.length &&
-      a.every((value, i) => structuredEquals(value, b[i]))
+      a.every((value, i) => messagesEqual(value, b[i]))
     );
   }
   const aKeys = Object.keys(a);
@@ -298,7 +290,7 @@ const structuredEquals = (a: unknown, b: unknown): boolean => {
   return (
     aKeys.length === bKeys.length &&
     aKeys.every((key) =>
-      structuredEquals((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+      messagesEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
     )
   );
 };

@@ -289,7 +289,9 @@ describe('zkFetch attestor + client', () => {
             throw new AttestorFailureError(
               attestor.id,
               'rejected',
-              e instanceof Error ? e.message : 'attestor refused the request',
+              e instanceof Error && e.message.includes('not trusted by this attestor')
+                ? 'untrusted-witness'
+                : 'refused',
             );
           });
         return options.tamper ? options.tamper(attestor.id, attestation) : attestation;
@@ -451,7 +453,7 @@ describe('zkFetch attestor + client', () => {
       },
     });
     expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([
-      expect.stringMatching(/did not return a valid attestation/),
+      expect.stringMatching(/not from the pinned witness/),
     ]);
   });
 
@@ -468,8 +470,8 @@ describe('zkFetch attestor + client', () => {
   it('refuses when the policy does not fit the evidence (host)', async () => {
     const hostile = clientOf({ policy: { ...policy(), allowedHosts: ['evil.example'] } });
     expect(await reasons(hostile.attest(REQUEST, INTENT))).toEqual([
-      expect.stringMatching(/did not return a valid attestation/),
-      expect.stringMatching(/did not return a valid attestation/),
+      expect.stringMatching(/violates the policy/),
+      expect.stringMatching(/violates the policy/),
     ]);
   });
 
@@ -484,7 +486,7 @@ describe('zkFetch attestor + client', () => {
       },
     });
     expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([
-      expect.stringMatching(/did not return a valid attestation/),
+      expect.stringMatching(/origin differs from the request/),
     ]);
   });
 
@@ -495,8 +497,8 @@ describe('zkFetch attestor + client', () => {
       windowEnd: BigInt(OBSERVED_AT + 60),
     });
     expect(await reasons(late)).toEqual([
-      expect.stringMatching(/did not return a valid attestation/),
-      expect.stringMatching(/did not return a valid attestation/),
+      expect.stringMatching(/does not match the intent/),
+      expect.stringMatching(/does not match the intent/),
     ]);
   });
 
@@ -555,13 +557,13 @@ describe('zkFetch attestor + client', () => {
       expect(failures[0]?.cause).toBeUndefined();
     });
 
-    it('redacts a transport refusal before returning aggregate errors', async () => {
+    it('does not copy a transport refusal with a partial secret into aggregate errors', async () => {
       const secret = 'Bearer transport-test-token';
       const attempt = clientOf({
         transport: {
           request: (attestor) =>
             Promise.reject(
-              new AttestorFailureError(attestor.id, 'rejected', `authorization: ${secret}`),
+              new AttestorFailureError(attestor.id, 'rejected', 'token=transport-test-token'),
             ),
         },
       }).attest({ ...REQUEST, secretHeaders: { authorization: secret } }, INTENT);
@@ -569,7 +571,7 @@ describe('zkFetch attestor + client', () => {
       expect(error).toBeInstanceOf(AggregateError);
       for (const failure of (error as AggregateError).errors) {
         expect(failure).toBeInstanceOf(AttestorFailureError);
-        expect(String(failure)).not.toContain(secret);
+        expect(String(failure)).not.toContain('transport-test-token');
         expect((failure as AttestorFailureError).cause).toBeUndefined();
       }
     });

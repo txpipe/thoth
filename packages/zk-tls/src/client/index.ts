@@ -20,6 +20,7 @@ import type {
 import {
   assertEvidenceMatchesIntent,
   assertEvidenceMatchesPolicy,
+  assertIntentWindow,
   claimUrl,
   deriveClaimFromEvidence,
   INTENT_CONTEXT_KEY,
@@ -181,41 +182,6 @@ const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetc
   if (asked !== attested) {
     throw new Error(`prover returned evidence for ${attested}, not the requested ${asked}`);
   }
-};
-
-/**
- * Build the claim proposal the client sends to one operator's attestor.
- *
- * Runs the policy and intent checks and derives the common claim. The client
- * deliberately does **not** re-verify the Reclaim ECDSA signature: each
- * pinned attestor verifies its own witness's evidence before signing.
- * Because the claim is deterministic in the intent and the disclosures, the
- * proposal is byte-identical to what each attestor will sign, so the client
- * can precompute the expected message and vet each returned attestation
- * against it (`resolveAttestation`'s `expectedMessage`).
- *
- * @typeParam V — the claim's value-slot count (the dApp contract's `#V`).
- * @param options — the evidence, the shared policy, and the slot count.
- * @returns the claim to propose (and to submit, once collected).
- * @throws if the evidence is invalid, fails the policy, or does not fit the
- *   dApp's claim length.
- */
-const buildClaimProposal = async <V extends number>(options: {
-  /** The evidence to attest (as produced by the prover). */
-  evidence: ZkFetchEvidence;
-  /** The shared policy every attestor in the set enforces. */
-  policy: ZkFetchPolicy;
-  /** The intent the evidence was witnessed under. */
-  intent: ZkFetchIntent;
-  /** The claim's value-slot count (the target contract's `#V`). */
-  valueSlots: V;
-}): Promise<Claim<V>> => {
-  const { evidence, policy, intent, valueSlots } = options;
-  const verified = parsedEvidenceView(evidence);
-  assertEvidenceMatchesPolicy(verified, policy);
-  assertEvidenceMatchesIntent(verified, intent, policy.maxWindowSeconds);
-  const derived = deriveClaimFromEvidence({ verified, policy, intent, valueSlots });
-  return claimSchema(valueSlots).parse(derived);
 };
 
 /**
@@ -397,12 +363,7 @@ export const zkFetchClient = {
     }
     return {
       attest: async (request, input) => {
-        if (input.windowStart > input.windowEnd) {
-          throw new Error('observation window is inverted');
-        }
-        if (input.windowEnd - input.windowStart > BigInt(checkedPolicy.maxWindowSeconds)) {
-          throw new Error('observation window exceeds the policy maximum');
-        }
+        assertIntentWindow(input, checkedPolicy.maxWindowSeconds);
         const windowEndMs = Number(input.windowEnd) * 1000;
         if (Date.now() >= windowEndMs) {
           throw new AggregateError(
@@ -428,29 +389,36 @@ export const zkFetchClient = {
         };
         /** One operator end to end; every failure becomes an `AttestorFailureError`. */
         const attempt = async ({ attestor, operator }: Contact) => {
-          const failAs =
-            (reason: AttestorFailureError['reason']) =>
-            (e: unknown): never => {
-              throw new AttestorFailureError(
-                attestor.id,
-                e instanceof AttestorFailureError ? e.reason : reason,
-              );
-            };
-          const raw = await operator.prover.prove(bound).catch(failAs('unreachable'));
+          const raw = await operator.prover.prove(bound).catch(() => {
+            throw new AttestorFailureError(attestor.id, 'unreachable');
+          });
+          let rejectionDetail = 'invalid witness evidence';
           const { evidence, claim } = await (async () => {
             const evidence = zkFetchEvidenceSchema.parse(raw);
+            rejectionDetail = 'evidence origin differs from the request';
             assertEvidenceMatchesRequest(evidence, request);
+            rejectionDetail = 'evidence is not from the pinned witness';
             if (evidence.attestorAddress.toLowerCase() !== operator.witnessAddress.toLowerCase()) {
               throw new Error(`evidence for "${attestor.id}" is not from its pinned witness`);
             }
-            const claim = await buildClaimProposal({
-              evidence,
+            rejectionDetail = 'invalid witness evidence';
+            const verified = parsedEvidenceView(evidence);
+            rejectionDetail = 'evidence violates the policy';
+            assertEvidenceMatchesPolicy(verified, checkedPolicy);
+            rejectionDetail = 'evidence does not match the intent';
+            assertEvidenceMatchesIntent(verified, intent, checkedPolicy.maxWindowSeconds);
+            rejectionDetail = 'claim cannot be derived from the evidence';
+            const derived = deriveClaimFromEvidence({
+              verified,
               policy: checkedPolicy,
               intent,
               valueSlots,
             });
+            const claim = claimSchema(valueSlots).parse(derived);
             return { evidence, claim };
-          })().catch(failAs('rejected'));
+          })().catch(() => {
+            throw new AttestorFailureError(attestor.id, 'rejected', rejectionDetail);
+          });
           // The attestor is the law: it re-parses these with its own schemas,
           // which accept the already-parsed (superset) shapes. The schemas'
           // *input* types are the looser pre-parse form, so the payload is
@@ -460,9 +428,23 @@ export const zkFetchClient = {
             evidence,
             claim,
           } as unknown as ZkFetchAttestationInput;
-          const attestation = await transport
-            .request(attestor, payload)
-            .catch(failAs('unreachable'));
+          const attestation = await transport.request(attestor, payload).catch((e: unknown) => {
+            if (e instanceof AttestorFailureError && e.reason === 'rejected') {
+              const knownDetails: Record<string, string> = {
+                'untrusted-witness': 'witness not trusted by this attestor',
+                'invalid-evidence': 'attestor rejected invalid evidence',
+                policy: 'attestor rejected the policy',
+                intent: 'attestor rejected the intent',
+                claim: 'attestor rejected the proposed claim',
+              };
+              throw new AttestorFailureError(
+                attestor.id,
+                'rejected',
+                knownDetails[e.detail ?? ''] ?? 'attestor refused the request',
+              );
+            }
+            throw new AttestorFailureError(attestor.id, 'unreachable');
+          });
           try {
             const collected = resolveAttestation({
               trusted,
@@ -474,7 +456,7 @@ export const zkFetchClient = {
             return { id: attestor.id, claim, collected };
           } catch (e) {
             const toMessage = e instanceof AttestationMismatchError && e.reason === 'message';
-            return failAs(toMessage ? 'message' : 'signature')(e);
+            throw new AttestorFailureError(attestor.id, toMessage ? 'message' : 'signature');
           }
         };
 
