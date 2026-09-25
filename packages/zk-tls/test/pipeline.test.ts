@@ -360,7 +360,7 @@ describe('zkFetch attestor + client', () => {
       }),
     });
     expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([
-      expect.stringMatching(/attestor-1.*signature check/),
+      expect.stringMatching(/attestor-1.*did not return a valid attestation/),
     ]);
   });
 
@@ -399,6 +399,22 @@ describe('zkFetch attestor + client', () => {
     ).not.toContain(SECRET);
   });
 
+  it('does not expose a secret from a prover exception', async () => {
+    const secret = 'Bearer hidden-token';
+    const leaking: ZkFetchProver = {
+      prove: () => Promise.reject(new Error('token=hidden-token')),
+    };
+    const error = await clientOf({
+      operators: { ...operators(), 'attestor-0': { prover: leaking, witnessAddress: w0.address } },
+    })
+      .attest({ ...REQUEST, secretHeaders: { authorization: secret } }, INTENT)
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AggregateError);
+    expect(
+      dump({ error: String(error), errors: (error as AggregateError).errors?.map(String) }),
+    ).not.toContain('hidden-token');
+  });
+
   it('refuses evidence from a witness other than the pinned one', async () => {
     const client = clientOf({
       operators: {
@@ -410,7 +426,7 @@ describe('zkFetch attestor + client', () => {
       },
     });
     expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([
-      expect.stringMatching(/not from its pinned witness/),
+      expect.stringMatching(/did not return a valid attestation/),
     ]);
   });
 
@@ -427,8 +443,8 @@ describe('zkFetch attestor + client', () => {
   it('refuses when the policy does not fit the evidence (host)', async () => {
     const hostile = clientOf({ policy: { ...policy(), allowedHosts: ['evil.example'] } });
     expect(await reasons(hostile.attest(REQUEST, INTENT))).toEqual([
-      expect.stringMatching(/not in allowlist/),
-      expect.stringMatching(/not in allowlist/),
+      expect.stringMatching(/did not return a valid attestation/),
+      expect.stringMatching(/did not return a valid attestation/),
     ]);
   });
 
@@ -443,7 +459,7 @@ describe('zkFetch attestor + client', () => {
       },
     });
     expect(await reasons(client.attest(REQUEST, INTENT))).toEqual([
-      expect.stringMatching(/not the requested/),
+      expect.stringMatching(/did not return a valid attestation/),
     ]);
   });
 
@@ -454,8 +470,8 @@ describe('zkFetch attestor + client', () => {
       windowEnd: BigInt(OBSERVED_AT + 60),
     });
     expect(await reasons(late)).toEqual([
-      expect.stringMatching(/outside the intent window/),
-      expect.stringMatching(/outside the intent window/),
+      expect.stringMatching(/did not return a valid attestation/),
+      expect.stringMatching(/did not return a valid attestation/),
     ]);
   });
 

@@ -175,7 +175,8 @@ One call:
 
 `collected` holds the agreeing attestations sorted by registry slot, ready for
 the positional registry. If no message reaches the threshold, `attest` throws
-an `AggregateError` whose `errors` hold each failed operator's error. The
+an `AggregateError` whose `errors` hold a generic reason for each failed
+operator without copying errors from provers or transports. The
 client contacts the first `threshold` operators in `operators` order.
 
 ## Concepts

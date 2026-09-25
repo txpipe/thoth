@@ -316,7 +316,7 @@ export interface ZkFetchClient<V extends number, PK, S> {
    * @param intent — the holder commitment and the observation window.
    * @returns the threshold attestation.
    * @throws `AggregateError` if no message reaches the threshold; `errors`
-   *   holds each failed operator's error.
+   *   holds one safe, generic error per failed operator.
    */
   attest(request: ZkFetchRequest, intent: ZkFetchIntentInput): Promise<Attestment<V, PK, S>>;
 }
@@ -439,7 +439,15 @@ export const zkFetchClient = {
         const first = group?.[0];
         if (group === undefined || first === undefined) {
           throw new AggregateError(
-            results.flatMap((r) => (r.status === 'rejected' ? [r.reason] : [])),
+            results.flatMap((r, i) =>
+              r.status === 'rejected'
+                ? [
+                    new Error(
+                      `attestor "${contacted[i]?.attestor.id}" did not return a valid attestation`,
+                    ),
+                  ]
+                : [],
+            ),
             `threshold of ${threshold} not met: no message was signed by ${threshold} distinct registry slots`,
           );
         }
