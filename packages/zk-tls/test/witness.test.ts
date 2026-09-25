@@ -97,6 +97,15 @@ describe('test-key witness', () => {
     await expect(attest(await observe(bob))).rejects.toThrow(/not this attestor's witness/);
   });
 
+  it('is rejected when the claim identifier does not match its signed content', async () => {
+    const evidence = await observe(alice);
+    const forged = {
+      ...evidence,
+      claim: { ...evidence.claim, identifier: `0x${'ab'.repeat(32)}` },
+    };
+    await expect(attest(forged)).rejects.toThrow(/identifier/);
+  });
+
   it('is rejected when it claims another witness address', async () => {
     const forged = { ...(await observe(bob)), attestorAddress: alice.address };
     await expect(attest(forged)).rejects.toThrow(/Invalid claim signature/);

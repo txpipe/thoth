@@ -1,6 +1,7 @@
 import type { proto } from '@reclaimprotocol/attestor-core';
 import {
   assertValidClaimSignatures,
+  getIdentifierFromClaimInfo,
   SelectedServiceSignatureType,
   SIGNATURES,
 } from '@reclaimprotocol/attestor-core';
@@ -38,13 +39,18 @@ const witnessAddressOf = (witnessKey: string): string => {
  * hex), then returns the parsed evidence view with the values it may certify
  * in {@link VerifiedEvidence.disclosedValues}.
  *
+ * The signature covers an identifier the witness recomputes from
+ * provider/parameters/context, not the `claim.identifier` field itself, so the
+ * field is checked against that recomputation here.
+ *
  * Only the attestor (host) side needs the signature work: the client builds
  * its expected claim by derivation and relies on its pinned attestors having
  * verified (plus the on-chain N-of-M threshold).
  *
  * @param evidence — canonicalized proof artifacts.
  * @returns the cryptographically verified evidence.
- * @throws if the signature is invalid, malformed, or the claim is uninterpretable.
+ * @throws if the signature is invalid, malformed, the claim identifier does
+ *   not match its signed content, or the claim is uninterpretable.
  */
 export const verifyZkFetchProof = async (evidence: ZkFetchEvidence): Promise<VerifiedEvidence> => {
   const claimSignature = hexToBytes(evidence.signatureHex);
@@ -58,6 +64,16 @@ export const verifyZkFetchProof = async (evidence: ZkFetchEvidence): Promise<Ver
       attestorAddress: evidence.attestorAddress,
     } as proto.ClaimTunnelResponse['signatures'],
   });
+
+  const { provider, parameters, context } = evidence.claim;
+  // `getIdentifierFromClaimInfo` re-canonicalizes `context` in place; pass a
+  // copy so re-verification never mutates the evidence it was handed.
+  const recomputed = getIdentifierFromClaimInfo({ provider, parameters, context });
+  if (evidence.claim.identifier !== recomputed) {
+    throw new Error(
+      `claim identifier ${evidence.claim.identifier} does not match its signed content (${recomputed})`,
+    );
+  }
 
   return parsedEvidenceView(evidence);
 };
