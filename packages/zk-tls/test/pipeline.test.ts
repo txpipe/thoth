@@ -15,6 +15,7 @@ import type { FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
 import {
   type ZkFetchDefinition,
+  type ZkFetchEvidence,
   type ZkFetchPolicy,
   zkFetchClaimSchema,
   zkFetchEvidenceSchema,
@@ -28,7 +29,7 @@ import {
   zkFetchClient,
 } from '@thoth/zk-tls/client';
 import { describe, expect, it } from 'vitest';
-import { testWitness } from './helpers/witness.js';
+import { type TestWitness, testWitness } from './helpers/witness.js';
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = join(
@@ -42,9 +43,6 @@ const FIXTURE_PATH = join(
   'fixture-github-attestor-core-x-0m.json',
 );
 const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Record<string, unknown>;
-
-// Signs the attestor/client tests' evidence; the real fixture's witness key is not ours.
-const witness = testWitness(`0x${'33'.repeat(32)}`);
 
 const policy = (
   slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'data', parse: 'float', optional: true }],
@@ -137,13 +135,23 @@ describe('zkFetch claim schema', () => {
 });
 
 describe('zkFetch attestor + client', () => {
-  const attestors = ['attestor-0', 'attestor-1', 'attestor-2'].map((id, i) =>
-    zkFetchAttestor({
-      id,
-      keyPair: fakeKey(id),
-      registryIndex: i,
-      witnessKey: `0x${'33'.repeat(32)}`,
-    }),
+  const aliceWitness = testWitness(`0x${'33'.repeat(32)}`);
+  const bobWitness = testWitness(`0x${'44'.repeat(32)}`);
+  const carolWitness = testWitness(`0x${'55'.repeat(32)}`);
+  const witnessById: Record<string, TestWitness> = {
+    'attestor-0': aliceWitness,
+    'attestor-1': bobWitness,
+    'attestor-2': carolWitness,
+  };
+  const witnessKeyById: Record<string, string> = {
+    'attestor-0': `0x${'33'.repeat(32)}`,
+    'attestor-1': `0x${'44'.repeat(32)}`,
+    'attestor-2': `0x${'55'.repeat(32)}`,
+  };
+  const ids = Object.keys(witnessById);
+
+  const attestors = Object.entries(witnessKeyById).map(([id, witnessKey], i) =>
+    zkFetchAttestor({ id, keyPair: fakeKey(id), registryIndex: i, witnessKey }),
   );
   const byId = new Map(attestors.map((a) => [a.id, a]));
   const trusted = buildTrustedSet(attestors.map(descriptorOf));
@@ -159,27 +167,89 @@ describe('zkFetch attestor + client', () => {
     },
   };
 
-  // Evidence for `url`, carrying the caller's context; values mirror the old fixture's
-  // unparseable `data`, so the `data` slot stays unpresent.
-  const observe = (url: string, request: ZkFetchRequest) =>
+  const BASE_TIMESTAMP_S = 1_786_122_944;
+
+  // Each witness signs the request it receives, the caller's context included;
+  // values mirror the old fixture's unparseable `data`, so the `data` slot
+  // stays unpresent.
+  const observe = (
+    witness: TestWitness,
+    request: ZkFetchRequest,
+    overrides: {
+      url?: string;
+      timestampS?: number;
+      values?: Readonly<Record<string, string>>;
+    } = {},
+  ) =>
     witness.sign({
-      values: { data: 'HTTP/1.1 200 OK' },
-      timestampS: 1_786_122_944,
-      parameters: { url, method: request.method ?? 'GET', body: '' },
+      values: overrides.values ?? { data: 'HTTP/1.1 200 OK' },
+      timestampS: overrides.timestampS ?? BASE_TIMESTAMP_S,
+      parameters: { url: overrides.url ?? request.url, method: request.method ?? 'GET', body: '' },
       context: request.context,
     });
-  const prover: ZkFetchProver = { prove: (request) => observe(request.url, request) };
 
-  const prove = (): ReturnType<ReturnType<typeof zkFetchClient.init>['proveReq']> =>
-    zkFetchClient
-      .init({
-        trusted,
-        transport,
-        policy: policy(),
-        valueSlots: 3,
-        prover,
-      })
-      .proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' });
+  const proversWith = (
+    overrides: {
+      url?: () => string;
+      timestampS?: (id: string) => number | undefined;
+      values?: (id: string) => Readonly<Record<string, string>> | undefined;
+      onProve?: (id: string, request: ZkFetchRequest) => void;
+    } = {},
+  ): Record<string, ZkFetchProver> =>
+    Object.fromEntries(
+      Object.entries(witnessById).map(([id, witness]) => [
+        id,
+        {
+          prove: (request: ZkFetchRequest) => {
+            overrides.onProve?.(id, request);
+            return observe(witness, request, {
+              url: overrides.url?.(),
+              timestampS: overrides.timestampS?.(id),
+              values: overrides.values?.(id),
+            });
+          },
+        } satisfies ZkFetchProver,
+      ]),
+    );
+
+  const provers = proversWith();
+
+  const clientWith = (
+    overrides: {
+      policy?: ZkFetchPolicy;
+      transport?: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature>;
+      provers?: Record<string, ZkFetchProver>;
+    } = {},
+  ) =>
+    zkFetchClient.init({
+      trusted,
+      transport: overrides.transport ?? transport,
+      policy: overrides.policy ?? policy(),
+      valueSlots: 3,
+      provers: overrides.provers ?? provers,
+    });
+
+  const prove = () =>
+    clientWith().proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' });
+
+  const evidenceOf = (
+    evidences: Readonly<Record<string, ZkFetchEvidence>>,
+    id: string,
+  ): ZkFetchEvidence => {
+    const evidence = evidences[id];
+    if (evidence === undefined) {
+      throw new Error(`no evidence for attestor ${id}`);
+    }
+    return evidence;
+  };
+
+  const requestOf = (requests: Record<string, ZkFetchRequest>, id: string): ZkFetchRequest => {
+    const request = requests[id];
+    if (request === undefined) {
+      throw new Error(`prover for ${id} was not called`);
+    }
+    return request;
+  };
 
   it('collects one agreeing attestation per pinned attestor', async () => {
     const attestment = await prove().then((proof) => proof.attest());
@@ -203,55 +273,69 @@ describe('zkFetch attestor + client', () => {
   });
 
   it('refuses when the policy does not fit the evidence (host)', async () => {
-    const hostile = zkFetchClient.init({
-      trusted,
-      transport,
-      policy: { ...policy(), allowedHosts: ['evil.example'] },
-      valueSlots: 3,
-      prover,
-    });
+    const hostile = clientWith({ policy: { ...policy(), allowedHosts: ['evil.example'] } });
     await expect(
-      hostile
-        .proveReq({ url: 'https://api.github.com/x', method: 'GET' })
-        .then((proof) => proof.attest()),
+      hostile.proveReq({ url: 'https://api.github.com/x', method: 'GET' }),
     ).rejects.toThrow(/not in allowlist/);
   });
 
   it('binds the evidence to the requested URL origin (same origin, other path)', async () => {
     const attestedUrl = 'https://api.github.com/repos/reclaimprotocol/attestor-core';
-    const client = zkFetchClient.init({
-      trusted,
-      transport,
-      policy: policy(),
-      valueSlots: 3,
-      prover: { prove: (request) => observe(attestedUrl, request) },
+    const requests: Record<string, ZkFetchRequest> = {};
+    const client = clientWith({
+      provers: proversWith({
+        url: () => attestedUrl,
+        onProve: (id, request) => {
+          requests[id] = request;
+        },
+      }),
     });
     const proof = await client.proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' });
-    const expected = await observe(attestedUrl, { url: attestedUrl, method: 'GET' });
-    expect(proof.evidence.claim.identifier).toBe(expected.claim.identifier);
+    const expected = await observe(bobWitness, requestOf(requests, 'attestor-1'), {
+      url: attestedUrl,
+    });
+    expect(evidenceOf(proof.evidences, 'attestor-1').claim.identifier).toBe(
+      expected.claim.identifier,
+    );
   });
 
   it('refuses evidence for a different origin than requested', async () => {
-    const client = zkFetchClient.init({
-      trusted,
-      transport,
-      policy: policy(),
-      valueSlots: 3,
-      prover: { prove: (request) => observe('https://api.github.com/repos/x', request) },
+    const client = clientWith({
+      provers: proversWith({ url: () => 'https://api.github.com/repos/x' }),
     });
     await expect(
       client.proveReq({ url: 'https://other.example/x', method: 'GET' }),
     ).rejects.toThrow(/not the requested/);
   });
 
-  it('refuses a policy slot beyond the claim length at init', () => {
+  it('refuses a prover map that does not match the trusted set at init', () => {
     expect(() =>
       zkFetchClient.init({
         trusted,
         transport,
-        policy: policy([{ slot: 5, name: 'data', parse: 'float', optional: true }]),
+        policy: policy(),
         valueSlots: 3,
-        prover,
+        provers: {},
+      }),
+    ).toThrow(/no prover configured for attestor/);
+    expect(() =>
+      zkFetchClient.init({
+        trusted,
+        transport,
+        policy: policy(),
+        valueSlots: 3,
+        provers: {
+          ...provers,
+          ghost: { prove: (request) => observe(aliceWitness, request) },
+        },
+      }),
+    ).toThrow(/prover configured for unknown attestor ghost/);
+  });
+
+  it('refuses a policy slot beyond the claim length at init', () => {
+    expect(() =>
+      clientWith({
+        policy: policy([{ slot: 5, name: 'data', parse: 'float', optional: true }]),
       }),
     ).toThrow(/out of the claim's 3 value slots/);
   });
@@ -271,5 +355,77 @@ describe('zkFetch attestor + client', () => {
     for (const collected of attestment.collected) {
       expect(collected.attestation.message).toEqual(message);
     }
+  });
+
+  it('proposes the earliest observation to every attestor', async () => {
+    const offsets: Record<string, number> = { 'attestor-0': 0, 'attestor-1': 3, 'attestor-2': 6 };
+    const staggered = proversWith({
+      timestampS: (id) => BASE_TIMESTAMP_S + (offsets[id] ?? 0),
+    });
+    const proof = await clientWith({ provers: staggered }).proveReq({
+      url: 'https://api.github.com/repos/x',
+      method: 'GET',
+    });
+    expect(proof.claim.timestamp).toBe(BigInt(BASE_TIMESTAMP_S));
+    const attestment = await proof.attest();
+    expect(attestment.collected.length).toBe(3);
+    for (const collected of attestment.collected) {
+      expect(collected.attestation.message).toEqual(attestment.message);
+    }
+  });
+
+  it('refuses without contacting an attestor when witnesses disagree', async () => {
+    let calls = 0;
+    const counting: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> = {
+      async request(attestor, input) {
+        calls += 1;
+        return transport.request(attestor, input);
+      },
+    };
+    const diverging = proversWith({
+      values: (id) => (id === 'attestor-1' ? { data: '42' } : { data: 'HTTP/1.1 200 OK' }),
+    });
+    await expect(
+      clientWith({ transport: counting, provers: diverging }).proveReq({
+        url: 'https://api.github.com/repos/x',
+        method: 'GET',
+      }),
+    ).rejects.toThrow(/witnesses disagree/);
+    expect(calls).toBe(0);
+  });
+
+  it('signs the same thothNonce into every witness context, next to the caller context', async () => {
+    const requests: Record<string, ZkFetchRequest> = {};
+    const client = clientWith({
+      provers: proversWith({
+        onProve: (id, request) => {
+          requests[id] = request;
+        },
+      }),
+    });
+    await client.proveReq({
+      url: 'https://api.github.com/repos/x',
+      method: 'GET',
+      context: { label: 'commute' },
+    });
+    const nonces = ids.map((id) => requestOf(requests, id).context?.thothNonce);
+    expect(new Set(nonces).size).toBe(1);
+    for (const nonce of nonces) {
+      expect(nonce).toMatch(/^0x[0-9a-f]{64}$/);
+    }
+    expect(requestOf(requests, 'attestor-0').context?.label).toBe('commute');
+  });
+
+  it('uses a fresh thothNonce for every proveReq', async () => {
+    const nonceOf = async (): Promise<string | undefined> => {
+      const proof = await prove();
+      const context = JSON.parse(evidenceOf(proof.evidences, 'attestor-0').claim.context) as {
+        thothNonce?: string;
+      };
+      return context.thothNonce;
+    };
+    const first = await nonceOf();
+    expect(first).toBeDefined();
+    expect(await nonceOf()).not.toBe(first);
   });
 });

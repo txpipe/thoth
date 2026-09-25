@@ -10,6 +10,7 @@ import type {
   PrepareZKProofsBaseOpts,
 } from '@reclaimprotocol/attestor-core';
 import type { ZkFetchProver, ZkFetchRequest } from '../client/index.js';
+import { bytesToHex } from '../hex.js';
 import type { ZkFetchEvidence } from '../index.js';
 
 /** The lazily-imported Reclaim client module. */
@@ -69,10 +70,6 @@ const loadCore = (): Promise<AttestorCore> => {
   })();
   return corePromise;
 };
-
-/** Lowercase hex of raw bytes. */
-const bytesToHex = (bytes: Uint8Array): string =>
-  Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 
 /**
  * Build the zkFetch kind's live prover.

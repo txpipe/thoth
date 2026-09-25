@@ -3,6 +3,7 @@ import type { AttestationInput } from '@thoth/core';
 import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { CLAIM_VERSION } from '@thoth/core/claim';
 import { z } from 'zod';
+import { hexToBytes } from './hex.js';
 
 /**
  * Default maximum seconds between a client-proposed claim timestamp and the
@@ -240,9 +241,6 @@ const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => 
     (allowed) => lower === allowed.toLowerCase() || lower.endsWith(`.${allowed.toLowerCase()}`),
   );
 };
-
-const hexToBytes = (hex: string): Uint8Array =>
-  new Uint8Array(Buffer.from(hex.replace(/^0x/, ''), 'hex'));
 
 /**
  * Decode the URL a claim attests from its signed parameters.

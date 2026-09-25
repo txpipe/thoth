@@ -10,6 +10,7 @@ import { buildAttestor, defineAttestor } from '@thoth/attestor';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
+import { hexToBytes } from '../hex.js';
 import {
   assertEvidenceMatchesPolicy,
   DEFAULT_MAX_SKEW_S,
@@ -24,9 +25,6 @@ import {
   zkFetchEvidenceSchema,
   zkFetchPolicySchema,
 } from '../index.js';
-
-const hexToBytes = (hex: string): Uint8Array =>
-  new Uint8Array(Buffer.from(hex.replace(/^0x/, ''), 'hex'));
 
 const witnessAddressOf = (witnessKey: string): string => {
   const scheme = SIGNATURES[SelectedServiceSignatureType];
