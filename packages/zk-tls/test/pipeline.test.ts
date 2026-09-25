@@ -24,9 +24,11 @@ import {
   addressFromWitnessId,
   toCanonicalEvidence,
   type ZkFetchProver,
+  type ZkFetchRequest,
   zkFetchClient,
 } from '@thoth/zk-tls/client';
 import { describe, expect, it } from 'vitest';
+import { testWitness } from './helpers/witness.js';
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = join(
@@ -41,11 +43,14 @@ const FIXTURE_PATH = join(
 );
 const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Record<string, unknown>;
 
+// Signs the attestor/client tests' evidence; the real fixture's witness key is not ours.
+const witness = testWitness(`0x${'33'.repeat(32)}`);
+
 const policy = (
   slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'data', parse: 'float', optional: true }],
 ): ZkFetchPolicy => ({
   allowedHosts: ['api.github.com'],
-  attestorAddresses: [(fixture as { attestorAddress: string }).attestorAddress],
+  attestorAddresses: [witness.address],
   slots,
 });
 
@@ -150,6 +155,17 @@ describe('zkFetch attestor + client', () => {
     },
   };
 
+  // Evidence for `url`, carrying the caller's context; values mirror the old fixture's
+  // unparseable `data`, so the `data` slot stays unpresent.
+  const observe = (url: string, request: ZkFetchRequest) =>
+    witness.sign({
+      values: { data: 'HTTP/1.1 200 OK' },
+      timestampS: 1_786_122_944,
+      parameters: { url, method: request.method ?? 'GET', body: '' },
+      context: request.context,
+    });
+  const prover: ZkFetchProver = { prove: (request) => observe(request.url, request) };
+
   const prove = (): ReturnType<ReturnType<typeof zkFetchClient.init>['proveReq']> =>
     zkFetchClient
       .init({
@@ -157,7 +173,7 @@ describe('zkFetch attestor + client', () => {
         transport,
         policy: policy(),
         valueSlots: 3,
-        prover: { prove: async () => zkFetchEvidenceSchema.parse(fixture) } satisfies ZkFetchProver,
+        prover,
       })
       .proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' });
 
@@ -188,7 +204,7 @@ describe('zkFetch attestor + client', () => {
       transport,
       policy: { ...policy(), allowedHosts: ['evil.example'] },
       valueSlots: 3,
-      prover: { prove: async () => zkFetchEvidenceSchema.parse(fixture) },
+      prover,
     });
     await expect(
       hostile
@@ -198,10 +214,17 @@ describe('zkFetch attestor + client', () => {
   });
 
   it('binds the evidence to the requested URL origin (same origin, other path)', async () => {
-    const proof = await prove();
-    expect(proof.evidence.claim.identifier).toBe(
-      (fixture.claim as { identifier: string }).identifier,
-    );
+    const attestedUrl = 'https://api.github.com/repos/reclaimprotocol/attestor-core';
+    const client = zkFetchClient.init({
+      trusted,
+      transport,
+      policy: policy(),
+      valueSlots: 3,
+      prover: { prove: (request) => observe(attestedUrl, request) },
+    });
+    const proof = await client.proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' });
+    const expected = await observe(attestedUrl, { url: attestedUrl, method: 'GET' });
+    expect(proof.evidence.claim.identifier).toBe(expected.claim.identifier);
   });
 
   it('refuses evidence for a different origin than requested', async () => {
@@ -210,7 +233,7 @@ describe('zkFetch attestor + client', () => {
       transport,
       policy: policy(),
       valueSlots: 3,
-      prover: { prove: async () => zkFetchEvidenceSchema.parse(fixture) } satisfies ZkFetchProver,
+      prover: { prove: (request) => observe('https://api.github.com/repos/x', request) },
     });
     await expect(
       client.proveReq({ url: 'https://other.example/x', method: 'GET' }),
@@ -224,7 +247,7 @@ describe('zkFetch attestor + client', () => {
         transport,
         policy: policy([{ slot: 5, name: 'data', parse: 'float', optional: true }]),
         valueSlots: 3,
-        prover: { prove: async () => zkFetchEvidenceSchema.parse(fixture) } satisfies ZkFetchProver,
+        prover,
       }),
     ).toThrow(/out of the claim's 3 value slots/);
   });
