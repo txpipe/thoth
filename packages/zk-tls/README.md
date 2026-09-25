@@ -108,6 +108,34 @@ prover that the client can use to obtain evidence:
   The policy constrains hosts and slot semantics; which witness an attestor
   trusts is per instance, via its `witnessKey`, not part of the shared law.
 
+## Live check
+
+Two real witnesses fetching the same request must derive one claim. That needs
+network and witness processes, so it lives in `test/live.test.ts` and is skipped
+unless `WITNESS_URLS` names at least two witnesses.
+
+Start two witnesses with the helper (clones and pins `attestor-core`, installs
+dependencies, runs two sidecars; Ctrl-C stops them):
+
+```bash
+npm run witnesses --workspace=packages/zk-tls
+```
+
+It prints the check command for another shell:
+
+```bash
+WITNESS_URLS=ws://localhost:8001/ws,ws://localhost:8002/ws \
+  npx vitest run packages/zk-tls/test/live.test.ts
+```
+
+The clone is pinned to `attestor-core` `7d8b90c` (5.1.4) so the check does not
+drift with upstream; `WITNESS_REF`, `WITNESS_CLONE_DIR`, `WITNESS_PORT_A/B`, and
+`WITNESS_KEY_A/B` override the defaults. The test reveals only the
+`stargazers_count` field of `https://api.github.com/repos/txpipe/dolos`
+(override with `LIVE_URL`), asserts that both witnesses derive the same
+identifier and message, and that the star count is present. It is not part of
+`npm test`.
+
 ## Design rationale
 
 The kind sits in the middle of the Thoth layering:

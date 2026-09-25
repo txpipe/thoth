@@ -50,7 +50,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "witnesses": "bash scripts/start-witnesses.sh"
   },
   "dependencies": {
     "@reclaimprotocol/attestor-core": "5.0.8",

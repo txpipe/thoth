@@ -67,14 +67,16 @@ PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start   # ws://localhost:8001/ws
 ```
 
 - `PRIVATE_KEY` is an ETH key on secp256k1. Give this key to the attestor as
-  `witnessKey`, so the attestor accepts only this witness's evidence. To read
-  the address off the key, use any ETH tooling (for example
-  `cast wallet address --private-key …`), or run
-  `packages/zk-tls/scripts/make-fixture.mjs` once, which prints the witness
-  address to the console.
+  `witnessKey`, so the attestor accepts only this witness's evidence. Read the
+  address off the key with any ETH tooling, for example
+  `cast wallet address --private-key …`.
 - `AUTHENTICATION_PUBLIC_KEY`, the matching compressed secp256k1 public key,
   enables host-whitelisted auth requests; pass a matching `authRequest` to the
   prover. The signing key stays server-side. In a browser, fetch a pre-signed
   request from your own backend.
 - Locally the endpoint is plain `ws://`; TLS termination (`wss://`) is a
   reverse-proxy concern in production.
+
+For two witnesses at once, `packages/zk-tls/scripts/start-witnesses.sh` clones a
+pinned `attestor-core` and starts sidecars on two ports. It is what the live
+check uses; see the package README's "Live check".
