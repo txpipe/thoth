@@ -2,7 +2,7 @@
 // sign provider claim data. Checks the zkFetch attestor accepts evidence signed
 // by the witness key it pins — offline and deterministically — and rejects
 // evidence from any other witness.
-import type { FlatMessage } from '@thoth/core/claim';
+import { claimToMessage, type FlatMessage } from '@thoth/core/claim';
 import {
   deriveClaimFromEvidence,
   parsedEvidenceView,
@@ -109,5 +109,31 @@ describe('test-key witness', () => {
   it('is rejected when it claims another witness address', async () => {
     const forged = { ...(await observe(bob)), attestorAddress: alice.address };
     await expect(attest(forged)).rejects.toThrow(/Invalid claim signature/);
+  });
+
+  it('derives one message whatever witness produced the observation', async () => {
+    const aliceClaim = deriveClaimFromEvidence({
+      verified: parsedEvidenceView(await observe(alice)),
+      policy,
+      valueSlots: 3,
+    });
+    const bobClaim = deriveClaimFromEvidence({
+      verified: parsedEvidenceView(await observe(bob)),
+      policy,
+      valueSlots: 3,
+    });
+    expect(claimToMessage(bobClaim)).toEqual(claimToMessage(aliceClaim));
+  });
+
+  it('derives a different nonce when the signed context changes', async () => {
+    const deriveNonce = async (overrides: Partial<Observation> = {}) =>
+      deriveClaimFromEvidence({
+        verified: parsedEvidenceView(await observe(alice, overrides)),
+        policy,
+        valueSlots: 3,
+      }).nonce;
+    expect(await deriveNonce({ context: { intent: 'cd'.repeat(32) } })).not.toEqual(
+      await deriveNonce(),
+    );
   });
 });

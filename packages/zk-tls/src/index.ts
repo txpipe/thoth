@@ -153,7 +153,7 @@ export interface VerifiedEvidence {
   disclosedValues: Readonly<Record<string, string>>;
   /** Claim identifier. */
   identifier: string;
-  /** SHA-256 (hex) over the canonical serialization of the evidence; the claim's `evidenceHash`. */
+  /** SHA-256 (hex) over the canonical serialization of the evidence artifacts. */
   canonicalHash: string;
 }
 
@@ -383,14 +383,16 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
 /**
  * Derive the canonical {@link Claim} the attestor signs from parsed evidence.
  *
- * The claim is a statement of what was observed, not what the client proposed:
- * `values`/`present` come straight from the policy-declared disclosures, the
- * timestamp is the fetch's (`evidence.timestampS`), and `evidenceHash` binds
- * the claim to the verified artifacts. `version`/`kind` come from the policy
- * (`claimVersion`/`claimKind`, defaulting to 1). The nonce is **deterministic**
- * in the evidence (SHA-256 over `identifier + canonicalHash`). A slot whose
- * disclosure is absent stays unpresent — the evidence only ever carries what
- * the witness saw.
+ * The claim states what was observed, not what the client proposed.
+ * `values`/`present` come from the policy-declared disclosures, the timestamp
+ * is the fetch's (`evidence.timestampS`), and `evidenceHash` is the Reclaim
+ * identifier, which depends only on provider, parameters, and context. Every
+ * witness derives the same identifier for the same observation. `version`/`kind`
+ * come from the policy (`claimVersion`/`claimKind`, defaulting to 1). The nonce
+ * is a domain-separated SHA-256 of that identifier, so one observation with one
+ * context yields the same nonce from every witness, and a fresh context yields
+ * a fresh nonce. A slot whose disclosure is absent stays unpresent. The evidence
+ * carries only what the witness saw.
  *
  * @typeParam V — the claim's value-slot count.
  * @param options — the parsed evidence view, the policy, and the slot count.
@@ -430,8 +432,8 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
     version: policy.claimVersion ?? CLAIM_VERSION,
     kind: policy.claimKind ?? 1n,
     timestamp: BigInt(verified.claim.timestampS),
-    nonce: hexToBytes(sha256Hex(`${verified.identifier}:${verified.canonicalHash}`)),
-    evidenceHash: hexToBytes(verified.canonicalHash),
+    nonce: hexToBytes(sha256Hex(`thoth:nonce:${verified.identifier}`)),
+    evidenceHash: hexToBytes(verified.identifier),
     present,
     values,
   } as Claim<V>;
