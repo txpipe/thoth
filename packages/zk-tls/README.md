@@ -107,6 +107,10 @@ prover that the client can use to obtain evidence:
   produce different messages, and the registry refuses to count them together.
   The policy constrains hosts and slot semantics; which witness an attestor
   trusts is per instance, via its `witnessKey`, not part of the shared law.
+  The policy is the dApp's law, carried with each request and enforced by the
+  attestor for that request; an attestor holds no app-specific policy. Keeping
+  a claim meaningful is the consuming contract's job: it pins the trusted set
+  and the predicate, and a claim's values are not source-bound on-chain.
 
 ## Live check
 

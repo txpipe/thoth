@@ -46,9 +46,18 @@ valid within a bound. N band attestors agreeing on the same value give the app
 independent corroboration rather than cryptographic proof.
 
 Attestors certify facts, not decisions: a claim is a canonical statement of what was
-observed, and the application defines the predicate over it. Attestors never know how
-a claim is used, so the same attested value can feed different predicates in
-different applications.
+observed, and the application defines the predicate over it. Attestors are generic
+infrastructure, shared across applications: an attestor holds no application's policy
+and accepts requests from any protocol that reaches it, as long as the evidence comes
+from the witness it trusts. Attestors never know how a claim is used, so the same
+attested value can feed different predicates in different applications.
+
+What makes a claim meaningful is the consuming contract. The app pins its trusted
+attestor set and threshold at deploy time, and its predicate decides which claims it
+accepts. A claim does not carry the host, request, or policy that produced it as a
+field the contract can compare, only an opaque `evidenceHash`, so matching values do
+not by themselves prove where they came from. An app that needs source binding has to
+put the commitment it needs into the claim layout and check it on-chain.
 
 On the other side is the *client* — the component that runs on the user's machine,
 inside the dApp. It first obtains evidence of a fact. In the zkFetch kind that means
@@ -67,6 +76,7 @@ signatures are needed for a claim to be valid.
 
 A claim can be *portable* — reusable to feed different predicates in different apps —
 or *scoped*: binding a claim to an app id forbids it from being used by any other app.
+Scoping is a claim-layout and contract concern; the base `Claim` carries no app id.
 
 ## The contract
 
