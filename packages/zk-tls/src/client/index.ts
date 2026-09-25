@@ -207,7 +207,7 @@ const buildClaimProposal = async <V extends number>(options: {
   const { evidence, policy, intent, valueSlots } = options;
   const verified = parsedEvidenceView(evidence);
   assertEvidenceMatchesPolicy(verified, policy);
-  assertEvidenceMatchesIntent(verified, intent);
+  assertEvidenceMatchesIntent(verified, intent, policy.maxWindowSeconds);
   const derived = deriveClaimFromEvidence({ verified, policy, intent, valueSlots });
   return claimSchema(valueSlots).parse(derived);
 };

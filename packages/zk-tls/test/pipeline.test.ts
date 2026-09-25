@@ -58,6 +58,7 @@ const policy = (
   slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'stars', parse: 'int', optional: true }],
 ): ZkFetchPolicy => ({
   allowedHosts: ['api.github.com'],
+  maxWindowSeconds: 120,
   attestorAddresses: [witness.address],
   slots,
 });

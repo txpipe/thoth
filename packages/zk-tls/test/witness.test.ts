@@ -27,6 +27,7 @@ const OBSERVED_AT = 1_786_000_000;
 
 const policy = (...pinned: string[]): ZkFetchPolicy => ({
   allowedHosts: ['api.example.com'],
+  maxWindowSeconds: 120,
   attestorAddresses: pinned.length > 0 ? pinned : [alice.address, bob.address],
   slots: [
     { slot: 0, name: 'balance', parse: 'int' },
@@ -223,6 +224,14 @@ describe('zkFetch attestor', () => {
       windowEnd: BigInt(OBSERVED_AT - 1),
     });
     await expect(attest(await observe(alice, intent), p, intent)).rejects.toThrow(/inverted/);
+  });
+
+  it('rejects a window longer than the policy permits', async () => {
+    const p = { ...policy(), maxWindowSeconds: 119 };
+    const intent = intentFor(p);
+    await expect(attest(await observe(alice, intent), p, intent)).rejects.toThrow(
+      /policy maximum of 119 seconds/,
+    );
   });
 
   it('rejects a missing required disclosure', async () => {

@@ -190,11 +190,14 @@ export interface ZkFetchSlot {
  *
  * The rule for "this evidence may be attested": only evidence whose host is
  * allowlisted, whose signing Reclaim witness is pinned, and whose disclosures
- * cover every declared slot, within any size bound.
+ * cover every declared slot, within the response-size and observation-window
+ * bounds.
  */
 export interface ZkFetchPolicy {
   /** Hosts the attested URL may target; exact or any subdomain suffix. */
   allowedHosts: readonly string[];
+  /** Maximum permitted observation-window length, in seconds. */
+  maxWindowSeconds: number;
   /** The Reclaim attestor addresses this zkFetch attestor trusts. */
   attestorAddresses: readonly string[];
   /** Map extracted (disclosed) values onto claim slots. */
@@ -210,6 +213,11 @@ export interface ZkFetchPolicy {
 
 export const zkFetchPolicySchema = z.object({
   allowedHosts: z.array(z.string()).min(1),
+  maxWindowSeconds: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(2 ** 32 - 1),
   attestorAddresses: z.array(z.string()).min(1),
   slots: z
     .array(
@@ -559,11 +567,13 @@ const bytesEqual = (a: Uint8Array, b: Uint8Array): boolean =>
  *
  * @param verified — the evidence view (see {@link parsedEvidenceView}).
  * @param intent — the intent the client claims the session was run under.
+ * @param maxWindowSeconds — the policy's maximum observation-window length.
  * @throws with a descriptive message on the first mismatch.
  */
 export const assertEvidenceMatchesIntent = (
   verified: VerifiedEvidence,
   intent: ZkFetchIntent,
+  maxWindowSeconds: number,
 ): void => {
   const { claim } = verified;
   let context: Readonly<Record<string, unknown>>;
@@ -587,6 +597,9 @@ export const assertEvidenceMatchesIntent = (
   }
   if (intent.windowStart > intent.windowEnd) {
     throw new Error(`observation window is inverted [${intent.windowStart}, ${intent.windowEnd}]`);
+  }
+  if (intent.windowEnd - intent.windowStart > BigInt(maxWindowSeconds)) {
+    throw new Error(`observation window exceeds the policy maximum of ${maxWindowSeconds} seconds`);
   }
   const observedAt = BigInt(claim.timestampS);
   if (observedAt < intent.windowStart || observedAt > intent.windowEnd) {

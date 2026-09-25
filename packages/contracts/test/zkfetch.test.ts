@@ -46,6 +46,7 @@ describe('zkFetch attestation in the simulator', () => {
       transport,
       policy: {
         allowedHosts: ['api.example.com'],
+        maxWindowSeconds: 120,
         attestorAddresses: [witness.address],
         slots: [{ slot: 0, name: 'balance', parse: 'int' }],
       },

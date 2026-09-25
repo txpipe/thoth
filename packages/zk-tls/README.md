@@ -36,9 +36,9 @@ add their side's machinery. The prover runs a witnessed fetch:
     allowlist, pinned witness, required slots must be certifiable (disclosed
     and parseable; optional slots may be absent and are signed unpresent),
     size bound.
-  - `assertEvidenceMatchesIntent(verified, intent)` — the signed context
+  - `assertEvidenceMatchesIntent(verified, intent, policy.maxWindowSeconds)` — the signed context
     carries the intent digest, the signed request matches the request
-    binding, and the witness observed inside the intent window.
+    binding, and the witness observed inside the policy-bounded intent window.
   - `deriveClaimFromEvidence({ verified, policy, intent, valueSlots })` —
     derive the common `Claim` the attestor signs: the header from the intent
     (with `policyDigest` recomputed from the policy), values/present from the
@@ -121,6 +121,7 @@ import { zkFetchPolicySchema } from '@thoth/zk-tls/attestor';
 
 const policy = zkFetchPolicySchema.parse({
   allowedHosts: ['api.strava.com'],
+  maxWindowSeconds: 120,
   attestorAddresses: ['0x…40 hex…'],      // which Reclaim witness may sign evidence
   slots: [
     { slot: 0, name: 'distance', parse: 'float' },

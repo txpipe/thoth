@@ -113,7 +113,7 @@ const checkAndDerive = async (
   const verified = await verifyZkFetchProof(evidence);
   assertEvidenceMatchesPolicy(verified, policy);
   const intent = intentOf(proposed);
-  assertEvidenceMatchesIntent(verified, intent);
+  assertEvidenceMatchesIntent(verified, intent, policy.maxWindowSeconds);
   assertClaimMatchesDisclosures({
     claim: proposed,
     disclosures: verified.disclosedValues,

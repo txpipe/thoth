@@ -46,6 +46,7 @@ const transport: AttestorTransport<ZkFetchDefinition, PublicKey, Signature> = {
 
 const policy = zkFetchPolicySchema.parse({
   allowedHosts: ['www.strava.com'],
+  maxWindowSeconds: 120,
   attestorAddresses: ['0x…the Reclaim witness you pin…'],
   slots: [
     { slot: 0, name: 'distance', parse: 'float' },
