@@ -285,7 +285,8 @@ The kind lands in the middle of the Thoth layering:
   error means, so only an explicit `AttestorFailureError('rejected')` counts
   as a refusal; everything else a transport throws is `'unreachable'`. The
   client's own pre-send evidence checks apply the attestor's law, so they
-  report `'rejected'` too.
+  report `'rejected'` too. Arbitrary prover errors are classified without
+  copying their messages into public failures.
 - **Strict input.** Dramatically fewer shapes to reason about at a trust
   boundary, and no witness-address decoding inside the verifier.
 

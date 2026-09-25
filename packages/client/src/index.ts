@@ -238,7 +238,7 @@ export function thresholdGroup<K, C, PK, S, Msg>(
   const groups: CollectedAttestation<K, C, PK, S, Msg>[][] = [];
   for (const entry of collected) {
     const group = groups.find((g) =>
-      structuredEquals(g[0]?.attestation.message, entry.attestation.message),
+      messagesEqual(g[0]?.attestation.message, entry.attestation.message),
     );
     if (group === undefined) {
       groups.push([entry]);
@@ -249,6 +249,18 @@ export function thresholdGroup<K, C, PK, S, Msg>(
   return groups
     .find((group) => group.length >= threshold)
     ?.sort((a, b) => a.registryIndex - b.registryIndex);
+}
+
+/**
+ * Compare signed messages with the same structural rule used by
+ * {@link thresholdGroup}.
+ *
+ * @param a — the first signed message.
+ * @param b — the second signed message.
+ * @returns whether they contain the same fields in the same shape and order.
+ */
+export function messagesEqual<Msg>(a: Msg, b: Msg): boolean {
+  return structuredEquals(a, b);
 }
 
 /**

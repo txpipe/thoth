@@ -88,7 +88,8 @@ export type AttestorFailureReason = 'unreachable' | 'rejected' | 'message' | 'si
  * refused under the kind's law — by the attestor, or by the client applying
  * the same checks to the evidence before sending it (`'rejected'`) — it signed
  * a different message than the others (`'message'`), or its signature does not
- * verify under its pinned key (`'signature'`). The underlying error, if any, is the `cause`.
+ * verify under its pinned key (`'signature'`). Only a caller-supplied safe
+ * detail is exposed; arbitrary underlying errors may contain credentials.
  *
  * A transport throws this with `'rejected'` when the attestor answered with a
  * refusal; anything else a transport throws is treated as `'unreachable'`.
@@ -98,22 +99,26 @@ export class AttestorFailureError extends Error {
   readonly attestorId: string;
   /** What went wrong. */
   readonly reason: AttestorFailureReason;
+  /** A safe explanation supplied by the transport or kind client. */
+  readonly detail?: string;
 
   /**
    * @param attestorId — the failed attestor's id.
    * @param reason — what went wrong.
-   * @param cause — the underlying error, whose message is appended.
+   * @param detail — a safe explanation that contains no request secrets.
    */
-  constructor(attestorId: string, reason: AttestorFailureReason, cause?: unknown) {
-    const detail: Record<AttestorFailureReason, string> = {
+  constructor(attestorId: string, reason: AttestorFailureReason, detail?: string) {
+    const description: Record<AttestorFailureReason, string> = {
       unreachable: 'was unreachable',
       rejected: 'rejected the request',
       message: 'returned a different message',
       signature: 'returned an invalid signature',
     };
-    const why = cause instanceof Error ? `: ${cause.message}` : '';
-    super(`attestor "${attestorId}" ${detail[reason]}${why}`, { cause });
+    super(
+      `attestor "${attestorId}" ${description[reason]}${detail === undefined ? '' : `: ${detail}`}`,
+    );
     this.attestorId = attestorId;
     this.reason = reason;
+    this.detail = detail;
   }
 }

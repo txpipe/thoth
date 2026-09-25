@@ -286,7 +286,11 @@ describe('zkFetch attestor + client', () => {
             >[0],
           )
           .catch((e: unknown) => {
-            throw new AttestorFailureError(attestor.id, 'rejected', e);
+            throw new AttestorFailureError(
+              attestor.id,
+              'rejected',
+              e instanceof Error ? e.message : 'attestor refused the request',
+            );
           });
         return options.tamper ? options.tamper(attestor.id, attestation) : attestation;
       },
@@ -522,7 +526,8 @@ describe('zkFetch attestor + client', () => {
       }).attest(REQUEST, INTENT);
       expect(collected.map((c) => c.registryIndex)).toEqual([1, 2]);
       expect(failures).toMatchObject([{ attestorId: 'attestor-0', reason: 'unreachable' }]);
-      expect(String(failures[0])).toMatch(/witness offline/);
+      expect(String(failures[0])).toMatch(/was unreachable/);
+      expect(failures[0]?.cause).toBeUndefined();
     });
 
     it('reports an unreachable attestor and completes with the third', async () => {
@@ -532,6 +537,41 @@ describe('zkFetch attestor + client', () => {
       }).attest(REQUEST, INTENT);
       expect(collected.map((c) => c.registryIndex)).toEqual([0, 2]);
       expect(failures).toMatchObject([{ attestorId: 'attestor-1', reason: 'unreachable' }]);
+    });
+
+    it('keeps a secret out of a prover failure and its public cause', async () => {
+      const secret = 'Bearer private-test-token';
+      const leaking: ZkFetchProver = {
+        prove: () => Promise.reject(new Error(`authorization: ${secret}`)),
+      };
+      const { failures } = await clientOf({
+        operators: {
+          ...three(),
+          'attestor-0': { prover: leaking, witnessAddress: w0.address },
+        },
+      }).attest({ ...REQUEST, secretHeaders: { authorization: secret } }, INTENT);
+      expect(failures[0]?.reason).toBe('unreachable');
+      expect(String(failures[0])).not.toContain(secret);
+      expect(failures[0]?.cause).toBeUndefined();
+    });
+
+    it('redacts a transport refusal before returning aggregate errors', async () => {
+      const secret = 'Bearer transport-test-token';
+      const attempt = clientOf({
+        transport: {
+          request: (attestor) =>
+            Promise.reject(
+              new AttestorFailureError(attestor.id, 'rejected', `authorization: ${secret}`),
+            ),
+        },
+      }).attest({ ...REQUEST, secretHeaders: { authorization: secret } }, INTENT);
+      const error = await attempt.catch((failure: unknown) => failure);
+      expect(error).toBeInstanceOf(AggregateError);
+      for (const failure of (error as AggregateError).errors) {
+        expect(failure).toBeInstanceOf(AttestorFailureError);
+        expect(String(failure)).not.toContain(secret);
+        expect((failure as AttestorFailureError).cause).toBeUndefined();
+      }
     });
 
     it('falls back to the third operator when one disagrees, and says so', async () => {
@@ -625,11 +665,34 @@ describe('zkFetch attestor + client', () => {
     });
 
     it('gives up once the intent window expires mid-call', async () => {
+      vi.useFakeTimers();
       vi.setSystemTime((OBSERVED_AT + 60) * 1000 - 30);
       const attempt = clientOf({
         operators: { ...three(), 'attestor-0': { prover: hanging, witnessAddress: w0.address } },
       }).attest(REQUEST, INTENT);
-      await expect(attempt).rejects.toThrow(/intent window.*expired/);
+      const expired = expect(attempt).rejects.toThrow(/intent window.*expired/);
+      await vi.advanceTimersByTimeAsync(30);
+      await expired;
+    });
+
+    it('expires a window longer than the maximum timer delay', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(OBSERVED_AT * 1000);
+      const durationS = 25 * 24 * 60 * 60;
+      const attempt = clientOf({
+        policy: { ...policy(), maxWindowSeconds: durationS },
+        operators: {
+          'attestor-0': { prover: hanging, witnessAddress: w0.address },
+          'attestor-1': { prover: hanging, witnessAddress: w1.address },
+        },
+      }).attest(REQUEST, {
+        ...INTENT,
+        windowStart: BigInt(OBSERVED_AT),
+        windowEnd: BigInt(OBSERVED_AT + durationS),
+      });
+      const expired = expect(attempt).rejects.toThrow(/intent window expired/);
+      await vi.advanceTimersByTimeAsync(durationS * 1000);
+      await expired;
     });
   });
 });

@@ -4,7 +4,7 @@ import type {
   SignatureVerifier,
   TrustedSet,
 } from '@thoth/client';
-import { attestorOf, resolveAttestation, thresholdGroup } from '@thoth/client';
+import { attestorOf, messagesEqual, resolveAttestation, thresholdGroup } from '@thoth/client';
 import { AttestationMismatchError, AttestorFailureError } from '@thoth/client/errors';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
@@ -397,8 +397,14 @@ export const zkFetchClient = {
     }
     return {
       attest: async (request, input) => {
+        if (input.windowStart > input.windowEnd) {
+          throw new Error('observation window is inverted');
+        }
+        if (input.windowEnd - input.windowStart > BigInt(checkedPolicy.maxWindowSeconds)) {
+          throw new Error('observation window exceeds the policy maximum');
+        }
         const windowEndMs = Number(input.windowEnd) * 1000;
-        if (Date.now() > windowEndMs) {
+        if (Date.now() >= windowEndMs) {
           throw new AggregateError(
             [],
             `intent window expired at ${input.windowEnd}; no operator was contacted`,
@@ -420,7 +426,6 @@ export const zkFetchClient = {
           ...request,
           context: { ...request.context, [INTENT_CONTEXT_KEY]: intentDigestOf(intent) },
         };
-
         /** One operator end to end; every failure becomes an `AttestorFailureError`. */
         const attempt = async ({ attestor, operator }: Contact) => {
           const failAs =
@@ -486,7 +491,7 @@ export const zkFetchClient = {
                   new AttestorFailureError(
                     next.attestor.id,
                     'unreachable',
-                    new Error(`timed out after ${timeoutMs}ms`),
+                    `timed out after ${timeoutMs}ms`,
                   ),
                 ),
               timeoutMs,
@@ -521,10 +526,13 @@ export const zkFetchClient = {
             return 0;
           };
           /** With no winner, operators that answered differing messages each disagree. */
-          const split = (): AttestorFailureError[] =>
-            new Set(answered.map((a) => String(a.collected.attestation.message))).size > 1
+          const split = (): AttestorFailureError[] => {
+            const first = answered[0]?.collected.attestation.message;
+            return first !== undefined &&
+              answered.some((a) => !messagesEqual(a.collected.attestation.message, first))
               ? answered.map((a) => new AttestorFailureError(a.id, 'message'))
               : [];
+          };
           const step = () => {
             if (done) {
               return;
@@ -537,7 +545,7 @@ export const zkFetchClient = {
             if (group !== undefined && first !== undefined) {
               const message = first.attestation.message;
               const disagreeing = answered
-                .filter((a) => String(a.collected.attestation.message) !== String(message))
+                .filter((a) => !messagesEqual(a.collected.attestation.message, message))
                 .map((a) => new AttestorFailureError(a.id, 'message'));
               // Return our own proposal, not the attestor's echo of it.
               const claim =
@@ -589,22 +597,22 @@ export const zkFetchClient = {
                 step();
               });
           };
-          const untilExpiry = windowEndMs - Date.now();
-          // ponytail: setTimeout caps at ~24.8 days; longer windows get no expiry timer.
-          if (untilExpiry < 2 ** 31) {
-            expiry = setTimeout(
-              () =>
-                finish(() =>
-                  reject(
-                    new AggregateError(
-                      [...failures, ...split()],
-                      `intent window expired at ${input.windowEnd} before the threshold of ${threshold} was met`,
-                    ),
+          const armExpiry = () => {
+            const remaining = windowEndMs - Date.now();
+            if (remaining <= 0) {
+              finish(() =>
+                reject(
+                  new AggregateError(
+                    [...failures, ...split()],
+                    `intent window expired at ${input.windowEnd} before the threshold of ${threshold} was met`,
                   ),
                 ),
-              untilExpiry,
-            );
-          }
+              );
+              return;
+            }
+            expiry = setTimeout(armExpiry, Math.min(remaining, 2 ** 31 - 1));
+          };
+          armExpiry();
           if (contactAll) {
             for (const next of pending.splice(0)) {
               launch(next);

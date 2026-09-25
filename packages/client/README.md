@@ -91,7 +91,7 @@ const httpTransport: AttestorTransport<MyDefinition, MyPublicKey, MySignature> =
     });
     if (!res.ok) {
       // A refusal, not an outage: the kind client reports it as 'rejected'.
-      throw new AttestorFailureError(attestor.id, 'rejected', new Error(await res.text()));
+      throw new AttestorFailureError(attestor.id, 'rejected', await res.text());
     }
     return res.json();
   },
@@ -99,7 +99,9 @@ const httpTransport: AttestorTransport<MyDefinition, MyPublicKey, MySignature> =
 ```
 
 Throw `AttestorFailureError` with `'rejected'` when the attestor answered with
-a refusal; anything else the transport throws counts as `'unreachable'`.
+a refusal; anything else the transport throws counts as `'unreachable'`. The
+kind client must remove request secrets from the detail before exposing the
+failure, and must not retain the underlying exception as a public cause.
 
 ### Resolve string-named endpoints
 
