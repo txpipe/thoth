@@ -12,6 +12,7 @@ import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
 import {
   assertEvidenceMatchesPolicy,
+  DEFAULT_MAX_SKEW_S,
   deriveClaimFromEvidence,
   parseDisclosedValue,
   parsedEvidenceView,
@@ -119,9 +120,11 @@ export const assertClaimMatchesDisclosures = (options: {
  *
  * `verify` implements the kind's check: verify the evidence
  * ({@link verifyZkFetchProof}), check it against the policy
- * ({@link assertEvidenceMatchesPolicy}), and enforce that the client-proposed claim
- * matches the disclosed values ({@link assertClaimMatchesDisclosures}).
- * `message` encodes a claim into its flat field vector via `claimToMessage`.
+ * ({@link assertEvidenceMatchesPolicy}), bound the client-proposed timestamp
+ * against the witness's own observation (`maxSkewS`, default
+ * {@link DEFAULT_MAX_SKEW_S}), and enforce that the proposed claim matches the
+ * disclosed values ({@link assertClaimMatchesDisclosures}). `message` encodes a
+ * claim into its flat field vector via `claimToMessage`.
  *
  * @returns the shareable definition; instantiate it with `@thoth/attestor`'s
  *   `buildAttestor` (see {@link zkFetchAttestor}).
@@ -135,6 +138,15 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
     verify: async (input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number>>) => {
       const verified = await verifyZkFetchProof(input.evidence);
       assertEvidenceMatchesPolicy(verified, input.policy);
+      const observedAt = BigInt(input.evidence.claim.timestampS);
+      const maxSkewS = BigInt(input.policy.maxSkewS ?? DEFAULT_MAX_SKEW_S);
+      const skew = input.claim.timestamp - observedAt;
+      const absSkew = skew < 0n ? -skew : skew;
+      if (absSkew > maxSkewS) {
+        throw new Error(
+          `claim timestamp ${input.claim.timestamp} is ${absSkew} s from the witness observation ${observedAt}, beyond the ${maxSkewS} s skew`,
+        );
+      }
       assertClaimMatchesDisclosures({
         claim: input.claim,
         disclosures: verified.disclosedValues,
@@ -196,6 +208,7 @@ export function zkFetchAttestor<PK, S>(parts: {
         verified,
         policy,
         valueSlots: proposed.values.length,
+        timestamp: proposed.timestamp,
       });
       const message = claimToMessage(claim);
       const signature = await signer.sign(message);

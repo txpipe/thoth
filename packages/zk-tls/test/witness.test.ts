@@ -36,23 +36,34 @@ const observe = (
     ...overrides,
   });
 
-const attestor = zkFetchAttestor({
-  id: 'attestor-0',
-  keyPair: {
-    publicKey: 'pk-0',
-    signer: { sign: (message: FlatMessage): string => `sig:${message.join(',')}` },
-  },
-  registryIndex: 0,
-  witnessKey: `0x${'11'.repeat(32)}`,
-});
+const makeAttestor = (id: string, witnessKey: string, registryIndex: number) =>
+  zkFetchAttestor({
+    id,
+    keyPair: {
+      publicKey: id,
+      signer: { sign: (message: FlatMessage): string => `sig:${message.join(',')}` },
+    },
+    registryIndex,
+    witnessKey,
+  });
 
-const attest = (evidence: ZkFetchEvidence) => {
+const aliceAttestor = makeAttestor('attestor-alice', `0x${'11'.repeat(32)}`, 0);
+const bobAttestor = makeAttestor('attestor-bob', `0x${'22'.repeat(32)}`, 1);
+
+const attestWith = (
+  attestor: typeof aliceAttestor,
+  evidence: ZkFetchEvidence,
+  timestamp: bigint,
+  overrides: Partial<ZkFetchPolicy> = {},
+) => {
+  const activePolicy = { ...policy, ...overrides };
   const claim = deriveClaimFromEvidence({
     verified: parsedEvidenceView(evidence),
-    policy,
+    policy: activePolicy,
     valueSlots: 3,
+    timestamp,
   });
-  return attestor.attest({ policy, evidence, claim } as unknown as Parameters<
+  return attestor.attest({ policy: activePolicy, evidence, claim } as unknown as Parameters<
     typeof attestor.attest
   >[0]);
 };
@@ -85,7 +96,7 @@ describe('test-key witness', () => {
   });
 
   it('is accepted and signed by the attestor whose witness it is', async () => {
-    const attestation = await attest(await observe(alice));
+    const attestation = await attestWith(aliceAttestor, await observe(alice), 1_786_000_000n);
     expect(attestation.claim.timestamp).toBe(1_786_000_000n);
     // A present zero stays present.
     expect(attestation.claim.present).toEqual([true, true, false]);
@@ -94,7 +105,9 @@ describe('test-key witness', () => {
   });
 
   it('is rejected when signed by another witness', async () => {
-    await expect(attest(await observe(bob))).rejects.toThrow(/not this attestor's witness/);
+    await expect(attestWith(aliceAttestor, await observe(bob), 1_786_000_000n)).rejects.toThrow(
+      /not this attestor's witness/,
+    );
   });
 
   it('is rejected when the claim identifier does not match its signed content', async () => {
@@ -103,12 +116,37 @@ describe('test-key witness', () => {
       ...evidence,
       claim: { ...evidence.claim, identifier: `0x${'ab'.repeat(32)}` },
     };
-    await expect(attest(forged)).rejects.toThrow(/identifier/);
+    await expect(attestWith(aliceAttestor, forged, 1_786_000_000n)).rejects.toThrow(/identifier/);
   });
 
   it('is rejected when it claims another witness address', async () => {
     const forged = { ...(await observe(bob)), attestorAddress: alice.address };
-    await expect(attest(forged)).rejects.toThrow(/Invalid claim signature/);
+    await expect(attestWith(aliceAttestor, forged, 1_786_000_000n)).rejects.toThrow(
+      /Invalid claim signature/,
+    );
+  });
+
+  it('lets witnesses within the skew sign one message', async () => {
+    const aliceAttestation = await attestWith(aliceAttestor, await observe(alice), 1_786_000_000n);
+    const bobAttestation = await attestWith(
+      bobAttestor,
+      await observe(bob, { timestampS: 1_786_000_010 }),
+      1_786_000_000n,
+    );
+    expect(bobAttestation.message).toEqual(aliceAttestation.message);
+  });
+
+  it('rejects a witness observation outside the policy skew', async () => {
+    const bobEvidence = await observe(bob, { timestampS: 1_786_000_010 });
+    await expect(
+      attestWith(bobAttestor, bobEvidence, 1_786_000_000n, { maxSkewS: 5 }),
+    ).rejects.toThrow(/skew/);
+  });
+
+  it('rejects a proposed timestamp too far from its own observation', async () => {
+    await expect(
+      attestWith(aliceAttestor, await observe(alice), 1_786_000_000n - 61n),
+    ).rejects.toThrow(/skew/);
   });
 
   it('derives one message whatever witness produced the observation', async () => {
@@ -116,11 +154,13 @@ describe('test-key witness', () => {
       verified: parsedEvidenceView(await observe(alice)),
       policy,
       valueSlots: 3,
+      timestamp: 1_786_000_000n,
     });
     const bobClaim = deriveClaimFromEvidence({
       verified: parsedEvidenceView(await observe(bob)),
       policy,
       valueSlots: 3,
+      timestamp: 1_786_000_000n,
     });
     expect(claimToMessage(bobClaim)).toEqual(claimToMessage(aliceClaim));
   });
@@ -131,6 +171,7 @@ describe('test-key witness', () => {
         verified: parsedEvidenceView(await observe(alice, overrides)),
         policy,
         valueSlots: 3,
+        timestamp: 1_786_000_000n,
       }).nonce;
     expect(await deriveNonce({ context: { intent: 'cd'.repeat(32) } })).not.toEqual(
       await deriveNonce(),

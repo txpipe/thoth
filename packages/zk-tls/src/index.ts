@@ -5,6 +5,13 @@ import { CLAIM_VERSION } from '@thoth/core/claim';
 import { z } from 'zod';
 
 /**
+ * Default maximum seconds between a client-proposed claim timestamp and the
+ * witness's own observation; a policy may override it with
+ * {@link ZkFetchPolicy.maxSkewS}.
+ */
+export const DEFAULT_MAX_SKEW_S = 60;
+
+/**
  * The claim a Reclaim witness signs: a canonical, JSON-stringified record of
  * the fetch it witnessed (what was requested, matched, and redacted).
  *
@@ -195,6 +202,11 @@ export interface ZkFetchPolicy {
   allowedHosts: readonly string[];
   /** Map extracted (disclosed) values onto claim slots. */
   slots: readonly ZkFetchSlot[];
+  /**
+   * Maximum seconds between the proposed claim timestamp and this attestor's
+   * own witness observation. Defaults to {@link DEFAULT_MAX_SKEW_S}.
+   */
+  maxSkewS?: number;
   /** Upper bound on the captured response size in bytes. */
   maxResponseBytes?: number;
   /** Claim schema version the attestor signs; must match the contract's.
@@ -216,6 +228,7 @@ export const zkFetchPolicySchema = z.object({
       }),
     )
     .min(1),
+  maxSkewS: z.number().int().nonnegative().optional(),
   maxResponseBytes: z.number().int().nonnegative().optional(),
   claimVersion: z.bigint().optional(),
   claimKind: z.bigint().optional(),
@@ -383,19 +396,21 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
 /**
  * Derive the canonical {@link Claim} the attestor signs from parsed evidence.
  *
- * The claim states what was observed, not what the client proposed.
- * `values`/`present` come from the policy-declared disclosures, the timestamp
- * is the fetch's (`evidence.timestampS`), and `evidenceHash` is the Reclaim
- * identifier, which depends only on provider, parameters, and context. Every
+ * The claim reflects the evidence, not the client's proposal. `values`/`present`
+ * come from the policy-declared disclosures, and `evidenceHash` is the Reclaim
+ * identifier, which depends only on provider, parameters, and context, so every
  * witness derives the same identifier for the same observation. `version`/`kind`
- * come from the policy (`claimVersion`/`claimKind`, defaulting to 1). The nonce
- * is a domain-separated SHA-256 of that identifier, so one observation with one
- * context yields the same nonce from every witness, and a fresh context yields
- * a fresh nonce. A slot whose disclosure is absent stays unpresent. The evidence
- * carries only what the witness saw.
+ * come from the policy (`claimVersion`/`claimKind`, defaulting to 1). The
+ * timestamp is the caller's `timestamp`, which the client proposes and the law
+ * bounds against the witness's own observation. The nonce is a domain-separated
+ * SHA-256 of that identifier, so one observation with one context yields the
+ * same nonce from every witness, and a fresh context yields a fresh nonce. A
+ * slot whose disclosure is absent stays unpresent. The evidence carries only
+ * what the witness saw.
  *
  * @typeParam V — the claim's value-slot count.
- * @param options — the parsed evidence view, the policy, and the slot count.
+ * @param options — the parsed evidence view, the policy, the slot count, and
+ *   the timestamp to sign.
  * @returns the derived claim.
  * @throws if a policy slot is out of the claim's value range.
  */
@@ -406,8 +421,10 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   policy: ZkFetchPolicy;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
+  /** The claim timestamp to sign, proposed by the client. */
+  timestamp: bigint;
 }): Claim<V> => {
-  const { verified, policy, valueSlots } = options;
+  const { verified, policy, valueSlots, timestamp } = options;
   const outOfRange = policy.slots.find((slot) => slot.slot >= valueSlots);
   if (outOfRange !== undefined) {
     throw new Error(
@@ -431,7 +448,7 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   return {
     version: policy.claimVersion ?? CLAIM_VERSION,
     kind: policy.claimKind ?? 1n,
-    timestamp: BigInt(verified.claim.timestampS),
+    timestamp,
     nonce: hexToBytes(sha256Hex(`thoth:nonce:${verified.identifier}`)),
     evidenceHash: hexToBytes(verified.identifier),
     present,

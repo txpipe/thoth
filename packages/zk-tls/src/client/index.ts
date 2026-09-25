@@ -182,7 +182,12 @@ const buildClaimProposal = async <V extends number>(options: {
   const { evidence, policy, valueSlots } = options;
   const verified = parsedEvidenceView(evidence);
   assertEvidenceMatchesPolicy(verified, policy);
-  const derived = deriveClaimFromEvidence({ verified, policy, valueSlots });
+  const derived = deriveClaimFromEvidence({
+    verified,
+    policy,
+    valueSlots,
+    timestamp: BigInt(evidence.claim.timestampS),
+  });
   return claimSchema(valueSlots).parse(derived);
 };
 

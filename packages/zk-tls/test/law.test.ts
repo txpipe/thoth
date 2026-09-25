@@ -59,6 +59,7 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
         slots: [{ slot: 0, name: 'v', parse }],
       },
       valueSlots: 1,
+      timestamp: 1_786_122_944n,
     });
     return { present: claim.present[0] ?? false, value: claim.values[0] ?? 0n };
   };
@@ -146,6 +147,7 @@ describe('deriveClaimFromEvidence', () => {
       verified,
       policy: policy([{ slot: 0, name: 'distance', parse: 'float' }]),
       valueSlots: 2,
+      timestamp: 1_786_122_944n,
     });
     expect(claim.values).toEqual([12n, 0n]);
     expect(claim.present).toEqual([true, false]);
@@ -160,6 +162,7 @@ describe('deriveClaimFromEvidence', () => {
       verified,
       policy: policy([{ slot: 0, name: 'time', parse: 'int' }]),
       valueSlots: 2,
+      timestamp: 1_786_122_944n,
     });
     expect(claim.values).toEqual([300n, 0n]);
     expect(claim.present).toEqual([true, false]);
@@ -172,6 +175,7 @@ describe('deriveClaimFromEvidence', () => {
         verified,
         policy: policy([{ slot: 1, name: 'a', parse: 'int' }]),
         valueSlots: 1,
+        timestamp: 1_786_122_944n,
       }),
     ).toThrow(/out of the claim's 1 value slots/);
   });
