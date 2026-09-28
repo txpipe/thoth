@@ -99,7 +99,7 @@ thoth/
 - **Compact**: `pragma language_version >= 0.22`; follow the style in
   `packages/contracts/*.compact`; module params are uppercase (`<#K, #V, #N, #M>`).
   Metadata in `attestation.compact`'s header comment is load-bearing — keep the
-  wire-layout doc synchronized with `buildMessage`.
+  wire-layout doc synchronized with `buildMessage`. The claim’s `version` stays `1` until a layout is deployed; pre-launch, change the wire layout freely and keep `version = 1`.
 - **Public API style**: every export is documented with JSDoc (block-comment
   `/** … */`) — `@param`, `@returns`, `@typeParam`, `@see` where relevant.
   The file header line uses `//` for file-level notes.
