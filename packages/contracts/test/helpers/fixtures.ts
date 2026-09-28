@@ -45,6 +45,13 @@ export const makeClaim = (
   };
 };
 
+// A copy of `bytes` with byte `i` inverted.
+export const flip = (bytes: Uint8Array, i: number): Uint8Array => {
+  const copy = Uint8Array.from(bytes);
+  copy[i] = (copy[i] ?? 0) ^ 0xff;
+  return copy;
+};
+
 export type SignedClaim = {
   claim: A_Claim;
   signatures: JubjubSchnorrSignature[]; // valid sigs for the keys given; absent slot = dummy (never verifies)

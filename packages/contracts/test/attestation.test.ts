@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import {
+  flip,
   holderOf,
   idOf,
   makeClaim,
@@ -53,9 +54,9 @@ describe('mock attestation', () => {
       const msg = pureCircuits.message(claim);
       for (const field of ['nonce', 'evidenceHash'] as const) {
         for (let i = 0; i < 32; i++) {
-          const bytes = Uint8Array.from(claim[field]);
-          bytes[i] = (bytes[i] ?? 0) ^ 0xff;
-          expect(pureCircuits.message({ ...claim, [field]: bytes })).not.toEqual(msg);
+          expect(pureCircuits.message({ ...claim, [field]: flip(claim[field], i) })).not.toEqual(
+            msg,
+          );
         }
       }
     });
@@ -125,6 +126,33 @@ describe('mock attestation', () => {
       };
       await expect(
         sim.call('verifyAttestation', ps({ ...signed, ...tampered, holderSecret: holder })),
+      ).rejects.toThrow('Insufficient valid signatures');
+    });
+
+    // Replaying accepted signatures with a mutated byte must fail the signature
+    // check: the nullifier and vault id key on all 32 bytes, so a byte the
+    // message did not sign would let one attestment be vaulted repeatedly (#66).
+    it.each([
+      { name: 'nonce[0]', mutate: (c: A_Claim) => ({ ...c, nonce: flip(c.nonce, 0) }) },
+      { name: 'nonce[31]', mutate: (c: A_Claim) => ({ ...c, nonce: flip(c.nonce, 31) }) },
+      {
+        name: 'evidenceHash[31]',
+        mutate: (c: A_Claim) => ({ ...c, evidenceHash: flip(c.evidenceHash, 31) }),
+      },
+      {
+        name: 'nonce[31] and evidenceHash[31]',
+        mutate: (c: A_Claim) => ({
+          ...c,
+          nonce: flip(c.nonce, 31),
+          evidenceHash: flip(c.evidenceHash, 31),
+        }),
+      },
+    ])('rejects a replay of accepted signatures with $name mutated', async ({ mutate }) => {
+      const signed = signClaim(makeClaim(), [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
+      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+      const replayed = { ...signed, claim: mutate(signed.claim) };
+      await expect(
+        sim.call('verifyAttestation', ps({ ...replayed, holderSecret: holder })),
       ).rejects.toThrow('Insufficient valid signatures');
     });
 
