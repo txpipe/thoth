@@ -17,6 +17,13 @@
 // (#N) lives here. The message shape (order+sizes) is the single thing the
 // attestor must mirror, per the documented wire layout below.
 //
+// Wire layout (buildMessage), K = 2*V + 7 fields:
+//   [ version, kind, timestamp,
+//     nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
+//     evidenceHash[0..16] as Uint<128>, evidenceHash[16..32] as Uint<128>,
+//     present[0..V] as Field, values[0..V] as Field ]
+// Each 32-byte field is split in two halves so every byte is signed.
+//
 // Module parameters (import "attestation"<K, V, N, M>):
 //   #K — signed-message length in fields. Must equal 2*V + 7 (the 7-field
 //        header in buildMessage, the V `present` fields, and the V value

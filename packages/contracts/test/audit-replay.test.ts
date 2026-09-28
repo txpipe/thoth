@@ -32,7 +32,7 @@ const flip = (bytes: Uint8Array, i: number): Uint8Array => {
 const signedOnce = () =>
   signClaim(makeClaim(), [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
 
-describe('audit repro: the signed message ignores the last byte of nonce/evidenceHash', () => {
+describe('replay: the signed message binds every byte of nonce/evidenceHash', () => {
   beforeEach(() => {
     sim = new MockAttestationSim(createPrivateState(holder), registryKeys);
   });
@@ -52,7 +52,16 @@ describe('audit repro: the signed message ignores the last byte of nonce/evidenc
     const replayed = { ...signed.claim, nonce: flip(signed.claim.nonce, 31) };
     expect(() =>
       sim.call('verifyAttestation', ps({ ...signed, claim: replayed, holderSecret: holder })),
-    ).toThrow();
+    ).toThrow('Insufficient valid signatures');
+  });
+
+  it('rejects the same signatures after mutating evidenceHash[31]', () => {
+    const signed = signedOnce();
+    sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+    const replayed = { ...signed.claim, evidenceHash: flip(signed.claim.evidenceHash, 31) };
+    expect(() =>
+      sim.call('verifyAttestation', ps({ ...signed, claim: replayed, holderSecret: holder })),
+    ).toThrow('Insufficient valid signatures');
   });
 
   it('rejects the same signatures after mutating nonce[31] and evidenceHash[31]', () => {
@@ -65,7 +74,7 @@ describe('audit repro: the signed message ignores the last byte of nonce/evidenc
     };
     expect(() =>
       sim.call('verifyAttestation', ps({ ...signed, claim: replayed, holderSecret: holder })),
-    ).toThrow();
+    ).toThrow('Insufficient valid signatures');
   });
 
   it('buildMessage distinguishes a change to nonce[31]', () => {

@@ -87,10 +87,10 @@ All are fixed when a contract embeds the module.
 ```
 
 The attestor MUST reproduce this exact flat field vector to sign the same
-message (same order, sizes, presence-flag semantics, and the split of
-each 32-byte field into two 16-byte halves, so every byte is signed). `present` is a `Vector<V, Boolean>`: one flag
-per value slot; `present[i] = true` means `values[i]` was populated (its value
-may still be `0`). The message length is `K = 7 + 2*V` (7 header fields, V
+message (same order, sizes, presence-flag semantics, and the split of each
+32-byte field into two 16-byte halves, so every byte is signed). `present` is a
+`Vector<V, Boolean>`: one flag per value slot; `present[i] = true` means
+`values[i]` was populated (its value may still be `0`). The message length is `K = 7 + 2*V` (7 header fields, V
 presence flags, V values) — fixed when a contract embeds the module.
 
 ## Design notes
