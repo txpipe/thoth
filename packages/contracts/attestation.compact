@@ -21,8 +21,10 @@
 //   [ version, kind, timestamp,
 //     nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
 //     evidenceHash[0..16] as Uint<128>, evidenceHash[16..32] as Uint<128>,
-//     present[0..V] as Field, values[0..V] as Field ]
-// Each 32-byte field is split in two halves so every byte is signed.
+//     present[0] as Field, ..., present[V-1] as Field,
+//     values[0] as Field, ..., values[V-1] as Field ]
+// Byte ranges are half-open (nonce[0..16] is bytes 0-15). Each 32-byte field
+// is split in two halves so every byte is signed.
 //
 // Module parameters (import "attestation"<K, V, N, M>):
 //   #K — signed-message length in fields. Must equal 2*V + 7 (the 7-field

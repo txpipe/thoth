@@ -82,8 +82,8 @@ All are fixed when a contract embeds the module.
 [ version, kind, timestamp,
   nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
   evidenceHash[0..16] as Uint<128>, evidenceHash[16..32] as Uint<128>,
-  present[0] as Field, ..., present[N-1] as Field,
-  values[0] as Field, ..., values[N-1] as Field ]
+  present[0] as Field, ..., present[V-1] as Field,
+  values[0] as Field, ..., values[V-1] as Field ]
 ```
 
 The attestor MUST reproduce this exact flat field vector to sign the same
