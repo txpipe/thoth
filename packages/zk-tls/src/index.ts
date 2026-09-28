@@ -13,6 +13,9 @@ import { hexToBytes } from './hex.js';
  */
 export const DEFAULT_MAX_SKEW_S = 60;
 
+/** The zkFetch kind's law tag, also its kind identifier. */
+export const ZK_FETCH_LAW = 'zk-fetch@1';
+
 /**
  * The claim a Reclaim witness signs: a canonical, JSON-stringified record of
  * the fetch it witnessed (what was requested, matched, and redacted).
@@ -121,7 +124,7 @@ export const zkFetchClaimSchema: z.ZodType<
  */
 export interface ZkFetchDefinition {
   /** The kind identifier, `zk-fetch@1`. */
-  readonly kind: 'zk-fetch@1';
+  readonly kind: typeof ZK_FETCH_LAW;
   /** Runtime schema for the policy. */
   readonly policy: typeof zkFetchPolicySchema;
   /** Runtime schema for the evidence. */
@@ -245,8 +248,10 @@ export const zkFetchPolicySchema = z.object({
 /**
  * Hash a zkFetch policy under the `zk-fetch@1` law.
  *
- * The policy is parsed first, so keys the schema does not know never reach
- * the hash. The wire version is the policy's `claimVersion` (default 1).
+ * The policy is parsed and normalized first, so policies that mean the same
+ * thing hash the same: unknown keys are dropped, defaults are filled in, hosts
+ * are lowercased, deduplicated and sorted, and slots are sorted by index. The
+ * wire version is the policy's `claimVersion` (default 1).
  *
  * @param policy — the policy to hash.
  * @returns the 32-byte policy hash (see `@thoth/core/intent`'s `policyHashOf`).
@@ -254,10 +259,21 @@ export const zkFetchPolicySchema = z.object({
  */
 export const zkFetchPolicyHashOf = (policy: ZkFetchPolicy): Uint8Array => {
   const parsed = zkFetchPolicySchema.parse(policy);
-  return policyHashOf('zk-fetch@1', parsed, parsed.claimVersion ?? CLAIM_VERSION);
+  const claimVersion = parsed.claimVersion ?? CLAIM_VERSION;
+  const normalized = {
+    allowedHosts: [...new Set(parsed.allowedHosts.map((host) => host.toLowerCase()))].sort(),
+    slots: parsed.slots
+      .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
+      .sort((a, b) => a.slot - b.slot),
+    maxSkewS: parsed.maxSkewS ?? DEFAULT_MAX_SKEW_S,
+    maxResponseBytes: parsed.maxResponseBytes,
+    claimVersion,
+    claimKind: parsed.claimKind ?? 1n,
+  };
+  return policyHashOf(ZK_FETCH_LAW, normalized, claimVersion);
 };
 
-/** The request identity a zkFetch claim is about, as the witness signed it. */
+/** The request identity a zkFetch claim is about: the method, URL and body. */
 export interface ZkFetchRequest {
   /** The HTTP method. */
   method: string;
@@ -294,7 +310,8 @@ export interface ZkFetchSubject {
  */
 export const zkFetchSubjectOf = (request: ZkFetchRequest): ZkFetchSubject => {
   const url = new URL(request.url);
-  const digest = (text: string): Uint8Array => hexToBytes(sha256Hex(text));
+  const digest = (text: string): Uint8Array =>
+    new Uint8Array(createHash('sha256').update(text, 'utf-8').digest());
   return {
     method: digest(request.method.toUpperCase()),
     host: digest(url.host),

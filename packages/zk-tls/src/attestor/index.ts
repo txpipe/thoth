@@ -18,6 +18,7 @@ import {
   parseDisclosedValue,
   parsedEvidenceView,
   type VerifiedEvidence,
+  ZK_FETCH_LAW,
   type ZkFetchDefinition,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
@@ -129,7 +130,7 @@ export const assertClaimMatchesDisclosures = (options: {
  */
 export function createZkFetchDefinition(): ZkFetchDefinition {
   return defineAttestor({
-    kind: 'zk-fetch@1',
+    kind: ZK_FETCH_LAW,
     policy: zkFetchPolicySchema,
     evidence: zkFetchEvidenceSchema,
     claim: zkFetchClaimSchema,

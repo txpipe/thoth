@@ -20,14 +20,44 @@ const policy: ZkFetchPolicy = {
 };
 
 describe('zkFetchPolicyHashOf', () => {
-  it('is the policy hash under the zk-fetch@1 law and wire version 1', () => {
-    expect(hex(zkFetchPolicyHashOf(policy))).toBe(hex(policyHashOf('zk-fetch@1', policy, 1n)));
+  it('is the policy hash of the normalized policy under the zk-fetch@1 law', () => {
+    const normalized = {
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'price', parse: 'int', optional: false }],
+      maxSkewS: 60,
+      claimVersion: 1n,
+      claimKind: 1n,
+    };
+
+    expect(hex(zkFetchPolicyHashOf(policy))).toBe(hex(policyHashOf('zk-fetch@1', normalized, 1n)));
   });
 
   it('signs under the policy claim version', () => {
-    const v2 = { ...policy, claimVersion: 2n };
+    const v2 = zkFetchPolicyHashOf({ ...policy, claimVersion: 2n });
 
-    expect(hex(zkFetchPolicyHashOf(v2))).toBe(hex(policyHashOf('zk-fetch@1', v2, 2n)));
+    expect(hex(v2)).not.toBe(hex(zkFetchPolicyHashOf(policy)));
+  });
+
+  it('hashes policies that differ only in defaults, host order or slot order the same', () => {
+    const twoSlots: ZkFetchPolicy = {
+      allowedHosts: ['b.example', 'a.example'],
+      slots: [
+        { slot: 1, name: 'volume', parse: 'float' },
+        { slot: 0, name: 'price', parse: 'int' },
+      ],
+    };
+    const spelledOut: ZkFetchPolicy = {
+      allowedHosts: ['A.example', 'b.example', 'a.example'],
+      slots: [
+        { slot: 0, name: 'price', parse: 'int', optional: false },
+        { slot: 1, name: 'volume', parse: 'float', optional: false },
+      ],
+      maxSkewS: 60,
+      claimVersion: 1n,
+      claimKind: 1n,
+    };
+
+    expect(hex(zkFetchPolicyHashOf(spelledOut))).toBe(hex(zkFetchPolicyHashOf(twoSlots)));
   });
 
   it('ignores keys the policy schema does not know', () => {
