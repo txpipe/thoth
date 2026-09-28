@@ -16,7 +16,7 @@ npm install @thoth/core
 
 ## What's in it
 
-The package exposes two entry points:
+The package exposes three entry points:
 
 - **`@thoth/core`**:
   - `AttestationInput<P, E, C>` — the raw policy / evidence / claim submitted to an attestor
@@ -28,6 +28,10 @@ The package exposes two entry points:
   - `claimSchema<V>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape
   - `claimToMessage` — encode a parsed `Claim` into the exact `FlatMessage` the contract's `buildMessage` verifies
   - `FlatMessage` — a Compact `Vector<K, Field>` as a `readonly bigint[]`
+- **`@thoth/core/intent`**:
+  - `policyHashOf(law, policy, version?)` — hash a kind's policy, tagged with its law and the wire version
+  - `subjectHashOf(fields)` — hash a kind's subject struct; equals the circuit's `persistentHash` of that struct
+  - `intentDigestOf(intent)` — the digest of an `Intent` that every witness signs into its context
 
 ### The flat message type
 
@@ -55,6 +59,16 @@ const def: AttestorDefinition<'zkfetch', z.ZodType, z.ZodType, z.ZodType> = {
   message: (claim) => claimToMessage(claim),
 };
 ```
+
+### The claim context
+
+The intent helpers are shared by every kind; each kind supplies its own policy
+and subject structs. `policyHashOf` and `intentDigestOf` are SHA-256 over one
+canonical serialization: JSON with sorted keys and no whitespace, a `bigint` as
+its decimal string, and bytes as lowercase hex. Another implementation
+reproduces them from that rule alone. `subjectHashOf` is a circuit hash
+instead, because an app recomputes the subject hash in-circuit from private
+fields. It requires a subject struct whose fields are all `Bytes<32>`.
 
 ## Links
 

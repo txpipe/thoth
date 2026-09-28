@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { CLAIM_VERSION } from '@thoth/core/claim';
+import { policyHashOf, subjectHashOf } from '@thoth/core/intent';
 import { z } from 'zod';
 import { hexToBytes } from './hex.js';
 
@@ -240,6 +241,79 @@ export const zkFetchPolicySchema = z.object({
   claimVersion: z.bigint().optional(),
   claimKind: z.bigint().optional(),
 });
+
+/**
+ * Hash a zkFetch policy under the `zk-fetch@1` law.
+ *
+ * The policy is parsed first, so keys the schema does not know never reach
+ * the hash. The wire version is the policy's `claimVersion` (default 1).
+ *
+ * @param policy — the policy to hash.
+ * @returns the 32-byte policy hash (see `@thoth/core/intent`'s `policyHashOf`).
+ * @throws if the policy fails {@link zkFetchPolicySchema}.
+ */
+export const zkFetchPolicyHashOf = (policy: ZkFetchPolicy): Uint8Array => {
+  const parsed = zkFetchPolicySchema.parse(policy);
+  return policyHashOf('zk-fetch@1', parsed, parsed.claimVersion ?? CLAIM_VERSION);
+};
+
+/** The request identity a zkFetch claim is about, as the witness signed it. */
+export interface ZkFetchRequest {
+  /** The HTTP method. */
+  method: string;
+  /** The requested URL. */
+  url: string;
+  /** The request body; absent means empty. */
+  body?: string;
+}
+
+/**
+ * The zkFetch subject struct: one SHA-256 digest per part of the request.
+ *
+ * Mirrors a Compact `struct { method, host, path, body: Bytes<32> }`. Keeping
+ * the host apart lets an app bind the source host in-circuit while the path,
+ * which may name an account, stays private.
+ */
+export interface ZkFetchSubject {
+  /** SHA-256 of the uppercased method. */
+  method: Uint8Array;
+  /** SHA-256 of the URL host, lowercased, with any non-default port. */
+  host: Uint8Array;
+  /** SHA-256 of the URL path and query, without the fragment. */
+  path: Uint8Array;
+  /** SHA-256 of the body. */
+  body: Uint8Array;
+}
+
+/**
+ * Build the zkFetch subject struct of a request.
+ *
+ * @param request — the request identity.
+ * @returns the subject struct.
+ * @throws if the URL does not parse.
+ */
+export const zkFetchSubjectOf = (request: ZkFetchRequest): ZkFetchSubject => {
+  const url = new URL(request.url);
+  const digest = (text: string): Uint8Array => hexToBytes(sha256Hex(text));
+  return {
+    method: digest(request.method.toUpperCase()),
+    host: digest(url.host),
+    path: digest(`${url.pathname}${url.search}`),
+    body: digest(request.body ?? ''),
+  };
+};
+
+/**
+ * Hash the subject of a zkFetch request.
+ *
+ * @param request — the request identity.
+ * @returns the 32-byte subject hash of {@link zkFetchSubjectOf} the request.
+ * @throws if the URL does not parse.
+ */
+export const zkFetchSubjectHashOf = (request: ZkFetchRequest): Uint8Array => {
+  const { method, host, path, body } = zkFetchSubjectOf(request);
+  return subjectHashOf([method, host, path, body]);
+};
 
 const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => {
   const lower = host.toLowerCase();

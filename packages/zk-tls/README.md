@@ -44,8 +44,15 @@ prover that the client can use to obtain evidence:
     of the wire's `Uint<64>` range.
   - `claimUrl(claim)` returns the URL a signed claim attests, decoded from its
     parameters.
+  - `zkFetchPolicyHashOf(policy)` hashes a parsed policy under the
+    `zk-fetch@1` law and the policy's claim version.
+  - `zkFetchSubjectOf(request)` builds the kind's subject struct, one SHA-256
+    per request part (method, host, path, body), and
+    `zkFetchSubjectHashOf(request)` hashes it. The host is its own field so an
+    app can bind the source host in-circuit and keep the path private.
   - Types: `ZkFetchDefinition`, `ProviderClaimData`, `ZkFetchEvidence`,
-    `VerifiedEvidence`, `ZkFetchPolicy`, `ZkFetchSlot`.
+    `VerifiedEvidence`, `ZkFetchPolicy`, `ZkFetchSlot`, `ZkFetchRequest`,
+    `ZkFetchSubject`.
 - **`@thoth/zk-tls/attestor`.** The attestor, or host, side:
   - `verifyZkFetchProof(evidence)` verifies the witness's ECDSA signature
     with the Reclaim SDK and extracts the values it disclosed, returned as

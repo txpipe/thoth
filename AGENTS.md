@@ -27,7 +27,7 @@ Run everything from the repo root (npm workspace):
 - `npm install` — install all workspaces
 - `npm run types` — typecheck every package (`tsc --noEmit` per workspace)
 - `npm test` — compiles the mock contract (via `pretest` → `npm run compact`),
-  then runs vitest (contract simulator + zk-tls kind tests)
+  then runs vitest (contract simulator, core, and zk-tls kind tests)
 - `npm run check` — biome format/lint + `compact format -c` check
 - `npm run check:fix` — auto-fix biome + compact formatting
 - `npm run build` — build all packages that have a `build` script (`tsc`),
@@ -59,7 +59,8 @@ thoth/
 │   ├── client/         # @thoth/client    — dApp-side seam: TrustedSet, transport, primitives
 │   ├── contracts/      # @thoth/contracts — Compact modules (+ tests)
 │   ├── core/           # @thoth/core      — keyless claim/envelope types
-│   │   └── src/claim.ts                   — claim types served at @thoth/core/claim
+│   │   ├── src/claim.ts                   — claim types served at @thoth/core/claim
+│   │   └── src/intent.ts                  — claim-context hashes at @thoth/core/intent
 │   └── zk-tls/         # @thoth/zk-tls    — zkFetch kind: attestor law + client (fixture-backed tests)
 ├── docs/DESIGN.md      # design overview & decisions
 ├── README.md           # human-oriented overview
