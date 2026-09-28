@@ -1,6 +1,6 @@
 // Reproductions for zk-tls audit findings that are not in the contract layer.
-// These are `it.fails`: they pass while the defect exists and turn red once the
-// behavior is fixed, which is the signal to convert them into normal tests.
+// These tests assert the intended behavior. They fail while the defects exist
+// and go green once they are fixed.
 import type { FlatMessage } from '@thoth/core/claim';
 import {
   deriveClaimFromEvidence,
@@ -57,7 +57,7 @@ const attestWith = (
 };
 
 describe('audit repro: the attestor accepts stale witness observations', () => {
-  it.fails('rejects an observation from a year ago', async () => {
+  it('rejects an observation from a year ago', async () => {
     const oldTimestampS = Math.floor(Date.now() / 1000) - 365 * 24 * 3600;
     const evidence = await observe({ timestampS: oldTimestampS });
     await expect(attestWith(evidence, BigInt(oldTimestampS))).rejects.toThrow();
@@ -71,28 +71,28 @@ describe('audit repro: maxResponseBytes is bypassed when responseText is absent'
     await attestWith(evidence, 1_786_000_000n, { maxResponseBytes: 1 });
   });
 
-  it.fails('rejects evidence that omits the field the bound reads', async () => {
+  it('rejects evidence that omits the field the bound reads', async () => {
     const evidence = await observe();
     await expect(attestWith(evidence, 1_786_000_000n, { maxResponseBytes: 1 })).rejects.toThrow();
   });
 });
 
 describe('audit repro: float parsing accepts prefix junk and loses precision', () => {
-  it.fails('rejects a float with trailing junk', () => {
+  it('rejects a float with trailing junk', () => {
     expect(parseDisclosedValue('12abc', 'float')).toBeNull();
   });
 
-  it.fails('rejects a grouped number', () => {
+  it('rejects a grouped number', () => {
     expect(parseDisclosedValue('1,000', 'float')).toBeNull();
   });
 
-  it.fails('preserves an integer above 2^53', () => {
+  it('preserves an integer above 2^53', () => {
     expect(parseDisclosedValue('9007199254740993', 'float')).toBe(9_007_199_254_740_993n);
   });
 });
 
 describe('audit repro: verifyZkFetchProof mutates the evidence it verifies', () => {
-  it.fails('leaves a non-canonical context unchanged', async () => {
+  it('leaves a non-canonical context unchanged', async () => {
     const evidence = await observe();
     const pretty = JSON.stringify(JSON.parse(evidence.claim.context), null, 2);
     expect(pretty).not.toBe(evidence.claim.context);

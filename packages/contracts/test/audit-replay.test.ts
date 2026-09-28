@@ -4,9 +4,8 @@
 // nullifier and vault id use the full bytes. One attestment can therefore be
 // submitted many times with a fresh tail byte.
 //
-// These are `it.fails`: they pass while the defect exists and turn red once the
-// wire layout binds all 32 bytes, which is the signal to convert them into
-// normal rejection tests.
+// These tests assert the behavior the wire layout must have. They fail while
+// the defect exists and go green once it is fixed.
 import { randomBytes } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
@@ -43,7 +42,7 @@ describe('audit repro: the signed message ignores the last byte of nonce/evidenc
     ).toThrow('Insufficient valid signatures');
   });
 
-  it.fails('rejects the same signatures after mutating nonce[31]', () => {
+  it('rejects the same signatures after mutating nonce[31]', () => {
     const signed = signedOnce();
     sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
     const replayed = { ...signed.claim, nonce: Uint8Array.from(signed.claim.nonce) };
@@ -53,7 +52,7 @@ describe('audit repro: the signed message ignores the last byte of nonce/evidenc
     ).toThrow();
   });
 
-  it.fails('rejects the same signatures after mutating nonce[31] and evidenceHash[31]', () => {
+  it('rejects the same signatures after mutating nonce[31] and evidenceHash[31]', () => {
     const signed = signedOnce();
     sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
     const replayed = {
@@ -68,14 +67,14 @@ describe('audit repro: the signed message ignores the last byte of nonce/evidenc
     ).toThrow();
   });
 
-  it.fails('buildMessage distinguishes a change to nonce[31]', () => {
+  it('buildMessage distinguishes a change to nonce[31]', () => {
     const claim = makeClaim();
     const flipped = { ...claim, nonce: Uint8Array.from(claim.nonce) };
     flipped.nonce[31] ^= 0xff;
     expect(pureCircuits.message(flipped)).not.toEqual(pureCircuits.message(claim));
   });
 
-  it.fails('buildMessage distinguishes a change to evidenceHash[31]', () => {
+  it('buildMessage distinguishes a change to evidenceHash[31]', () => {
     const claim = makeClaim();
     const flipped = { ...claim, evidenceHash: Uint8Array.from(claim.evidenceHash) };
     flipped.evidenceHash[31] ^= 0xff;
