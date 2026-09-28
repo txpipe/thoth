@@ -31,27 +31,40 @@ describe('mock attestation', () => {
   });
 
   describe('buildMessage (frozen wire shape)', () => {
-    it('returns exactly K=11 fields in the frozen order', () => {
+    it('returns exactly K=13 fields in the frozen order', () => {
       const claim = makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] });
       const msg = pureCircuits.message(claim);
-      expect(msg).toHaveLength(11);
-      // [version, kind, timestamp, nonce, evidenceHash, p0, p1, p2, v0, v1, v2]
+      expect(msg).toHaveLength(13);
+      // [version, kind, timestamp, nonce0, nonce1, evidenceHash0, evidenceHash1,
+      //  p0, p1, p2, v0, v1, v2]
       expect(msg[0]).toBe(1n);
       expect(msg[1]).toBe(1n);
       expect(msg[2]).toBe(claim.timestamp);
-      expect(msg[5]).toBe(1n);
-      expect(msg[6]).toBe(1n);
       expect(msg[7]).toBe(1n);
-      expect(msg[8]).toBe(100n);
-      expect(msg[9]).toBe(200n);
-      expect(msg[10]).toBe(300n);
+      expect(msg[8]).toBe(1n);
+      expect(msg[9]).toBe(1n);
+      expect(msg[10]).toBe(100n);
+      expect(msg[11]).toBe(200n);
+      expect(msg[12]).toBe(300n);
+    });
+
+    it('distinguishes a change to every byte of nonce and evidenceHash', () => {
+      const claim = makeClaim();
+      const msg = pureCircuits.message(claim);
+      for (const field of ['nonce', 'evidenceHash'] as const) {
+        for (let i = 0; i < 32; i++) {
+          const bytes = Uint8Array.from(claim[field]);
+          bytes[i] = (bytes[i] ?? 0) ^ 0xff;
+          expect(pureCircuits.message({ ...claim, [field]: bytes })).not.toEqual(msg);
+        }
+      }
     });
 
     it('distinguishes absent (present all false) from a genuine 0 value', () => {
       const absent = makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] });
       const presentZero = makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] });
       expect(pureCircuits.message(absent)).not.toEqual(pureCircuits.message(presentZero));
-      expect(pureCircuits.message(presentZero)[5]).toBe(1n);
+      expect(pureCircuits.message(presentZero)[7]).toBe(1n);
     });
   });
 

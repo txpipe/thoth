@@ -24,7 +24,7 @@ The package exposes three entry points:
   - `AttestorDescriptor<D, PK>` — the client-facing face of an attestor: everything a client needs to address it
   - `Attestation<K, C, PK, S>` — the signed artifact an attestor produces and a client collects
 - **`@thoth/core/claim`**:
-  - `Claim<V>` / `ClaimInput<V>` — the canonical claim: 5-field header (version, kind, timestamp, nonce, evidenceHash), a `present` mask, and `V` numeric `values`
+  - `Claim<V>` / `ClaimInput<V>` — the canonical claim: header (version, kind, timestamp, nonce, evidenceHash), a `present` mask, and `V` numeric `values`
   - `claimSchema<V>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape
   - `claimToMessage` — encode a parsed `Claim` into the exact `FlatMessage` the contract's `buildMessage` verifies
   - `FlatMessage` — a Compact `Vector<K, Field>` as a `readonly bigint[]`

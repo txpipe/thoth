@@ -18,7 +18,7 @@
 // attestor must mirror, per the documented wire layout below.
 //
 // Module parameters (import "attestation"<K, V, N, M>):
-//   #K — signed-message length in fields. Must equal 2*V + 5 (the 5-field
+//   #K — signed-message length in fields. Must equal 2*V + 7 (the 7-field
 //        header in buildMessage, the V `present` fields, and the V value
 //        fields). This is what the registry's countValidSignatures verifies
 //        over.
@@ -63,19 +63,30 @@ module attestation<#K, #V, #N, #M> {
     return jubjubPointX(hashToCurve<Vector<2, Bytes<32>>>([pad(32, "thoth:holder:v1"), secret]));
   }
 
-  /// Reconstruct the flat signed message: a 5-field fixed header followed by
-  /// the `present` flags and the values mapped to `Field`. Tuple/vector spread
+  /// Split 32 bytes into two 16-byte halves, each cast to a Field, so every
+  /// byte reaches the signed message (a single Field holds only 31 bytes).
+  circuit splitBytes(b: Bytes<32>): Vector<2, Field> {
+    return [(slice<16>(b, 0) as Uint<128>) as Field, (slice<16>(b, 16) as Uint<128>) as Field];
+  }
+
+  /// Reconstruct the flat signed message: a 7-field fixed header (version,
+  /// kind, timestamp, then nonce and evidenceHash each as two 16-byte halves)
+  /// followed by the `present` flags and the values mapped to `Field`. Tuple/vector spread
   /// (`...`) appends the flags and values, so at specialization
-  /// `[header..., present..., values...]` has length 5 + 2*V, which must equal
+  /// `[header..., present..., values...]` has length 7 + 2*V, which must equal
   /// K (enforced by the embedder). This is the single wire shape the attestor
   /// must mirror.
   export pure circuit buildMessage(c: Claim): Vector<K, Field> {
-    const header: Vector<5, Field> =
+    const nonce = splitBytes(c.nonce);
+    const evidenceHash = splitBytes(c.evidenceHash);
+    const header: Vector<7, Field> =
             [c.version as Field,
              c.kind as Field,
              c.timestamp as Field,
-             degradeToTransient(c.nonce),
-             degradeToTransient(c.evidenceHash),];
+             nonce[0],
+             nonce[1],
+             evidenceHash[0],
+             evidenceHash[1],];
     const presentFields: Vector<V, Field> = map((p: Boolean) => p as Field, c.present);
     const valuesFields: Vector<V, Field> = map((v: Uint<64>) => v as Field, c.values);
     return [...header, ...presentFields, ...valuesFields];

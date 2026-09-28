@@ -1,5 +1,5 @@
 // Test mock: a thin deployable wrapper around the attestation + registry
-// modules, specialized to V=3 values, K=11 message fields, M=3 signatures,
+// modules, specialized to V=3 values, K=13 message fields, M=3 signatures,
 // N=2 threshold (2-of-3). Exists only to give the modules a top-level shell to
 // compile against and to re-export the pure parity surface (`message`,
 // `computeId`, `holderOf`, `subjectHash`) plus types and ledger fields
@@ -8,10 +8,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=11 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "../../attestation"<11, 3, 2, 3> prefix A_;
+//           K=13 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "../../attestation"<13, 3, 2, 3> prefix A_;
 
-import "../../attestor_registry"<3, 11> prefix R_;
+import "../../attestor_registry"<3, 13> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
@@ -35,7 +35,7 @@ export circuit verifyAttestation(): [] {
   A_verifyAttestation();
 }
 
-export pure circuit message(a: A_Claim): Vector<11, Field> {
+export pure circuit message(a: A_Claim): Vector<13, Field> {
   return A_buildMessage(a);
 }
 

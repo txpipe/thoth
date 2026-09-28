@@ -1,4 +1,4 @@
-import { degradeToTransient } from '@midnight-ntwrk/compact-runtime';
+import { convertBytesToUint } from '@midnight-ntwrk/compact-runtime';
 import { z } from 'zod';
 
 /**
@@ -17,8 +17,8 @@ export type FlatMessage = readonly bigint[];
 /**
  * The fixed claim shape every kind is expected to sign.
  *
- * Mirror of `attestation.compact`'s `Claim` struct: a 5-field header (version,
- * kind, timestamp, nonce, evidenceHash), a per-position `present` mask, and `V`
+ * Mirror of `attestation.compact`'s `Claim` struct: a header (version, kind,
+ * timestamp, nonce, evidenceHash), a per-position `present` mask, and `V`
  * numeric `values`.
  *
  * This is the canonical shape kinds adopt unless they deviate.
@@ -118,14 +118,28 @@ export function claimSchema<V extends number>(
   >;
 }
 
+const UINT128_MAX = (1n << 128n) - 1n;
+
+// Split 32 bytes into two 16-byte halves cast to `Uint<128>`, exactly as
+// `attestation.compact`'s `splitBytes` does, so every byte is signed.
+function splitBytes(bytes: Uint8Array): [bigint, bigint] {
+  if (bytes.length !== 32) {
+    throw new Error(`expected 32 bytes, got ${bytes.length}`);
+  }
+  return [
+    convertBytesToUint(UINT128_MAX, 16, bytes.slice(0, 16), 'claimToMessage'),
+    convertBytesToUint(UINT128_MAX, 16, bytes.slice(16, 32), 'claimToMessage'),
+  ];
+}
+
 /**
  * Encode a parsed {@link Claim} into the flat signed-message field vector.
  *
  * The canonical default for kinds whose `message` is exactly the canonical
- * `Claim` shape: a 5-field header (version, kind, timestamp, and the two
- * byte fields mapped via {@link !degradeToTransient}, exactly as
+ * `Claim` shape: a 7-field header (version, kind, timestamp, then `nonce` and
+ * `evidenceHash` each split into two 16-byte halves, exactly as
  * `attestation.compact`'s `buildMessage` does), followed by the `present`
- * flags (`1`/`0`) and the `values`. The result has length `2*V + 5`, which is
+ * flags (`1`/`0`) and the `values`. The result has length `2*V + 7`, which is
  * the signed-message length `K` the target contract is specialized with.
  *
  * Kinds that extend the claim or use a different layout keep their own
@@ -134,16 +148,15 @@ export function claimSchema<V extends number>(
  *
  * @param claim — a parsed {@link Claim}.
  * @returns the flat message the signer commits to and the contract verifies.
- * @throws if `claim.nonce` or `claim.evidenceHash` is not exactly 32 bytes
- *   (the `degradeToTransient` precondition).
+ * @throws if `claim.nonce` or `claim.evidenceHash` is not exactly 32 bytes.
  */
 export function claimToMessage<V extends number>(claim: Claim<V>): FlatMessage {
   return [
     claim.version,
     claim.kind,
     claim.timestamp,
-    degradeToTransient(claim.nonce),
-    degradeToTransient(claim.evidenceHash),
+    ...splitBytes(claim.nonce),
+    ...splitBytes(claim.evidenceHash),
     ...claim.present.map((p) => (p ? 1n : 0n)),
     ...claim.values,
   ];
