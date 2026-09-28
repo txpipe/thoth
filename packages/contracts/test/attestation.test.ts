@@ -26,8 +26,8 @@ const ps = (overrides: Partial<PrivateState> = {}): PrivateState => ({
 });
 
 describe('mock attestation', () => {
-  beforeEach(() => {
-    sim = new MockAttestationSim(createPrivateState(holder), registryKeys);
+  beforeEach(async () => {
+    sim = await MockAttestationSim.create(createPrivateState(holder), registryKeys);
   });
 
   describe('buildMessage (frozen wire shape)', () => {
@@ -56,82 +56,98 @@ describe('mock attestation', () => {
   });
 
   describe('verifyAttestation', () => {
-    it('accepts 2-of-3 valid signatures (threshold N=2)', () => {
+    it('accepts 2-of-3 valid signatures (threshold N=2)', async () => {
       const claim = makeClaim();
       const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
-      sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
       expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
     });
 
-    it('accepts 3-of-3 valid signatures', () => {
+    it('rejects valid signatures made over a different message', async () => {
+      const claim = makeClaim();
+      const other = signClaim(makeClaim(), notaryKeys, randomBytes(32));
+      await expect(
+        sim.call('verifyAttestation', ps({ ...other, claim, holderSecret: holder })),
+      ).rejects.toThrow('Insufficient valid signatures');
+    });
+
+    it('accepts 3-of-3 valid signatures', async () => {
       const claim = makeClaim();
       const signed = signClaim(claim, notaryKeys, randomBytes(32));
-      sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
       expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
     });
 
-    it('rejects 1-of-3 valid signatures', () => {
+    it('rejects 1-of-3 valid signatures', async () => {
       const claim = makeClaim();
       const signed = signClaim(claim, [notaryKeys[0], null, null], randomBytes(32));
-      expect(() => sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }))).toThrow(
-        'Insufficient valid signatures',
-      );
+      await expect(
+        sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
+      ).rejects.toThrow('Insufficient valid signatures');
     });
 
-    it('rejects a signature from an unregistered key', () => {
+    it('rejects the same key signing into two slots (positional verification)', async () => {
+      const claim = makeClaim();
+      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[0], null], randomBytes(32));
+      await expect(
+        sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
+      ).rejects.toThrow('Insufficient valid signatures');
+    });
+
+    it('rejects a signature from an unregistered key', async () => {
       const outsider = makeNotaryKey();
       const claim = makeClaim();
       const signed = signClaim(claim, [outsider, outsider, null], randomBytes(32));
-      expect(() => sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }))).toThrow(
-        'Insufficient valid signatures',
-      );
+      await expect(
+        sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
+      ).rejects.toThrow('Insufficient valid signatures');
     });
 
-    it('rejects a tampered claim (value flipped)', () => {
+    it('rejects a tampered claim (value flipped)', async () => {
       const claim = makeClaim({ values: [12345n, 0n, 0n], present: [true, false, false] });
       const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
       const tampered = {
         claim: { ...signed.claim, values: [54321n, 0n, 0n] },
         commitRand: signed.commitRand,
       };
-      expect(() =>
+      await expect(
         sim.call('verifyAttestation', ps({ ...signed, ...tampered, holderSecret: holder })),
-      ).toThrow('Insufficient valid signatures');
+      ).rejects.toThrow('Insufficient valid signatures');
     });
 
-    it('rejects an unsupported version', () => {
+    it('rejects an unsupported version', async () => {
       const claim = makeClaim();
       const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
       const bad = { ...signed, claim: { ...signed.claim, version: 2n } };
-      expect(() => sim.call('verifyAttestation', ps({ ...bad, holderSecret: holder }))).toThrow(
-        'Unsupported claim version',
-      );
+      await expect(
+        sim.call('verifyAttestation', ps({ ...bad, holderSecret: holder })),
+      ).rejects.toThrow('Unsupported claim version');
     });
 
-    it('rejects an unsupported kind', () => {
+    it('rejects an unsupported kind', async () => {
       const claim = makeClaim();
       const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
       const bad = { ...signed, claim: { ...signed.claim, kind: 2n } };
-      expect(() => sim.call('verifyAttestation', ps({ ...bad, holderSecret: holder }))).toThrow(
-        'Unsupported kind',
-      );
+      await expect(
+        sim.call('verifyAttestation', ps({ ...bad, holderSecret: holder })),
+      ).rejects.toThrow('Unsupported kind');
     });
 
-    it('accepts a genuine-0 value when present flag set', () => {
+    it('accepts a genuine-0 value when present flag set', async () => {
       const claim = makeClaim({ values: [0n, 200n, 0n], present: [false, true, false] });
       const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
-      sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
       expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
     });
   });
 
   describe('nonce replay', () => {
-    it('rejects a second use of the same nonce', () => {
+    it('rejects a second use of the same nonce', async () => {
       const claim = makeClaim();
       const signed = signClaim(claim, notaryKeys, randomBytes(32));
       const psState = ps({ ...signed, holderSecret: holder });
-      sim.call('verifyAttestation', psState);
-      expect(() => sim.call('verifyAttestation', psState)).toThrow('Nonce replay');
+      await sim.call('verifyAttestation', psState);
+      await expect(sim.call('verifyAttestation', psState)).rejects.toThrow('Nonce replay');
     });
   });
 
@@ -143,35 +159,35 @@ describe('mock attestation', () => {
       return ps({ ...signed, holderSecret: holder, ...overrides });
     };
 
-    beforeEach(() => {
-      sim = new MockAttestationSim(createPrivateState(holder), registryKeys, WINDOW);
+    beforeEach(async () => {
+      sim = await MockAttestationSim.create(createPrivateState(holder), registryKeys, WINDOW);
     });
 
-    it('accepts a timestamp inside the window', () => {
+    it('accepts a timestamp inside the window', async () => {
       sim.now = Number(nowSeconds());
-      sim.call('verifyAttestation', attWith(makeClaim({ timestamp: nowSeconds() - 60n })));
+      await sim.call('verifyAttestation', attWith(makeClaim({ timestamp: nowSeconds() - 60n })));
     });
 
-    it('rejects a future timestamp', () => {
+    it('rejects a future timestamp', async () => {
       sim.now = Number(nowSeconds());
-      expect(() =>
+      await expect(
         sim.call('verifyAttestation', attWith(makeClaim({ timestamp: nowSeconds() + 86400n }))),
-      ).toThrow('Timestamp in the future');
+      ).rejects.toThrow('Timestamp in the future');
     });
 
-    it('rejects a stale timestamp (older than the 30-day window)', () => {
+    it('rejects a stale timestamp (older than the 30-day window)', async () => {
       sim.now = Number(nowSeconds());
-      expect(() =>
+      await expect(
         sim.call('verifyAttestation', attWith(makeClaim({ timestamp: nowSeconds() - 31n * DAY }))),
-      ).toThrow('Timestamp too old');
+      ).rejects.toThrow('Timestamp too old');
     });
   });
 
   describe('claim vault content', () => {
-    it('stores holder and timestamp under the claim id', () => {
+    it('stores holder and timestamp under the claim id', async () => {
       const claim = makeClaim();
       const signed = signClaim(claim, notaryKeys, randomBytes(32));
-      sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
       const entry = sim.ledgerView().A_claimsVault.lookup(idOf(claim, signed.commitRand));
       expect(entry.holder).toBe(holderOf(holder));
       expect(entry.timestamp).toBe(claim.timestamp);
@@ -179,95 +195,111 @@ describe('mock attestation', () => {
   });
 
   describe('openClaim', () => {
-    const store = (claim = makeClaim()) => {
+    const store = async (claim = makeClaim()) => {
       const signed = signClaim(claim, notaryKeys, randomBytes(32));
-      sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
       return signed;
     };
 
-    it('re-hydrates the claim and reads multiple value slots', () => {
-      const signed = store(makeClaim({ values: [111n, 222n, 333n], present: [true, true, true] }));
+    it('re-hydrates the claim and reads multiple value slots', async () => {
+      const signed = await store(
+        makeClaim({ values: [111n, 222n, 333n], present: [true, true, true] }),
+      );
       const id = idOf(signed.claim, signed.commitRand);
-      expect(() =>
-        sim.call('openAndRead', ps({ ...signed, holderSecret: holder }), id, 111n, 222n),
-      ).not.toThrow();
+      await sim.call('openAndRead', ps({ ...signed, holderSecret: holder }), id, 111n, 222n);
     });
 
-    it('reads per-slot presence directly (present[i] is native)', () => {
-      const signed = store(makeClaim({ values: [111n, 0n, 333n], present: [true, false, true] }));
+    it('reads per-slot presence directly (present[i] is native)', async () => {
+      const signed = await store(
+        makeClaim({ values: [111n, 0n, 333n], present: [true, false, true] }),
+      );
       const id = idOf(signed.claim, signed.commitRand);
-      expect(() =>
-        sim.call('openAndReadPresence', ps({ ...signed, holderSecret: holder }), id, true, false),
-      ).not.toThrow();
+      await sim.call(
+        'openAndReadPresence',
+        ps({ ...signed, holderSecret: holder }),
+        id,
+        true,
+        false,
+      );
     });
 
-    it('rejects a presence mismatch on a slot', () => {
-      const signed = store(makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }));
+    it('rejects a presence mismatch on a slot', async () => {
+      const signed = await store(
+        makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }),
+      );
       const id = idOf(signed.claim, signed.commitRand);
-      expect(() =>
+      await expect(
         sim.call('openAndReadPresence', ps({ ...signed, holderSecret: holder }), id, true, true),
-      ).toThrow('present[1] mismatch');
+      ).rejects.toThrow('present[1] mismatch');
     });
 
-    it('accepts a claim where the required metric 0 is present', () => {
-      const signed = store(makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }));
+    it('accepts a claim where the required metric 0 is present', async () => {
+      const signed = await store(
+        makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }),
+      );
       const id = idOf(signed.claim, signed.commitRand);
-      expect(() =>
-        sim.call('openAndRequireMetric0', ps({ ...signed, holderSecret: holder }), id, 111n),
-      ).not.toThrow();
+      await sim.call('openAndRequireMetric0', ps({ ...signed, holderSecret: holder }), id, 111n);
     });
 
-    it('rejects a claim where the required metric 0 is absent', () => {
-      const signed = store(makeClaim({ values: [0n, 222n, 333n], present: [false, true, true] }));
+    it('rejects a claim where the required metric 0 is absent', async () => {
+      const signed = await store(
+        makeClaim({ values: [0n, 222n, 333n], present: [false, true, true] }),
+      );
       const id = idOf(signed.claim, signed.commitRand);
-      expect(() =>
+      await expect(
         sim.call('openAndRequireMetric0', ps({ ...signed, holderSecret: holder }), id, 0n),
-      ).toThrow('metric 0 not present');
+      ).rejects.toThrow('metric 0 not present');
     });
 
-    it('rejects a claim where the required metric 0 value mismatches', () => {
-      const signed = store(makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }));
+    it('rejects a claim where the required metric 0 value mismatches', async () => {
+      const signed = await store(
+        makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }),
+      );
       const id = idOf(signed.claim, signed.commitRand);
-      expect(() =>
+      await expect(
         sim.call('openAndRequireMetric0', ps({ ...signed, holderSecret: holder }), id, 222n),
-      ).toThrow('value[0] mismatch');
+      ).rejects.toThrow('value[0] mismatch');
     });
 
-    it('rejects an unknown claim', () => {
-      const signed = store();
+    it('rejects an unknown claim', async () => {
+      const signed = await store();
       const wrongId = randomBytes(32);
-      expect(() =>
+      await expect(
         sim.call('openAndRead', ps({ ...signed, holderSecret: holder }), wrongId, 12345n, 0n),
-      ).toThrow('Unknown claim');
+      ).rejects.toThrow('Unknown claim');
     });
 
-    it('rejects a claim not bound to the caller', () => {
-      const signed = store();
+    it('rejects a claim not bound to the caller', async () => {
+      const signed = await store();
       const id = idOf(signed.claim, signed.commitRand);
       const otherHolder = randomBytes(32);
-      expect(() =>
+      await expect(
         sim.call('openAndRead', ps({ ...signed, holderSecret: otherHolder }), id, 12345n, 0n),
-      ).toThrow('Claim not bound to caller');
+      ).rejects.toThrow('Claim not bound to caller');
     });
 
-    it('rejects a claim that does not match the id', () => {
-      const signed = store(makeClaim({ values: [12345n, 0n, 0n], present: [true, false, false] }));
+    it('rejects a claim that does not match the id', async () => {
+      const signed = await store(
+        makeClaim({ values: [12345n, 0n, 0n], present: [true, false, false] }),
+      );
       const id = idOf(signed.claim, signed.commitRand);
       const tampered = {
         ...signed,
         claim: { ...signed.claim, values: [54321n, 0n, 0n] },
       };
-      expect(() =>
+      await expect(
         sim.call('openAndRead', ps({ ...tampered, holderSecret: holder }), id, 54321n, 0n),
-      ).toThrow('Claim does not match id');
+      ).rejects.toThrow('Claim does not match id');
     });
 
-    it('is repeatable (no nullifier consumed)', () => {
-      const signed = store(makeClaim({ values: [999n, 0n, 0n], present: [true, false, false] }));
+    it('is repeatable (no nullifier consumed)', async () => {
+      const signed = await store(
+        makeClaim({ values: [999n, 0n, 0n], present: [true, false, false] }),
+      );
       const id = idOf(signed.claim, signed.commitRand);
       const state = ps({ ...signed, holderSecret: holder });
-      sim.call('openAndRead', state, id, 999n, 0n);
-      expect(() => sim.call('openAndRead', state, id, 999n, 0n)).not.toThrow();
+      await sim.call('openAndRead', state, id, 999n, 0n);
+      await sim.call('openAndRead', state, id, 999n, 0n);
     });
   });
 });

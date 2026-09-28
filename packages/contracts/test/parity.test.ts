@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { claimToMessage } from '@thoth/core/claim';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
-import { idOf, makeClaim, makeNotaryKey } from './helpers/fixtures.js';
+import { DUMMY_SIGNATURE, idOf, makeClaim, makeNotaryKey } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
 import { MockAttestationSim } from './helpers/sim.js';
@@ -18,9 +18,6 @@ import { MockAttestationSim } from './helpers/sim.js';
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 const registryKeys = notaryKeys.map((k) => k.pk);
 const holder = randomBytes(32);
-
-// A signature that can never verify against a non-empty registry slot.
-const DUMMY_SIGNATURE = { announcement: { x: 0n, y: 1n }, response: 0n };
 
 const claims = [
   makeClaim(),
@@ -39,7 +36,7 @@ describe('claimToMessage parity', () => {
   });
 
   describe('end-to-end accept (level 2)', () => {
-    it('accepts signatures made over claimToMessage output', () => {
+    it('accepts signatures made over claimToMessage output', async () => {
       const commitRand = randomBytes(32);
       const claim = makeClaim({ values: [111n, 222n, 333n], present: [true, true, true] });
       const msg = claimToMessage(claim);
@@ -51,8 +48,8 @@ describe('claimToMessage parity', () => {
         DUMMY_SIGNATURE, // empty third slot — never verifies
       ];
 
-      const sim = new MockAttestationSim(createPrivateState(holder), registryKeys);
-      sim.call('verifyAttestation', {
+      const sim = await MockAttestationSim.create(createPrivateState(holder), registryKeys);
+      await sim.call('verifyAttestation', {
         claim,
         signatures,
         commitRand,

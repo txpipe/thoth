@@ -61,6 +61,9 @@ extracted from midnightntwrk/example-zkloan."* Security-critical primitive
 the whole N-of-M threshold rests on, currently an example-project extraction
 with manual range-check bit-twiddling. Already tracked as issue #17.
 
+**Resolved (#17):** `schnorr.compact` is gone; the registry now verifies with
+the stdlib `jubjubSchnorrVerify` (compiler 0.34.0, compact-runtime 0.19.0).
+
 ## 8. Fixed numeric-only claim shape
 
 5-field header + `Vector<V, Boolean>` presence mask + `Vector<V, Uint<64>>`.

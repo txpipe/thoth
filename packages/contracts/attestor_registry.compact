@@ -14,7 +14,6 @@ pragma language_version >= 0.22;
 
 module attestor_registry<#M, #K> {
   import CompactStandardLibrary;
-  import "schnorr" prefix Schnorr_;
 
   /// The M attestor public keys, pinned at deploy by the top-level constructor.
   export sealed ledger keys: Vector<M, JubjubPoint>;
@@ -22,24 +21,24 @@ module attestor_registry<#M, #K> {
   /// Whether one signature verifies against its registry slot.
   circuit slotValid(
             msg: Vector<K, Field>,
-            sig: Schnorr_SchnorrSignature,
+            sig: JubjubSchnorrSignature,
             pk: JubjubPoint,
             slotEmpty: Boolean
             ): Boolean {
     if (slotEmpty) {
       return false;
     }
-    return Schnorr_schnorrVerifyOk<K>(msg, sig, pk);
+    return jubjubSchnorrVerify<K>(msg, sig, pk);
   }
 
   /// Number of the M signatures that verify against their corresponding
   /// registry slot (signature i is checked against keys[i]).
   export circuit countValidSignatures(
                    msg: Vector<K, Field>,
-                   sigs: Vector<M, Schnorr_SchnorrSignature>
+                   sigs: Vector<M, JubjubSchnorrSignature>
                    ): Uint<64> {
     const verdicts: Vector<M, Boolean> =
-            map((key: JubjubPoint, sig: Schnorr_SchnorrSignature) =>
+            map((key: JubjubPoint, sig: JubjubSchnorrSignature) =>
                 slotValid(msg, sig, key, key == default<JubjubPoint>),
                 keys,
                 sigs);

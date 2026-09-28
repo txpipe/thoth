@@ -34,7 +34,7 @@ jobs:
             https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           echo "$HOME/.compact/bin" >> "$GITHUB_PATH"
-          compact update 0.31.1
+          compact update 0.34.0
 
       - name: Format & Lint
         run: |

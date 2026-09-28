@@ -1,37 +1,23 @@
-// Off-chain Jubjub-Schnorr signing with exact in-circuit parity.
-//
-// Mirrors the contract's verify path (schnorr.compact + attestation.compact):
-//   msg  = the flat Vector<K, Field> being committed to (produced by
-//          pureCircuits.message(claim) or the off-chain claimToMessage)
-//   c    = pureCircuits.schnorrChallenge(ann, pk, msg) — Poseidon challenge;
-//          the in-circuit `truncateChallenge` reduces it mod 2^248 (the
-//          getSchnorrReduction witness supplies q, r). We reproduce the same
-//          reduction here: c = cFull % 2^248.
-//   s    = (k + c*sk) % JUBJUB_ORDER
-//   signature = { announcement: k*G, response: s }
+// Off-chain Jubjub-Schnorr signing via the runtime's `jubjubSchnorrSign`, the
+// counterpart of the stdlib `jubjubSchnorrVerify` the registry counts with.
+// Both hash (R, pk, msg) identically. The signer reduces the challenge mod the
+// Jubjub order; the compiled verifier feeds the unreduced hash to `ecMul`,
+// which is equivalent because pk lies in the prime-order subgroup
+// (c·pk == (c mod r)·pk). The simulator tests exercise this end to end.
 //
 // The message is computed with the contract's own compiled pure circuit
 // (`pureCircuits.message`), or supplied directly (e.g. from
 // `@thoth/core/claim`'s `claimToMessage`) — never a hand-rolled encoding — so
 // a signature produced here must verify in-circuit.
-import { createHash } from 'node:crypto';
-import { ecMulGenerator } from '@midnight-ntwrk/compact-runtime';
+import {
+  CompactTypeField,
+  CompactTypeVector,
+  type JubjubPoint,
+  type JubjubSchnorrSignature,
+  jubjubSchnorrSign,
+  jubjubSchnorrVerifyingKey,
+} from '@midnight-ntwrk/compact-runtime';
 import { type A_Claim, pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
-import type { SchnorrSignature } from './private-state.js';
-
-export const JUBJUB_ORDER = 0x0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb7n;
-export const TWO_248 = 1n << 248n;
-
-export type JubjubPoint = { x: bigint; y: bigint };
-
-// Deterministic k for reproducible fixtures; production notaries use a CSPRNG.
-const hashToScalar = (seed: string): bigint => {
-  const digest = createHash('sha256').update(seed, 'utf-8').digest();
-  const k = BigInt(`0x${digest.toString('hex')}`) % (JUBJUB_ORDER - 1n);
-  return k + 1n;
-};
-
-export const derivePublicKey = (sk: bigint): JubjubPoint => ecMulGenerator(sk);
 
 /**
  * Sign an arbitrary flat message with the given secret key.
@@ -40,28 +26,20 @@ export const derivePublicKey = (sk: bigint): JubjubPoint => ecMulGenerator(sk);
  * a message produced by `claimToMessage` (the off-chain encoder) and verify it
  * against the contract's own `buildMessage`.
  *
- * @param sk — the secret key.
+ * @param sk — the Jubjub scalar signing key.
  * @param msg — the flat message to commit to.
- * @param kSeed — deterministic nonce seed for reproducible fixtures.
  * @returns the derived public key plus the Schnorr signature over `msg`.
  */
 export const signMessage = (
   sk: bigint,
   msg: readonly bigint[],
-  kSeed = sk.toString(16),
-): { pk: JubjubPoint; signature: SchnorrSignature } => {
-  const pk = derivePublicKey(sk);
-  const k = hashToScalar(kSeed);
-  const announcement = ecMulGenerator(k);
-  const cFull = pureCircuits.schnorrChallenge(announcement.x, announcement.y, pk.x, pk.y, [...msg]);
-  const c = cFull % TWO_248;
-  const response = (k + c * sk) % JUBJUB_ORDER;
-  return { pk, signature: { announcement, response } };
-};
+): { pk: JubjubPoint; signature: JubjubSchnorrSignature } => ({
+  pk: jubjubSchnorrVerifyingKey(sk),
+  signature: jubjubSchnorrSign(new CompactTypeVector(msg.length, CompactTypeField), [...msg], sk),
+});
 
 export const signClaim = (
   sk: bigint,
   claim: A_Claim,
-  kSeed = sk.toString(16),
-): { pk: JubjubPoint; signature: SchnorrSignature } =>
-  signMessage(sk, pureCircuits.message(claim), kSeed);
+): { pk: JubjubPoint; signature: JubjubSchnorrSignature } =>
+  signMessage(sk, pureCircuits.message(claim));

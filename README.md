@@ -52,7 +52,6 @@ thoth/
 │   ├── contracts/             # @thoth/contracts — Compact on-chain modules
 │   │   ├── attestation.compact     # N-of-M verification, replay/freshness control, claims vault
 │   │   ├── attestor_registry.compact  # pinned attestor keys + signature counting
-│   │   ├── schnorr.compact         # Jubjub Schnorr verification polyfill
 │   │   ├── examples/example_app.compact  # 2-of-3 example embedding
 │   │   ├── test/                   # simulator tests + helpers
 │   │   └── README.md               # how to embed the modules in your own contract
@@ -69,18 +68,17 @@ wired into the root `workspaces`.
 
 ## The contracts
 
-Three embeddable Compact modules plus a top-level example (`packages/contracts/README.md`):
+Two embeddable Compact modules plus a top-level example (`packages/contracts/README.md`):
 
 | File | Module | Role |
 |------|--------|------|
 | `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and freshness (`freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)` |
-| `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` — counts only, no threshold |
-| `schnorr.compact` | `schnorr` | Jubjub Schnorr verification polyfill (generic `Vector<#n, Field>`) |
+| `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` via the stdlib `jubjubSchnorrVerify` — counts only, no threshold |
 | `examples/example_app.compact` | top-level | Example app embedding `Attestation<11, 3, 2, 3>` (2-of-3) |
 
 ## Development
 
-Requirements: Node.js 24 (`.nvmrc`), the Compact CLI (0.31.1).
+Requirements: Node.js 24 (`.nvmrc`), the Compact CLI (compiler 0.34.0).
 
 ```bash
 npm install

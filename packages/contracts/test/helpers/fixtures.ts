@@ -2,18 +2,23 @@
 // FROZEN message shape (see sign.ts). Zero-filled absent slots are the
 // canonical "not present" encoding; `present[i] = true` marks slot i populated.
 import { randomBytes } from 'node:crypto';
+import {
+  type JubjubPoint,
+  type JubjubSchnorrSignature,
+  jubjubSchnorrVerifyingKey,
+  sampleJubjubSchnorrSk,
+} from '@midnight-ntwrk/compact-runtime';
 import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
-import type { SchnorrSignature } from './private-state.js';
-import { derivePublicKey, type JubjubPoint, signClaim as signSingle } from './sign.js';
+import { signClaim as signSingle } from './sign.js';
 
 export const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
 
 export type NotaryKey = { sk: bigint; pk: JubjubPoint };
 
 export const makeNotaryKey = (): NotaryKey => {
-  const sk = BigInt(`0x${Buffer.from(randomBytes(31)).toString('hex')}`) % (1n << 248n);
-  return { sk, pk: derivePublicKey(sk) };
+  const sk = sampleJubjubSchnorrSk();
+  return { sk, pk: jubjubSchnorrVerifyingKey(sk) };
 };
 
 // Build a valid `Claim` fixture. `values` is the raw vector (length 3 for this
@@ -42,13 +47,13 @@ export const makeClaim = (
 
 export type SignedClaim = {
   claim: A_Claim;
-  signatures: SchnorrSignature[]; // valid sigs for the keys given; absent slot = dummy (never verifies)
+  signatures: JubjubSchnorrSignature[]; // valid sigs for the keys given; absent slot = dummy (never verifies)
   commitRand: Uint8Array;
 };
 
 // Dummy signature for an empty slot: identity announcement, zero response —
 // it can never verify against a non-empty registry slot.
-const DUMMY_SIGNATURE: SchnorrSignature = {
+export const DUMMY_SIGNATURE: JubjubSchnorrSignature = {
   announcement: { x: 0n, y: 1n },
   response: 0n,
 };
@@ -60,8 +65,8 @@ export const signClaim = (
   keys: readonly (NotaryKey | null)[],
   commitRand: Uint8Array,
 ): SignedClaim => {
-  const signatures: SchnorrSignature[] = keys.map((key, i) =>
-    key === null ? DUMMY_SIGNATURE : signSingle(key.sk, claim, `${claim.nonce[0]}-${i}`).signature,
+  const signatures: JubjubSchnorrSignature[] = keys.map((key) =>
+    key === null ? DUMMY_SIGNATURE : signSingle(key.sk, claim).signature,
   );
   return { claim, signatures, commitRand };
 };
