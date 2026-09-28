@@ -42,14 +42,20 @@
     "./client": {
       "types": "./dist/client/index.d.ts",
       "import": "./dist/client/index.js"
+    },
+    "./prover": {
+      "types": "./dist/prover/index.d.ts",
+      "import": "./dist/prover/index.js"
     }
   },
   "scripts": {
     "build": "tsc",
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "witnesses": "bash scripts/start-witnesses.sh"
   },
   "dependencies": {
     "@reclaimprotocol/attestor-core": "5.0.8",
+    "@reclaimprotocol/tls": "^0.1.4",
     "@thoth/attestor": "*",
     "@thoth/client": "*",
     "@thoth/core": "*",

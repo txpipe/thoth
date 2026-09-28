@@ -3,6 +3,14 @@ import type { AttestationInput } from '@thoth/core';
 import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { CLAIM_VERSION } from '@thoth/core/claim';
 import { z } from 'zod';
+import { hexToBytes } from './hex.js';
+
+/**
+ * Default maximum seconds between a client-proposed claim timestamp and the
+ * witness's own observation; a policy may override it with
+ * {@link ZkFetchPolicy.maxSkewS}.
+ */
+export const DEFAULT_MAX_SKEW_S = 60;
 
 /**
  * The claim a Reclaim witness signs: a canonical, JSON-stringified record of
@@ -128,16 +136,6 @@ export interface ZkFetchDefinition {
   message(claim: Claim<number>): FlatMessage;
 }
 
-/** A response redaction selection as declared in the claim's signed parameters. */
-interface ResponseRedaction {
-  /** Select a regex match from the response; named groups name the fields it hides. */
-  regex?: string;
-  /** Retrieve the item at a dot-notated JSON path; its leaf names the hidden field. */
-  jsonPath?: string;
-  /** Select an HTML node by xpath. */
-  xPath?: string;
-}
-
 /**
  * The parsed view of evidence, used for claim derivation and policy checks.
  *
@@ -156,14 +154,14 @@ export interface VerifiedEvidence {
   /** The captured HTTP transcript, when the evidence carried one. */
   responseText?: string;
   /**
-   * The extracted values the attestor can certify, keyed by named regex group;
-   * already excludes redacted fields (which the proof's parameters mark as
-   * hidden from the attestor).
+   * The values the witness extracted from the response it saw, keyed by named
+   * regex group. The witness computes them over the redacted transcript and the
+   * claim signature covers them, so they are certifiable as they are.
    */
   disclosedValues: Readonly<Record<string, string>>;
   /** Claim identifier. */
   identifier: string;
-  /** SHA-256 (hex) over the canonical serialization of the evidence; the claim's `evidenceHash`. */
+  /** SHA-256 (hex) over the canonical serialization of the evidence artifacts. */
   canonicalHash: string;
 }
 
@@ -197,16 +195,19 @@ export interface ZkFetchSlot {
  * The policy under which a zkFetch attestor attests.
  *
  * The rule for "this evidence may be attested": only evidence whose host is
- * allowlisted, whose signing Reclaim witness is pinned, and whose disclosures
- * cover every declared slot, within any size bound.
+ * allowlisted and whose disclosures cover every declared slot, within any size
+ * bound.
  */
 export interface ZkFetchPolicy {
   /** Hosts the attested URL may target; exact or any subdomain suffix. */
   allowedHosts: readonly string[];
-  /** The Reclaim attestor addresses this zkFetch attestor trusts. */
-  attestorAddresses: readonly string[];
   /** Map extracted (disclosed) values onto claim slots. */
   slots: readonly ZkFetchSlot[];
+  /**
+   * Maximum seconds between the proposed claim timestamp and this attestor's
+   * own witness observation. Defaults to {@link DEFAULT_MAX_SKEW_S}.
+   */
+  maxSkewS?: number;
   /** Upper bound on the captured response size in bytes. */
   maxResponseBytes?: number;
   /** Claim schema version the attestor signs; must match the contract's.
@@ -216,9 +217,14 @@ export interface ZkFetchPolicy {
   claimKind?: bigint;
 }
 
+/**
+ * Runtime validator + type source for {@link ZkFetchPolicy}.
+ *
+ * Both sides parse the shared policy through it: the client at `init`, the
+ * attestor before running its checks.
+ */
 export const zkFetchPolicySchema = z.object({
   allowedHosts: z.array(z.string()).min(1),
-  attestorAddresses: z.array(z.string()).min(1),
   slots: z
     .array(
       z.object({
@@ -229,6 +235,7 @@ export const zkFetchPolicySchema = z.object({
       }),
     )
     .min(1),
+  maxSkewS: z.number().int().nonnegative().optional(),
   maxResponseBytes: z.number().int().nonnegative().optional(),
   claimVersion: z.bigint().optional(),
   claimKind: z.bigint().optional(),
@@ -240,9 +247,6 @@ const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => 
     (allowed) => lower === allowed.toLowerCase() || lower.endsWith(`.${allowed.toLowerCase()}`),
   );
 };
-
-const hexToBytes = (hex: string): Uint8Array =>
-  new Uint8Array(Buffer.from(hex.replace(/^0x/, ''), 'hex'));
 
 /**
  * Decode the URL a claim attests from its signed parameters.
@@ -264,122 +268,28 @@ export const claimUrl = (claim: ProviderClaimData): string => {
   return parameters.url;
 };
 
-const NAMED_GROUP = /\(\?<([A-Za-z][A-Za-z0-9_]*)>/g;
-
 /**
- * Extract the named-group names a regex pattern declares.
- *
- * Redaction and extraction patterns use `(?<name>…)` groups; the group names
- * are the field identifiers claim derivation keys on.
- *
- * @param pattern — the regex source.
- * @returns the named-group names, in order of appearance.
- */
-const namedGroups = (pattern: string): string[] => {
-  const names: string[] = [];
-  for (const match of pattern.matchAll(NAMED_GROUP)) {
-    const name = match[1];
-    if (name !== undefined) {
-      names.push(name);
-    }
-  }
-  return names;
-};
-
-/**
- * The field names a redaction xPath hides.
- *
- * Mirrors the jsonPath leaf rule: an xPath names the node it selects, so the
- * hidden field is the selected node's local name — the last attribute/step
- * token of the expression (e.g. `/html/body/div[@id='x']/span` -> `span`,
- * `//price/@value` -> `value`). Returns an empty list when no name can be
- * derived; the caller then falls closed rather than certify a value the
- * witness may have hidden.
- *
- * @param expression — the redaction's xPath.
- * @returns the derived hidden field names, or `[]` when undecodable.
- */
-const xPathFieldNames = (expression: string): string[] => {
-  const last =
-    expression
-      .split('/')
-      .filter((step) => step !== '' && step !== '.')
-      .at(-1) ?? '';
-  const attribute = last.startsWith('@') ? last.slice(1) : last;
-  const name = attribute.replace(/\[.*$/, '').replace(/[^A-Za-z0-9_.-]/g, '');
-  return name !== '' && name !== '*' ? [name] : [];
-};
-
-/**
- * Read the disclosed values the signed claim carries, dropping redacted fields.
+ * Read the values the witness extracted from the response it saw.
  *
  * The signature already binds `claim.context`; this parser only interprets it.
- * Redaction is client-side in Reclaim — the attestor only ever sees selected
- * slices — so the *signed parameters* (`responseRedactions`) are the rule for
- * which extracted names are hidden and must never be certified. A redaction
- * names its fields through named regex groups, a JSON-path leaf, or an xPath
- * node name; a group-less regex names every disclosed value it matches; an
- * undecodable xPath falls closed (nothing is certified).
+ * Reclaim redacts client-side — `responseRedactions` selects the slices the
+ * witness sees and the rest of the response never reaches it — so the extracted
+ * values are the witness's own computation over the redacted transcript.
+ * Nothing is dropped here: the reveal whitelist already did the hiding.
  *
  * @param claim — signed claim data whose context carries `extractedParameters`.
- * @returns the certifiable disclosed values; redacted names are dropped.
+ * @returns the certifiable disclosed values.
  */
 const disclosedValuesOf = (claim: ProviderClaimData): Readonly<Record<string, string>> => {
-  let parameters: Readonly<{ responseRedactions?: readonly ResponseRedaction[] }>;
   let context: Readonly<{ extractedParameters?: Readonly<Record<string, string>> }>;
   try {
-    parameters = JSON.parse(claim.parameters) as Readonly<{
-      responseRedactions?: readonly ResponseRedaction[];
-    }>;
     context = JSON.parse(claim.context) as Readonly<{
       extractedParameters?: Readonly<Record<string, string>>;
     }>;
   } catch {
-    throw new Error('claim parameters or context are not valid JSON');
+    throw new Error('claim context is not valid JSON');
   }
-  const extracted = context.extractedParameters ?? {};
-  const redacted = new Set<string>();
-  const groupless: RegExp[] = [];
-  for (const redaction of parameters.responseRedactions ?? []) {
-    if (typeof redaction.regex === 'string' && redaction.regex !== '') {
-      const groups = namedGroups(redaction.regex);
-      if (groups.length === 0) {
-        groupless.push(new RegExp(redaction.regex));
-      } else {
-        for (const name of groups) {
-          redacted.add(name);
-        }
-      }
-    }
-    if (typeof redaction.jsonPath === 'string' && redaction.jsonPath !== '') {
-      const leaf = redaction.jsonPath.split('.').at(-1);
-      if (leaf !== undefined && leaf !== '') {
-        redacted.add(leaf);
-      }
-    }
-    if (typeof redaction.xPath === 'string' && redaction.xPath !== '') {
-      const names = xPathFieldNames(redaction.xPath);
-      if (names.length === 0) {
-        // Undecodable selector: fall closed — none of the extracted values can
-        // be certified, as any of them may be the one the witness hid.
-        return {};
-      }
-      for (const name of names) {
-        redacted.add(name);
-      }
-    }
-  }
-  const disclosed: Record<string, string> = {};
-  for (const [name, value] of Object.entries(extracted)) {
-    if (redacted.has(name)) {
-      continue;
-    }
-    if (groupless.some((pattern) => pattern.test(value))) {
-      continue;
-    }
-    disclosed[name] = value;
-  }
-  return disclosed;
+  return context.extractedParameters ?? {};
 };
 
 /**
@@ -490,17 +400,21 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
 /**
  * Derive the canonical {@link Claim} the attestor signs from parsed evidence.
  *
- * The claim is a statement of what was observed, not what the client proposed:
- * `values`/`present` come straight from the policy-declared disclosures, the
- * timestamp is the fetch's (`evidence.timestampS`), and `evidenceHash` binds
- * the claim to the verified artifacts. `version`/`kind` come from the policy
- * (`claimVersion`/`claimKind`, defaulting to 1). The nonce is **deterministic**
- * in the evidence (SHA-256 over `identifier + canonicalHash`). A slot whose
- * disclosure is absent (or was redacted) stays unpresent — redacted fields are
- * never certified.
+ * The claim reflects the evidence, not the client's proposal. `values`/`present`
+ * come from the policy-declared disclosures, and `evidenceHash` is the Reclaim
+ * identifier, which depends only on provider, parameters, and context, so every
+ * witness derives the same identifier for the same observation. `version`/`kind`
+ * come from the policy (`claimVersion`/`claimKind`, defaulting to 1). The
+ * timestamp is the caller's `timestamp`, which the client proposes and the law
+ * bounds against the witness's own observation. The nonce is a domain-separated
+ * SHA-256 of that identifier, so one observation with one context yields the
+ * same nonce from every witness, and a fresh context yields a fresh nonce. A
+ * slot whose disclosure is absent stays unpresent. The evidence carries only
+ * what the witness saw.
  *
  * @typeParam V — the claim's value-slot count.
- * @param options — the parsed evidence view, the policy, and the slot count.
+ * @param options — the parsed evidence view, the policy, the slot count, and
+ *   the timestamp to sign.
  * @returns the derived claim.
  * @throws if a policy slot is out of the claim's value range.
  */
@@ -511,8 +425,10 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   policy: ZkFetchPolicy;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
+  /** The claim timestamp to sign, proposed by the client. */
+  timestamp: bigint;
 }): Claim<V> => {
-  const { verified, policy, valueSlots } = options;
+  const { verified, policy, valueSlots, timestamp } = options;
   const outOfRange = policy.slots.find((slot) => slot.slot >= valueSlots);
   if (outOfRange !== undefined) {
     throw new Error(
@@ -536,9 +452,9 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   return {
     version: policy.claimVersion ?? CLAIM_VERSION,
     kind: policy.claimKind ?? 1n,
-    timestamp: BigInt(verified.claim.timestampS),
-    nonce: hexToBytes(sha256Hex(`${verified.identifier}:${verified.canonicalHash}`)),
-    evidenceHash: hexToBytes(verified.canonicalHash),
+    timestamp,
+    nonce: hexToBytes(sha256Hex(`thoth:nonce:${verified.identifier}`)),
+    evidenceHash: hexToBytes(verified.identifier),
     present,
     values,
   } as Claim<V>;
@@ -548,10 +464,9 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
  * Check evidence against the policy.
  *
  * Fails fast so the attestor does not waste work: the attested URL must be
- * HTTPS against an allowlisted host, the proof must carry a signature from a
- * pinned Reclaim witness, every *required* policy slot's disclosure must be
- * certifiable (present and parseable — optional slots may be absent and are
- * signed unpresent), and the captured response must fit any size bound.
+ * HTTPS against an allowlisted host, every *required* policy slot's disclosure
+ * must be certifiable (present and parseable — optional slots may be absent and
+ * are signed unpresent), and the captured response must fit any size bound.
  *
  * @param verified — the evidence view (see {@link parsedEvidenceView}).
  * @param policy — the policy.
@@ -569,14 +484,6 @@ export const assertEvidenceMatchesPolicy = (
   const host = url.hostname.toLowerCase();
   if (!hostAllowed(host, policy.allowedHosts)) {
     throw new Error(`attested host ${host} not in allowlist [${policy.allowedHosts.join(', ')}]`);
-  }
-  const attestorAddress = verified.attestorAddress.toLowerCase();
-  if (!policy.attestorAddresses.some((pinned) => pinned.toLowerCase() === attestorAddress)) {
-    throw new Error(
-      `attestor address ${verified.attestorAddress} not in pinned witnesses [${policy.attestorAddresses.join(
-        ', ',
-      )}]`,
-    );
   }
   for (const slot of policy.slots) {
     if (slot.optional) {

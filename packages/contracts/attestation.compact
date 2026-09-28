@@ -41,10 +41,10 @@ module attestation<#K, #V, #N, #M> {
 
   export struct Claim {
     version: Uint<8>; // schema version (1)
-    kind: Uint<8>; // attestor kind (1 = reclaim-attestor)
+    kind: Uint<8>; // code of the attestor kind that signed the claim
     timestamp: Uint<32>; // Unix seconds of the attestation
     nonce: Bytes<32>; // per-claim randomness (replay protection)
-    evidenceHash: Bytes<32>; // hash of the evidence artifacts (binding)
+    evidenceHash: Bytes<32>; // kind-defined hash binding the claim to its evidence
     present: Vector<V, Boolean>; // present[i] = values[i] was populated (measured), even if 0
     values: Vector<V, Uint<64>>; // positional numeric claim values last; 0 IS a valid value
   }

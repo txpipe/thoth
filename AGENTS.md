@@ -131,6 +131,9 @@ thoth/
   `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.
 - After changing Compact sources, recompile before running tests:
   `npm run compact:no-zk` (the `pretest` hook does this automatically).
+- `packages/zk-tls/test/live.test.ts` is an opt-in live check against two real
+  witnesses; it skips unless `WITNESS_URLS` names them, so `npm test` and CI
+  stay offline. See the package README's "Live check".
 - Never skip the `present` mask semantics: `present[i] = true` means slot `i`
   was measured (value may still be `0`).
 

@@ -3,8 +3,8 @@
 // policy checks.
 //
 // These exercise the shared surface, not the Reclaim signature machinery —
-// that is covered by `pipeline.test.ts` via the attestor, using a real
-// witnessed fixture.
+// that is covered via the attestor by `pipeline.test.ts` (a real witnessed
+// fixture) and `witness.test.ts` (local test-key witnesses).
 
 import {
   assertEvidenceMatchesPolicy,
@@ -56,10 +56,10 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
       verified: verifiedOf(claimWith({}, {}), { v: value }),
       policy: {
         allowedHosts: ['api.github.com'],
-        attestorAddresses: ['0xc340fc267cacbb9e3101adced0c7728f7e63b63d'],
         slots: [{ slot: 0, name: 'v', parse }],
       },
       valueSlots: 1,
+      timestamp: 1_786_122_944n,
     });
     return { present: claim.present[0] ?? false, value: claim.values[0] ?? 0n };
   };
@@ -107,52 +107,20 @@ describe('disclosedValuesOf via parsedEvidenceView', () => {
     });
   });
 
-  it('drops named-group regex redactions', () => {
+  it('passes extracted values through whatever the signed redactions say', () => {
+    // Redaction is a reveal whitelist applied before the witness sees the
+    // response, so the witness's extracted values are certifiable as they are.
     const disclosed = disclosedOf(
-      { responseRedactions: [{ regex: '(?<token>secret-[0-9]+)' }] },
-      { extractedParameters: { token: 'secret-4815', label: 'commute' } },
+      {
+        responseRedactions: [
+          { regex: '(?<token>secret-[0-9]+)' },
+          { jsonPath: '$.user.email' },
+          { xPath: '//*' },
+        ],
+      },
+      { extractedParameters: { token: 'secret-4815', email: 'a@b.co', label: 'commute' } },
     );
-    expect(disclosed).toEqual({ label: 'commute' });
-  });
-
-  it('drops every value a group-less regex redaction matches', () => {
-    const disclosed = disclosedOf(
-      { responseRedactions: [{ regex: 'private' }] },
-      { extractedParameters: { a: 'private data', b: 'public' } },
-    );
-    expect(disclosed).toEqual({ b: 'public' });
-  });
-
-  it('drops the leaf property of a jsonPath redaction', () => {
-    const disclosed = disclosedOf(
-      { responseRedactions: [{ jsonPath: '$.user.email' }] },
-      { extractedParameters: { email: 'a@b.co', name: 'a' } },
-    );
-    expect(disclosed).toEqual({ name: 'a' });
-  });
-
-  it('drops the node an xPath redaction selects', () => {
-    const disclosed = disclosedOf(
-      { responseRedactions: [{ xPath: '/html/body/div[1]/span[@id="price"]' }] },
-      { extractedParameters: { span: '99', note: 'ok' } },
-    );
-    expect(disclosed).toEqual({ note: 'ok' });
-  });
-
-  it('drops the attribute an xPath redaction targets', () => {
-    const disclosed = disclosedOf(
-      { responseRedactions: [{ xPath: '//user/@email' }] },
-      { extractedParameters: { email: 'a@b.co', name: 'a' } },
-    );
-    expect(disclosed).toEqual({ name: 'a' });
-  });
-
-  it('falls closed (nothing disclosed) on an undecodable xPath redaction', () => {
-    const disclosed = disclosedOf(
-      { responseRedactions: [{ xPath: '//*' }] },
-      { extractedParameters: { a: '1', b: '2' } },
-    );
-    expect(disclosed).toEqual({});
+    expect(disclosed).toEqual({ token: 'secret-4815', email: 'a@b.co', label: 'commute' });
   });
 
   it('treats unknown redaction fields as inert', () => {
@@ -167,7 +135,6 @@ describe('disclosedValuesOf via parsedEvidenceView', () => {
 describe('deriveClaimFromEvidence', () => {
   const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
     allowedHosts: ['api.github.com'],
-    attestorAddresses: ['0xc340fc267cacbb9e3101adced0c7728f7e63b63d'],
     slots,
   });
 
@@ -180,6 +147,7 @@ describe('deriveClaimFromEvidence', () => {
       verified,
       policy: policy([{ slot: 0, name: 'distance', parse: 'float' }]),
       valueSlots: 2,
+      timestamp: 1_786_122_944n,
     });
     expect(claim.values).toEqual([12n, 0n]);
     expect(claim.present).toEqual([true, false]);
@@ -194,6 +162,7 @@ describe('deriveClaimFromEvidence', () => {
       verified,
       policy: policy([{ slot: 0, name: 'time', parse: 'int' }]),
       valueSlots: 2,
+      timestamp: 1_786_122_944n,
     });
     expect(claim.values).toEqual([300n, 0n]);
     expect(claim.present).toEqual([true, false]);
@@ -206,6 +175,7 @@ describe('deriveClaimFromEvidence', () => {
         verified,
         policy: policy([{ slot: 1, name: 'a', parse: 'int' }]),
         valueSlots: 1,
+        timestamp: 1_786_122_944n,
       }),
     ).toThrow(/out of the claim's 1 value slots/);
   });
@@ -214,7 +184,6 @@ describe('deriveClaimFromEvidence', () => {
 describe('assertClaimMatchesDisclosures', () => {
   const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
     allowedHosts: ['api.github.com'],
-    attestorAddresses: ['0xc340fc267cacbb9e3101adced0c7728f7e63b63d'],
     slots,
   });
 
@@ -250,7 +219,6 @@ describe('assertClaimMatchesDisclosures', () => {
 describe('assertEvidenceMatchesPolicy', () => {
   const policy: ZkFetchPolicy = {
     allowedHosts: ['api.github.com'],
-    attestorAddresses: ['0xc340fc267cacbb9e3101adced0c7728f7e63b63d'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
   };
 
@@ -291,19 +259,6 @@ describe('assertEvidenceMatchesPolicy', () => {
     expect(() => assertEvidenceMatchesPolicy(verified('https://notgithub.com/x'), policy)).toThrow(
       /not in allowlist/,
     );
-  });
-
-  it('rejects a witness that is not pinned', () => {
-    const rogue = verifiedOf(
-      claimWith({ url: 'https://api.github.com/x' }, { extractedParameters: { distance: '1' } }),
-      { distance: '1' },
-    );
-    expect(() =>
-      assertEvidenceMatchesPolicy(rogue, {
-        ...policy,
-        attestorAddresses: ['0x1111111111111111111111111111111111111111'],
-      }),
-    ).toThrow(/not in pinned witnesses/);
   });
 
   it('refuses a required slot whose disclosure is missing or unparseable', () => {
