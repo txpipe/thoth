@@ -108,6 +108,61 @@ Only the commitment goes to the client and attestors. Keep the secret locally
 for the contract witness when vaulting or opening the claim. Secret reuse links
 claims; Thoth promises no cross-claim identity or unlinkability.
 
+## Threshold collection
+
+Use `client.collect(request, intent)` to obtain an N-of-M set in one call:
+
+```ts
+const result = await client.collect(request, {
+  holder,
+  windowStart: BigInt(Math.floor(Date.now() / 1000)),
+  windowEnd: BigInt(Math.floor(Date.now() / 1000) + 60),
+  expiresAt: Date.now() + 60_000,
+  threshold: 2,
+  operatorTimeoutMs: 20_000,
+  attestorIds: ['attestor-0', 'attestor-1', 'attestor-2'],
+});
+```
+
+The caller fixes the observation window before any session starts. Every
+operator proves independently and signs a claim under that window and holder.
+The window must contain its witness's observation. Choose its width to satisfy
+the consuming contract's freshness and maximum-window rules. `expiresAt` is a
+local collection deadline in milliseconds; it does not add an expiry field to
+the signed claim or replace the contract's time checks.
+
+Collection starts `threshold` sessions concurrently. It contacts the next
+candidate only when no message group can reach the threshold with the active
+sessions. A down, disagreeing, or invalid operator therefore does not prevent
+an agreeing healthy subset from succeeding. Candidate order defaults to the
+trusted descriptors' order; optional `attestorIds` limits and orders the
+candidates. Duplicate ids count once. Unselected and unused spare provers do
+not receive the request. Each selected prover receives its own request copy.
+
+Every response passes the same key, kind, claim, message-binding, and signature
+checks as `proof.attest()`. Collection groups responses by the exact flat
+message and counts distinct registry slots. The returned `claim`, `message`,
+and `collected` describe one threshold group, sorted by registry slot.
+`failures` contains only registry slots and safe phase reasons. Valid
+but disagreeing responses belong to other groups and do not appear as failures.
+
+`ZkFetchCollectionError.reason` is `invalid-intent`, `expired`, or `threshold`.
+The error retains safe `failures`, never a remote exception or its cause.
+Operator diagnostics use `evidence`, `attestation`, `timeout`, or `secret`.
+The timeout covers proving, transport, and asynchronous signature verification
+together. Late responses cannot count or proceed to a later phase. The current
+prover and transport interfaces cannot cancel underlying network work, so
+requests already started may continue after the client stops waiting.
+
+Secret headers go only to the selected prover. Collection never forwards the
+request to an attestor and rejects evidence containing a secret header value,
+including values escaped inside its JSON fields, before sending that evidence.
+The prover must still implement proper witness redaction. Collection's guard
+checks header values; it cannot recognize arbitrary transformations of secrets.
+
+`proveReq(request, holder)` and `proof.attest(...ids)` retain their existing
+behavior for callers that want a proof handle and require all witnesses to agree.
+
 ## Concepts
 
 - **Two claims.** A Reclaim provider claim data is the record a Reclaim witness
@@ -225,6 +280,10 @@ The kind sits in the middle of the Thoth layering:
   using the configured verifier. Forged transport responses fail before
   submission. The client does not repeat the witness ECDSA check. The
   on-chain registry still enforces the N-of-M threshold.
+- **One intent across fallback.** Threshold collection uses a caller-fixed
+  observation window. Extending a window after each fallback would change the
+  signed message and discard earlier signatures. The local deadline bounds
+  collection while the contract remains responsible for signed-window freshness.
 - **Strict input.** Fewer shapes to reason about at a trust boundary, and no
   witness-address decoding inside the verifier.
 

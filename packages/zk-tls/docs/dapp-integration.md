@@ -96,6 +96,35 @@ const proof = await client.proveReq({
 const attestment = await proof.attest(); // or .attest('attestor-0')
 ```
 
+## Collecting a threshold
+
+For a resilient one-call flow, use `collect` instead of the proof-handle flow:
+
+```ts
+const start = Math.floor(Date.now() / 1000);
+const attestment = await client.collect(request, {
+  holder,
+  windowStart: BigInt(start),
+  windowEnd: BigInt(start + 60),
+  expiresAt: Date.now() + 60_000,
+  threshold: 2,
+  operatorTimeoutMs: 20_000,
+});
+```
+
+Set the observation window to the consuming contract's permitted freshness and
+width. It stays fixed for every independent witnessed session, including
+fallbacks. Match `threshold` to the on-chain N-of-M configuration.
+
+Collection returns one group of verified signatures over the same message.
+It tolerates failed or disagreeing operators when a healthy subset can still
+reach the threshold, and contacts spare operators as needed. To limit which
+witnesses may receive your secret headers, supply an ordered `attestorIds` list.
+Failures contain only registry slots and safe reasons. See the
+[collection contract](../README.md#threshold-collection) for deadline, timeout,
+privacy, and error semantics. Submit the returned attestment using the registry
+placement described below.
+
 ## Building the request
 
 `proveReq(request, holder)` takes a `ZkFetchRequest` and the per-claim commitment

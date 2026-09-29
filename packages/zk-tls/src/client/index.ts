@@ -32,6 +32,21 @@ const APP_ID_BYTES = 32;
 const sameMessage = (a: FlatMessage, b: FlatMessage): boolean =>
   a.length === b.length && a.every((value, i) => value === b[i]);
 
+/** Inspect evidence fields directly so JSON escaping cannot hide a secret header value. */
+const containsSecret = (value: unknown, secrets: readonly string[]): boolean => {
+  if (typeof value === 'string') {
+    return secrets.some(
+      (secret) => value.includes(secret) || value.includes(JSON.stringify(secret).slice(1, -1)),
+    );
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.entries(value).some(
+      ([key, field]) => containsSecret(key, secrets) || containsSecret(field, secrets),
+    );
+  }
+  return false;
+};
+
 /**
  * What to fetch and which of its fields the proof reveals or redacts.
  *
@@ -315,6 +330,64 @@ export interface ZkFetchClientProof<V extends number, PK, S> {
   attest(...ids: string[]): Promise<Attestment<V, PK, S>>;
 }
 
+/** Safe classification of a failed operator session. No remote error text is retained. */
+export interface ZkFetchCollectionFailure {
+  /** The pinned registry slot, rather than a remote-provided identity. */
+  readonly registryIndex: number;
+  /** The failed phase, timeout, or confidential evidence rejection. */
+  readonly reason: 'evidence' | 'attestation' | 'timeout' | 'secret';
+}
+
+/** A threshold set with safe diagnostics for failed operator sessions.
+ * @typeParam V - Claim value-slot count.
+ * @typeParam PK - Public key type.
+ * @typeParam S - Signature type.
+ */
+export interface ZkFetchCollection<V extends number, PK, S> extends Attestment<V, PK, S> {
+  /** Safe diagnostics. Disagreeing but valid messages are separate groups, not failures. */
+  readonly failures: readonly ZkFetchCollectionFailure[];
+}
+
+/** Collection failed without retaining request, evidence, or remote error details. */
+export class ZkFetchCollectionError extends Error {
+  /** Why no threshold set was returned. */
+  readonly reason: 'invalid-intent' | 'expired' | 'threshold';
+  /** Safe diagnostics for operator sessions that failed. */
+  readonly failures: readonly ZkFetchCollectionFailure[];
+
+  /**
+   * @param reason - The collection failure category.
+   * @param failures - Safe operator diagnostics.
+   */
+  constructor(
+    reason: ZkFetchCollectionError['reason'],
+    failures: readonly ZkFetchCollectionFailure[] = [],
+  ) {
+    super(`zkFetch collection failed: ${reason}`);
+    this.name = 'ZkFetchCollectionError';
+    this.reason = reason;
+    this.failures = [...failures];
+  }
+}
+
+/** The fixed claim inputs and collection limits shared by all operators in a call. */
+export interface ZkFetchCollectionIntent {
+  /** Per-claim holder commitment, 32 bytes. */
+  readonly holder: Uint8Array;
+  /** Inclusive start of the signed observation window, Unix seconds. */
+  readonly windowStart: bigint;
+  /** Inclusive end of the signed observation window, Unix seconds. */
+  readonly windowEnd: bigint;
+  /** Collection deadline, Unix milliseconds. This is a local limit, not signed expiry. */
+  readonly expiresAt: number;
+  /** Required number of distinct registry slots signing the same message. */
+  readonly threshold: number;
+  /** Maximum milliseconds for an operator's proving, transport, and verification together. */
+  readonly operatorTimeoutMs: number;
+  /** Ordered candidate ids. Defaults to the trusted set's descriptor order. */
+  readonly attestorIds?: readonly string[];
+}
+
 /**
  * The client, ready to prove a request.
  *
@@ -339,6 +412,16 @@ export interface ZkFetchClient<V extends number, PK, S> {
    *   origin, or the witnesses disagree on the claim.
    */
   proveReq(request: ZkFetchRequest, holder: Uint8Array): Promise<ZkFetchClientProof<V, PK, S>>;
+  /**
+   * Run independent witnessed sessions and collect a threshold under one intent.
+   * @param request - The HTTPS request, including headers private to the prover.
+   * @param intent - Fixed holder, observation window, deadline, and collection limits.
+   * @returns A set of verified signatures over one exact message, sorted by registry slot.
+   */
+  collect(
+    request: ZkFetchRequest,
+    intent: ZkFetchCollectionIntent,
+  ): Promise<ZkFetchCollection<V, PK, S>>;
 }
 
 /**
@@ -398,6 +481,179 @@ export const zkFetchClient = {
     // instead of on the first `attest()`.
     assertPolicySlotsInRange(checkedPolicy, valueSlots);
     return {
+      collect: async (suppliedRequest, suppliedIntent) => {
+        const groups = new Map<string, Attestment<V, PK, S>>();
+        const failures: ZkFetchCollectionFailure[] = [];
+        let request: ZkFetchRequest;
+        let intent: ZkFetchCollectionIntent;
+        let holder: Uint8Array;
+        let candidates: typeof trusted.attestors;
+        try {
+          request = structuredClone(suppliedRequest);
+          intent = structuredClone(suppliedIntent);
+          holder = bytes32Schema.parse(intent.holder).slice();
+          if (
+            !Number.isSafeInteger(intent.threshold) ||
+            intent.threshold < 1 ||
+            !Number.isSafeInteger(intent.operatorTimeoutMs) ||
+            intent.operatorTimeoutMs < 1 ||
+            intent.operatorTimeoutMs > 2_147_483_647 ||
+            !Number.isSafeInteger(intent.expiresAt) ||
+            typeof intent.windowStart !== 'bigint' ||
+            typeof intent.windowEnd !== 'bigint' ||
+            intent.windowStart < 0n ||
+            intent.windowEnd < intent.windowStart ||
+            intent.windowEnd > 18_446_744_073_709_551_615n
+          ) {
+            throw new Error('invalid collection limits');
+          }
+          const seenSlots = new Set<number>();
+          const ids = intent.attestorIds ?? trusted.attestors.map((attestor) => attestor.id);
+          candidates = ids
+            .map((id) => attestorOf(trusted, id))
+            .filter((attestor) => {
+              if (seenSlots.has(attestor.registryIndex)) {
+                return false;
+              }
+              seenSlots.add(attestor.registryIndex);
+              return true;
+            });
+          if (candidates.length < intent.threshold) {
+            throw new Error('not enough candidate slots');
+          }
+        } catch {
+          throw new ZkFetchCollectionError('invalid-intent');
+        }
+        const assertUnexpired = () => {
+          if (Date.now() >= intent.expiresAt) {
+            throw new ZkFetchCollectionError('expired', failures);
+          }
+        };
+        assertUnexpired();
+        type Outcome = {
+          slot: number;
+          result?: Attestment<V, PK, S>;
+          failure?: ZkFetchCollectionFailure;
+        };
+        const run = async (attestor: (typeof candidates)[number]): Promise<Outcome> => {
+          const slot = attestor.registryIndex;
+          let phase: ZkFetchCollectionFailure['reason'] = 'evidence';
+          let closed = false;
+          const deadline = Math.min(Date.now() + intent.operatorTimeoutMs, intent.expiresAt);
+          const assertOpen = () => {
+            if (closed || Date.now() >= deadline) {
+              phase = 'timeout';
+              throw new Error('operator session closed');
+            }
+          };
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            const session = async (): Promise<Attestment<V, PK, S>> => {
+              const prover = provers[attestor.id];
+              if (prover === undefined) {
+                throw new Error('missing prover');
+              }
+              const evidence = zkFetchEvidenceSchema.parse(
+                await prover.prove(structuredClone(request)),
+              );
+              assertOpen();
+              phase = 'secret';
+              const secrets = Object.values(request.secretHeaders ?? {}).filter(
+                (secret) => secret.length > 0,
+              );
+              if (containsSecret(evidence, secrets)) {
+                throw new Error('confidential evidence');
+              }
+              phase = 'evidence';
+              assertEvidenceMatchesRequest(evidence, request);
+              const claim = await buildClaimProposal({
+                evidence,
+                policy: checkedPolicy,
+                appId,
+                holder,
+                valueSlots,
+                windowStart: intent.windowStart,
+                windowEnd: intent.windowEnd,
+              });
+              assertOpen();
+              const message = claimToMessage(claim);
+              phase = 'attestation';
+              const attestation = await transport.request(
+                attestor,
+                structuredClone({
+                  evidence,
+                  policy: checkedPolicy,
+                  claim,
+                }) as unknown as ZkFetchAttestationInput,
+              );
+              assertOpen();
+              const collected = await resolveAttestation({
+                trusted,
+                attestor,
+                attestation,
+                verifier,
+                expectedClaim: claim,
+                expectedMessage: message,
+              });
+              assertOpen();
+              return { claim, message, collected: [collected] };
+            };
+            const timeout = new Promise<never>((_, reject) => {
+              timer = setTimeout(() => {
+                phase = 'timeout';
+                closed = true;
+                reject(new Error('operator timeout'));
+              }, deadline - Date.now());
+            });
+            return { slot, result: await Promise.race([session(), timeout]) };
+          } catch {
+            return { slot, failure: { registryIndex: slot, reason: phase } };
+          } finally {
+            closed = true;
+            clearTimeout(timer);
+          }
+        };
+        const pending = new Map<number, Promise<Outcome>>();
+        let next = 0;
+        let largestGroup = 0;
+        const launchNeeded = () => {
+          // Start a spare only when no existing message can reach N with the active sessions.
+          while (largestGroup + pending.size < intent.threshold && next < candidates.length) {
+            const attestor = candidates[next++];
+            if (attestor !== undefined) {
+              pending.set(attestor.registryIndex, run(attestor));
+            }
+          }
+        };
+        launchNeeded();
+        while (pending.size > 0) {
+          const { slot, result, failure } = await Promise.race(pending.values());
+          pending.delete(slot);
+          assertUnexpired();
+          if (failure !== undefined) {
+            failures.push(failure);
+          }
+          if (result !== undefined) {
+            const key = result.message.join(',');
+            const previous = groups.get(key);
+            const group = {
+              ...result,
+              collected: [...(previous?.collected ?? []), ...result.collected],
+            };
+            groups.set(key, group);
+            largestGroup = Math.max(largestGroup, group.collected.length);
+            if (group.collected.length === intent.threshold) {
+              return {
+                ...group,
+                failures,
+                collected: group.collected.sort((a, b) => a.registryIndex - b.registryIndex),
+              };
+            }
+          }
+          launchNeeded();
+        }
+        throw new ZkFetchCollectionError('threshold', failures);
+      },
       proveReq: async (request, holder): Promise<ZkFetchClientProof<V, PK, S>> => {
         const checkedHolder = bytes32Schema.parse(holder).slice();
         const signedRequest: ZkFetchRequest = { ...request };

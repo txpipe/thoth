@@ -31,7 +31,7 @@ import {
   type ZkFetchRequest,
   zkFetchClient,
 } from '@thoth/zk-tls/client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
@@ -283,6 +283,376 @@ describe('zkFetch attestor + client', () => {
       valueSlots: 3,
       provers: overrides.provers ?? provers,
     });
+
+  const intent = () => ({
+    holder: new Uint8Array(32).fill(0xc1),
+    windowStart: BigInt(BASE_TIMESTAMP_S),
+    windowEnd: BigInt(BASE_TIMESTAMP_S + 60),
+    expiresAt: Date.now() + 60_000,
+    threshold: 2,
+    operatorTimeoutMs: 5_000,
+  });
+  const collectionRequest = { url: 'https://api.github.com/repos/x', method: 'GET' as const };
+
+  it('collects a threshold of distinct registry slots in one call', async () => {
+    const result = await clientWith().collect(collectionRequest, intent());
+    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([0, 1]);
+    expect(
+      result.collected.every((entry) =>
+        entry.attestation.message.every((value, i) => value === result.message[i]),
+      ),
+    ).toBe(true);
+  });
+
+  it('collects a healthy subset when an operator observes a different value', async () => {
+    const client = clientWith({
+      provers: proversWith({
+        values: (id) => ({ data: id === 'attestor-0' ? '99' : '42' }),
+      }),
+    });
+    const result = await client.collect(collectionRequest, intent());
+    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([1, 2]);
+    expect(result.claim.values[0]).toBe(42n);
+  });
+
+  it('falls back when a selected witness is down without exposing its error', async () => {
+    const result = await clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async () => {
+            throw new Error('Bearer private-token');
+          },
+        },
+      },
+    }).collect(
+      { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
+      intent(),
+    );
+    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([1, 2]);
+    expect(result.failures).toEqual([{ registryIndex: 0, reason: 'evidence' }]);
+    expect(JSON.stringify(result.failures)).not.toContain('private-token');
+  });
+
+  it('never forwards evidence containing a secret header value to an attestor', async () => {
+    const received: ZkFetchEvidence[] = [];
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async (request) => ({
+            ...(await observe(aliceWitness, request)),
+            responseText: 'Bearer private-token',
+          }),
+        },
+      },
+      transport: {
+        request: async (attestor, input) => {
+          received.push(input.evidence as ZkFetchEvidence);
+          return transport.request(attestor, input);
+        },
+      },
+    });
+    const result = await client.collect(
+      { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
+      intent(),
+    );
+    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([1, 2]);
+    expect(result.failures).toEqual([{ registryIndex: 0, reason: 'secret' }]);
+    expect(received.some((evidence) => JSON.stringify(evidence).includes('private-token'))).toBe(
+      false,
+    );
+  });
+
+  it('times out a hanging witness and collects from the next operator', async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = clientWith({
+        provers: {
+          ...provers,
+          'attestor-0': { prove: () => new Promise(() => {}) },
+        },
+      }).collect(collectionRequest, { ...intent(), operatorTimeoutMs: 100 });
+      await vi.advanceTimersByTimeAsync(100);
+      const result = await pending;
+      expect(result.collected.map((entry) => entry.registryIndex)).toEqual([1, 2]);
+      expect(result.failures).toEqual([{ registryIndex: 0, reason: 'timeout' }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 500);
+
+  it('expires an intent while its witness session is still pending', async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = clientWith({
+        provers: {
+          ...provers,
+          'attestor-0': { prove: () => new Promise(() => {}) },
+        },
+      }).collect(collectionRequest, { ...intent(), expiresAt: Date.now() + 50 });
+      const rejection = expect(pending).rejects.toMatchObject({ reason: 'expired' });
+      await vi.advanceTimersByTimeAsync(50);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 500);
+
+  it('runs the initial threshold sessions concurrently and leaves spare witnesses uncontacted', async () => {
+    let release: (() => void) | undefined;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const client = clientWith({
+      provers: {
+        'attestor-0': {
+          prove: async (request) => {
+            await ready;
+            return observe(aliceWitness, request);
+          },
+        },
+        'attestor-1': {
+          prove: async (request) => {
+            release?.();
+            return observe(bobWitness, request);
+          },
+        },
+        'attestor-2': {
+          prove: async () => {
+            throw new Error('spare was contacted');
+          },
+        },
+      },
+    });
+    const result = await client.collect(collectionRequest, intent());
+    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([0, 1]);
+    expect(result.failures).toEqual([]);
+  }, 500);
+
+  it.each([
+    { threshold: 0 },
+    { threshold: 4 },
+    { threshold: 1.5 },
+    { operatorTimeoutMs: 0 },
+    { operatorTimeoutMs: Number.NaN },
+    { expiresAt: Number.NaN },
+    { holder: new Uint8Array(31) },
+    { windowStart: BigInt(BASE_TIMESTAMP_S + 61) },
+    { attestorIds: ['attestor-0', 'attestor-0'] },
+    { attestorIds: ['unknown'] },
+  ])(
+    'rejects invalid intent limits or selection before contacting witnesses: %o',
+    async (override) => {
+      let contacted = false;
+      const client = clientWith({
+        provers: proversWith({
+          onProve: () => {
+            contacted = true;
+          },
+        }),
+      });
+      await expect(
+        client.collect(collectionRequest, { ...intent(), ...override }),
+      ).rejects.toMatchObject({ reason: 'invalid-intent' });
+      expect(contacted).toBe(false);
+    },
+  );
+
+  it('does not count a forged signature toward an otherwise healthy threshold', async () => {
+    const client = clientWith({
+      transport: {
+        request: async (attestor, input) => {
+          const result = await transport.request(attestor, input);
+          return attestor.registryIndex === 0 ? { ...result, signature: 'forged' } : result;
+        },
+      },
+    });
+    const result = await client.collect(collectionRequest, intent());
+    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([1, 2]);
+    expect(result.failures).toEqual([{ registryIndex: 0, reason: 'attestation' }]);
+  });
+
+  it('counts duplicate target ids only once and preserves registry placement', async () => {
+    const result = await clientWith().collect(collectionRequest, {
+      ...intent(),
+      attestorIds: ['attestor-2', 'attestor-2', 'attestor-0'],
+    });
+    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([0, 2]);
+  });
+
+  it('fails safely when no exact signed message reaches the threshold', async () => {
+    const client = clientWith({
+      provers: proversWith({
+        values: (id) => ({
+          data: id === 'attestor-0' ? '10' : id === 'attestor-1' ? '20' : '30',
+        }),
+      }),
+    });
+    await expect(client.collect(collectionRequest, intent())).rejects.toMatchObject({
+      reason: 'threshold',
+      failures: [],
+    });
+  });
+
+  it('rejects an already expired intent before contacting any witness', async () => {
+    let contacted = false;
+    const client = clientWith({
+      provers: proversWith({
+        onProve: () => {
+          contacted = true;
+        },
+      }),
+    });
+    await expect(
+      client.collect(collectionRequest, { ...intent(), expiresAt: Date.now() }),
+    ).rejects.toMatchObject({ reason: 'expired' });
+    expect(contacted).toBe(false);
+  });
+
+  it.each(['transport', 'verifier'] as const)(
+    'bounds a hanging %s by the operator timeout',
+    async (phase) => {
+      vi.useFakeTimers();
+      try {
+        const hangingTransport = {
+          request: (
+            attestor: Parameters<typeof transport.request>[0],
+            input: Parameters<typeof transport.request>[1],
+          ) =>
+            attestor.registryIndex === 0
+              ? new Promise<never>(() => {})
+              : transport.request(attestor, input),
+        };
+        const hangingVerifier = {
+          verify: (key: FakePublicKey, message: FlatMessage, signature: string) =>
+            key.id === 'attestor-0'
+              ? new Promise<boolean>(() => {})
+              : fakeVerifier.verify(key, message, signature),
+        };
+        const client = zkFetchClient.init({
+          trusted,
+          policy: policy(),
+          appId: APP_ID,
+          valueSlots: 3,
+          provers,
+          transport: phase === 'transport' ? hangingTransport : transport,
+          verifier: phase === 'verifier' ? hangingVerifier : fakeVerifier,
+        });
+        const pending = client.collect(collectionRequest, { ...intent(), operatorTimeoutMs: 100 });
+        await vi.advanceTimersByTimeAsync(100);
+        const result = await pending;
+        expect(result.collected.map((entry) => entry.registryIndex)).toEqual([1, 2]);
+        expect(result.failures).toEqual([{ registryIndex: 0, reason: 'timeout' }]);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('keeps the intent fixed when a transport mutates its claim proposal', async () => {
+    const client = clientWith({
+      transport: {
+        request: async (attestor, input) => {
+          if (attestor.registryIndex === 0) {
+            input.claim.holder.fill(0xff);
+          }
+          return transport.request(attestor, input);
+        },
+      },
+    });
+    const result = await client.collect(collectionRequest, intent());
+    expect(result.claim.holder).toEqual(new Uint8Array(32).fill(0xc1));
+    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([1, 2]);
+  });
+
+  it('blocks secret header values escaped inside evidence JSON', async () => {
+    const secret = 'Bearer "private-token"\n';
+    let leaked = false;
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async (request) => {
+            const evidence = await observe(aliceWitness, request);
+            evidence.claim.context = JSON.stringify({
+              ...JSON.parse(evidence.claim.context),
+              echo: secret,
+            });
+            return evidence;
+          },
+        },
+      },
+      transport: {
+        request: async (attestor, input) => {
+          if (attestor.registryIndex === 0) {
+            leaked = true;
+          }
+          return transport.request(attestor, input);
+        },
+      },
+    });
+    const result = await client.collect(
+      { ...collectionRequest, secretHeaders: { authorization: secret } },
+      intent(),
+    );
+    expect(result.failures).toEqual([{ registryIndex: 0, reason: 'secret' }]);
+    expect(leaked).toBe(false);
+  });
+
+  it('isolates requests between witnesses and snapshots the caller intent', async () => {
+    const request = { ...collectionRequest, context: { label: 'original' } };
+    const fixedIntent = intent();
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async (copy) => {
+            (copy.context as { label: string }).label = 'changed';
+            fixedIntent.holder.fill(0xff);
+            fixedIntent.windowEnd = 0n;
+            request.context.label = 'caller changed';
+            return observe(aliceWitness, copy, { values: { data: '99' } });
+          },
+        },
+      },
+    });
+    const result = await client.collect(request, fixedIntent);
+    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([1, 2]);
+    expect(result.claim.holder).toEqual(new Uint8Array(32).fill(0xc1));
+    expect(result.claim.windowEnd).toBe(BigInt(BASE_TIMESTAMP_S + 60));
+  });
+
+  it('does not forward a witness result that arrives after its timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      let release: ((value: ZkFetchEvidence) => void) | undefined;
+      const late = new Promise<ZkFetchEvidence>((resolve) => {
+        release = resolve;
+      });
+      let forwarded = false;
+      const client = clientWith({
+        provers: { ...provers, 'attestor-0': { prove: () => late } },
+        transport: {
+          request: async (attestor, input) => {
+            if (attestor.registryIndex === 0) {
+              forwarded = true;
+            }
+            return transport.request(attestor, input);
+          },
+        },
+      });
+      const pending = client.collect(collectionRequest, { ...intent(), operatorTimeoutMs: 100 });
+      await vi.advanceTimersByTimeAsync(100);
+      const result = await pending;
+      release?.(await observe(aliceWitness, collectionRequest));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(forwarded).toBe(false);
+      expect(result.collected.map((entry) => entry.registryIndex)).toEqual([1, 2]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('rejects a forged attestor signature returned by the transport', async () => {
     const broken = {
