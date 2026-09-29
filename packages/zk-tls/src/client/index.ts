@@ -35,9 +35,18 @@ const sameMessage = (a: FlatMessage, b: FlatMessage): boolean =>
 /** Inspect evidence fields directly so JSON escaping cannot hide a secret header value. */
 const containsSecret = (value: unknown, secrets: readonly string[]): boolean => {
   if (typeof value === 'string') {
-    return secrets.some(
-      (secret) => value.includes(secret) || value.includes(JSON.stringify(secret).slice(1, -1)),
-    );
+    if (secrets.some((secret) => value.includes(secret))) {
+      return true;
+    }
+    // Evidence contains JSON-encoded parameters and context. Decode their
+    // string values, including Unicode escapes and nested JSON strings.
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(value);
+    } catch {
+      return false;
+    }
+    return containsSecret(decoded, secrets);
   }
   if (typeof value === 'object' && value !== null) {
     return Object.entries(value).some(

@@ -654,6 +654,39 @@ describe('zkFetch attestor + client', () => {
     }
   });
 
+  it('blocks secret header values encoded with JSON Unicode escapes', async () => {
+    let leaked = false;
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async (request) => {
+            const evidence = await observe(aliceWitness, request);
+            evidence.claim.context = JSON.stringify({
+              ...JSON.parse(evidence.claim.context),
+              echo: 'Bearer private-token',
+            }).replace('private-token', '\\u0070rivate-token');
+            return evidence;
+          },
+        },
+      },
+      transport: {
+        request: async (attestor, input) => {
+          if (attestor.registryIndex === 0) {
+            leaked = true;
+          }
+          return transport.request(attestor, input);
+        },
+      },
+    });
+    const result = await client.collect(
+      { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
+      intent(),
+    );
+    expect(result.failures).toEqual([{ registryIndex: 0, reason: 'secret' }]);
+    expect(leaked).toBe(false);
+  });
+
   it('rejects a forged attestor signature returned by the transport', async () => {
     const broken = {
       request: async (...args: Parameters<typeof transport.request>) => ({
