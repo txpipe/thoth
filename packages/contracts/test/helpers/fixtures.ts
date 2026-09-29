@@ -14,6 +14,15 @@ import { signClaim as signSingle } from './sign.js';
 
 export const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
 
+// A fixed app id and the two policy hashes the mock seals at deploy. A third,
+// unsealed hash stands in for a laxer policy a requester might substitute.
+const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
+export const APP_ID = filled(0xa1);
+export const POLICY_A = filled(0xb1);
+export const POLICY_B = filled(0xb2);
+export const UNSEALED_POLICY = filled(0xbf);
+export const ACCEPTED_POLICIES: readonly Uint8Array[] = [POLICY_A, POLICY_B];
+
 export type NotaryKey = { sk: bigint; pk: JubjubPoint };
 
 export const makeNotaryKey = (): NotaryKey => {
@@ -35,7 +44,8 @@ export const makeClaim = (
   const present = overrides.present ?? values.map((_, i) => i === 0);
   return {
     version: 1n,
-    kind: 1n,
+    appId: APP_ID,
+    policyHash: POLICY_A,
     timestamp: nowSeconds(),
     nonce: randomBytes(32),
     evidenceHash: randomBytes(32),

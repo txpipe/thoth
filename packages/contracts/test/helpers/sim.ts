@@ -38,8 +38,11 @@ export class MockAttestationSim {
     privateState: PrivateState,
     registryKeys: JubjubPoint[],
     freshnessWindow = 0n,
+    policyHashes?: readonly Uint8Array[],
   ): Promise<MockAttestationSim> {
-    const contract = new Contract<PrivateState>(makeWitnesses(registryKeys, freshnessWindow));
+    const contract = new Contract<PrivateState>(
+      makeWitnesses(registryKeys, freshnessWindow, policyHashes),
+    );
     const deploy = await contract.initialState(createConstructorContext(privateState, COIN_PK));
     return new MockAttestationSim(contract, deploy.currentContractState.data);
   }

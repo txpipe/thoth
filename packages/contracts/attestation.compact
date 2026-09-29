@@ -7,6 +7,9 @@
 // Responsibilities:
 //   - verify >= #N of #M signatures from the appended AttestorRegistry over the
 //     frozen flat message built by `buildMessage` (this module's contract law);
+//   - reject a claim whose `policyHash` is not in the sealed `policyHashes`
+//     set. The policy hash is the on-chain binding: there is no kind code, and
+//     a contract serves several policies (kinds) by sealing several hashes;
 //   - reject nonce replay via the nullifiers set;
 //   - reject stale/future timestamps when the sealed `freshnessWindow` is set
 //     (0 disables the check);
@@ -17,8 +20,11 @@
 // (#N) lives here. The message shape (order+sizes) is the single thing the
 // attestor must mirror, per the documented wire layout below.
 //
-// Wire layout (buildMessage), K = 2*V + 7 fields:
-//   [ version, kind, timestamp,
+// Wire layout (buildMessage), K = 2*V + 10 fields:
+//   [ version,
+//     appId[0..16] as Uint<128>, appId[16..32] as Uint<128>,
+//     policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
+//     timestamp,
 //     nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
 //     evidenceHash[0..16] as Uint<128>, evidenceHash[16..32] as Uint<128>,
 //     present[0] as Field, ..., present[V-1] as Field,
@@ -27,7 +33,7 @@
 // is split in two halves so every byte is signed.
 //
 // Module parameters (import "attestation"<K, V, N, M>):
-//   #K — signed-message length in fields. Must equal 2*V + 7 (the 7-field
+//   #K — signed-message length in fields. Must equal 2*V + 10 (the 10-field
 //        header in buildMessage, the V `present` fields, and the V value
 //        fields). This is what the registry's countValidSignatures verifies
 //        over.
@@ -49,7 +55,8 @@ module attestation<#K, #V, #N, #M> {
 
   export struct Claim {
     version: Uint<8>; // schema version (1)
-    kind: Uint<8>; // code of the attestor kind that signed the claim
+    appId: Bytes<32>; // the app the claim is for
+    policyHash: Bytes<32>; // hash of the policy the attestors enforced
     timestamp: Uint<32>; // Unix seconds of the attestation
     nonce: Bytes<32>; // per-claim randomness (replay protection)
     evidenceHash: Bytes<32>; // kind-defined hash binding the claim to its evidence
@@ -60,6 +67,9 @@ module attestation<#K, #V, #N, #M> {
   /// Freshness window (seconds), sealed at deploy by the top-level
   /// constructor. 0 disables the freshness check.
   export sealed ledger freshnessWindow: Uint<64>;
+  /// Accepted policy hashes, sealed at deploy by the top-level constructor.
+  /// A claim is accepted only under one of these policies.
+  export sealed ledger policyHashes: Set<Bytes<32>>;
   export ledger claimsVault: Map<Bytes<32>, ClaimEntry>;
   export ledger nullifiers: Set<Bytes<32>>;
 
@@ -78,19 +88,25 @@ module attestation<#K, #V, #N, #M> {
     return [(slice<16>(b, 0) as Uint<128>) as Field, (slice<16>(b, 16) as Uint<128>) as Field];
   }
 
-  /// Reconstruct the flat signed message: a 7-field fixed header (version,
-  /// kind, timestamp, then nonce and evidenceHash each as two 16-byte halves)
-  /// followed by the `present` flags and the values mapped to `Field`. Tuple/vector spread
+  /// Reconstruct the flat signed message: a 10-field fixed header (version,
+  /// appId and policyHash each as two 16-byte halves, timestamp, then nonce
+  /// and evidenceHash each as two 16-byte halves) followed by the `present`
+  /// flags and the values mapped to `Field`. Tuple/vector spread
   /// (`...`) appends the flags and values, so at specialization
-  /// `[header..., present..., values...]` has length 7 + 2*V, which must equal
+  /// `[header..., present..., values...]` has length 10 + 2*V, which must equal
   /// K (enforced by the embedder). This is the single wire shape the attestor
   /// must mirror.
   export pure circuit buildMessage(c: Claim): Vector<K, Field> {
+    const appId = splitBytes(c.appId);
+    const policyHash = splitBytes(c.policyHash);
     const nonce = splitBytes(c.nonce);
     const evidenceHash = splitBytes(c.evidenceHash);
-    const header: Vector<7, Field> =
+    const header: Vector<10, Field> =
             [c.version as Field,
-             c.kind as Field,
+             appId[0],
+             appId[1],
+             policyHash[0],
+             policyHash[1],
              c.timestamp as Field,
              nonce[0],
              nonce[1],
@@ -117,7 +133,7 @@ module attestation<#K, #V, #N, #M> {
   export circuit verifyAttestation(): [] {
     const [claim, sigs, rand] = getAttestationWitness();
     assert(claim.version == 1, "Unsupported claim version");
-    assert(claim.kind == 1, "Unsupported kind");
+    assert(policyHashes.member(disclose(claim.policyHash)), "Unaccepted policy");
 
     const msg = buildMessage(claim);
     assert(Registry_countValidSignatures(msg, sigs) >= (N as Uint<64>),

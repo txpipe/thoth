@@ -26,7 +26,6 @@ describe('zkFetchPolicyHashOf', () => {
       slots: [{ slot: 0, name: 'price', parse: 'int', optional: false }],
       maxSkewS: 60,
       claimVersion: 1n,
-      claimKind: 1n,
     };
 
     expect(hex(zkFetchPolicyHashOf(policy))).toBe(hex(policyHashOf('zk-fetch@1', normalized, 1n)));
@@ -54,7 +53,6 @@ describe('zkFetchPolicyHashOf', () => {
       ],
       maxSkewS: 60,
       claimVersion: 1n,
-      claimKind: 1n,
     };
 
     expect(hex(zkFetchPolicyHashOf(spelledOut))).toBe(hex(zkFetchPolicyHashOf(twoSlots)));
@@ -81,7 +79,7 @@ describe('zkFetchPolicyHashOf', () => {
     // policy hash is the on-chain binding, so its bytes must not drift.
     expect(hex(zkFetchPolicyHashOf(policy))).toBe(
       sha256(
-        '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"claimKind":"1","claimVersion":"1",' +
+        '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"claimVersion":"1",' +
           '"maxSkewS":60,"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
       ),
     );

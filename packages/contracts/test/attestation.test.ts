@@ -3,13 +3,17 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import {
+  ACCEPTED_POLICIES,
   flip,
   holderOf,
   idOf,
   makeClaim,
   makeNotaryKey,
   nowSeconds,
+  POLICY_A,
+  POLICY_B,
   signClaim,
+  UNSEALED_POLICY,
 } from './helpers/fixtures.js';
 import { createPrivateState, type PrivateState } from './helpers/private-state.js';
 import { MockAttestationSim } from './helpers/sim.js';
@@ -32,21 +36,23 @@ describe('mock attestation', () => {
   });
 
   describe('buildMessage (frozen wire shape)', () => {
-    it('returns exactly K=13 fields in the frozen order', () => {
+    it('returns exactly K=16 fields in the frozen order', () => {
       const claim = makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] });
       const msg = pureCircuits.message(claim);
-      expect(msg).toHaveLength(13);
-      // [version, kind, timestamp, nonce0, nonce1, evidenceHash0, evidenceHash1,
-      //  p0, p1, p2, v0, v1, v2]
-      expect(msg[0]).toBe(1n);
-      expect(msg[1]).toBe(1n);
-      expect(msg[2]).toBe(claim.timestamp);
-      expect(msg[7]).toBe(1n);
-      expect(msg[8]).toBe(1n);
-      expect(msg[9]).toBe(1n);
-      expect(msg[10]).toBe(100n);
-      expect(msg[11]).toBe(200n);
-      expect(msg[12]).toBe(300n);
+      expect(msg).toHaveLength(16);
+      // [version, appId0, appId1, policyHash0, policyHash1, timestamp,
+      //  nonce0, nonce1, evidenceHash0, evidenceHash1, p0, p1, p2, v0, v1, v2]
+      // APP_ID is 32 × 0xa1 and POLICY_A 32 × 0xb1, so each half repeats the byte.
+      const half = (byte: string): bigint => BigInt(`0x${byte.repeat(16)}`);
+      expect(msg.slice(0, 6)).toEqual([
+        1n,
+        half('a1'),
+        half('a1'),
+        half('b1'),
+        half('b1'),
+        claim.timestamp,
+      ]);
+      expect(msg.slice(10)).toEqual([1n, 1n, 1n, 100n, 200n, 300n]);
     });
 
     it('pins each 16-byte half to its slot (little-endian)', () => {
@@ -55,13 +61,13 @@ describe('mock attestation', () => {
       const evidenceHash = new Uint8Array(32);
       evidenceHash[16] = 2;
       const msg = pureCircuits.message(makeClaim({ nonce, evidenceHash }));
-      expect(msg.slice(3, 7)).toEqual([1n, 0n, 0n, 2n]);
+      expect(msg.slice(6, 10)).toEqual([1n, 0n, 0n, 2n]);
     });
 
-    it('distinguishes a change to every byte of nonce and evidenceHash', () => {
+    it('distinguishes a change to every byte of every 32-byte field', () => {
       const claim = makeClaim();
       const msg = pureCircuits.message(claim);
-      for (const field of ['nonce', 'evidenceHash'] as const) {
+      for (const field of ['appId', 'policyHash', 'nonce', 'evidenceHash'] as const) {
         for (let i = 0; i < 32; i++) {
           expect(pureCircuits.message({ ...claim, [field]: flip(claim[field], i) })).not.toEqual(
             msg,
@@ -74,7 +80,7 @@ describe('mock attestation', () => {
       const absent = makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] });
       const presentZero = makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] });
       expect(pureCircuits.message(absent)).not.toEqual(pureCircuits.message(presentZero));
-      expect(pureCircuits.message(presentZero)[7]).toBe(1n);
+      expect(pureCircuits.message(presentZero)[10]).toBe(1n);
     });
   });
 
@@ -174,13 +180,34 @@ describe('mock attestation', () => {
       ).rejects.toThrow('Unsupported claim version');
     });
 
-    it('rejects an unsupported kind', async () => {
-      const claim = makeClaim();
-      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
-      const bad = { ...signed, claim: { ...signed.claim, kind: 2n } };
+    it('rejects a claim whose policyHash is not in the sealed set', async () => {
+      const claim = makeClaim({ policyHash: UNSEALED_POLICY });
+      const signed = signClaim(claim, notaryKeys, randomBytes(32));
       await expect(
-        sim.call('verifyAttestation', ps({ ...bad, holderSecret: holder })),
-      ).rejects.toThrow('Unsupported kind');
+        sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
+      ).rejects.toThrow('Unaccepted policy');
+    });
+
+    it('accepts a claim under any sealed policy hash', async () => {
+      for (const policyHash of ACCEPTED_POLICIES) {
+        const claim = makeClaim({ policyHash });
+        const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
+        await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+        expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
+      }
+    });
+
+    it('seals exactly the deploy-time policy hashes', async () => {
+      const deployed = await MockAttestationSim.create(
+        createPrivateState(holder),
+        registryKeys,
+        0n,
+        [POLICY_B, POLICY_B],
+      );
+      const policies = deployed.ledgerView().A_policyHashes;
+      expect(policies.member(POLICY_B)).toBe(true);
+      expect(policies.member(POLICY_A)).toBe(false);
+      expect(policies.size()).toBe(1n);
     });
 
     it('accepts a genuine-0 value when present flag set', async () => {

@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { claimToMessage } from '@thoth/core/claim';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
-import { DUMMY_SIGNATURE, idOf, makeClaim, makeNotaryKey } from './helpers/fixtures.js';
+import { DUMMY_SIGNATURE, idOf, makeClaim, makeNotaryKey, POLICY_B } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
 import { MockAttestationSim } from './helpers/sim.js';
@@ -24,6 +24,8 @@ const claims = [
   makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] }),
   makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] }),
   makeClaim({ values: [0n, 200n, 0n], present: [false, true, false] }),
+  makeClaim({ appId: new Uint8Array(32).fill(0xa2), policyHash: POLICY_B }),
+  makeClaim({ appId: new Uint8Array(32), policyHash: new Uint8Array(32).fill(0xff) }),
 ];
 
 describe('claimToMessage parity', () => {

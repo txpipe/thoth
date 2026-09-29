@@ -23,6 +23,9 @@ import {
 /** A fresh random 32-byte nonce, hex-encoded with an `0x` prefix. */
 const randomNonce = (): string => `0x${bytesToHex(crypto.getRandomValues(new Uint8Array(32)))}`;
 
+/** Byte length of a claim's `appId`. */
+const APP_ID_BYTES = 32;
+
 /** Field-wise equality of two flat messages. */
 const sameMessage = (a: FlatMessage, b: FlatMessage): boolean =>
   a.length === b.length && a.every((value, i) => value === b[i]);
@@ -181,8 +184,8 @@ const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetc
  * against it (`resolveAttestation`'s `expectedMessage`).
  *
  * @typeParam V — the claim's value-slot count (the dApp contract's `#V`).
- * @param options — the evidence, the shared policy, the slot count, and the
- *   timestamp every witness's evidence agrees on.
+ * @param options — the evidence, the shared policy, the app id, the slot
+ *   count, and the timestamp every witness's evidence agrees on.
  * @returns the claim to propose (and to submit, once collected).
  * @throws if the evidence is invalid, fails the policy, or does not fit the
  *   dApp's claim length.
@@ -192,15 +195,17 @@ const buildClaimProposal = async <V extends number>(options: {
   evidence: ZkFetchEvidence;
   /** The shared policy every attestor in the set enforces. */
   policy: ZkFetchPolicy;
+  /** The app the claim is for. */
+  appId: Uint8Array;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
   /** The timestamp to sign: the earliest observation across the witnesses. */
   timestamp: bigint;
 }): Promise<Claim<V>> => {
-  const { evidence, policy, valueSlots, timestamp } = options;
+  const { evidence, policy, appId, valueSlots, timestamp } = options;
   const verified = parsedEvidenceView(evidence);
   assertEvidenceMatchesPolicy(verified, policy);
-  const derived = deriveClaimFromEvidence({ verified, policy, valueSlots, timestamp });
+  const derived = deriveClaimFromEvidence({ verified, policy, appId, valueSlots, timestamp });
   return claimSchema(valueSlots).parse(derived);
 };
 
@@ -256,6 +261,11 @@ export interface ZkFetchClientConfig<V extends number, PK, S> {
   readonly transport: AttestorTransport<ZkFetchDefinition, PK, S>;
   /** The policy the attestors enforce; members of a trusted set must share it. */
   readonly policy: ZkFetchPolicy;
+  /**
+   * The app every claim is for, signed into the claim. 32 bytes. The target
+   * contract must also seal the policy's hash (`zkFetchPolicyHashOf(policy)`).
+   */
+  readonly appId: Uint8Array;
   /** The claim's value-slot count (the target contract's `#V`). */
   readonly valueSlots: V;
   /**
@@ -322,7 +332,7 @@ export interface ZkFetchClient<V extends number, PK, S> {
  * import { zkFetchClient } from '@thoth/zk-tls/client';
  *
  * const client = zkFetchClient.init({
- *   trusted, transport, policy, valueSlots,
+ *   trusted, transport, policy, appId, valueSlots,
  *   provers: { txpipeEndpoint: zkFetchProver({ witnessUrl }) },
  * });
  * const proof = await client.proveReq({ url, method, headers });
@@ -341,16 +351,21 @@ export const zkFetchClient = {
    * @typeParam V — the claim's value-slot count.
    * @typeParam PK — the signature scheme's public-key type.
    * @typeParam S — the signature scheme's signature type.
-   * @param config — trusted set, transport, policy, slot count, and provers.
+   * @param config — trusted set, transport, policy, app id, slot count, and
+   *   provers.
    * @returns a client ready to `proveReq`.
-   * @throws if the policy is invalid, a policy slot exceeds `valueSlots`, or
-   *   the prover map does not match the trusted set exactly.
+   * @throws if the policy is invalid, the appId is not 32 bytes, a policy slot
+   *   exceeds `valueSlots`, or the prover map does not match the trusted set
+   *   exactly.
    */
   init: <const V extends number, PK, S>(
     config: ZkFetchClientConfig<V, PK, S>,
   ): ZkFetchClient<V, PK, S> => {
-    const { trusted, transport, policy, valueSlots, provers } = config;
+    const { trusted, transport, policy, appId, valueSlots, provers } = config;
     const checkedPolicy = zkFetchPolicySchema.parse(policy);
+    if (appId.length !== APP_ID_BYTES) {
+      throw new Error(`appId must be ${APP_ID_BYTES} bytes, got ${appId.length}`);
+    }
     const trustedIds = new Set(trusted.attestors.map((attestor) => attestor.id));
     for (const id of trustedIds) {
       if (provers[id] === undefined) {
@@ -399,6 +414,7 @@ export const zkFetchClient = {
             const claim = await buildClaimProposal({
               evidence,
               policy: checkedPolicy,
+              appId,
               valueSlots,
               timestamp,
             });

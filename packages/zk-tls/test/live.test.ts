@@ -12,6 +12,9 @@ import { verifyZkFetchProof } from '@thoth/zk-tls/attestor';
 import { zkFetchProver } from '@thoth/zk-tls/prover';
 import { describe, expect, it } from 'vitest';
 
+/** The app id every claim in this suite is for. */
+const APP_ID = new Uint8Array(32).fill(0xa1);
+
 const WITNESS_URLS = (process.env.WITNESS_URLS ?? '')
   .split(',')
   .map((url) => url.trim())
@@ -50,6 +53,7 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
         deriveClaimFromEvidence({
           verified: view,
           policy,
+          appId: APP_ID,
           valueSlots: 1,
           timestamp,
         }),

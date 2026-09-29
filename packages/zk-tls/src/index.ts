@@ -94,7 +94,8 @@ export const zkFetchClaimSchema: z.ZodType<
 > = z
   .object({
     version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
-    kind: z.union([z.number(), z.bigint()]),
+    appId: z.instanceof(Uint8Array),
+    policyHash: z.instanceof(Uint8Array),
     timestamp: z.union([z.number(), z.bigint()]),
     nonce: z.instanceof(Uint8Array),
     evidenceHash: z.instanceof(Uint8Array),
@@ -103,7 +104,8 @@ export const zkFetchClaimSchema: z.ZodType<
   })
   .transform((input) => ({
     version: BigInt(input.version),
-    kind: BigInt(input.kind),
+    appId: input.appId,
+    policyHash: input.policyHash,
     timestamp: BigInt(input.timestamp),
     nonce: input.nonce,
     evidenceHash: input.evidenceHash,
@@ -217,8 +219,6 @@ export interface ZkFetchPolicy {
   /** Claim schema version the attestor signs; must match the contract's.
    * Defaults to 1. */
   claimVersion?: bigint;
-  /** Contract-facing kind code the attestor signs (1 = zkFetch); must match the contract's. Defaults to 1. */
-  claimKind?: bigint;
 }
 
 /**
@@ -242,7 +242,6 @@ export const zkFetchPolicySchema = z.object({
   maxSkewS: z.number().int().nonnegative().optional(),
   maxResponseBytes: z.number().int().nonnegative().optional(),
   claimVersion: z.bigint().optional(),
-  claimKind: z.bigint().optional(),
 });
 
 /**
@@ -267,7 +266,6 @@ export const normalizePolicy = (policy: ZkFetchPolicy) => {
     maxSkewS: parsed.maxSkewS ?? DEFAULT_MAX_SKEW_S,
     maxResponseBytes: parsed.maxResponseBytes,
     claimVersion: parsed.claimVersion ?? CLAIM_VERSION,
-    claimKind: parsed.claimKind ?? 1n,
   };
 };
 
@@ -515,8 +513,9 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
  * The claim reflects the evidence, not the client's proposal. `values`/`present`
  * come from the policy-declared disclosures, and `evidenceHash` is the Reclaim
  * identifier, which depends only on provider, parameters, and context, so every
- * witness derives the same identifier for the same observation. `version`/`kind`
- * come from the policy (`claimVersion`/`claimKind`, defaulting to 1). The
+ * witness derives the same identifier for the same observation. `version`
+ * comes from the policy's `claimVersion` (default 1) and `policyHash` is
+ * {@link zkFetchPolicyHashOf} the policy; `appId` is the caller's. The
  * timestamp is the caller's `timestamp`, which the client proposes and the law
  * bounds against the witness's own observation. The nonce is a domain-separated
  * SHA-256 of that identifier, so one observation with one context yields the
@@ -525,22 +524,25 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
  * what the witness saw.
  *
  * @typeParam V — the claim's value-slot count.
- * @param options — the parsed evidence view, the policy, the slot count, and
- *   the timestamp to sign.
+ * @param options — the parsed evidence view, the policy, the app id, the slot
+ *   count, and the timestamp to sign.
  * @returns the derived claim.
- * @throws if a policy slot is out of the claim's value range.
+ * @throws if a policy slot is out of the claim's value range, or the policy
+ *   fails {@link zkFetchPolicySchema}.
  */
 export const deriveClaimFromEvidence = <V extends number>(options: {
   /** The evidence view (see {@link parsedEvidenceView}). */
   verified: VerifiedEvidence;
   /** The policy declaring the slot map. */
   policy: ZkFetchPolicy;
+  /** The app the claim is for, proposed by the client. 32 bytes. */
+  appId: Uint8Array;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
   /** The claim timestamp to sign, proposed by the client. */
   timestamp: bigint;
 }): Claim<V> => {
-  const { verified, policy, valueSlots, timestamp } = options;
+  const { verified, policy, appId, valueSlots, timestamp } = options;
   const outOfRange = policy.slots.find((slot) => slot.slot >= valueSlots);
   if (outOfRange !== undefined) {
     throw new Error(
@@ -561,10 +563,11 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
     present[slot.slot] = true;
     values[slot.slot] = value;
   }
-  const { claimVersion, claimKind } = normalizePolicy(policy);
+  const { claimVersion } = normalizePolicy(policy);
   return {
     version: claimVersion,
-    kind: claimKind,
+    appId,
+    policyHash: zkFetchPolicyHashOf(policy),
     timestamp,
     nonce: hexToBytes(sha256Hex(`thoth:nonce:${verified.identifier}`)),
     evidenceHash: hexToBytes(verified.identifier),

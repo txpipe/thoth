@@ -206,6 +206,7 @@ export function zkFetchAttestor<PK, S>(parts: {
       const claim = deriveClaimFromEvidence({
         verified,
         policy,
+        appId: proposed.appId,
         valueSlots: proposed.values.length,
         timestamp: proposed.timestamp,
       });
