@@ -44,7 +44,11 @@ prover that the client can use to obtain evidence:
     of the wire's `Uint<64>` range.
   - `claimUrl(claim)` returns the URL a signed claim attests, decoded from its
     parameters.
-  - `zkFetchPolicyHashOf(policy)` hashes a parsed, normalized policy under the
+  - `normalizePolicy(policy)` parses a policy, fills its defaults, lowercases,
+    deduplicates and sorts its hosts, and sorts its slots by index, so policies
+    that mean the same thing normalize the same. The hash and the checks read
+    it.
+  - `zkFetchPolicyHashOf(policy)` hashes a normalized policy under the
     `zk-fetch@1` law (`ZK_FETCH_LAW`) and the policy's claim version, so
     policies that differ only in defaults, host order or slot order hash the
     same.

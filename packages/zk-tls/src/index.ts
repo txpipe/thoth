@@ -246,12 +246,37 @@ export const zkFetchPolicySchema = z.object({
 });
 
 /**
+ * Parse and normalize a zkFetch policy into the form every hash and check
+ * reads.
+ *
+ * So that policies that mean the same thing agree: unknown keys are dropped,
+ * defaults are filled in, hosts are lowercased, deduplicated and sorted, and
+ * slots are sorted by index and have `optional` filled.
+ *
+ * @param policy — the policy to normalize.
+ * @returns the parsed, normalized policy.
+ * @throws if the policy fails {@link zkFetchPolicySchema}.
+ */
+export const normalizePolicy = (policy: ZkFetchPolicy) => {
+  const parsed = zkFetchPolicySchema.parse(policy);
+  return {
+    allowedHosts: [...new Set(parsed.allowedHosts.map((host) => host.toLowerCase()))].sort(),
+    slots: parsed.slots
+      .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
+      .sort((a, b) => a.slot - b.slot),
+    maxSkewS: parsed.maxSkewS ?? DEFAULT_MAX_SKEW_S,
+    maxResponseBytes: parsed.maxResponseBytes,
+    claimVersion: parsed.claimVersion ?? CLAIM_VERSION,
+    claimKind: parsed.claimKind ?? 1n,
+  };
+};
+
+/**
  * Hash a zkFetch policy under the `zk-fetch@1` law.
  *
- * The policy is parsed and normalized first, so policies that mean the same
- * thing hash the same: unknown keys are dropped, defaults are filled in, hosts
- * are lowercased, deduplicated and sorted, and slots are sorted by index. The
- * wire version is the policy's `claimVersion` (default 1).
+ * The policy is normalized first (see {@link normalizePolicy}), so policies
+ * that mean the same thing hash the same. The wire version is the policy's
+ * `claimVersion` (default 1).
  *
  * @param policy — the policy to hash.
  * @returns the 32-byte policy hash.
@@ -259,19 +284,8 @@ export const zkFetchPolicySchema = z.object({
  * @see policyHashOf
  */
 export const zkFetchPolicyHashOf = (policy: ZkFetchPolicy): Uint8Array => {
-  const parsed = zkFetchPolicySchema.parse(policy);
-  const claimVersion = parsed.claimVersion ?? CLAIM_VERSION;
-  const normalized = {
-    allowedHosts: [...new Set(parsed.allowedHosts.map((host) => host.toLowerCase()))].sort(),
-    slots: parsed.slots
-      .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
-      .sort((a, b) => a.slot - b.slot),
-    maxSkewS: parsed.maxSkewS ?? DEFAULT_MAX_SKEW_S,
-    maxResponseBytes: parsed.maxResponseBytes,
-    claimVersion,
-    claimKind: parsed.claimKind ?? 1n,
-  };
-  return policyHashOf(ZK_FETCH_LAW, normalized, claimVersion);
+  const normalized = normalizePolicy(policy);
+  return policyHashOf(ZK_FETCH_LAW, normalized, normalized.claimVersion);
 };
 
 /** The request identity a zkFetch claim is about: the method, URL and body. */
@@ -541,9 +555,10 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
     present[slot.slot] = true;
     values[slot.slot] = value;
   }
+  const { claimVersion, claimKind } = normalizePolicy(policy);
   return {
-    version: policy.claimVersion ?? CLAIM_VERSION,
-    kind: policy.claimKind ?? 1n,
+    version: claimVersion,
+    kind: claimKind,
     timestamp,
     nonce: hexToBytes(sha256Hex(`thoth:nonce:${verified.identifier}`)),
     evidenceHash: hexToBytes(verified.identifier),
