@@ -6,13 +6,6 @@ import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
 import { hexToBytes } from './hex.js';
 
-/**
- * Default maximum seconds between a client-proposed claim timestamp and the
- * witness's own observation; a policy may override it with
- * {@link ZkFetchPolicy.maxSkewS}.
- */
-export const DEFAULT_MAX_SKEW_S = 60;
-
 /** The zkFetch kind's law tag, also its kind identifier. */
 export const ZK_FETCH_LAW = 'zk-fetch@1';
 
@@ -96,7 +89,8 @@ export const zkFetchClaimSchema: z.ZodType<
     version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
     appId: bytes32Schema,
     policyHash: bytes32Schema,
-    timestamp: z.union([z.number(), z.bigint()]),
+    windowStart: z.union([z.number(), z.bigint()]),
+    windowEnd: z.union([z.number(), z.bigint()]),
     nonce: z.instanceof(Uint8Array),
     subjectHash: bytes32Schema,
     present: z.array(z.boolean()),
@@ -106,7 +100,8 @@ export const zkFetchClaimSchema: z.ZodType<
     version: BigInt(input.version),
     appId: input.appId,
     policyHash: input.policyHash,
-    timestamp: BigInt(input.timestamp),
+    windowStart: BigInt(input.windowStart),
+    windowEnd: BigInt(input.windowEnd),
     nonce: input.nonce,
     subjectHash: input.subjectHash,
     present: input.present,
@@ -209,11 +204,6 @@ export interface ZkFetchPolicy {
   allowedHosts: readonly string[];
   /** Map extracted (disclosed) values onto claim slots. */
   slots: readonly ZkFetchSlot[];
-  /**
-   * Maximum seconds between the proposed claim timestamp and this attestor's
-   * own witness observation. Defaults to {@link DEFAULT_MAX_SKEW_S}.
-   */
-  maxSkewS?: number;
   /** Upper bound on the captured response size in bytes. */
   maxResponseBytes?: number;
   /** Claim schema version the attestor signs; must match the contract's.
@@ -239,7 +229,6 @@ export const zkFetchPolicySchema = z.object({
       }),
     )
     .min(1),
-  maxSkewS: z.number().int().nonnegative().optional(),
   maxResponseBytes: z.number().int().nonnegative().optional(),
   claimVersion: z.bigint().optional(),
 });
@@ -263,7 +252,6 @@ export const normalizePolicy = (policy: ZkFetchPolicy) => {
     slots: parsed.slots
       .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
       .sort((a, b) => a.slot - b.slot),
-    maxSkewS: parsed.maxSkewS ?? DEFAULT_MAX_SKEW_S,
     maxResponseBytes: parsed.maxResponseBytes,
     claimVersion: parsed.claimVersion ?? CLAIM_VERSION,
   };
@@ -555,8 +543,9 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
  * every witness that fetched the same request derives the same subject.
  * `version` comes from the policy's `claimVersion` (default 1) and
  * `policyHash` is {@link zkFetchPolicyHashOf} the policy; `appId` is the
- * caller's. The timestamp is the caller's `timestamp`, which the client
- * proposes and the law bounds against the witness's own observation. The
+ * caller's. The observation window is the caller's `windowStart` and
+ * `windowEnd`, which the client proposes and the law requires to contain the
+ * witness's own observation (ADR 0005). The
  * nonce is a domain-separated SHA-256 of the Reclaim identifier, which depends
  * only on provider, parameters, and context, so one observation with one
  * context yields the same nonce from every witness, and a fresh context yields
@@ -565,7 +554,7 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
  *
  * @typeParam V — the claim's value-slot count.
  * @param options — the parsed evidence view, the policy, the app id, the slot
- *   count, and the timestamp to sign.
+ *   count, and the observation window to sign.
  * @returns the derived claim.
  * @throws if a policy slot is out of the claim's value range, the policy
  *   fails {@link zkFetchPolicySchema}, or the signed parameters carry no
@@ -580,10 +569,12 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   appId: Uint8Array;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
-  /** The claim timestamp to sign, proposed by the client. */
-  timestamp: bigint;
+  /** Start of the observation window to sign, proposed by the client. Unix seconds. */
+  windowStart: bigint;
+  /** End of the observation window to sign, proposed by the client. Unix seconds. */
+  windowEnd: bigint;
 }): Claim<V> => {
-  const { verified, policy, appId, valueSlots, timestamp } = options;
+  const { verified, policy, appId, valueSlots, windowStart, windowEnd } = options;
   const outOfRange = policy.slots.find((slot) => slot.slot >= valueSlots);
   if (outOfRange !== undefined) {
     throw new Error(
@@ -609,7 +600,8 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
     version: claimVersion,
     appId,
     policyHash: zkFetchPolicyHashOf(policy),
-    timestamp,
+    windowStart,
+    windowEnd,
     nonce: hexToBytes(sha256Hex(`thoth:nonce:${verified.identifier}`)),
     subjectHash: zkFetchSubjectHashOf(claimRequestOf(verified.claim)),
     present,

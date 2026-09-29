@@ -26,6 +26,8 @@ const claims = [
   makeClaim({ values: [0n, 200n, 0n], present: [false, true, false] }),
   makeClaim({ appId: new Uint8Array(32).fill(0xa2), policyHash: POLICY_B }),
   makeClaim({ appId: new Uint8Array(32), policyHash: new Uint8Array(32).fill(0xff) }),
+  makeClaim({ windowStart: 0n, windowEnd: 0n }),
+  makeClaim({ windowStart: 1_800_000_000n, windowEnd: 0xffff_ffffn }),
 ];
 
 describe('claimToMessage parity', () => {

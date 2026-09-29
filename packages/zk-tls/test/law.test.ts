@@ -69,7 +69,8 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
       },
       appId: APP_ID,
       valueSlots: 1,
-      timestamp: 1_786_122_944n,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
     });
     return { present: claim.present[0] ?? false, value: claim.values[0] ?? 0n };
   };
@@ -158,7 +159,8 @@ describe('deriveClaimFromEvidence', () => {
       policy: policy([{ slot: 0, name: 'distance', parse: 'float' }]),
       appId: APP_ID,
       valueSlots: 2,
-      timestamp: 1_786_122_944n,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
     });
     expect(claim.values).toEqual([12n, 0n]);
     expect(claim.present).toEqual([true, false]);
@@ -174,7 +176,8 @@ describe('deriveClaimFromEvidence', () => {
       policy: policy([{ slot: 0, name: 'time', parse: 'int' }]),
       appId: APP_ID,
       valueSlots: 2,
-      timestamp: 1_786_122_944n,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
     });
     expect(claim.values).toEqual([300n, 0n]);
     expect(claim.present).toEqual([true, false]);
@@ -190,7 +193,8 @@ describe('deriveClaimFromEvidence', () => {
       policy: activePolicy,
       appId: APP_ID,
       valueSlots: 1,
-      timestamp: 1_786_122_944n,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
     });
     expect(claim.appId).toEqual(APP_ID);
     expect(claim.policyHash).toEqual(zkFetchPolicyHashOf(activePolicy));
@@ -206,7 +210,8 @@ describe('deriveClaimFromEvidence', () => {
       policy: policy([{ slot: 0, name: 'a', parse: 'int' }]),
       appId: APP_ID,
       valueSlots: 1,
-      timestamp: 1_786_122_944n,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
     });
     expect(claim.subjectHash).toEqual(zkFetchSubjectHashOf(request));
   });
@@ -221,7 +226,8 @@ describe('deriveClaimFromEvidence', () => {
         policy: policy([{ slot: 1, name: 'a', parse: 'int' }]),
         appId: APP_ID,
         valueSlots: 1,
-        timestamp: 1_786_122_944n,
+        windowStart: 1_786_122_944n,
+        windowEnd: 1_786_122_944n,
       }),
     ).toThrow(/out of the claim's 1 value slots/);
   });

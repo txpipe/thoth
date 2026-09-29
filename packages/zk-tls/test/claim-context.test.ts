@@ -24,7 +24,6 @@ describe('zkFetchPolicyHashOf', () => {
     const normalized = {
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'price', parse: 'int', optional: false }],
-      maxSkewS: 60,
       claimVersion: 1n,
     };
 
@@ -51,7 +50,6 @@ describe('zkFetchPolicyHashOf', () => {
         { slot: 0, name: 'price', parse: 'int', optional: false },
         { slot: 1, name: 'volume', parse: 'float', optional: false },
       ],
-      maxSkewS: 60,
       claimVersion: 1n,
     };
 
@@ -80,7 +78,7 @@ describe('zkFetchPolicyHashOf', () => {
     expect(hex(zkFetchPolicyHashOf(policy))).toBe(
       sha256(
         '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"claimVersion":"1",' +
-          '"maxSkewS":60,"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
+          '"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
       ),
     );
   });

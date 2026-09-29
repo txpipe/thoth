@@ -129,7 +129,8 @@ describe('zkFetch claim schema', () => {
       version: 1,
       appId: APP_ID,
       policyHash: new Uint8Array(32),
-      timestamp: 1_786_122_944,
+      windowStart: 1_786_122_944,
+      windowEnd: 1_786_122_944,
       nonce: new Uint8Array(32),
       subjectHash: new Uint8Array(32),
       present: [true],
@@ -151,7 +152,8 @@ describe('zkFetch claim schema', () => {
       version: 1,
       appId: APP_ID,
       policyHash: new Uint8Array(32),
-      timestamp: 1_786_122_944,
+      windowStart: 1_786_122_944,
+      windowEnd: 1_786_122_944,
       nonce: new Uint8Array(32),
       subjectHash: new Uint8Array(32),
       present: [true, false],
@@ -406,7 +408,7 @@ describe('zkFetch attestor + client', () => {
     }
   });
 
-  it('proposes the earliest observation to every attestor', async () => {
+  it('proposes the window spanning every observation to every attestor', async () => {
     const offsets: Record<string, number> = { 'attestor-0': 0, 'attestor-1': 3, 'attestor-2': 6 };
     const staggered = proversWith({
       timestampS: (id) => BASE_TIMESTAMP_S + (offsets[id] ?? 0),
@@ -415,7 +417,8 @@ describe('zkFetch attestor + client', () => {
       url: 'https://api.github.com/repos/x',
       method: 'GET',
     });
-    expect(proof.claim.timestamp).toBe(BigInt(BASE_TIMESTAMP_S));
+    expect(proof.claim.windowStart).toBe(BigInt(BASE_TIMESTAMP_S));
+    expect(proof.claim.windowEnd).toBe(BigInt(BASE_TIMESTAMP_S + 6));
     const attestment = await proof.attest();
     expect(attestment.collected.length).toBe(3);
     for (const collected of attestment.collected) {

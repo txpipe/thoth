@@ -42,8 +42,9 @@ its own schemas and runs the full check before signing:
 2. `assertEvidenceMatchesPolicy(verified, policy)` checks the attested URL
    against the host allowlist, every required slot's certifiability, and any
    size bound.
-3. The law bounds the client-proposed timestamp by `maxSkewS` (default 60
-   seconds) against the witness's own observation.
+3. `assertObservationInWindow({ claim, verified })` requires the witness's own
+   observation to fall inside the client-proposed window, bounds included.
+   The contract bounds the window's length and checks it against block time.
 4. `assertClaimMatchesSubject({ claim, verified })` derives the subject hash
    from the request the witness signed and requires the proposal to carry it.
 5. `assertClaimMatchesDisclosures({ claim, disclosures, policy })` enforces
@@ -53,7 +54,7 @@ After those checks, `attestor.attest` also rejects evidence whose signing
 witness is not the instance's own `witnessKey`. Only then does it sign the
 attestor-derived claim: values and present bits from the disclosed values, a
 deterministic nonce, the signed request's subject hash as `subjectHash`, and
-the hash of its own policy as `policyHash`. The `appId` and the timestamp are
+the hash of its own policy as `policyHash`. The `appId` and the window are
 the only fields it takes from the proposal.
 
 The attestor derives its own claim rather than trusting the proposal, so a

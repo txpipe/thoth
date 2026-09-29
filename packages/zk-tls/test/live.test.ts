@@ -47,7 +47,9 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
 
     expect(new Set(verified.map((view) => view.identifier)).size).toBe(1);
 
-    const timestamp = BigInt(Math.min(...evidences.map((evidence) => evidence.claim.timestampS)));
+    const observedAt = evidences.map((evidence) => evidence.claim.timestampS);
+    const windowStart = BigInt(Math.min(...observedAt));
+    const windowEnd = BigInt(Math.max(...observedAt));
     const messages = verified.map((view) =>
       claimToMessage(
         deriveClaimFromEvidence({
@@ -55,7 +57,8 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
           policy,
           appId: APP_ID,
           valueSlots: 1,
-          timestamp,
+          windowStart,
+          windowEnd,
         }),
       ),
     );

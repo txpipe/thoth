@@ -15,7 +15,6 @@ import {
   assertEvidenceMatchesPolicy,
   claimRequestOf,
   deriveClaimFromEvidence,
-  normalizePolicy,
   parseDisclosedValue,
   parsedEvidenceView,
   type VerifiedEvidence,
@@ -141,13 +140,39 @@ export const assertClaimMatchesSubject = (options: {
 };
 
 /**
+ * Check a client-proposed claim's observation window against the witness.
+ *
+ * The window is when the attestor observed (ADR 0005), so the attestor
+ * requires its own witness's observation time to fall inside the proposed
+ * `[windowStart, windowEnd]`, bounds included. The contract bounds the
+ * window's length and checks it against block time.
+ *
+ * @param options — the proposed claim and the verified evidence.
+ * @throws if the witness observed outside the proposed window.
+ */
+export const assertObservationInWindow = (options: {
+  /** The client-proposed claim. */
+  claim: Claim<number>;
+  /** The verified evidence whose signed claim carries the observation time. */
+  verified: VerifiedEvidence;
+}): void => {
+  const { claim, verified } = options;
+  const observedAt = BigInt(verified.claim.timestampS);
+  if (observedAt < claim.windowStart || observedAt > claim.windowEnd) {
+    throw new Error(
+      `witness observation ${observedAt} is outside the claim window [${claim.windowStart}, ${claim.windowEnd}]`,
+    );
+  }
+};
+
+/**
  * Create the zkFetch attestor kind's shareable definition.
  *
  * `verify` implements the kind's check: verify the evidence
  * ({@link verifyZkFetchProof}), check it against the policy
- * ({@link assertEvidenceMatchesPolicy}), bound the client-proposed timestamp
- * against the witness's own observation (`maxSkewS`, default
- * `DEFAULT_MAX_SKEW_S`), and enforce that the proposed claim matches the
+ * ({@link assertEvidenceMatchesPolicy}), require the witness's own
+ * observation to fall inside the client-proposed window
+ * ({@link assertObservationInWindow}), and enforce that the proposed claim matches the
  * signed request ({@link assertClaimMatchesSubject}) and the disclosed values
  * ({@link assertClaimMatchesDisclosures}). `message` encodes a
  * claim into its flat field vector via `claimToMessage`.
@@ -164,15 +189,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
     verify: async (input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number>>) => {
       const verified = await verifyZkFetchProof(input.evidence);
       assertEvidenceMatchesPolicy(verified, input.policy);
-      const observedAt = BigInt(input.evidence.claim.timestampS);
-      const maxSkewS = BigInt(normalizePolicy(input.policy).maxSkewS);
-      const skew = input.claim.timestamp - observedAt;
-      const absSkew = skew < 0n ? -skew : skew;
-      if (absSkew > maxSkewS) {
-        throw new Error(
-          `claim timestamp ${input.claim.timestamp} is ${absSkew} s from the witness observation ${observedAt}, beyond the ${maxSkewS} s skew`,
-        );
-      }
+      assertObservationInWindow({ claim: input.claim, verified });
       assertClaimMatchesSubject({ claim: input.claim, verified });
       assertClaimMatchesDisclosures({
         claim: input.claim,
@@ -236,7 +253,8 @@ export function zkFetchAttestor<PK, S>(parts: {
         policy,
         appId: proposed.appId,
         valueSlots: proposed.values.length,
-        timestamp: proposed.timestamp,
+        windowStart: proposed.windowStart,
+        windowEnd: proposed.windowEnd,
       });
       const message = claimToMessage(claim);
       const signature = await signer.sign(message);

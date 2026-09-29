@@ -10,7 +10,7 @@ your own `.compact` contracts and compile as part of your own DApp build.
 
 | File | Module | Role |
 |------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and freshness (`freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)`. The claim can be opened at any time to access the values. |
+| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and the observation window (`maxWindow`, `freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)`. The claim can be opened at any time to access the values. |
 | `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` over a `Vector<K, Field>` message, verified with the stdlib `jubjubSchnorrVerify` (compiler ≥ 0.32; developed against 0.34.0). Counts only — no threshold |
 
 The modules form a single import graph (`attestation` → `attestor_registry`), so
@@ -39,10 +39,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//            K=16 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "node_modules/@thoth/contracts/attestation"<16, 3, 2, 3> prefix A_;
+//            K=17 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "node_modules/@thoth/contracts/attestation"<17, 3, 2, 3> prefix A_;
 
-import "node_modules/@thoth/contracts/attestor_registry"<3, 16> prefix R_;
+import "node_modules/@thoth/contracts/attestor_registry"<3, 17> prefix R_;
 ```
 
 If the package is hoisted elsewhere by your package manager, add the package
@@ -53,20 +53,20 @@ export COMPACT_PATH="$(node -p 'require.resolve("@thoth/contracts/package.json")
 ```
 
 ```compact
-import "attestation"<16, 3, 2, 3> prefix A_;
-import "attestor_registry"<3, 16> prefix R_;
+import "attestation"<17, 3, 2, 3> prefix A_;
+import "attestor_registry"<3, 17> prefix R_;
 ```
 
 See `examples/example_app.compact` for a complete top-level embedding that
-pins registry keys, the accepted policy hashes, and the freshness window in the
-constructor, re-exports the module types/ledgers/pure circuits, and exports a
+pins registry keys, the accepted policy hashes, the freshness window, and the
+maximum observation window in the constructor, re-exports the module types/ledgers/pure circuits, and exports a
 `verifyAttestation` entry point.
 
 ## Module parameters
 
 `attestation<#K, #V, #N, #M>` — embed as `import "attestation"<K, V, N, M>`:
 
-- `#K` — signed-message length in fields (`K` must equal `2*V + 10`)
+- `#K` — signed-message length in fields (`K` must equal `2*V + 11`)
 - `#V` — number of claim value slots (`Claim.values: Vector<V, Uint<64>>`)
 - `#N` — the app's N-of-M threshold
 - `#M` — number of attestor signatures supplied / registry key slots
@@ -82,7 +82,7 @@ All are fixed when a contract embeds the module.
 [ version,
   appId[0..16] as Uint<128>, appId[16..32] as Uint<128>,
   policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
-  timestamp,
+  windowStart, windowEnd,
   nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
   subjectHash[0..16] as Uint<128>, subjectHash[16..32] as Uint<128>,
   present[0] as Field, ..., present[V-1] as Field,
@@ -93,13 +93,13 @@ The attestor MUST reproduce this exact flat field vector to sign the same
 message (same order, sizes, presence-flag semantics, and the split of each
 32-byte field into two 16-byte halves, so every byte is signed). `present` is a
 `Vector<V, Boolean>`: one flag per value slot; `present[i] = true` means
-`values[i]` was populated (its value may still be `0`). The message length is `K = 10 + 2*V` (10 header fields, V
+`values[i]` was populated (its value may still be `0`). The message length is `K = 11 + 2*V` (11 header fields, V
 presence flags, V values) — fixed when a contract embeds the module.
 
 ## Design notes
 
 - **The claim is the entire message.** Everything the contract inspects —
-  freshness (`timestamp`), replay protection (`nonce`), source binding
+  the observation window (`windowStart`, `windowEnd`), replay protection (`nonce`), source binding
   (`subjectHash`), the policy (`policyHash`), the app (`appId`), and the
   version — is inside the signed field vector.
   Kinds must not rely on un-signed side-channels: any data the contract needs
@@ -112,6 +112,15 @@ presence flags, V values) — fixed when a contract embeds the module.
   sealing one hash per policy. The membership check discloses which accepted
   policy a claim used. `appId` is signed but not checked by the module; an app
   that needs it compares it in its own predicate.
+- **The window is when the attestor observed** (ADR 0005), not when the fact
+  happened; a fact's own time travels as a claim value. `verifyAttestation`
+  checks it against block time, unconditionally: the window must not be
+  inverted (`"Window inverted"`) nor longer than the sealed `maxWindow`
+  (`"Window too long"`), the block time must be at or after `windowStart`
+  (`"Window in the future"`) and before `windowEnd + freshnessWindow`
+  (`"Window too old"`). A zero `freshnessWindow` does not disable the check:
+  the claim must then land while its window is still open. The vault entry
+  stores the window next to the holder.
 - **Source binding is the app's in-circuit check.** `subjectHash` is a circuit
   hash (`persistentHash`) of what the claim is about, such as a zkFetch
   request. The module signs it but does not check it. An app that must accept
@@ -148,7 +157,7 @@ flag disagrees with an asserted predicate can never pass signature verification.
 
 ## Deploy wiring
 
-`freshnessWindow` and `policyHashes` (Attestation) and `keys` (Registry) are
+`freshnessWindow`, `maxWindow` and `policyHashes` (Attestation) and `keys` (Registry) are
 **sealed** ledgers set exactly once in the top-level constructor. Fill
 `policyHashes` by inserting each accepted policy hash there; no circuit can add
 one after deploy. See `examples/example_app.compact`

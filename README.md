@@ -12,8 +12,8 @@ Three pieces:
 
 - **Contract module**: An embeddable Compact module set: each app
   carries its own pinned attestor registry, verifies a fixed threshold of
-  independent signatures over a canonical claim, and composes optional policy
-  circuits (freshness) per contract.
+  independent signatures over a canonical claim, checks when it was observed,
+  and composes optional policy circuits per contract.
 - **Attestor SDK**: A library that provides the types and functions that
   attestors need to provide the service. Includes different packages to adapt
   for different sources and types of attestation (zkFetch, price band, …)
@@ -50,7 +50,7 @@ thoth/
 │   ├── attestor/              # @thoth/attestor — host: key boundary, instances, helpers
 │   ├── client/                # @thoth/client — dApp-side seam: TrustedSet, transport, primitives
 │   ├── contracts/             # @thoth/contracts — Compact on-chain modules
-│   │   ├── attestation.compact     # N-of-M verification, replay/freshness control, claims vault
+│   │   ├── attestation.compact     # N-of-M verification, replay/window control, claims vault
 │   │   ├── attestor_registry.compact  # pinned attestor keys + signature counting
 │   │   ├── examples/example_app.compact  # 2-of-3 example embedding
 │   │   ├── test/                   # simulator tests + helpers
@@ -72,7 +72,7 @@ Two embeddable Compact modules plus a top-level example (`packages/contracts/REA
 
 | File | Module | Role |
 |------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and freshness (`freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)` |
+| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and the observation window (`maxWindow`, `freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)` |
 | `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` via the stdlib `jubjubSchnorrVerify` — counts only, no threshold |
 | `examples/example_app.compact` | top-level | Example app embedding `Attestation<13, 3, 2, 3>` (2-of-3) |
 

@@ -34,7 +34,7 @@ prover that the client can use to obtain evidence:
     allowlist and the size bound. Required slots must be
     certifiable, meaning disclosed and parseable; optional slots may be absent
     and are signed unpresent.
-  - `deriveClaimFromEvidence({ verified, policy, appId, valueSlots, timestamp })`
+  - `deriveClaimFromEvidence({ verified, policy, appId, valueSlots, windowStart, windowEnd })`
     derives the canonical `Claim` the attestor signs: values/present from the
     disclosed values, a deterministic nonce, `zkFetchSubjectHashOf` the signed
     request as `subjectHash`, and `zkFetchPolicyHashOf(policy)` as
@@ -67,6 +67,9 @@ prover that the client can use to obtain evidence:
   - `verifyZkFetchProof(evidence)` verifies the witness's ECDSA signature
     with the Reclaim SDK and extracts the values it disclosed, returned as
     `VerifiedEvidence.disclosedValues`.
+  - `assertObservationInWindow({ claim, verified })` enforces that the
+    witness observed inside the client-proposed window (ADR 0005). The client
+    proposes the window from the earliest to the latest witness observation.
   - `assertClaimMatchesSubject({ claim, verified })` enforces that a
     client-proposed claim's `subjectHash` is the one of the request the witness
     signed.
@@ -74,7 +77,7 @@ prover that the client can use to obtain evidence:
     that a client-proposed claim says exactly what the evidence disclosed.
   - `createZkFetchDefinition()` returns the shareable definition: the three
     schemas, the `verify` step, which verifies the proof, checks the policy,
-    bounds the proposed timestamp by `maxSkewS`, and checks the claim against
+    requires the witness observation inside the proposed window, and checks the claim against
     the signed request and the disclosures, and a `message` that encodes the claim into the flat
     message via `claimToMessage`.
   - `zkFetchAttestor({ id, keyPair, registryIndex, witnessKey })` returns a

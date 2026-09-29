@@ -55,23 +55,24 @@ const makeAttestor = (id: string, witnessKey: string, registryIndex: number) =>
 const aliceAttestor = makeAttestor('attestor-alice', `0x${'11'.repeat(32)}`, 0);
 const bobAttestor = makeAttestor('attestor-bob', `0x${'22'.repeat(32)}`, 1);
 
+/** The observation window every claim in this suite is proposed with. */
+const WINDOW = { windowStart: 1_786_000_000n, windowEnd: 1_786_000_010n };
+
 const attestWith = (
   attestor: typeof aliceAttestor,
   evidence: ZkFetchEvidence,
-  timestamp: bigint,
-  overrides: Partial<ZkFetchPolicy> = {},
+  window: { windowStart: bigint; windowEnd: bigint } = WINDOW,
   claimOverrides: Partial<Claim<number>> = {},
 ) => {
-  const activePolicy = { ...policy, ...overrides };
   const derived = deriveClaimFromEvidence({
     verified: parsedEvidenceView(evidence),
-    policy: activePolicy,
+    policy,
     appId: APP_ID,
     valueSlots: 3,
-    timestamp,
+    ...window,
   });
   const claim = { ...derived, ...claimOverrides };
-  return attestor.attest({ policy: activePolicy, evidence, claim } as unknown as Parameters<
+  return attestor.attest({ policy, evidence, claim } as unknown as Parameters<
     typeof attestor.attest
   >[0]);
 };
@@ -83,7 +84,7 @@ describe('test-key witness', () => {
     expect(bob.address).not.toBe(alice.address);
   });
 
-  it('produces evidence carrying the chosen values, timestamp, parameters and context', async () => {
+  it('produces evidence carrying the chosen values, observation time, parameters and context', async () => {
     const evidence = await observe(alice, { timestampS: 1_786_000_123 });
     expect(evidence.attestorAddress).toBe(alice.address);
     expect(evidence.claim.timestampS).toBe(1_786_000_123);
@@ -104,8 +105,9 @@ describe('test-key witness', () => {
   });
 
   it('is accepted and signed by the attestor whose witness it is', async () => {
-    const attestation = await attestWith(aliceAttestor, await observe(alice), 1_786_000_000n);
-    expect(attestation.claim.timestamp).toBe(1_786_000_000n);
+    const attestation = await attestWith(aliceAttestor, await observe(alice));
+    expect(attestation.claim.windowStart).toBe(WINDOW.windowStart);
+    expect(attestation.claim.windowEnd).toBe(WINDOW.windowEnd);
     expect(attestation.claim.appId).toEqual(APP_ID);
     expect(attestation.claim.policyHash).toEqual(zkFetchPolicyHashOf(policy));
     // A present zero stays present.
@@ -115,7 +117,7 @@ describe('test-key witness', () => {
   });
 
   it('signs the subject hash of the request its witness observed', async () => {
-    const attestation = await attestWith(aliceAttestor, await observe(alice), 1_786_000_000n);
+    const attestation = await attestWith(aliceAttestor, await observe(alice));
     expect(attestation.claim.subjectHash).toEqual(
       zkFetchSubjectHashOf({ method: 'GET', url: 'https://api.example.com/v1/account', body: '' }),
     );
@@ -124,12 +126,12 @@ describe('test-key witness', () => {
   it('rejects a proposal about another subject', async () => {
     const other = zkFetchSubjectHashOf({ method: 'GET', url: 'https://api.example.com/v1/other' });
     await expect(
-      attestWith(aliceAttestor, await observe(alice), 1_786_000_000n, {}, { subjectHash: other }),
+      attestWith(aliceAttestor, await observe(alice), WINDOW, { subjectHash: other }),
     ).rejects.toThrow(/subjectHash does not match/);
   });
 
   it('is rejected when signed by another witness', async () => {
-    await expect(attestWith(aliceAttestor, await observe(bob), 1_786_000_000n)).rejects.toThrow(
+    await expect(attestWith(aliceAttestor, await observe(bob))).rejects.toThrow(
       /not this attestor's witness/,
     );
   });
@@ -140,37 +142,39 @@ describe('test-key witness', () => {
       ...evidence,
       claim: { ...evidence.claim, identifier: `0x${'ab'.repeat(32)}` },
     };
-    await expect(attestWith(aliceAttestor, forged, 1_786_000_000n)).rejects.toThrow(/identifier/);
+    await expect(attestWith(aliceAttestor, forged)).rejects.toThrow(/identifier/);
   });
 
   it('is rejected when it claims another witness address', async () => {
     const forged = { ...(await observe(bob)), attestorAddress: alice.address };
-    await expect(attestWith(aliceAttestor, forged, 1_786_000_000n)).rejects.toThrow(
-      /Invalid claim signature/,
-    );
+    await expect(attestWith(aliceAttestor, forged)).rejects.toThrow(/Invalid claim signature/);
   });
 
-  it('lets witnesses within the skew sign one message', async () => {
-    const aliceAttestation = await attestWith(aliceAttestor, await observe(alice), 1_786_000_000n);
+  it('lets witnesses observing inside the window sign one message', async () => {
+    const aliceAttestation = await attestWith(aliceAttestor, await observe(alice));
     const bobAttestation = await attestWith(
       bobAttestor,
       await observe(bob, { timestampS: 1_786_000_010 }),
-      1_786_000_000n,
     );
     expect(bobAttestation.message).toEqual(aliceAttestation.message);
   });
 
-  it('rejects a witness observation outside the policy skew', async () => {
-    const bobEvidence = await observe(bob, { timestampS: 1_786_000_010 });
+  it('rejects a window that starts after its own observation', async () => {
     await expect(
-      attestWith(bobAttestor, bobEvidence, 1_786_000_000n, { maxSkewS: 5 }),
-    ).rejects.toThrow(/skew/);
+      attestWith(aliceAttestor, await observe(alice), {
+        windowStart: 1_786_000_001n,
+        windowEnd: 1_786_000_010n,
+      }),
+    ).rejects.toThrow(/outside the claim window/);
   });
 
-  it('rejects a proposed timestamp too far from its own observation', async () => {
+  it('rejects a window that ends before its own observation', async () => {
     await expect(
-      attestWith(aliceAttestor, await observe(alice), 1_786_000_000n - 61n),
-    ).rejects.toThrow(/skew/);
+      attestWith(bobAttestor, await observe(bob, { timestampS: 1_786_000_010 }), {
+        windowStart: 1_786_000_000n,
+        windowEnd: 1_786_000_009n,
+      }),
+    ).rejects.toThrow(/outside the claim window/);
   });
 
   it('derives one message whatever witness produced the observation', async () => {
@@ -179,14 +183,14 @@ describe('test-key witness', () => {
       policy,
       appId: APP_ID,
       valueSlots: 3,
-      timestamp: 1_786_000_000n,
+      ...WINDOW,
     });
     const bobClaim = deriveClaimFromEvidence({
       verified: parsedEvidenceView(await observe(bob)),
       policy,
       appId: APP_ID,
       valueSlots: 3,
-      timestamp: 1_786_000_000n,
+      ...WINDOW,
     });
     expect(claimToMessage(bobClaim)).toEqual(claimToMessage(aliceClaim));
   });
@@ -198,7 +202,7 @@ describe('test-key witness', () => {
         policy,
         appId: APP_ID,
         valueSlots: 3,
-        timestamp: 1_786_000_000n,
+        ...WINDOW,
       }).nonce;
     expect(await deriveNonce({ context: { intent: 'cd'.repeat(32) } })).not.toEqual(
       await deriveNonce(),

@@ -185,7 +185,7 @@ const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetc
  *
  * @typeParam V — the claim's value-slot count (the dApp contract's `#V`).
  * @param options — the evidence, the shared policy, the app id, the slot
- *   count, and the timestamp every witness's evidence agrees on.
+ *   count, and the observation window every witness's evidence falls in.
  * @returns the claim to propose (and to submit, once collected).
  * @throws if the evidence is invalid, fails the policy, or does not fit the
  *   dApp's claim length.
@@ -199,13 +199,22 @@ const buildClaimProposal = async <V extends number>(options: {
   appId: Uint8Array;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
-  /** The timestamp to sign: the earliest observation across the witnesses. */
-  timestamp: bigint;
+  /** Start of the window to sign: the earliest observation across the witnesses. */
+  windowStart: bigint;
+  /** End of the window to sign: the latest observation across the witnesses. */
+  windowEnd: bigint;
 }): Promise<Claim<V>> => {
-  const { evidence, policy, appId, valueSlots, timestamp } = options;
+  const { evidence, policy, appId, valueSlots, windowStart, windowEnd } = options;
   const verified = parsedEvidenceView(evidence);
   assertEvidenceMatchesPolicy(verified, policy);
-  const derived = deriveClaimFromEvidence({ verified, policy, appId, valueSlots, timestamp });
+  const derived = deriveClaimFromEvidence({
+    verified,
+    policy,
+    appId,
+    valueSlots,
+    windowStart,
+    windowEnd,
+  });
   return claimSchema(valueSlots).parse(derived);
 };
 
@@ -406,9 +415,11 @@ export const zkFetchClient = {
         for (const [id, evidence] of entries) {
           evidences[id] = evidence;
         }
-        const timestamp = BigInt(
-          Math.min(...entries.map(([, evidence]) => evidence.claim.timestampS)),
-        );
+        // The window spans every witness's observation, so each attestor
+        // finds its own inside it (ADR 0005).
+        const observedAt = entries.map(([, evidence]) => evidence.claim.timestampS);
+        const windowStart = BigInt(Math.min(...observedAt));
+        const windowEnd = BigInt(Math.max(...observedAt));
         const proposals = await Promise.all(
           entries.map(async ([id, evidence]) => {
             const claim = await buildClaimProposal({
@@ -416,7 +427,8 @@ export const zkFetchClient = {
               policy: checkedPolicy,
               appId,
               valueSlots,
-              timestamp,
+              windowStart,
+              windowEnd,
             });
             return { id, claim, message: claimToMessage(claim) };
           }),
