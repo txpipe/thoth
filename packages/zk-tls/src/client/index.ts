@@ -80,7 +80,7 @@ export interface RawZkFetchProof {
   extractedParameterValues?: Readonly<Record<string, string>>;
   /** The witnesses that vouched for the proof. */
   witnesses?: readonly { id: string; url: string }[];
-  /** The captured HTTP transcript, when the producer carried one. */
+  /** Untrusted, client-supplied HTTP transcript; not covered by the witness signature. */
   responseText?: string;
 }
 

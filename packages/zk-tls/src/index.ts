@@ -46,7 +46,7 @@ export interface ZkFetchEvidence {
   signatureHex: string;
   /** The attestor address whose key produced the signature; `0x` + 40 hex. */
   attestorAddress: string;
-  /** The captured HTTP transcript (headers + body) the claim was extracted from. */
+  /** Untrusted, client-supplied HTTP transcript (headers + body); not witness-signed. */
   responseText?: string;
 }
 
@@ -151,7 +151,7 @@ export interface VerifiedEvidence {
   claim: ProviderClaimData;
   /** The address that signed the claim (lowercased). */
   attestorAddress: string;
-  /** The captured HTTP transcript, when the evidence carried one. */
+  /** Untrusted, client-supplied HTTP transcript; not authenticated by proof verification. */
   responseText?: string;
   /**
    * The values the witness extracted from the response it saw, keyed by named
@@ -165,7 +165,11 @@ export interface VerifiedEvidence {
   canonicalHash: string;
 }
 
-/** How a disclosed string value is interpreted for a claim slot. */
+/**
+ * How a disclosed string is interpreted: `int` accepts digits only; `float`
+ * accepts unsigned decimals with optional signed base-10 exponents and rounds
+ * exactly to the nearest integer, with halves rounded up. Both require Uint<64>.
+ */
 export type ZkFetchParseRule = 'int' | 'float';
 
 /**
@@ -195,16 +199,13 @@ export interface ZkFetchSlot {
  * The policy under which a zkFetch attestor attests.
  *
  * The rule for "this evidence may be attested": only evidence whose host is
- * allowlisted and whose disclosures cover every declared slot, within any size
- * bound.
+ * allowlisted and whose signed disclosures cover every required slot.
  */
 export interface ZkFetchPolicy {
   /** Hosts the attested URL may target; exact or any subdomain suffix. */
   allowedHosts: readonly string[];
   /** Map extracted (disclosed) values onto claim slots. */
   slots: readonly ZkFetchSlot[];
-  /** Upper bound on the captured response size in bytes. */
-  maxResponseBytes?: number;
   /** Claim schema version the attestor signs; must match the contract's.
    * Defaults to 1. */
   claimVersion?: bigint;
@@ -228,7 +229,6 @@ export const zkFetchPolicySchema = z.object({
       }),
     )
     .min(1),
-  maxResponseBytes: z.number().int().nonnegative().optional(),
   claimVersion: z.bigint().optional(),
 });
 
@@ -251,7 +251,6 @@ export const normalizePolicy = (policy: ZkFetchPolicy) => {
     slots: parsed.slots
       .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
       .sort((a, b) => a.slot - b.slot),
-    maxResponseBytes: parsed.maxResponseBytes,
     claimVersion: parsed.claimVersion ?? CLAIM_VERSION,
   };
 };
@@ -473,6 +472,10 @@ const UINT64_MAX = 1n << 64n;
  * certifiable and its slot stays unpresent, rather than the attestor guessing
  * a numeric reading or signing a value the contract can never verify.
  *
+ * `float` accepts `[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?` as a whole
+ * string. It rounds in decimal arithmetic, with halves rounded up. Neither
+ * rule accepts whitespace, grouping separators, or a leading sign.
+ *
  * Exported for the attestor side's disclosure cross-check
  * (`assertClaimMatchesDisclosures`); claim derivation uses it internally.
  *
@@ -490,15 +493,30 @@ export const parseDisclosedValue = (value: string, rule: ZkFetchParseRule): bigi
       return big < UINT64_MAX ? big : null;
     }
     case 'float': {
-      const parsed = Number.parseFloat(value);
-      if (!Number.isFinite(parsed) || parsed < 0) {
+      const match = /^([0-9]+)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/.exec(value);
+      if (!match || match[0] !== value) {
         return null;
       }
-      const rounded = Math.round(parsed);
-      if (rounded < 0 || rounded >= UINT64_MAX) {
+      const whole = match[1] ?? '';
+      const coefficient = whole + (match[2] ?? '');
+      const digits = coefficient.replace(/^0+/, '');
+      if (digits.length === 0) {
+        return 0n;
+      }
+      // Move the decimal point without converting the disclosed value to a double.
+      const decimalPosition =
+        BigInt(whole.length - (coefficient.length - digits.length)) + BigInt(match[3] ?? '0');
+      if (decimalPosition < 0n) {
+        return 0n;
+      }
+      // A Uint<64> has at most 20 digits. Bound padding even for enormous exponents.
+      if (decimalPosition > 20n) {
         return null;
       }
-      return BigInt(rounded);
+      const position = Number(decimalPosition);
+      const integer = BigInt(digits.slice(0, position).padEnd(position, '0') || '0');
+      const rounded = integer + ((digits[position] ?? '0') >= '5' ? 1n : 0n);
+      return rounded < UINT64_MAX ? rounded : null;
     }
   }
 };
@@ -612,7 +630,8 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
  * Fails fast so the attestor does not waste work: the attested URL must be
  * HTTPS against an allowlisted host, every *required* policy slot's disclosure
  * must be certifiable (present and parseable — optional slots may be absent and
- * are signed unpresent), and the captured response must fit any size bound.
+ * are signed unpresent). Captured response text is untrusted client output and
+ * does not participate in policy checks.
  *
  * @param verified — the evidence view (see {@link parsedEvidenceView}).
  * @param policy — the policy.
@@ -641,13 +660,6 @@ export const assertEvidenceMatchesPolicy = (
         `policy requires a certifiable value for "${slot.name}" but the proof did not disclose a parseable value`,
       );
     }
-  }
-  if (
-    policy.maxResponseBytes !== undefined &&
-    verified.responseText !== undefined &&
-    Buffer.byteLength(verified.responseText, 'utf-8') > policy.maxResponseBytes
-  ) {
-    throw new Error(`captured response exceeds maxResponseBytes (${policy.maxResponseBytes})`);
   }
   return host;
 };

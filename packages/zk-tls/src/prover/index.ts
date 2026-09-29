@@ -79,7 +79,8 @@ const loadCore = (): Promise<AttestorCore> => {
  * client drives the transcript and redaction proofs, and the witness returns a
  * signed claim. The result is canonical {@link ZkFetchEvidence} — the one shape
  * `@thoth/zk-tls` attestors verify — with the witness address taken from the
- * tunnel response and the captured response body in `responseText`.
+ * tunnel response and the captured response body in `responseText`. That text
+ * is untrusted, client-supplied transport output, not witness-signed content.
  *
  * @param config — witness URL, witness auth, and ZK tuning.
  * @returns a `ZkFetchProver` for the client's `prover` slot.

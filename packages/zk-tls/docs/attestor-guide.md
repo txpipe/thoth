@@ -40,8 +40,9 @@ its own schemas and runs the full check before signing:
    signature over the claim, checks the claim identifier against its signed
    content, and extracts the values it disclosed.
 2. `assertEvidenceMatchesPolicy(verified, policy)` checks the attested URL
-   against the host allowlist, every required slot's certifiability, and any
-   size bound.
+   against the host allowlist and requires every required slot to be certifiable.
+   Captured `responseText` is untrusted, client-supplied transport output; the
+   witness signature does not authenticate it, so policy checks do not use it.
 3. `assertObservationInWindow({ claim, verified })` requires the witness's own
    observation to fall inside the client-proposed window, bounds included.
    The contract bounds the window's length and checks it against block time.

@@ -129,10 +129,25 @@ deterministically.
 Every attestor in a trusted set will enforce the same policy. Field docs live in
 `zkFetchPolicySchema`'s JSDoc in `src/index.ts`:
 
-`int` accepts digits below `2^64`; `float` is rounded to the nearest integer and
-must be finite, non-negative, and below `2^64`. A required slot whose value is
-missing or unparseable rejects the evidence; an `optional` slot is signed
-unpresent.
+`int` accepts only decimal digits and requires a value below `2^64`.
+`float` accepts a whole string matching
+`[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?`: digits, an optional decimal point
+followed by digits, and an optional base-10 exponent. Leading zeros are allowed.
+Whitespace, leading signs, grouping separators, trailing junk, `NaN`, and
+`Infinity` are rejected. For example, `12abc`, `1,000`, `.5`, and `1.` are invalid;
+`0.5` and `2.5e2` are valid.
+
+`float` rounds exactly to the nearest integer, with halves rounded up, and
+requires the rounded result to be below `2^64`. It never converts the numeric
+value to a JavaScript double: `9007199254740993` stays `9007199254740993`, and
+`0.49999999999999999999` rounds to zero. A required slot whose value is missing
+or unparseable rejects the evidence; an `optional` slot is signed unpresent.
+
+`responseText`, when present in evidence or prover output, is untrusted,
+client-supplied transport output. The witness signature does not authenticate
+it. The policy therefore has no response-size bound; `maxResponseBytes` has
+been removed. Recompute any policy hash that included that field. Apply
+transport size limits separately from attestation policy checks.
 
 ## Handing it to the contract
 

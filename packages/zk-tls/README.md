@@ -31,8 +31,7 @@ prover that the client can use to obtain evidence:
   - Schemas: `zkFetchEvidenceSchema`, `zkFetchPolicySchema`,
     `zkFetchClaimSchema`.
   - `assertEvidenceMatchesPolicy(verified, policy)` checks HTTPS against the host
-    allowlist and the size bound. Required slots must be
-    certifiable, meaning disclosed and parseable; optional slots may be absent
+    allowlist. Required slots must be certifiable, meaning disclosed and parseable; optional slots may be absent
     and are signed unpresent.
   - `deriveClaimFromEvidence({ verified, policy, appId, holder, valueSlots, windowStart, windowEnd })`
     derives the canonical `Claim` the attestor signs: values/present from the
@@ -119,6 +118,12 @@ claims; Thoth promises no cross-claim identity or unlinkability.
   zod schema is the boundary. Normalizing third-party zkFetch output, such as
   raw `transformProof` shells and address/witness plumbing, belongs to the
   producing client SDK, not to this trust boundary.
+- **Captured response text.** `responseText` is untrusted, client-supplied
+  transport output. The witness signature does not authenticate it, even after
+  proof verification. Policy checks use the signed request and disclosures.
+  `maxResponseBytes` has been removed from the policy, schema, and policy hash.
+  Existing policy hashes that included it must be recomputed. Applications may
+  limit transport payloads separately, but those limits certify no response size.
 - **Redaction is a law, not a hint.** Reclaim redacts client-side:
   `responseRedactions` selects the slices revealed to the witness, and the rest
   of the response never reaches it. The reveal plan is part of the signed
