@@ -96,6 +96,11 @@ message (same order, sizes, presence-flag semantics, and the split of each
 `values[i]` was populated (its value may still be `0`). The message length is `K = 11 + 2*V` (11 header fields, V
 presence flags, V values) — fixed when a contract embeds the module.
 
+`verifyAttestation` rejects a claim with `present[i] = false` and `values[i] != 0`
+with `"Absent slot has nonzero value"`. Absent slots must carry zero, so their
+unused values cannot distinguish observations for replay protection. A measured
+zero remains valid with `present[i] = true`.
+
 ## Design notes
 
 - **The claim is the entire message.** Everything the contract inspects —

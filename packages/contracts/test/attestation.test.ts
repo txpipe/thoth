@@ -100,6 +100,16 @@ describe('mock attestation', () => {
   });
 
   describe('verifyAttestation', () => {
+    it.each([0, 1, 2])('rejects a nonzero value in absent slot %i', async (slot) => {
+      const values = [0n, 0n, 0n];
+      values[slot] = 1n;
+      const claim = makeClaim({ values, present: [false, false, false] });
+      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      await expect(sim.call('verifyAttestation', ps(signed))).rejects.toThrow(
+        'Absent slot has nonzero value',
+      );
+    });
+
     it('rejects a caller who does not know the signed holder secret', async () => {
       const claim = makeClaim();
       const signed = signClaim(claim, notaryKeys, randomBytes(32));
@@ -243,8 +253,12 @@ describe('mock attestation', () => {
       expect(policies.size()).toBe(1n);
     });
 
-    it('accepts a genuine-0 value when present flag set', async () => {
-      const claim = makeClaim({ values: [0n, 200n, 0n], present: [false, true, false] });
+    it.each([
+      { name: 'all absent', values: [0n, 0n, 0n], present: [false, false, false] },
+      { name: 'all measured zeros', values: [0n, 0n, 0n], present: [true, true, true] },
+      { name: 'mixed presence', values: [0n, 200n, 0n], present: [true, true, false] },
+    ])('accepts valid slots with $name', async ({ values, present }) => {
+      const claim = makeClaim({ values, present });
       const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
       await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
       expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
@@ -305,7 +319,7 @@ describe('mock attestation', () => {
         },
       ]),
     ])('accepts a distinct observation after changing $name', async ({ mutate }) => {
-      const claim = makeClaim();
+      const claim = makeClaim({ values: [0n, 0n, 0n], present: [true, true, true] });
       await sim.call('verifyAttestation', ps(signClaim(claim, notaryKeys, randomBytes(32))));
       const distinct = mutate(claim);
       const signed = signClaim(distinct, notaryKeys, randomBytes(32));
