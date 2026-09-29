@@ -18,7 +18,7 @@
     "pretest": "npm run compact && npm run build",
     "test": "vitest run",
     "build": "npm run build --workspace=packages/core && npm run build --workspaces --if-present",
-    "types": "npm run build --workspace=packages/core && npm run build --workspace=packages/attestor && npm run build --workspace=packages/client && tsc --noEmit && npm run types --workspaces --if-present",
+    "types": "npm run build --workspace=packages/core && npm run build --workspace=packages/attestor && npm run build --workspace=packages/client && npm run build --workspace=packages/zk-tls && tsc --noEmit && npm run types --workspaces --if-present",
     "check": "npm run check:biome && npm run check:compact",
     "check:fix": "npm run check:fix:biome && npm run check:fix:compact",
     "check:ci": "npm run check:biome && npm run check:compact",

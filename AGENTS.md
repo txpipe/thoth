@@ -45,8 +45,9 @@ biome on every push/PR.
 - **Stale `dist/` footgun** — workspaces resolve each other through
   `node_modules/@thoth/*` ⇒ `exports` ⇒ `dist/`. The root `build`/`types`
   scripts rebuild the dependency-producing packages first (`core`, `attestor`,
-  `client`), so consumers — e.g. `zk-tls`, which depends on all three — see
-  fresh types; if a *new* workspace dependency appears, add its package to the
+  `client`, `zk-tls`), so consumers — e.g. `zk-tls`, which depends on the first
+  three, and the `contracts` tests, which depend on all four — see fresh
+  types; if a *new* workspace dependency appears, add its package to the
   build-first chain. A stale `dist/index.d.ts` still produces confusing errors
   like "Generic type requires N type argument(s)".
 
@@ -134,6 +135,10 @@ thoth/
   `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.
 - After changing Compact sources, recompile before running tests:
   `npm run compact:no-zk` (the `pretest` hook does this automatically).
+- `packages/contracts/test/acceptance.test.ts` is the cross-seam check: test-key
+  witnesses → zkFetch attestors with real Jubjub keys → client collection →
+  simulator. Mutations of signed bindings each run on a fresh ledger, so the
+  rejection is the signature check, not a leftover nullifier.
 - `packages/zk-tls/test/live.test.ts` is an opt-in live check against two real
   witnesses; it skips unless `WITNESS_URLS` names them, so `npm test` and CI
   stay offline. See the package README's "Live check".
