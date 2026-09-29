@@ -124,6 +124,20 @@ identifiers and `proveReq` rejects the set with `witnesses disagree`. Reveal
 only the field the policy binds, and prefer values the origin returns
 deterministically.
 
+## Witness agreement and upgrades
+
+Every operator in one trusted set must run the same witness version and behavior.
+Two witnesses agree only when they add identical context fields to the Reclaim
+claim identifier for the same request and disclosures. Thoth does not pin witness
+behavior. An upstream witness change can silently split every affected trusted
+set; `proveReq` fails closed with `witnesses disagree`, causing an availability
+failure before any attestor is contacted.
+
+When a witness version or behavior changes, coordinate all operators and re-run
+the [live check](../README.md#live-check) with `WITNESS_URLS` pointing to the
+candidate witnesses before rotating the trusted set. Rotate only after the
+check confirms that they derive the same identifier and message.
+
 ## Building the policy
 
 Every attestor in a trusted set will enforce the same policy. Field docs live in
@@ -158,8 +172,8 @@ contract's fixed signature vector and call `verifyAttestation` with the claim.
 See `@thoth/contracts` for the circuit and the registry wiring.
 
 Each attestor operator runs their own Reclaim witness and builds the attestor
-with that witness's key. The dApp points each attestor's prover at the matching
-witness URL, so the evidence an attestor receives comes from the one witness it
+with that witness's public address. The dApp points each attestor's prover at
+the matching witness URL, so the evidence an attestor receives comes from the one witness it
 trusts. See [attestor-guide.md](attestor-guide.md) for running one.
 
 Replay protection uses the signed observation fields, including the window and
@@ -208,7 +222,7 @@ const hostedProver = (client: ReclaimClient): ZkFetchProver => ({
 on it.
 
 This path lets Reclaim choose the witness per call, so it only fits a trusted
-set whose attestors all pin that witness key. A set of operators running their
+set whose attestors all pin that witness address. A set of operators running their
 own witnesses needs one direct `zkFetchProver` per attestor instead.
 
 References:

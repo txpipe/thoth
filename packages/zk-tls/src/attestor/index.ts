@@ -2,8 +2,6 @@ import type { proto } from '@reclaimprotocol/attestor-core';
 import {
   assertValidClaimSignatures,
   getIdentifierFromClaimInfo,
-  SelectedServiceSignatureType,
-  SIGNATURES,
 } from '@reclaimprotocol/attestor-core';
 import type { Attestor, KeyPair } from '@thoth/attestor';
 import { buildAttestor, defineAttestor } from '@thoth/attestor';
@@ -28,11 +26,6 @@ import {
   zkFetchPolicySchema,
   zkFetchSubjectHashOf,
 } from '../index.js';
-
-const witnessAddressOf = (witnessKey: string): string => {
-  const scheme = SIGNATURES[SelectedServiceSignatureType];
-  return scheme.getAddress(scheme.getPublicKey(witnessKey)).toLowerCase();
-};
 
 /**
  * Verify a zkFetch proof and extract the values it disclosed.
@@ -220,7 +213,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  *
  * @typeParam PK — the signature scheme's public key type.
  * @typeParam S — the signature scheme's signature type.
- * @param parts — instance id, key material, registry slot, and witness key.
+ * @param parts — instance id, key material, registry slot, and witness address.
  * @returns a working `Attestor` for the kind.
  */
 export function zkFetchAttestor<PK, S>(parts: {
@@ -230,11 +223,11 @@ export function zkFetchAttestor<PK, S>(parts: {
   keyPair: KeyPair<PK, S, FlatMessage>;
   /** Slot index of this attestor's key in the on-chain registry. */
   registryIndex: number;
-  /** The operator's own Reclaim witness key (`0x` + 32-byte hex secp256k1). */
-  witnessKey: string;
+  /** The operator's own Reclaim witness address (`0x` + 20-byte hex). */
+  witnessAddress: string;
 }): Attestor<ZkFetchDefinition, PK, S> {
-  const { id, keyPair, registryIndex, witnessKey } = parts;
-  const witnessAddress = witnessAddressOf(witnessKey);
+  const { id, keyPair, registryIndex, witnessAddress } = parts;
+  const trustedWitnessAddress = witnessAddress.toLowerCase();
   const definition = createZkFetchDefinition();
   const publicKey = keyPair.publicKey;
   return buildAttestor({
@@ -248,9 +241,9 @@ export function zkFetchAttestor<PK, S>(parts: {
       const proposed = definition.claim.parse(input.claim);
       // One full check pass (ECDSA + policy + subject and disclosures cross-check).
       await definition.verify({ policy, evidence, claim: proposed });
-      if (evidence.attestorAddress.toLowerCase() !== witnessAddress) {
+      if (evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
         throw new Error(
-          `evidence signed by witness ${evidence.attestorAddress}, not this attestor's witness ${witnessAddress}`,
+          `evidence signed by witness ${evidence.attestorAddress}, not this attestor's witness ${trustedWitnessAddress}`,
         );
       }
       // Claim derivation only needs the pure parsed view.

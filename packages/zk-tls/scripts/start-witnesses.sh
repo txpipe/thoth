@@ -73,6 +73,18 @@ if ! wait_for "$PORT_B"; then
   exit 1
 fi
 
+witness_address() {
+  node -e "fetch('http://localhost:' + process.argv[1] + '/address').then(async response => {
+    if (!response.ok) throw new Error('address endpoint returned ' + response.status);
+    console.log((await response.json()).address);
+  }).catch(error => { console.error(error); process.exit(1); })" "$1"
+}
+
+ADDRESS_A=$(witness_address "$PORT_A")
+ADDRESS_B=$(witness_address "$PORT_B")
+log "witness A public address: $ADDRESS_A"
+log "witness B public address: $ADDRESS_B"
+log "configure each attestor with its witnessAddress above; keep witness keys on the witnesses"
 log "witness A listening on port $PORT_A (log $LOG_A)"
 log "witness B listening on port $PORT_B (log $LOG_B)"
 log "run the live check in another shell:"

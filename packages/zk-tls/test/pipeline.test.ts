@@ -190,15 +190,15 @@ describe('zkFetch attestor + client', () => {
     'attestor-1': bobWitness,
     'attestor-2': carolWitness,
   };
-  const witnessKeyById: Record<string, string> = {
-    'attestor-0': `0x${'33'.repeat(32)}`,
-    'attestor-1': `0x${'44'.repeat(32)}`,
-    'attestor-2': `0x${'55'.repeat(32)}`,
-  };
   const ids = Object.keys(witnessById);
 
-  const attestors = Object.entries(witnessKeyById).map(([id, witnessKey], i) =>
-    zkFetchAttestor({ id, keyPair: fakeKey(id), registryIndex: i, witnessKey }),
+  const attestors = Object.entries(witnessById).map(([id, witness], i) =>
+    zkFetchAttestor({
+      id,
+      keyPair: fakeKey(id),
+      registryIndex: i,
+      witnessAddress: witness.address,
+    }),
   );
   const byId = new Map(attestors.map((a) => [a.id, a]));
   const trusted = buildTrustedSet(attestors.map(descriptorOf));

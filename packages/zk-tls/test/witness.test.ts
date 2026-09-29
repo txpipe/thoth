@@ -1,6 +1,6 @@
 // Test-key witnesses: local secp256k1 keys stand in for Reclaim witnesses and
 // sign provider claim data. Checks the zkFetch attestor accepts evidence signed
-// by the witness key it pins — offline and deterministically — and rejects
+// by the witness address it pins, offline and deterministically, and rejects
 // evidence from any other witness.
 import { type Claim, claimToMessage, type FlatMessage } from '@thoth/core/claim';
 import {
@@ -41,7 +41,7 @@ const observe = (
     ...overrides,
   });
 
-const makeAttestor = (id: string, witnessKey: string, registryIndex: number) =>
+const makeAttestor = (id: string, witnessAddress: string, registryIndex: number) =>
   zkFetchAttestor({
     id,
     keyPair: {
@@ -49,11 +49,11 @@ const makeAttestor = (id: string, witnessKey: string, registryIndex: number) =>
       signer: { sign: (message: FlatMessage): string => `sig:${message.join(',')}` },
     },
     registryIndex,
-    witnessKey,
+    witnessAddress,
   });
 
-const aliceAttestor = makeAttestor('attestor-alice', `0x${'11'.repeat(32)}`, 0);
-const bobAttestor = makeAttestor('attestor-bob', `0x${'22'.repeat(32)}`, 1);
+const aliceAttestor = makeAttestor('attestor-alice', alice.address, 0);
+const bobAttestor = makeAttestor('attestor-bob', bob.address, 1);
 
 /** The observation window every claim in this suite is proposed with. */
 const WINDOW = { windowStart: 1_786_000_000n, windowEnd: 1_786_000_010n };

@@ -80,9 +80,9 @@ prover that the client can use to obtain evidence:
     requires the witness observation inside the proposed window, and checks the claim against
     the signed request and the disclosures, and a `message` that encodes the claim into the flat
     message via `claimToMessage`.
-  - `zkFetchAttestor({ id, keyPair, registryIndex, witnessKey })` returns a
+  - `zkFetchAttestor({ id, keyPair, registryIndex, witnessAddress })` returns a
     deployable instance: a specialization of `@thoth/attestor`'s `buildAttestor`
-    that knows the kind, accepts evidence only from the witness `witnessKey`
+    that knows the kind, accepts evidence only from the witness `witnessAddress`
     names, and signs the attestor-derived claim at the proposed `values.length`.
     The claim schema requires `present` and `values` to have equal lengths;
     verification rejects policy slot indices outside that length before checking
@@ -146,7 +146,7 @@ claims; Thoth promises no cross-claim identity or unlinkability.
   semantic agreement in practice: different interpretations of the same evidence
   produce different messages, and the registry refuses to count them together.
   The policy constrains hosts and slot semantics; which witness an attestor
-  trusts is per instance, via its `witnessKey`, not part of the shared law.
+  trusts is per instance, via its `witnessAddress`, not part of the shared law.
   The policy is the dApp's law, carried with each request and enforced by the
   attestor for that request; an attestor holds no app-specific policy or slot count.
   Keeping a claim meaningful is the consuming contract's job: it pins the trusted set
@@ -165,7 +165,8 @@ dependencies, runs two sidecars; Ctrl-C stops them):
 npm run witnesses --workspace=packages/zk-tls
 ```
 
-It prints the check command for another shell:
+It prints each witness's public address for the attestor's `witnessAddress`
+configuration and the check command for another shell:
 
 ```bash
 WITNESS_URLS=ws://localhost:8001/ws,ws://localhost:8002/ws \
@@ -179,6 +180,11 @@ drift with upstream; `WITNESS_REF`, `WITNESS_CLONE_DIR`, `WITNESS_PORT_A/B`, and
 (override with `LIVE_URL`), asserts that both witnesses derive the same
 identifier and message, and that the star count is present. It is not part of
 `npm test`.
+
+All operators in one trusted set must use the same witness version and behavior.
+Re-run this check against candidate witnesses after any witness change and before
+rotating the set. See the [attestor guide](docs/attestor-guide.md#witness-agreement-and-upgrades)
+for the agreement requirement and upgrade procedure.
 
 ## Design rationale
 
