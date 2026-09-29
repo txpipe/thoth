@@ -9,8 +9,7 @@ import type { PrivateState } from './private-state.js';
 
 export type WitnessBase = WitnessContext<Ledger, PrivateState>;
 
-// The values the mock's constructor seals at deploy; each defaults to the
-// fixtures' value.
+/** Deploy-time values sealed by the mock constructor. Omitted values use fixture defaults. */
 export type DeploySeals = {
   freshnessWindow?: bigint;
   maxWindow?: bigint;

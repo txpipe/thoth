@@ -14,10 +14,9 @@ import { signClaim as signSingle } from './sign.js';
 
 export const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
 
-// The seals the mock deploys with unless a test overrides them: a claim stays
-// submittable for a day after its window ends, and a window spans at most
-// five minutes.
+/** Default mock freshness window: one day after the observation ends. */
 export const DEFAULT_FRESHNESS_WINDOW = 86400n;
+/** Default mock maximum observation window: five minutes. */
 export const DEFAULT_MAX_WINDOW = 300n;
 
 // A fixed app id and the two policy hashes the mock seals at deploy. A third,
