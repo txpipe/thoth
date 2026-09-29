@@ -4,6 +4,8 @@
 // Each expected digest is rebuilt from a hand-written canonical serialization
 // (or, for the subject hash, a digest the compiled circuit produced), so the
 // vectors pin the encoding itself rather than this implementation's output.
+// The subject hash's circuit parity is re-checked in the contracts suite
+// (`packages/contracts/test/subject-parity.test.ts`).
 
 import { createHash } from 'node:crypto';
 import { claimContextDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
