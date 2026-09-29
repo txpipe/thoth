@@ -4,7 +4,8 @@ import {
   jubjubSchnorrSign,
   jubjubSchnorrVerifyingKey,
 } from '@midnight-ntwrk/compact-runtime';
-import { buildTrustedSet, resolveAttestation } from '@thoth/client';
+import { attestorOf, buildTrustedSet, resolveAttestation } from '@thoth/client';
+import { AttestorNotInTrustedSetError } from '@thoth/client/errors';
 import { jubjubVerifier } from '@thoth/client/jubjub';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -21,19 +22,21 @@ const claim = { value: 42n };
 const message = definition.message(claim);
 const publicKey = jubjubSchnorrVerifyingKey(17n);
 const signature = jubjubSchnorrSign(new CompactTypeVector(1, CompactTypeField), message, 17n);
-const attestor = { id: 'alice', definition, publicKey, registryIndex: 0 };
-const trusted = buildTrustedSet([attestor]);
+const attestor = { id: 'alice', definition, publicKey };
+const trusted = buildTrustedSet({ registrySize: 3, attestors: [{ attestor, registryIndex: 2 }] });
+const member = attestorOf(trusted, 'alice');
 const attestation = { claim, message, publicKey, signature };
-const options = { trusted, attestor, attestation, verifier: jubjubVerifier, expectedClaim: claim };
+const options = { trusted, member, attestation, verifier: jubjubVerifier, expectedClaim: claim };
 
 // Keep the message and its valid signature fixed to isolate claim comparison.
 const vetClaim = (expected: unknown, returned: unknown) => {
   const claimDefinition = { ...definition, claim: z.unknown(), message: () => message };
   const claimAttestor = { ...attestor, definition: claimDefinition };
+  const claimMember = { attestor: claimAttestor, registryIndex: 2 };
   return resolveAttestation({
     ...options,
-    trusted: buildTrustedSet([claimAttestor]),
-    attestor: claimAttestor,
+    trusted: buildTrustedSet({ registrySize: 3, attestors: [claimMember] }),
+    member: claimMember,
     expectedClaim: expected,
     attestation: { ...attestation, claim: returned },
   });
@@ -43,7 +46,7 @@ describe('resolveAttestation', () => {
   it('accepts a valid signature and tags it with its registry slot', async () => {
     await expect(
       resolveAttestation({ ...options, attestation: structuredClone(attestation) }),
-    ).resolves.toEqual({ registryIndex: 0, attestation });
+    ).resolves.toEqual({ registryIndex: 2, attestation });
   });
 
   it.each([
@@ -61,7 +64,7 @@ describe('resolveAttestation', () => {
       returned: { value: undefined },
     },
   ])('accepts equal $name', async ({ expected, returned }) => {
-    await expect(vetClaim(expected, returned)).resolves.toMatchObject({ registryIndex: 0 });
+    await expect(vetClaim(expected, returned)).resolves.toMatchObject({ registryIndex: 2 });
   });
 
   it.each([
@@ -100,7 +103,7 @@ describe('resolveAttestation', () => {
           verify: async (...args) => jubjubVerifier.verify(...args),
         },
       }),
-    ).resolves.toMatchObject({ registryIndex: 0 });
+    ).resolves.toMatchObject({ registryIndex: 2 });
   });
 
   it.each([
@@ -181,9 +184,20 @@ describe('resolveAttestation', () => {
     ).rejects.toMatchObject({ reason: 'public-key' });
   });
 
-  it('rejects an out-of-range registry slot', async () => {
+  it('rejects a member the trusted set never assigned', async () => {
     await expect(
-      resolveAttestation({ ...options, attestor: { ...attestor, registryIndex: 1 } }),
+      resolveAttestation({ ...options, member: { attestor, registryIndex: 1 } }),
+    ).rejects.toBeInstanceOf(AttestorNotInTrustedSetError);
+  });
+
+  it('rejects a slot outside the on-chain registry of an unchecked set', async () => {
+    const unchecked = { attestor, registryIndex: 3 };
+    await expect(
+      resolveAttestation({
+        ...options,
+        trusted: { registrySize: 3, attestors: [unchecked] },
+        member: unchecked,
+      }),
     ).rejects.toMatchObject({ reason: 'registry-index' });
   });
 
@@ -199,5 +213,73 @@ describe('resolveAttestation', () => {
         attestation: { ...attestation, signature: { ...signature, response: 0n } },
       }),
     ).rejects.toMatchObject({ reason: 'signature', attestorId: 'alice' });
+  });
+});
+
+describe('buildTrustedSet', () => {
+  const bob = { id: 'bob', definition, publicKey: jubjubSchnorrVerifyingKey(18n) };
+
+  it('keeps each attestor at the slot the app assigned', () => {
+    const set = buildTrustedSet({
+      registrySize: 5,
+      attestors: [
+        { attestor, registryIndex: 4 },
+        { attestor: bob, registryIndex: 1 },
+      ],
+    });
+    expect(set.registrySize).toBe(5);
+    expect(attestorOf(set, 'alice').registryIndex).toBe(4);
+    expect(attestorOf(set, 'bob')).toEqual({ attestor: bob, registryIndex: 1 });
+  });
+
+  it('bounds slots by the on-chain registry size, not by the set size', () => {
+    expect(() =>
+      buildTrustedSet({ registrySize: 3, attestors: [{ attestor, registryIndex: 2 }] }),
+    ).not.toThrow();
+    expect(() =>
+      buildTrustedSet({ registrySize: 2, attestors: [{ attestor, registryIndex: 2 }] }),
+    ).toThrow(expect.objectContaining({ reason: 'registry-index', attestorId: 'alice' }));
+  });
+
+  it.each([-1, 0.5, Number.NaN])('rejects the malformed slot %s', (registryIndex) => {
+    expect(() =>
+      buildTrustedSet({ registrySize: 3, attestors: [{ attestor, registryIndex }] }),
+    ).toThrow(expect.objectContaining({ reason: 'registry-index' }));
+  });
+
+  it.each([0, -1, 1.5])('rejects the registry size %s', (registrySize) => {
+    expect(() =>
+      buildTrustedSet({ registrySize, attestors: [{ attestor, registryIndex: 0 }] }),
+    ).toThrow(expect.objectContaining({ reason: 'registry-size' }));
+  });
+
+  it('rejects an empty set', () => {
+    expect(() => buildTrustedSet({ registrySize: 3, attestors: [] })).toThrow(
+      expect.objectContaining({ reason: 'empty' }),
+    );
+  });
+
+  it('rejects two attestors assigned the same slot', () => {
+    expect(() =>
+      buildTrustedSet({
+        registrySize: 3,
+        attestors: [
+          { attestor, registryIndex: 1 },
+          { attestor: bob, registryIndex: 1 },
+        ],
+      }),
+    ).toThrow(expect.objectContaining({ reason: 'duplicate-slot', attestorId: 'bob' }));
+  });
+
+  it('rejects one attestor id pinned twice', () => {
+    expect(() =>
+      buildTrustedSet({
+        registrySize: 3,
+        attestors: [
+          { attestor, registryIndex: 0 },
+          { attestor, registryIndex: 1 },
+        ],
+      }),
+    ).toThrow(expect.objectContaining({ reason: 'duplicate-id', attestorId: 'alice' }));
   });
 });

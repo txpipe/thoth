@@ -10,9 +10,11 @@ See the [package README](../README.md) for what the package exports and
 Seven things go into `zkFetchClient.init`:
 
 - **`trusted`.** The attestors your app pins, assembled with `@thoth/client`'s
-  `buildTrustedSet(descriptors)`. A descriptor is `{ id, definition, publicKey,
-  registryIndex }`, from your deploy config and the attestor network; see
-  `@thoth/client` for the trusted-set rules.
+  `buildTrustedSet({ registrySize, attestors })`. `registrySize` is your
+  registry's `#M`; each member pairs a descriptor `{ id, definition, publicKey }`
+  from the attestor network with the `registryIndex` of its key in **your**
+  deployed registry. The attestor does not choose its slot; see `@thoth/client`
+  for the trusted-set rules.
 - **`transport`.** How the client reaches each attestor. App-supplied; the
   host-side mirror is `Attestor.attest`, and `@thoth/client` has a minimal HTTP
   example.
@@ -39,7 +41,14 @@ import type { ZkFetchDefinition } from '@thoth/zk-tls';
 import { zkFetchClient } from '@thoth/zk-tls/client';
 import { zkFetchProver } from '@thoth/zk-tls/prover';
 
-const trusted = buildTrustedSet(descriptors);
+const trusted = buildTrustedSet({
+  registrySize: 3, // the registry's #M
+  attestors: [
+    { attestor: txpipeDescriptor, registryIndex: 0 },
+    { attestor: eryxDescriptor, registryIndex: 1 },
+    { attestor: foundationDescriptor, registryIndex: 2 },
+  ],
+});
 
 const transport: AttestorTransport<ZkFetchDefinition, PublicKey, Signature> = {
   async request(attestor, input) {
@@ -193,8 +202,9 @@ transport size limits separately from attestation policy checks.
 
 `attestment.claim` is the claim every attestor signed and `attestment.message`
 is its flat encoding; each `attestment.collected[i]` carries the `registryIndex`
-slot its attestor answered from. Place each signature at its slot in the
-contract's fixed signature vector and call `verifyAttestation` with the claim.
+your trusted set assigned to the attestor that signed it. Place each signature
+at its slot in the contract's fixed signature vector and call
+`verifyAttestation` with the claim.
 See `@thoth/contracts` for the circuit and the registry wiring.
 
 Each attestor operator runs their own Reclaim witness and builds the attestor

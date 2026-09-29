@@ -197,16 +197,24 @@ describe('zkFetch attestor + client', () => {
   };
   const ids = Object.keys(witnessById);
 
-  const attestors = Object.entries(witnessById).map(([id, witness], i) =>
+  const attestors = Object.entries(witnessById).map(([id, witness]) =>
     zkFetchAttestor({
       id,
       keyPair: fakeKey(id),
-      registryIndex: i,
       witnessAddress: witness.address,
     }),
   );
   const byId = new Map(attestors.map((a) => [a.id, a]));
-  const trusted = buildTrustedSet(attestors.map(descriptorOf));
+  // The app assigns each attestor its registry slot; here `attestor-i` sits at slot `i`.
+  const trustedWith = (slots: readonly number[], registrySize = 3) =>
+    buildTrustedSet({
+      registrySize,
+      attestors: attestors.map((attestor, i) => ({
+        attestor: descriptorOf(attestor),
+        registryIndex: slots[i] as number,
+      })),
+    });
+  const trusted = trustedWith([0, 1, 2]);
   const transport: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> = {
     async request(attestor, input) {
       const instance = byId.get(attestor.id);
@@ -272,10 +280,11 @@ describe('zkFetch attestor + client', () => {
       transport?: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature>;
       provers?: Record<string, ZkFetchProver>;
       appId?: Uint8Array;
+      trusted?: typeof trusted;
     } = {},
   ) =>
     zkFetchClient.init({
-      trusted,
+      trusted: overrides.trusted ?? trusted,
       verifier: fakeVerifier,
       transport: overrides.transport ?? transport,
       policy: overrides.policy ?? policy(),
@@ -301,7 +310,7 @@ describe('zkFetch attestor + client', () => {
     const seen = { contacted: false };
     const watched: typeof transport = {
       request: async (attestor, input) => {
-        seen.contacted ||= attestor.registryIndex === 0;
+        seen.contacted ||= attestor.id === 'attestor-0';
         return transport.request(attestor, input);
       },
     };
@@ -453,7 +462,7 @@ describe('zkFetch attestor + client', () => {
               : provers,
           transport: {
             request: (attestor, input) =>
-              step === 'transport' && attestor.registryIndex === 0
+              step === 'transport' && attestor.id === 'attestor-0'
                 ? hanging<never>()
                 : transport.request(attestor, input),
           },
@@ -551,7 +560,7 @@ describe('zkFetch attestor + client', () => {
       transport: {
         request: async (attestor, input) => {
           const result = await transport.request(attestor, input);
-          return attestor.registryIndex === 0 ? { ...result, signature: 'forged' } : result;
+          return attestor.id === 'attestor-0' ? { ...result, signature: 'forged' } : result;
         },
       },
     });
@@ -717,6 +726,38 @@ describe('zkFetch attestor + client', () => {
   it('lets the caller select which attestors to query', async () => {
     const attestment = await prove().then((proof) => proof.attest('attestor-0', 'attestor-2'));
     expect(attestment.collected.map((c) => c.registryIndex)).toEqual([0, 2]);
+  });
+
+  it("places slot-agnostic signatures at each app's own registry slots", async () => {
+    // Two apps pin the same attestors at different slots of registries with different sizes.
+    const [first, second] = await Promise.all(
+      [trustedWith([0, 1, 2]), trustedWith([4, 0, 2], 5)].map((set) =>
+        clientWith({ trusted: set })
+          .proveReq(
+            { url: 'https://api.github.com/repos/x', method: 'GET' },
+            new Uint8Array(32).fill(0xc1),
+          )
+          .then((proof) => proof.attest('attestor-0', 'attestor-1')),
+      ),
+    );
+    expect(first?.collected.map((c) => c.registryIndex)).toEqual([0, 1]);
+    expect(second?.collected.map((c) => c.registryIndex)).toEqual([4, 0]);
+    expect(second?.collected.map((c) => c.attestation)).toEqual(
+      first?.collected.map((c) => c.attestation),
+    );
+  });
+
+  it('collects and sorts by app-assigned slots, not by trusted-set order', async () => {
+    const result = await clientWith({ trusted: trustedWith([4, 0, 2], 5) }).collect(
+      collectionRequest,
+      { ...options(), threshold: 3 },
+    );
+    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([0, 2, 4]);
+    expect(result.collected.map((entry) => entry.attestation.publicKey.id)).toEqual([
+      'attestor-1',
+      'attestor-2',
+      'attestor-0',
+    ]);
   });
 
   it('refuses to attest to an attestor outside the trusted set', async () => {

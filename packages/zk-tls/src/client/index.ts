@@ -30,6 +30,10 @@ export { ZkFetchThresholdError };
 /** Byte length of a claim's `appId`. */
 const APP_ID_BYTES = 32;
 
+/** The trusted set's attestor ids, in descriptor order. */
+const idsOf = <PK>(trusted: TrustedSet<ZkFetchDefinition, PK>): string[] =>
+  trusted.attestors.map((member) => member.attestor.id);
+
 /** Field-wise equality of two flat messages. */
 const sameMessage = (a: FlatMessage, b: FlatMessage): boolean =>
   a.length === b.length && a.every((value, i) => value === b[i]);
@@ -331,7 +335,7 @@ export const zkFetchClient = {
     if (appId.length !== APP_ID_BYTES) {
       throw new Error(`appId must be ${APP_ID_BYTES} bytes, got ${appId.length}`);
     }
-    const trustedIds = new Set(trusted.attestors.map((attestor) => attestor.id));
+    const trustedIds = new Set(idsOf(trusted));
     for (const id of trustedIds) {
       if (provers[id] === undefined) {
         throw new Error(`no prover configured for attestor ${id}`);
@@ -352,7 +356,7 @@ export const zkFetchClient = {
         const checkedHolder = bytes32Schema.parse(holder).slice();
         const signedRequest = copyRequest(request);
         const entries = await Promise.all(
-          trusted.attestors.map(async (attestor) => {
+          trusted.attestors.map(async ({ attestor }) => {
             const evidence = await proveWith(provers, attestor, signedRequest);
             return [attestor.id, evidence] as const;
           }),
@@ -459,15 +463,15 @@ const collectAttestations = async <V extends number, PK, S>(options: {
   ids: string[];
 }): Promise<Attestment<V, PK, S>> => {
   const { trusted, evidences, claim, message, ids } = options;
-  const targetIds = ids.length > 0 ? ids : trusted.attestors.map((a) => a.id);
+  const targetIds = ids.length > 0 ? ids : idsOf(trusted);
   const collected: ZkFetchCollectedAttestation<V, PK, S>[] = [];
   for (const id of targetIds) {
-    const attestor = attestorOf(trusted, id);
+    const member = attestorOf(trusted, id);
     const evidence = evidences[id];
     if (evidence === undefined) {
       throw new Error(`no evidence for attestor ${id}`);
     }
-    collected.push(await attestWith(options, attestor, evidence, claim));
+    collected.push(await attestWith(options, member, evidence, claim));
   }
   return { claim, message, collected };
 };

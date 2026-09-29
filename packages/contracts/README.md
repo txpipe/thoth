@@ -155,8 +155,9 @@ zero remains valid with `present[i] = true`.
   per-user state belongs to the app (ADR 0004).
 - **Registry slots are positional.** `attestor_registry` verifies
   `signatures[i]` against `keys[i]` — a signature is valid *only* in the slot
-  holding its signer's public key. The client therefore places each collected
-  signature at the index equal to its attestor's registry slot order.
+  holding its signer's public key. Placement is the app's: the client's trusted
+  set records each attestor's slot in this registry, and each collected
+  signature goes at that slot.
 
 ## Reading presence in-circuit
 

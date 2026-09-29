@@ -81,9 +81,11 @@ thoth/
 - **Claim types are keyless.** `@thoth/core` carries no signing key; anything
   that commits to a message delegates to the kind's `message()`. Keep it that
   way.
-- **`registryIndex` is positional.** `attestor_registry.compact` verifies
-  signatures positionally (`signatures[i]` against `keys[i]`). Never reorder
-  descriptors by anything other than registry slot.
+- **`registryIndex` is positional and app-owned.** `attestor_registry.compact`
+  verifies signatures positionally (`signatures[i]` against `keys[i]`). The slot
+  lives only on the client's `TrustedSet` member (`{ attestor, registryIndex }`,
+  bounded by the registry's `registrySize`), never on `Attestor` or
+  `AttestorDescriptor`. Never order signatures by anything other than that slot.
 
 ## Code conventions
 

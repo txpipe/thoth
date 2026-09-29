@@ -41,32 +41,39 @@ export class AttestorNotInTrustedSetError extends Error {
   }
 }
 
+/** A {@link InvalidTrustedSetError} construction invariant. */
+export type TrustedSetInvariant =
+  | 'registry-size'
+  | 'empty'
+  | 'duplicate-id'
+  | 'registry-index'
+  | 'duplicate-slot';
+
 /**
  * A trusted set failed its construction invariants.
  *
- * `reason` discriminates the failing check: an empty set (`'empty'`), two
- * members with the same `id` (`'duplicate-id'`), two members claiming the same
- * registry slot (`'duplicate-slot'`), or a `registryIndex` outside the set's
- * own range (`'registry-index'`).
+ * `reason` discriminates the failing check: a `registrySize` that is not a
+ * positive integer (`'registry-size'`), an empty set (`'empty'`), two members
+ * with the same `id` (`'duplicate-id'`), two members assigned the same
+ * registry slot (`'duplicate-slot'`), or a `registryIndex` outside
+ * `[0, registrySize)` (`'registry-index'`).
  */
 export class InvalidTrustedSetError extends Error {
-  /** The offending attestor's id (`''` for a failed `'empty'` check). */
+  /** The offending attestor's id (`''` for a failed `'empty'` or `'registry-size'` check). */
   readonly attestorId: string;
   /** Which construction invariant failed. */
-  readonly reason: 'empty' | 'duplicate-id' | 'registry-index' | 'duplicate-slot';
+  readonly reason: TrustedSetInvariant;
 
   /**
    * @param attestorId — the offending attestor's id.
    * @param reason — the failed construction check.
    */
-  constructor(
-    attestorId: string,
-    reason: 'empty' | 'duplicate-id' | 'registry-index' | 'duplicate-slot',
-  ) {
-    const detail: Record<'empty' | 'duplicate-id' | 'registry-index' | 'duplicate-slot', string> = {
+  constructor(attestorId: string, reason: TrustedSetInvariant) {
+    const detail: Record<TrustedSetInvariant, string> = {
+      'registry-size': 'the registry size is not a positive integer',
       empty: 'the trusted set is empty',
       'duplicate-id': `attestor "${attestorId}" appears more than once`,
-      'registry-index': `attestor "${attestorId}" has a registryIndex outside the set`,
+      'registry-index': `attestor "${attestorId}" has a registryIndex outside the registry`,
       'duplicate-slot': `attestor "${attestorId}" claims an already-taken registry slot`,
     };
     super(`invalid trusted set: ${detail[reason]}`);

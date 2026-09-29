@@ -15,22 +15,26 @@ npm install @thoth/client
 
 ## What's in it
 
-- `TrustedSet<D, PK>` — the client's pinned attestors. It is **unordered**: the
-  array carries no order — each member's `registryIndex` is its on-chain
-  registry slot, never its position in the list. Each member is an
-  [`AttestorDescriptor`](https://github.com/txpipe-shop/thoth/tree/main/packages/core):
-  `id`, its keyless `definition`, its `publicKey`, and its `registryIndex`.
-- `buildTrustedSet(attestors)` — assemble the checked trusted set: rejects an
-  empty set, duplicate ids, duplicate or out-of-range `registryIndex` slots
-  (`InvalidTrustedSetError`, from `@thoth/client/errors`).
-- `attestorOf(trusted, id)` — resolve a string-named attestor to its descriptor.
+- `TrustedSet<D, PK>` — the client's pinned attestors plus the on-chain
+  registry's size (`registrySize`, the contract's `#M`). It is **unordered**:
+  the array carries no order. Each member is a `TrustedAttestor` — an
+  [`AttestorDescriptor`](https://github.com/txpipe-shop/thoth/tree/main/packages/core)
+  (`id`, keyless `definition`, `publicKey`) paired with the `registryIndex`
+  **this app** assigned it. The slot is the app's placement, not a property of
+  the attestor.
+- `buildTrustedSet({ registrySize, attestors })` — assemble the checked trusted
+  set: rejects an invalid registry size, an empty set, duplicate ids, duplicate
+  slots, and slots outside `[0, registrySize)` (`InvalidTrustedSetError`, from
+  `@thoth/client/errors`).
+- `attestorOf(trusted, id)` — resolve a string-named attestor to its trusted
+  member (descriptor + slot).
 - `AttestorTransport<D, PK, S>` — the seam between the client and a remote
   attestor: `request(attestor, input): Promise<Attestation>`. A kind SDK or the
   app supplies the concrete transport. The host-side mirror is `Attestor.attest` in `@thoth/attestor`.
-- `await resolveAttestation({ trusted, attestor, attestation, verifier, expectedClaim, expectedMessage? })` —
-  checks the pinned key, expected claim, signature, claim-to-message
+- `await resolveAttestation({ trusted, member, attestation, verifier, expectedClaim, expectedMessage? })` —
+  checks trusted-set membership, the pinned key, expected claim, signature, claim-to-message
   binding, slot bounds, and optionally the expected message, then tags the
-  attestation with its slot as a `CollectedAttestation`.
+  attestation with the member's slot as a `CollectedAttestation`.
 - `CollectedAttestation<C, PK, S, Msg>` — the collection output shape:
   an `Attestation` plus the `registryIndex` it belongs to.
 - Errors: `AttestationMismatchError` (thrown by `resolveAttestation`; `reason`
@@ -46,15 +50,24 @@ their own threshold policy, and add their own prove/attest ergonomics.
 
 ### Assemble the trusted set
 
-`buildTrustedSet(attestors)` is the one construction helper every kind SDK
-shares: it rejects an empty set, duplicate ids, duplicate `registryIndex`
-slots, and out-of-range slots, so a `TrustedSet` is valid by construction (or
-not built at all).
+`buildTrustedSet({ registrySize, attestors })` is the one construction helper
+every kind SDK shares. The app supplies each attestor's slot from its own
+deployed registry, and the registry's key count bounds those slots. A set may
+pin fewer attestors than the registry holds. It rejects an invalid registry
+size, an empty set, duplicate ids, duplicate slots, and out-of-range slots, so
+a `TrustedSet` is valid by construction (or not built at all).
 
 ```ts
 import { buildTrustedSet } from '@thoth/client';
 
-const trusted = buildTrustedSet(descriptors); // throws InvalidTrustedSetError if malformed
+// throws InvalidTrustedSetError if malformed
+const trusted = buildTrustedSet({
+  registrySize: 3, // the contract's #M
+  attestors: [
+    { attestor: txpipeDescriptor, registryIndex: 0 },
+    { attestor: eryxDescriptor, registryIndex: 2 },
+  ],
+});
 ```
 
 ### Implement the transport
@@ -86,12 +99,14 @@ const httpTransport: AttestorTransport<MyDefinition, MyPublicKey, MySignature> =
 
 ### Resolve string-named endpoints
 
-`attestorOf(trusted, id)` is the name→descriptor lookup behind a friendly
+`attestorOf(trusted, id)` is the name→member lookup behind a friendly
 `proof.attest("txpipeEndpoint", …)` API, without each SDK re-checking
 membership:
 
 ```ts
-const attestor = attestorOf(trusted, 'txpipeEndpoint'); // throws AttestorNotInTrustedSetError if not pinned
+// throws AttestorNotInTrustedSetError if not pinned
+const member = attestorOf(trusted, 'txpipeEndpoint');
+await transport.request(member.attestor, input); // transports never see the slot
 ```
 
 ### Vet one attestation
@@ -114,7 +129,7 @@ import { resolveAttestation } from '@thoth/client';
 import { jubjubVerifier } from '@thoth/client/jubjub';
 
 const collected = await resolveAttestation({
-  trusted, attestor, attestation,
+  trusted, member, attestation,
   expectedClaim: claim,
   verifier: jubjubVerifier,
 });
@@ -133,10 +148,18 @@ the law tag, policy, and wire version. Contract verification still enforces the
 registry and N-of-M threshold. Transport implementations must decode wire
 values into the typed attestation before vetting.
 
+Registry slots belong to the trusted set, not to attestors. The signed message
+binds no slot, registry, or contract, so one attestor can serve many apps at
+different slots. Each app records the slot its own registry assigned, and
+`registrySize` (the registry's `#M`) bounds it. A set may pin fewer attestors
+than the registry holds. `resolveAttestation` takes the trusted member itself,
+so a result can only carry a slot the set assigned. Transports receive only the
+descriptor.
+
 ## Links
 
 - [Thoth (repo root)](https://github.com/txpipe-shop/thoth) — overall architecture and docs
-- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — the registry-slot positional design
+- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — architecture overview and flow
 - [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core) — `AttestorDescriptor`, `Attestation`, `AttestationInput`
 - [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor) — the host-side `Attestor`/`Attest` these types mirror
 - [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts) — the on-chain registry that verifies the signatures positionally

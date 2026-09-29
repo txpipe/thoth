@@ -41,19 +41,18 @@ const observe = (
     ...overrides,
   });
 
-const makeAttestor = (id: string, witnessAddress: string, registryIndex: number) =>
+const makeAttestor = (id: string, witnessAddress: string) =>
   zkFetchAttestor({
     id,
     keyPair: {
       publicKey: id,
       signer: { sign: (message: FlatMessage): string => `sig:${message.join(',')}` },
     },
-    registryIndex,
     witnessAddress,
   });
 
-const aliceAttestor = makeAttestor('attestor-alice', alice.address, 0);
-const bobAttestor = makeAttestor('attestor-bob', bob.address, 1);
+const aliceAttestor = makeAttestor('attestor-alice', alice.address);
+const bobAttestor = makeAttestor('attestor-bob', bob.address);
 
 /** The observation window every claim in this suite is proposed with. */
 const WINDOW = { windowStart: 1_786_000_000n, windowEnd: 1_786_000_010n };

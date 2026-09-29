@@ -80,7 +80,7 @@ prover that the client can use to obtain evidence:
     requires the witness observation inside the proposed window, and checks the claim against
     the signed request and the disclosures, and a `message` that encodes the claim into the flat
     message via `claimToMessage`.
-  - `zkFetchAttestor({ id, keyPair, registryIndex, witnessAddress })` returns a
+  - `zkFetchAttestor({ id, keyPair, witnessAddress })` returns a
     deployable instance: a specialization of `@thoth/attestor`'s `buildAttestor`
     that knows the kind, accepts evidence only from the witness `witnessAddress`
     names, and signs the attestor-derived claim at the proposed `values.length`.
@@ -239,7 +239,8 @@ The kind sits in the middle of the Thoth layering:
 ```
 
 - **Composition with the host.** The definition is the shareable law; the
-  `KeyPair` + `registryIndex` make the deployable instance. Nothing here owns a
+  `KeyPair` + witness address make the deployable instance; registry
+  placement belongs to each dApp's trusted set. Nothing here owns a
   private key. `@thoth/attestor`'s `AttestorSigner` is the key boundary.
 - **Shared logic at the root.** The `@thoth/zk-tls` root holds what both sides
   need: schemas, policy check, claim derivation, and parse law. A client-only

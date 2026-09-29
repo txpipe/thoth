@@ -1,5 +1,6 @@
 // Per-attestor steps shared by `proveReq` and `collect`.
 
+import type { TrustedAttestor } from '@thoth/client';
 import { resolveAttestation } from '@thoth/client';
 import type { AttestorDescriptor } from '@thoth/core';
 import type { Claim } from '@thoth/core/claim';
@@ -138,15 +139,15 @@ export const proveWith = async <PK>(
  * @typeParam PK — the signature scheme's public-key type.
  * @typeParam S — the signature scheme's signature type.
  * @param config — the trusted set, transport, verifier, and shared policy.
- * @param attestor — the attestor to ask.
+ * @param member — the trusted attestor to ask, at its app-assigned slot.
  * @param evidence — that attestor's witness evidence.
  * @param claim — the claim proposal it must sign.
- * @returns the attestation, tagged with the attestor's registry slot.
+ * @returns the attestation, tagged with the member's registry slot.
  * @throws `AttestationMismatchError` if the key, claim, message, or signature is wrong.
  */
 export const attestWith = async <V extends number, PK, S>(
   config: Pick<ZkFetchClientConfig<V, PK, S>, 'trusted' | 'transport' | 'verifier' | 'policy'>,
-  attestor: AttestorDescriptor<ZkFetchDefinition, PK>,
+  member: TrustedAttestor<ZkFetchDefinition, PK>,
   evidence: ZkFetchEvidence,
   claim: Claim<V>,
 ): Promise<ZkFetchCollectedAttestation<V, PK, S>> => {
@@ -155,8 +156,8 @@ export const attestWith = async <V extends number, PK, S>(
   // accept the already-parsed (superset) shapes. The schemas' *input* types
   // are the looser pre-parse form, so the payload is bridged here.
   const input = { policy, evidence, claim } as unknown as ZkFetchAttestationInput;
-  const attestation = await transport.request(attestor, input);
-  return resolveAttestation({ trusted, attestor, attestation, verifier, expectedClaim: claim });
+  const attestation = await transport.request(member.attestor, input);
+  return resolveAttestation({ trusted, member, attestation, verifier, expectedClaim: claim });
 };
 
 /** Whether a value carries a secret anywhere, including inside JSON-encoded strings. */

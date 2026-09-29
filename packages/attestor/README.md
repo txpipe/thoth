@@ -20,13 +20,15 @@ npm install @thoth/attestor
 - `KeyPair<PK, S>` — the public key paired with its signing boundary, produced
   together from the same private key so they can't be cross-wired.
 - `Attestor<D, PK, S>` — a deployable, identifiable instance: `id`, the kind's
-  shareable `definition`, its `signer`, its `publicKey`, its `registryIndex`
-  (registry slot), and the `attest` lifecycle that verifies then signs.
+  shareable `definition`, its `signer`, its `publicKey`, and the `attest`
+  lifecycle that verifies then signs. It has no registry slot: the signed
+  message binds none, so one instance can serve any number of registries. Each
+  app assigns placement in its client-side `TrustedSet` (`@thoth/client`).
 - `defineAttestor` — keeps `kind` and the schema types as precise literals
   inferred from the object literal.
 - `buildAttestor` — a consistency-preserving constructor: takes an `id`, a
-  definition, a `KeyPair`, a `registryIndex`, and the kind's `attest` lifecycle,
-  and returns the `Attestor`.
+  definition, a `KeyPair`, and the kind's `attest` lifecycle, and returns the
+  `Attestor`.
 - `descriptorOf` — projects an `Attestor` to its client-facing
   [`AttestorDescriptor`](https://github.com/txpipe-shop/thoth/tree/main/packages/core)
   (drops `signer`/`attest`).
@@ -52,7 +54,6 @@ const attestor = buildAttestor({
   id: 'zkTLS',
   definition: kindLaw,
   keyPair,                        // produced by the kind's key package
-  registryIndex: 0,
   attest: async (definition, signer, input) => {
     const parsed = {
       policy: definition.policy.parse(input.policy),

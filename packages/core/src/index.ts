@@ -98,13 +98,12 @@ export interface AttestorDefinition<
 
 /**
  * The client-side face of an attestor instance: everything a client needs to
- * address the attestor and place its signatures, with none of the key-bearing
+ * address the attestor and check its signatures, with none of the key-bearing
  * machinery of `@thoth/attestor`.
  *
- * `registryIndex` is load-bearing: `attestor_registry.compact` verifies
- * signatures *positionally* — `signature[i]` against `keys[i]` — so the
- * client must place each collected signature at the slot holding that
- * attestor's public key.
+ * It carries no registry slot. The signed message binds no slot, registry, or
+ * contract, so one attestor can serve many registries at different slots.
+ * Each app assigns placement in its client-side trusted set.
  *
  * @typeParam D — the attestor's definition type.
  * @typeParam PK — the attestor's public-key type (scheme-specific).
@@ -117,10 +116,8 @@ export interface AttestorDescriptor<
   id: string;
   /** The kind's shareable law: schemas, `verify`, `message`. */
   definition: D;
-  /** Public key this attestor attests under; maps to an on-chain registry slot. */
+  /** Public key this attestor attests under. */
   publicKey: PK;
-  /** Registry slot = position in the signatures vector; see type doc above. */
-  registryIndex: number;
 }
 
 /**

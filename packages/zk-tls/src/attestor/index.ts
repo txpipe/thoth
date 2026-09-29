@@ -213,7 +213,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  *
  * @typeParam PK — the signature scheme's public key type.
  * @typeParam S — the signature scheme's signature type.
- * @param parts — instance id, key material, registry slot, and witness address.
+ * @param parts — instance id, key material, and witness address.
  * @returns a working `Attestor` for the kind.
  */
 export function zkFetchAttestor<PK, S>(parts: {
@@ -221,12 +221,10 @@ export function zkFetchAttestor<PK, S>(parts: {
   id: string;
   /** The key material: public key plus the matching signing boundary. */
   keyPair: KeyPair<PK, S, FlatMessage>;
-  /** Slot index of this attestor's key in the on-chain registry. */
-  registryIndex: number;
   /** The operator's own Reclaim witness address (`0x` + 20-byte hex). */
   witnessAddress: string;
 }): Attestor<ZkFetchDefinition, PK, S> {
-  const { id, keyPair, registryIndex, witnessAddress } = parts;
+  const { id, keyPair, witnessAddress } = parts;
   const trustedWitnessAddress = witnessAddress.toLowerCase();
   const definition = createZkFetchDefinition();
   const publicKey = keyPair.publicKey;
@@ -234,7 +232,6 @@ export function zkFetchAttestor<PK, S>(parts: {
     id,
     definition,
     keyPair,
-    registryIndex,
     attest: async (definition, signer, input) => {
       const policy = definition.policy.parse(input.policy);
       const evidence = definition.evidence.parse(input.evidence);

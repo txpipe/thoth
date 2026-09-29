@@ -7,10 +7,10 @@ See the [package README](../README.md) for what the package exports and
 
 ## Building an instance
 
-An attestor instance is a `KeyPair`, a placement in the on-chain registry, and
-the public address of the Reclaim witness the operator runs. The key pair comes
-from the signature scheme's key package and is held by `@thoth/attestor`'s
-`AttestorSigner`; nothing in this package touches a private key.
+An attestor instance is a `KeyPair` and the public address of the Reclaim
+witness the operator runs. The key pair comes from the signature scheme's key
+package and is held by `@thoth/attestor`'s `AttestorSigner`; nothing in this
+package touches a private key.
 
 ```ts
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
@@ -18,14 +18,14 @@ import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 const attestor = zkFetchAttestor({
   id: 'zkFetch-strava-1',
   keyPair, // the attestor's signing key, not the witness's
-  registryIndex: 0,
   witnessAddress: '0x…the public address of your Reclaim witness…',
 });
 ```
 
-`registryIndex` is the slot of this attestor's public key in the registry's
-pinned key vector. The contract verifies signatures positionally, so the index
-must match the deployment's registry slot.
+The instance takes no registry slot. Its signed message binds no slot,
+registry, or contract, so one instance serves any app. Each app places the
+attestor's public key in its own registry and records that slot in its
+client-side trusted set; see [dapp-integration.md](dapp-integration.md).
 
 `witnessAddress` is the public Ethereum address of the operator's own Reclaim
 witness. The instance compares addresses case-insensitively and rejects evidence

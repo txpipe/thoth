@@ -3,7 +3,6 @@
 
 import type { TrustedSet } from '@thoth/client';
 import { attestorOf } from '@thoth/client';
-import type { AttestorDescriptor } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema } from '@thoth/core/claim';
 import { z } from 'zod';
@@ -99,6 +98,7 @@ const optionsSchema = z
   })
   .refine(({ windowStart, windowEnd }) => windowStart <= windowEnd);
 
+type Member<PK> = TrustedSet<ZkFetchDefinition, PK>['attestors'][number];
 type Options = z.output<typeof optionsSchema>;
 type FailureReason = ZkFetchAttestorFailure['reason'];
 type Outcome<V extends number, PK, S> =
@@ -124,10 +124,10 @@ class AttemptError extends Error {
 const parseOptions = <PK>(
   trusted: TrustedSet<ZkFetchDefinition, PK>,
   supplied: ZkFetchThresholdOptions,
-): { options: Options; candidates: AttestorDescriptor<ZkFetchDefinition, PK>[] } => {
+): { options: Options; candidates: Member<PK>[] } => {
   try {
     const options = optionsSchema.parse(supplied);
-    const ids = options.attestorIds ?? trusted.attestors.map((attestor) => attestor.id);
+    const ids = options.attestorIds ?? trusted.attestors.map((member) => member.attestor.id);
     // A trusted set maps ids one-to-one onto slots, so distinct ids are distinct slots.
     const candidates = [...new Set(ids)].map((id) => attestorOf(trusted, id));
     if (candidates.length < options.threshold) {
@@ -151,9 +151,9 @@ const runAttempt = async <V extends number, PK, S>(
   config: ZkFetchClientConfig<V, PK, S>,
   request: ZkFetchRequest,
   options: Options,
-  attestor: AttestorDescriptor<ZkFetchDefinition, PK>,
+  member: Member<PK>,
 ): Promise<Outcome<V, PK, S>> => {
-  const slot = attestor.registryIndex;
+  const { attestor, registryIndex: slot } = member;
   const deadline = Math.min(Date.now() + options.attestorTimeoutMs, options.expiresAt);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -186,9 +186,7 @@ const runAttempt = async <V extends number, PK, S>(
     const claim = await step('evidence', () =>
       buildClaimProposal({ evidence, policy, appId, holder, valueSlots, windowStart, windowEnd }),
     );
-    const collected = await step('attestation', () =>
-      attestWith(config, attestor, evidence, claim),
-    );
+    const collected = await step('attestation', () => attestWith(config, member, evidence, claim));
     return { collected, claim, message: collected.attestation.message };
   };
 
@@ -240,11 +238,11 @@ export const collectThreshold = async <V extends number, PK, S>(
   // group reaches it, no other attempt is still pending.
   const startNeeded = () => {
     while (largestGroupSize + pending.size < options.threshold) {
-      const attestor = candidates.shift();
-      if (attestor === undefined) {
+      const member = candidates.shift();
+      if (member === undefined) {
         return;
       }
-      pending.set(attestor.registryIndex, runAttempt(config, snapshot, options, attestor));
+      pending.set(member.registryIndex, runAttempt(config, snapshot, options, member));
     }
   };
 
