@@ -75,6 +75,17 @@ describe('zkFetchPolicyHashOf', () => {
   it('rejects a malformed policy', () => {
     expect(() => zkFetchPolicyHashOf({ ...policy, allowedHosts: [] })).toThrow();
   });
+
+  it('pins the canonical form of a normalized policy', () => {
+    // Hand-written canonical JSON, not this implementation's output: the
+    // policy hash is the on-chain binding, so its bytes must not drift.
+    expect(hex(zkFetchPolicyHashOf(policy))).toBe(
+      sha256(
+        '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"claimKind":"1","claimVersion":"1",' +
+          '"maxSkewS":60,"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
+      ),
+    );
+  });
 });
 
 describe('zkFetchSubjectOf', () => {
