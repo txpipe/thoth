@@ -14,6 +14,7 @@ import { buildTrustedSet } from '@thoth/client';
 import type { FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
 import {
+  parsedEvidenceView,
   type ZkFetchDefinition,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
@@ -108,6 +109,19 @@ describe('toCanonicalEvidence', () => {
 });
 
 describe('verifyZkFetchProof', () => {
+  it('leaves non-canonical evidence unchanged when verifying it', async () => {
+    const evidence = zkFetchEvidenceSchema.parse(fixture);
+    evidence.claim.context = JSON.stringify(JSON.parse(evidence.claim.context), null, 2);
+    const original = structuredClone(evidence);
+    const before = parsedEvidenceView(evidence);
+
+    const verified = await verifyZkFetchProof(evidence);
+
+    expect(evidence).toEqual(original);
+    expect(verified).toEqual(before);
+    expect(await verifyZkFetchProof(evidence)).toEqual(before);
+  });
+
   it('re-verifies a genuine witnessed proof offline', async () => {
     const evidence = zkFetchEvidenceSchema.parse(fixture);
     const verified = await verifyZkFetchProof(evidence);
@@ -184,7 +198,7 @@ describe('zkFetch attestor + client', () => {
   const ids = Object.keys(witnessById);
 
   const attestors = Object.entries(witnessKeyById).map(([id, witnessKey], i) =>
-    zkFetchAttestor({ id, keyPair: fakeKey(id), registryIndex: i, witnessKey }),
+    zkFetchAttestor({ id, keyPair: fakeKey(id), registryIndex: i, witnessKey, valueSlots: 3 }),
   );
   const byId = new Map(attestors.map((a) => [a.id, a]));
   const trusted = buildTrustedSet(attestors.map(descriptorOf));

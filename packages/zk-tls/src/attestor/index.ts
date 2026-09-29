@@ -9,7 +9,7 @@ import type { Attestor, KeyPair } from '@thoth/attestor';
 import { buildAttestor, defineAttestor } from '@thoth/attestor';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { claimToMessage } from '@thoth/core/claim';
+import { claimSchema, claimToMessage } from '@thoth/core/claim';
 import { hexToBytes } from '../hex.js';
 import {
   assertEvidenceMatchesPolicy,
@@ -22,7 +22,6 @@ import {
   type ZkFetchDefinition,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
-  zkFetchClaimSchema,
   zkFetchEvidenceSchema,
   zkFetchPolicySchema,
   zkFetchSubjectHashOf,
@@ -48,6 +47,8 @@ const witnessAddressOf = (witnessKey: string): string => {
  * its expected claim by derivation and relies on its pinned attestors having
  * verified (plus the on-chain N-of-M threshold).
  *
+ * Verification leaves the caller's evidence unchanged, including its context encoding.
+ *
  * @param evidence — canonicalized proof artifacts.
  * @returns the cryptographically verified evidence.
  * @throws if the signature is invalid, malformed, the claim identifier does
@@ -59,7 +60,9 @@ export const verifyZkFetchProof = async (evidence: ZkFetchEvidence): Promise<Ver
     throw new Error(`zkFetch claim signature must be 65 bytes, got ${claimSignature.length}`);
   }
   await assertValidClaimSignatures({
-    claim: evidence.claim,
+    // Reclaim canonicalizes context in place while computing the signed identifier.
+    // All claim fields are scalars, so a shallow copy isolates that mutation.
+    claim: { ...evidence.claim },
     signatures: {
       claimSignature,
       attestorAddress: evidence.attestorAddress,
@@ -177,15 +180,16 @@ export const assertObservationInWindow = (options: {
  * ({@link assertClaimMatchesDisclosures}). `message` encodes a
  * claim into its flat field vector via `claimToMessage`.
  *
+ * @param valueSlots — the configured value-slot count of the target contract.
  * @returns the shareable definition; instantiate it with `@thoth/attestor`'s
  *   `buildAttestor` (see {@link zkFetchAttestor}).
  */
-export function createZkFetchDefinition(): ZkFetchDefinition {
+export function createZkFetchDefinition(valueSlots: number): ZkFetchDefinition {
   return defineAttestor({
     kind: ZK_FETCH_LAW,
     policy: zkFetchPolicySchema,
     evidence: zkFetchEvidenceSchema,
-    claim: zkFetchClaimSchema,
+    claim: claimSchema(valueSlots),
     verify: async (input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number>>) => {
       const verified = await verifyZkFetchProof(input.evidence);
       assertEvidenceMatchesPolicy(verified, input.policy);
@@ -208,12 +212,12 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  * it accepts evidence only from the operator's own Reclaim witness, rejects
  * proposals that do not match the disclosures, derives the *authoritative*
  * claim from the verified evidence (request-bound subject hash)
- * sized to the proposed claim's own length, and signs `message(claim)` with
+ * sized to the instance's configured value-slot count, and signs `message(claim)` with
  * the key pair's signer.
  *
  * @typeParam PK — the signature scheme's public key type.
  * @typeParam S — the signature scheme's signature type.
- * @param parts — instance id, key material, registry slot, and witness key.
+ * @param parts — instance id, key material, registry slot, witness key, and value-slot count.
  * @returns a working `Attestor` for the kind.
  */
 export function zkFetchAttestor<PK, S>(parts: {
@@ -225,10 +229,12 @@ export function zkFetchAttestor<PK, S>(parts: {
   registryIndex: number;
   /** The operator's own Reclaim witness key (`0x` + 32-byte hex secp256k1). */
   witnessKey: string;
+  /** The target contract's value-slot count (`#V`), enforced by the claim schema. */
+  valueSlots: number;
 }): Attestor<ZkFetchDefinition, PK, S> {
-  const { id, keyPair, registryIndex, witnessKey } = parts;
+  const { id, keyPair, registryIndex, witnessKey, valueSlots } = parts;
   const witnessAddress = witnessAddressOf(witnessKey);
-  const definition = createZkFetchDefinition();
+  const definition = createZkFetchDefinition(valueSlots);
   const publicKey = keyPair.publicKey;
   return buildAttestor({
     id,
@@ -253,7 +259,7 @@ export function zkFetchAttestor<PK, S>(parts: {
         policy,
         appId: proposed.appId,
         holder: proposed.holder,
-        valueSlots: proposed.values.length,
+        valueSlots,
         windowStart: proposed.windowStart,
         windowEnd: proposed.windowEnd,
       });

@@ -78,7 +78,8 @@ export const zkFetchEvidenceSchema = z.object({
  * The zkFetch kind's claim schema.
  *
  * Mirror of `@thoth/core/claim`'s `claimSchema` minus the exact-length
- * constraints (see issue #26).
+ * constraints (see issue #26). An attestor instance instead exposes a sized
+ * `definition.claim` schema for its configured value-slot count.
  */
 export const zkFetchClaimSchema: z.ZodType<
   Claim<number>,

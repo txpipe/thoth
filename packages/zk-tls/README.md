@@ -65,7 +65,8 @@ prover that the client can use to obtain evidence:
 - **`@thoth/zk-tls/attestor`.** The attestor, or host, side:
   - `verifyZkFetchProof(evidence)` verifies the witness's ECDSA signature
     with the Reclaim SDK and extracts the values it disclosed, returned as
-    `VerifiedEvidence.disclosedValues`.
+    `VerifiedEvidence.disclosedValues`. Verification leaves the supplied evidence
+    unchanged, including non-canonical context encoding.
   - `assertObservationInWindow({ claim, verified })` enforces that the
     witness observed inside the client-proposed window (ADR 0005). The client
     proposes the window from the earliest to the latest witness observation.
@@ -74,15 +75,18 @@ prover that the client can use to obtain evidence:
     signed.
   - `assertClaimMatchesDisclosures({ claim, disclosures, policy })` enforces
     that a client-proposed claim says exactly what the evidence disclosed.
-  - `createZkFetchDefinition()` returns the shareable definition: the three
+  - `createZkFetchDefinition(valueSlots)` returns the shareable definition: the three
     schemas, the `verify` step, which verifies the proof, checks the policy,
     requires the witness observation inside the proposed window, and checks the claim against
     the signed request and the disclosures, and a `message` that encodes the claim into the flat
     message via `claimToMessage`.
-  - `zkFetchAttestor({ id, keyPair, registryIndex, witnessKey })` returns a
+  - `zkFetchAttestor({ id, keyPair, registryIndex, witnessKey, valueSlots })` returns a
     deployable instance: a specialization of `@thoth/attestor`'s `buildAttestor`
     that knows the kind, accepts evidence only from the witness `witnessKey`
-    names, and signs the attestor-derived claim at the proposed claim's length.
+    names, and signs the attestor-derived claim at its configured `valueSlots` count.
+    Its claim schema requires both `values` and `present` to have that exact length
+    before verification. The shared `zkFetchClaimSchema` remains unsized; use the
+    instance's `definition.claim` for its boundary validation.
 - **`@thoth/zk-tls/client`.** The dApp side: `zkFetchClient`,
   `toCanonicalEvidence`, `addressFromWitnessId`, and the prover/config types.
   `init` validates the policy, its slot map, and the prover map, once;

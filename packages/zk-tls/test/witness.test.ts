@@ -50,6 +50,7 @@ const makeAttestor = (id: string, witnessKey: string, registryIndex: number) =>
     },
     registryIndex,
     witnessKey,
+    valueSlots: 3,
   });
 
 const aliceAttestor = makeAttestor('attestor-alice', `0x${'11'.repeat(32)}`, 0);
@@ -79,6 +80,23 @@ const attestWith = (
 };
 
 describe('test-key witness', () => {
+  it.each([
+    { present: [true, true], values: [0n, 8n] },
+    { present: [true, true, false, false], values: [0n, 8n, 0n, 0n] },
+    { present: [true, true], values: [0n, 8n, 0n] },
+    { present: [true, true, false], values: [0n, 8n] },
+  ])('rejects a proposal with mismatched slot lengths, case %#', async (claimOverrides) => {
+    await expect(
+      // Invalid proof data ensures rejection happens at the claim schema boundary.
+      attestWith(
+        aliceAttestor,
+        { ...(await observe(alice)), signatureHex: '0x00' },
+        WINDOW,
+        claimOverrides,
+      ),
+    ).rejects.toThrow(/expected array to have exactly 3 items/);
+  });
+
   it('derives the Ethereum address of its key', () => {
     // The well-known address of secp256k1 key 0x11…11.
     expect(alice.address).toBe('0x19e7e376e7c213b7e7e7e46cc70a5dd086daff2a');

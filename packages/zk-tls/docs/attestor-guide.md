@@ -20,6 +20,7 @@ const attestor = zkFetchAttestor({
   keyPair, // the attestor's signing key, not the witness's
   registryIndex: 0,
   witnessKey: '0x…the secp256k1 key of your Reclaim witness…',
+  valueSlots: 2, // the target contract's #V
 });
 ```
 
@@ -31,14 +32,22 @@ must match the deployment's registry slot.
 The instance derives its address once, at build time, and rejects any evidence
 signed by a different witness.
 
+`valueSlots` is the target contract's `#V`. The instance's claim schema requires
+both `values` and `present` to have exactly that length before checking the
+proof, and claim derivation uses this configured count when signing. Set it to
+the same count as the dApp client's `valueSlots`. Existing instance builders must
+supply this required field; standalone definitions now use
+`createZkFetchDefinition(valueSlots)`.
+
 ## The attest flow
 
 The dApp sends the raw input over the transport; the attestor parses it with
-its own schemas and runs the full check before signing:
+its own schemas, including the configured claim length, and runs the full check before signing:
 
 1. `verifyZkFetchProof(evidence)` re-verifies the Reclaim witness's ECDSA
    signature over the claim, checks the claim identifier against its signed
-   content, and extracts the values it disclosed.
+   content, and extracts the values it disclosed. It leaves the supplied evidence
+   unchanged even when Reclaim canonicalizes the context during verification.
 2. `assertEvidenceMatchesPolicy(verified, policy)` checks the attested URL
    against the host allowlist and requires every required slot to be certifiable.
    Captured `responseText` is untrusted, client-supplied transport output; the
