@@ -1,12 +1,12 @@
-// Unit tests for the claim-context hashes (`@thoth/core/intent`): the policy
-// hash, the subject hash, and the intent digest.
+// Unit tests for the claim-context hashes (`@thoth/core/claim-context`): the
+// policy hash, the subject hash, and the claim-context digest.
 //
 // Each expected digest is rebuilt from a hand-written canonical serialization
 // (or, for the subject hash, a digest the compiled circuit produced), so the
 // vectors pin the encoding itself rather than this implementation's output.
 
 import { createHash } from 'node:crypto';
-import { intentDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/intent';
+import { claimContextDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { describe, expect, it } from 'vitest';
 
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
@@ -72,8 +72,8 @@ describe('subjectHashOf', () => {
   });
 });
 
-describe('intentDigestOf', () => {
-  const intent = {
+describe('claimContextDigestOf', () => {
+  const context = {
     policyHash: filled(0xaa),
     subjectHash: filled(0xbb),
     holder: filled(0xcc),
@@ -82,10 +82,10 @@ describe('intentDigestOf', () => {
     windowEnd: 1_700_000_300n,
   };
 
-  it('hashes the tagged canonical intent', () => {
-    expect(hex(intentDigestOf(intent))).toBe(
+  it('hashes the tagged canonical context', () => {
+    expect(hex(claimContextDigestOf(context))).toBe(
       sha256(
-        `["thoth:intent",{"holder":"${'cc'.repeat(32)}","nonce":"${'dd'.repeat(32)}",` +
+        `["thoth:claim-context",{"holder":"${'cc'.repeat(32)}","nonce":"${'dd'.repeat(32)}",` +
           `"policyHash":"${'aa'.repeat(32)}","subjectHash":"${'bb'.repeat(32)}",` +
           '"windowEnd":"1700000300","windowStart":"1700000000"}]',
       ),
@@ -93,23 +93,23 @@ describe('intentDigestOf', () => {
   });
 
   it('changes with every field', () => {
-    const base = hex(intentDigestOf(intent));
+    const base = hex(claimContextDigestOf(context));
     const variants = [
-      { ...intent, policyHash: filled(1) },
-      { ...intent, subjectHash: filled(1) },
-      { ...intent, holder: filled(1) },
-      { ...intent, nonce: filled(1) },
-      { ...intent, windowStart: intent.windowStart + 1n },
-      { ...intent, windowEnd: intent.windowEnd + 1n },
+      { ...context, policyHash: filled(1) },
+      { ...context, subjectHash: filled(1) },
+      { ...context, holder: filled(1) },
+      { ...context, nonce: filled(1) },
+      { ...context, windowStart: context.windowStart + 1n },
+      { ...context, windowEnd: context.windowEnd + 1n },
     ];
 
     for (const variant of variants) {
-      expect(hex(intentDigestOf(variant))).not.toBe(base);
+      expect(hex(claimContextDigestOf(variant))).not.toBe(base);
     }
   });
 
   it('rejects a byte field that is not 32 bytes and a negative window bound', () => {
-    expect(() => intentDigestOf({ ...intent, nonce: new Uint8Array(16) })).toThrow(/nonce/);
-    expect(() => intentDigestOf({ ...intent, windowStart: -1n })).toThrow(/windowStart/);
+    expect(() => claimContextDigestOf({ ...context, nonce: new Uint8Array(16) })).toThrow(/nonce/);
+    expect(() => claimContextDigestOf({ ...context, windowStart: -1n })).toThrow(/windowStart/);
   });
 });

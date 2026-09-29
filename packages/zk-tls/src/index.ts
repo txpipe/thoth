@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { CLAIM_VERSION } from '@thoth/core/claim';
-import { policyHashOf, subjectHashOf } from '@thoth/core/intent';
+import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
 import { hexToBytes } from './hex.js';
 
@@ -254,8 +254,9 @@ export const zkFetchPolicySchema = z.object({
  * wire version is the policy's `claimVersion` (default 1).
  *
  * @param policy — the policy to hash.
- * @returns the 32-byte policy hash (see `@thoth/core/intent`'s `policyHashOf`).
+ * @returns the 32-byte policy hash.
  * @throws if the policy fails {@link zkFetchPolicySchema}.
+ * @see policyHashOf
  */
 export const zkFetchPolicyHashOf = (policy: ZkFetchPolicy): Uint8Array => {
   const parsed = zkFetchPolicySchema.parse(policy);

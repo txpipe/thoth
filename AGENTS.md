@@ -60,7 +60,7 @@ thoth/
 │   ├── contracts/      # @thoth/contracts — Compact modules (+ tests)
 │   ├── core/           # @thoth/core      — keyless claim/envelope types
 │   │   ├── src/claim.ts                   — claim types served at @thoth/core/claim
-│   │   └── src/intent.ts                  — claim-context hashes at @thoth/core/intent
+│   │   └── src/claim-context.ts           — claim-context hashes at @thoth/core/claim-context
 │   └── zk-tls/         # @thoth/zk-tls    — zkFetch kind: attestor law + client (fixture-backed tests)
 ├── docs/DESIGN.md      # design overview & decisions
 ├── README.md           # human-oriented overview

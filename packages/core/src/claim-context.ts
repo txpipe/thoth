@@ -1,5 +1,5 @@
 // The claim context: the hashes that tie a claim to its policy, its subject,
-// and the intent every witness signs. Keyless and kind-agnostic; each kind
+// and the context every witness signs. Keyless and kind-agnostic; each kind
 // supplies its own policy and subject structs.
 
 import { createHash } from 'node:crypto';
@@ -27,17 +27,17 @@ export type CanonicalValue =
 /**
  * The shared context of one attestation.
  *
- * Every witness signs {@link intentDigestOf} this intent, so every attestor
- * derives the same claim from it.
+ * Every witness signs {@link claimContextDigestOf} of this context, so every
+ * attestor derives the same claim from it.
  */
-export interface Intent {
+export interface ClaimContext {
   /** The policy the attestors enforce (see {@link policyHashOf}). 32 bytes. */
   policyHash: Uint8Array;
   /** What the claim is about (see {@link subjectHashOf}). 32 bytes. */
   subjectHash: Uint8Array;
   /** The per-claim holder commitment. 32 bytes. */
   holder: Uint8Array;
-  /** Random per-intent bytes. 32 bytes. */
+  /** Random per-claim bytes. 32 bytes. */
   nonce: Uint8Array;
   /** Start of the observation window, Unix seconds. */
   windowStart: bigint;
@@ -45,8 +45,8 @@ export interface Intent {
   windowEnd: bigint;
 }
 
-/** Domain tag that prefixes the canonical intent. */
-const INTENT_TAG = 'thoth:intent';
+/** Domain tag that prefixes the canonical claim context. */
+const CLAIM_CONTEXT_TAG = 'thoth:claim-context';
 
 const HASH_BYTES = 32;
 
@@ -157,16 +157,16 @@ export function subjectHashOf(fields: readonly Uint8Array[]): Uint8Array {
 }
 
 /**
- * Digest an intent for the witness context.
+ * Digest a claim context for the witness context.
  *
- * SHA-256 of the canonical serialization of `['thoth:intent', intent]`.
+ * SHA-256 of the canonical serialization of `['thoth:claim-context', context]`.
  *
- * @param intent — the intent.
- * @returns the 32-byte intent digest.
+ * @param context — the claim context.
+ * @returns the 32-byte context digest.
  * @throws if a byte field is not 32 bytes or a window bound is negative.
  */
-export function intentDigestOf(intent: Intent): Uint8Array {
-  const { policyHash, subjectHash, holder, nonce, windowStart, windowEnd } = intent;
+export function claimContextDigestOf(context: ClaimContext): Uint8Array {
+  const { policyHash, subjectHash, holder, nonce, windowStart, windowEnd } = context;
   assertHashBytes('policyHash', policyHash);
   assertHashBytes('subjectHash', subjectHash);
   assertHashBytes('holder', holder);
@@ -178,7 +178,7 @@ export function intentDigestOf(intent: Intent): Uint8Array {
     throw new Error(`windowEnd must be non-negative, got ${windowEnd}`);
   }
   return canonicalSha256([
-    INTENT_TAG,
+    CLAIM_CONTEXT_TAG,
     { policyHash, subjectHash, holder, nonce, windowStart, windowEnd },
   ]);
 }

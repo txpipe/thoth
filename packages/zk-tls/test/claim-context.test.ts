@@ -2,7 +2,7 @@
 // policy hash and its request subject.
 
 import { createHash } from 'node:crypto';
-import { policyHashOf, subjectHashOf } from '@thoth/core/intent';
+import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import {
   type ZkFetchPolicy,
   zkFetchPolicyHashOf,
