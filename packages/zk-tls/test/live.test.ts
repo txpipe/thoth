@@ -56,6 +56,7 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
           verified: view,
           policy,
           appId: APP_ID,
+          holder: new Uint8Array(32).fill(0xc1),
           valueSlots: 1,
           windowStart,
           windowEnd,

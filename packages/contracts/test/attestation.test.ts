@@ -4,6 +4,7 @@ import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import {
   ACCEPTED_POLICIES,
+  DEFAULT_HOLDER_SECRET,
   flip,
   holderOf,
   idOf,
@@ -19,7 +20,7 @@ import { MockAttestationSim } from './helpers/sim.js';
 
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 const registryKeys = notaryKeys.map((k) => k.pk);
-const holder = randomBytes(32);
+const holder = DEFAULT_HOLDER_SECRET;
 
 let sim: MockAttestationSim;
 
@@ -34,12 +35,12 @@ describe('mock attestation', () => {
   });
 
   describe('buildMessage (frozen wire shape)', () => {
-    it('returns exactly K=17 fields in the frozen order', () => {
+    it('returns exactly K=19 fields in the frozen order', () => {
       const claim = makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] });
       const msg = pureCircuits.message(claim);
-      expect(msg).toHaveLength(17);
+      expect(msg).toHaveLength(19);
       // [version, appId0, appId1, policyHash0, policyHash1, windowStart, windowEnd,
-      //  nonce0, nonce1, subjectHash0, subjectHash1, p0, p1, p2, v0, v1, v2]
+      //  nonce0, nonce1, subjectHash0, subjectHash1, holder0, holder1, p0, p1, p2, v0, v1, v2]
       // APP_ID is 32 × 0xa1 and POLICY_A 32 × 0xb1, so each half repeats the byte.
       const half = (byte: string): bigint => BigInt(`0x${byte.repeat(16)}`);
       expect(msg.slice(0, 7)).toEqual([
@@ -51,7 +52,7 @@ describe('mock attestation', () => {
         claim.windowStart,
         claim.windowEnd,
       ]);
-      expect(msg.slice(11)).toEqual([1n, 1n, 1n, 100n, 200n, 300n]);
+      expect(msg.slice(13)).toEqual([1n, 1n, 1n, 100n, 200n, 300n]);
     });
 
     it('pins each 16-byte half to its slot (little-endian)', () => {
@@ -63,6 +64,16 @@ describe('mock attestation', () => {
       expect(msg.slice(7, 11)).toEqual([1n, 0n, 0n, 2n]);
     });
 
+    it('pins every holder byte to its two signed header slots', () => {
+      const holder = new Uint8Array(32);
+      holder[0] = 3;
+      holder[15] = 4;
+      holder[16] = 5;
+      holder[31] = 6;
+      const msg = pureCircuits.message(makeClaim({ holder }));
+      expect(msg.slice(11, 13)).toEqual([3n + (4n << 120n), 5n + (6n << 120n)]);
+    });
+
     it('distinguishes the window start from the window end', () => {
       const claim = makeClaim({ windowStart: 100n, windowEnd: 200n });
       const swapped = { ...claim, windowStart: 200n, windowEnd: 100n };
@@ -72,7 +83,7 @@ describe('mock attestation', () => {
     it('distinguishes a change to every byte of every 32-byte field', () => {
       const claim = makeClaim();
       const msg = pureCircuits.message(claim);
-      for (const field of ['appId', 'policyHash', 'nonce', 'subjectHash'] as const) {
+      for (const field of ['appId', 'policyHash', 'nonce', 'subjectHash', 'holder'] as const) {
         for (let i = 0; i < 32; i++) {
           expect(pureCircuits.message({ ...claim, [field]: flip(claim[field], i) })).not.toEqual(
             msg,
@@ -85,11 +96,42 @@ describe('mock attestation', () => {
       const absent = makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] });
       const presentZero = makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] });
       expect(pureCircuits.message(absent)).not.toEqual(pureCircuits.message(presentZero));
-      expect(pureCircuits.message(presentZero)[11]).toBe(1n);
+      expect(pureCircuits.message(presentZero)[13]).toBe(1n);
     });
   });
 
   describe('verifyAttestation', () => {
+    it('rejects a caller who does not know the signed holder secret', async () => {
+      const claim = makeClaim();
+      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      await expect(
+        sim.call('verifyAttestation', ps({ ...signed, holderSecret: randomBytes(32) })),
+      ).rejects.toThrow('Holder mismatch');
+    });
+
+    it('accepts a claim bound to a fresh caller secret', async () => {
+      const secret = randomBytes(32);
+      const claim = makeClaim({ holder: pureCircuits.holderCommitment(secret) });
+      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: secret }));
+      await sim.call(
+        'openAndRead',
+        ps({ ...signed, holderSecret: secret }),
+        idOf(claim, signed.commitRand),
+        12345n,
+        0n,
+      );
+    });
+
+    it('rejects replacing the signed holder even when the new caller knows its secret', async () => {
+      const signed = signClaim(makeClaim(), notaryKeys, randomBytes(32));
+      const secret = randomBytes(32);
+      const claim = { ...signed.claim, holder: pureCircuits.holderCommitment(secret) };
+      await expect(
+        sim.call('verifyAttestation', ps({ ...signed, claim, holderSecret: secret })),
+      ).rejects.toThrow('Insufficient valid signatures');
+    });
+
     it('accepts 2-of-3 valid signatures (threshold N=2)', async () => {
       const claim = makeClaim();
       const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));

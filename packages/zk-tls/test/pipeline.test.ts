@@ -124,10 +124,11 @@ describe('verifyZkFetchProof', () => {
 });
 
 describe('zkFetch claim schema', () => {
-  it('rejects an appId, policyHash or subjectHash that is not 32 bytes', () => {
+  it('rejects an appId, policyHash subjectHash or holder that is not 32 bytes', () => {
     const claim = {
       version: 1,
       appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
       policyHash: new Uint8Array(32),
       windowStart: 1_786_122_944,
       windowEnd: 1_786_122_944,
@@ -142,6 +143,9 @@ describe('zkFetch claim schema', () => {
     expect(() => zkFetchClaimSchema.parse({ ...claim, policyHash: new Uint8Array(33) })).toThrow(
       /expected 32 bytes/,
     );
+    expect(() => zkFetchClaimSchema.parse({ ...claim, holder: new Uint8Array(31) })).toThrow(
+      /expected 32 bytes/,
+    );
     expect(() => zkFetchClaimSchema.parse({ ...claim, subjectHash: new Uint8Array(16) })).toThrow(
       /expected 32 bytes/,
     );
@@ -151,6 +155,7 @@ describe('zkFetch claim schema', () => {
     const claim = zkFetchClaimSchema.parse({
       version: 1,
       appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
       policyHash: new Uint8Array(32),
       windowStart: 1_786_122_944,
       windowEnd: 1_786_122_944,
@@ -262,7 +267,10 @@ describe('zkFetch attestor + client', () => {
     });
 
   const prove = () =>
-    clientWith().proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' });
+    clientWith().proveReq(
+      { url: 'https://api.github.com/repos/x', method: 'GET' },
+      new Uint8Array(32).fill(0xc1),
+    );
 
   const evidenceOf = (
     evidences: Readonly<Record<string, ZkFetchEvidence>>,
@@ -307,7 +315,10 @@ describe('zkFetch attestor + client', () => {
   it('refuses when the policy does not fit the evidence (host)', async () => {
     const hostile = clientWith({ policy: { ...policy(), allowedHosts: ['evil.example'] } });
     await expect(
-      hostile.proveReq({ url: 'https://api.github.com/x', method: 'GET' }),
+      hostile.proveReq(
+        { url: 'https://api.github.com/x', method: 'GET' },
+        new Uint8Array(32).fill(0xc1),
+      ),
     ).rejects.toThrow(/not in allowlist/);
   });
 
@@ -322,7 +333,10 @@ describe('zkFetch attestor + client', () => {
         },
       }),
     });
-    const proof = await client.proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' });
+    const proof = await client.proveReq(
+      { url: 'https://api.github.com/repos/x', method: 'GET' },
+      new Uint8Array(32).fill(0xc1),
+    );
     const expected = await observe(bobWitness, requestOf(requests, 'attestor-1'), {
       url: attestedUrl,
     });
@@ -336,7 +350,10 @@ describe('zkFetch attestor + client', () => {
       provers: proversWith({ url: () => 'https://api.github.com/repos/x' }),
     });
     await expect(
-      client.proveReq({ url: 'https://other.example/x', method: 'GET' }),
+      client.proveReq(
+        { url: 'https://other.example/x', method: 'GET' },
+        new Uint8Array(32).fill(0xc1),
+      ),
     ).rejects.toThrow(/not the requested/);
   });
 
@@ -400,6 +417,29 @@ describe('zkFetch attestor + client', () => {
     expect(present.every((p) => p === false)).toBe(true);
   });
 
+  it('rejects a holder commitment of the wrong length before proving', async () => {
+    await expect(
+      clientWith().proveReq(
+        { url: 'https://api.github.com/repos/x', method: 'GET' },
+        new Uint8Array(31),
+      ),
+    ).rejects.toThrow(/expected 32 bytes/);
+  });
+
+  it('signs the per-call holder in every collected attestation', async () => {
+    const holder = new Uint8Array(32).fill(0xc2);
+    const proof = await clientWith().proveReq(
+      { url: 'https://api.github.com/repos/x', method: 'GET' },
+      holder,
+    );
+    expect(proof.claim.holder).toEqual(holder);
+    const attestment = await proof.attest();
+    for (const collected of attestment.collected) {
+      expect(collected.attestation.claim.holder).toEqual(holder);
+      expect(collected.attestation.message).toEqual(claimToMessage(proof.claim));
+    }
+  });
+
   it('agrees on the flat message across every attestor', async () => {
     const attestment = await prove().then((proof) => proof.attest());
     const message = claimToMessage(attestment.claim);
@@ -413,10 +453,13 @@ describe('zkFetch attestor + client', () => {
     const staggered = proversWith({
       timestampS: (id) => BASE_TIMESTAMP_S + (offsets[id] ?? 0),
     });
-    const proof = await clientWith({ provers: staggered }).proveReq({
-      url: 'https://api.github.com/repos/x',
-      method: 'GET',
-    });
+    const proof = await clientWith({ provers: staggered }).proveReq(
+      {
+        url: 'https://api.github.com/repos/x',
+        method: 'GET',
+      },
+      new Uint8Array(32).fill(0xc1),
+    );
     expect(proof.claim.windowStart).toBe(BigInt(BASE_TIMESTAMP_S));
     expect(proof.claim.windowEnd).toBe(BigInt(BASE_TIMESTAMP_S + 6));
     const attestment = await proof.attest();
@@ -438,10 +481,13 @@ describe('zkFetch attestor + client', () => {
       values: (id) => (id === 'attestor-1' ? { data: '42' } : { data: 'HTTP/1.1 200 OK' }),
     });
     await expect(
-      clientWith({ transport: counting, provers: diverging }).proveReq({
-        url: 'https://api.github.com/repos/x',
-        method: 'GET',
-      }),
+      clientWith({ transport: counting, provers: diverging }).proveReq(
+        {
+          url: 'https://api.github.com/repos/x',
+          method: 'GET',
+        },
+        new Uint8Array(32).fill(0xc1),
+      ),
     ).rejects.toThrow(/witnesses disagree/);
     expect(calls).toBe(0);
   });
@@ -455,11 +501,14 @@ describe('zkFetch attestor + client', () => {
         },
       }),
     });
-    await client.proveReq({
-      url: 'https://api.github.com/repos/x',
-      method: 'GET',
-      context: { label: 'commute' },
-    });
+    await client.proveReq(
+      {
+        url: 'https://api.github.com/repos/x',
+        method: 'GET',
+        context: { label: 'commute' },
+      },
+      new Uint8Array(32).fill(0xc1),
+    );
     const nonces = ids.map((id) => requestOf(requests, id).context?.thothNonce);
     expect(new Set(nonces).size).toBe(1);
     for (const nonce of nonces) {

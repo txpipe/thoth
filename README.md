@@ -74,7 +74,7 @@ Two embeddable Compact modules plus a top-level example (`packages/contracts/REA
 |------|--------|------|
 | `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and the observation window (`maxWindow`, `freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)` |
 | `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` via the stdlib `jubjubSchnorrVerify` — counts only, no threshold |
-| `examples/example_app.compact` | top-level | Example app embedding `Attestation<17, 3, 2, 3>` (2-of-3) |
+| `examples/example_app.compact` | top-level | Example app embedding `Attestation<19, 3, 2, 3>` (2-of-3) |
 
 ## Development
 

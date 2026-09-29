@@ -93,6 +93,7 @@ export const zkFetchClaimSchema: z.ZodType<
     windowEnd: z.union([z.number(), z.bigint()]),
     nonce: z.instanceof(Uint8Array),
     subjectHash: bytes32Schema,
+    holder: bytes32Schema,
     present: z.array(z.boolean()),
     values: z.array(z.union([z.number(), z.bigint()])),
   })
@@ -104,6 +105,7 @@ export const zkFetchClaimSchema: z.ZodType<
     windowEnd: BigInt(input.windowEnd),
     nonce: input.nonce,
     subjectHash: input.subjectHash,
+    holder: input.holder,
     present: input.present,
     values: input.values.map((value) => BigInt(value)),
   })) as unknown as z.ZodType<
@@ -543,8 +545,8 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
  * every witness that fetched the same request derives the same subject.
  * `version` comes from the policy's `claimVersion` (default 1) and
  * `policyHash` is {@link zkFetchPolicyHashOf} the policy; `appId` is the
- * caller's. The observation window is the caller's `windowStart` and
- * `windowEnd`, which the client proposes and the law requires to contain the
+ * caller's, as is the per-claim `holder` commitment (ADR 0004). The observation
+ * window is the caller's `windowStart` and `windowEnd`, which the client proposes and the law requires to contain the
  * witness's own observation (ADR 0005). The
  * nonce is a domain-separated SHA-256 of the Reclaim identifier, which depends
  * only on provider, parameters, and context, so one observation with one
@@ -553,8 +555,8 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
  * evidence carries only what the witness saw.
  *
  * @typeParam V — the claim's value-slot count.
- * @param options — the parsed evidence view, the policy, the app id, the slot
- *   count, and the observation window to sign.
+ * @param options — the parsed evidence view, the policy, the app id, the holder
+ *   commitment, the slot count, and the observation window to sign.
  * @returns the derived claim.
  * @throws if a policy slot is out of the claim's value range, the policy
  *   fails {@link zkFetchPolicySchema}, or the signed parameters carry no
@@ -567,6 +569,8 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   policy: ZkFetchPolicy;
   /** The app the claim is for, proposed by the client. 32 bytes. */
   appId: Uint8Array;
+  /** Per-claim commitment of the caller secret, proposed by the client. 32 bytes. */
+  holder: Uint8Array;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
   /** Start of the observation window to sign, proposed by the client. Unix seconds. */
@@ -574,7 +578,7 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   /** End of the observation window to sign, proposed by the client. Unix seconds. */
   windowEnd: bigint;
 }): Claim<V> => {
-  const { verified, policy, appId, valueSlots, windowStart, windowEnd } = options;
+  const { verified, policy, appId, holder, valueSlots, windowStart, windowEnd } = options;
   const outOfRange = policy.slots.find((slot) => slot.slot >= valueSlots);
   if (outOfRange !== undefined) {
     throw new Error(
@@ -599,6 +603,7 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   return {
     version: claimVersion,
     appId,
+    holder,
     policyHash: zkFetchPolicyHashOf(policy),
     windowStart,
     windowEnd,

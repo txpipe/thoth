@@ -68,6 +68,7 @@ const attestWith = (
     verified: parsedEvidenceView(evidence),
     policy,
     appId: APP_ID,
+    holder: new Uint8Array(32).fill(0xc1),
     valueSlots: 3,
     ...window,
   });
@@ -182,6 +183,7 @@ describe('test-key witness', () => {
       verified: parsedEvidenceView(await observe(alice)),
       policy,
       appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 3,
       ...WINDOW,
     });
@@ -189,6 +191,7 @@ describe('test-key witness', () => {
       verified: parsedEvidenceView(await observe(bob)),
       policy,
       appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 3,
       ...WINDOW,
     });
@@ -201,6 +204,7 @@ describe('test-key witness', () => {
         verified: parsedEvidenceView(await observe(alice, overrides)),
         policy,
         appId: APP_ID,
+        holder: new Uint8Array(32).fill(0xc1),
         valueSlots: 3,
         ...WINDOW,
       }).nonce;

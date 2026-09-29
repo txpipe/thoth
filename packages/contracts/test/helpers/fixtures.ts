@@ -22,6 +22,8 @@ export const DEFAULT_MAX_WINDOW = 300n;
 // A fixed app id and the two policy hashes the mock seals at deploy. A third,
 // unsealed hash stands in for a laxer policy a requester might substitute.
 const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
+/** Fixed test secret; claim fixtures bind to this caller unless overridden. */
+export const DEFAULT_HOLDER_SECRET = new Uint8Array(32).fill(0xc1);
 export const APP_ID = filled(0xa1);
 export const POLICY_A = filled(0xb1);
 export const POLICY_B = filled(0xb2);
@@ -55,6 +57,7 @@ export const makeClaim = (
     windowEnd: nowSeconds(),
     nonce: randomBytes(32),
     subjectHash: randomBytes(32),
+    holder: pureCircuits.holderCommitment(DEFAULT_HOLDER_SECRET),
     values,
     present,
     ...overrides,

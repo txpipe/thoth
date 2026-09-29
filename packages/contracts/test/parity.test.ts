@@ -10,17 +10,27 @@ import { randomBytes } from 'node:crypto';
 import { claimToMessage } from '@thoth/core/claim';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
-import { DUMMY_SIGNATURE, idOf, makeClaim, makeNotaryKey, POLICY_B } from './helpers/fixtures.js';
+import {
+  DEFAULT_HOLDER_SECRET,
+  DUMMY_SIGNATURE,
+  idOf,
+  makeClaim,
+  makeNotaryKey,
+  POLICY_B,
+} from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
 import { MockAttestationSim } from './helpers/sim.js';
 
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 const registryKeys = notaryKeys.map((k) => k.pk);
-const holder = randomBytes(32);
+const holder = DEFAULT_HOLDER_SECRET;
 
 const claims = [
   makeClaim(),
+  makeClaim({ holder: new Uint8Array(32) }),
+  makeClaim({ holder: Uint8Array.from({ length: 32 }, (_, i) => i) }),
+  makeClaim({ holder: new Uint8Array(32).fill(0xff) }),
   makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] }),
   makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] }),
   makeClaim({ values: [0n, 200n, 0n], present: [false, true, false] }),

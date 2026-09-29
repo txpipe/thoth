@@ -24,7 +24,7 @@ The package exposes three entry points:
   - `AttestorDescriptor<D, PK>` — the client-facing face of an attestor: everything a client needs to address it
   - `Attestation<K, C, PK, S>` — the signed artifact an attestor produces and a client collects
 - **`@thoth/core/claim`**:
-  - `Claim<V>` / `ClaimInput<V>` — the canonical claim: header (version, appId, policyHash, windowStart, windowEnd, nonce, subjectHash), a `present` mask, and `V` numeric `values`
+  - `Claim<V>` / `ClaimInput<V>` — the canonical claim: header (version, appId, policyHash, windowStart, windowEnd, nonce, subjectHash, holder), a `present` mask, and `V` numeric `values`
   - `claimSchema<V>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape
   - `bytes32Schema` — a zod schema for the claim's 32-byte `appId`, `policyHash` and `subjectHash`
   - `claimToMessage` — encode a parsed `Claim` into the exact `FlatMessage` the contract's `buildMessage` verifies
@@ -75,7 +75,10 @@ recomputes the subject hash in-circuit from private fields. It requires a
 subject struct whose fields are all `Bytes<32>`. `holderCommitmentOf` is a
 circuit hash for the same reason: the contract re-derives the holder from the
 caller's secret. Its tag keeps it apart from the vault pseudonym the contract
-derives from the same secret.
+derives from the same secret. A claim carries this commitment as `holder`;
+the contract requires the caller to know its secret. Use a fresh high-entropy
+secret per claim. Secret reuse links claims; the layer makes no cross-claim
+identity or unlinkability promise.
 
 ## Links
 

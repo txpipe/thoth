@@ -70,6 +70,9 @@ const client = zkFetchClient.init({
   },
 });
 
+// import { holderCommitmentOf } from '@thoth/core/claim-context';
+// Generate holderSecret as 32 cryptographically random bytes and retain it locally.
+const holder = holderCommitmentOf(holderSecret);
 const proof = await client.proveReq({
   url: 'https://www.strava.com/api/v3/athlete/activities?per_page=1',
   method: 'GET',
@@ -84,14 +87,19 @@ const proof = await client.proveReq({
     { regex: '"moving_time":\\s*\\d+' },
   ],
   context: { label: 'strava-activity' },
-});
+}, holder);
 
 const attestment = await proof.attest(); // or .attest('attestor-0')
 ```
 
 ## Building the request
 
-`proveReq` takes a `ZkFetchRequest`; the witness signs these parameters into
+`proveReq(request, holder)` takes a `ZkFetchRequest` and the per-claim commitment
+from `holderCommitmentOf`, imported from `@thoth/core/claim-context`. Keep the
+secret for the contract witness and use a fresh high-entropy secret per claim.
+Reusing it links claims; Thoth makes no cross-claim unlinkability promise.
+
+The request describes the fetch; the witness signs these parameters into
 the claim, so the policy can rely on them. Field-by-field docs live in
 `ZkFetchRequest`'s JSDoc in `src/client/index.ts`. The two that carry protocol
 semantics:

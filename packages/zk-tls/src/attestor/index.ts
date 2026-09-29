@@ -252,6 +252,7 @@ export function zkFetchAttestor<PK, S>(parts: {
         verified,
         policy,
         appId: proposed.appId,
+        holder: proposed.holder,
         valueSlots: proposed.values.length,
         windowStart: proposed.windowStart,
         windowEnd: proposed.windowEnd,

@@ -34,7 +34,7 @@ prover that the client can use to obtain evidence:
     allowlist and the size bound. Required slots must be
     certifiable, meaning disclosed and parseable; optional slots may be absent
     and are signed unpresent.
-  - `deriveClaimFromEvidence({ verified, policy, appId, valueSlots, windowStart, windowEnd })`
+  - `deriveClaimFromEvidence({ verified, policy, appId, holder, valueSlots, windowStart, windowEnd })`
     derives the canonical `Claim` the attestor signs: values/present from the
     disclosed values, a deterministic nonce, `zkFetchSubjectHashOf` the signed
     request as `subjectHash`, and `zkFetchPolicyHashOf(policy)` as
@@ -87,8 +87,8 @@ prover that the client can use to obtain evidence:
 - **`@thoth/zk-tls/client`.** The dApp side: `zkFetchClient`,
   `toCanonicalEvidence`, `addressFromWitnessId`, and the prover/config types.
   `init` validates the policy, its slot map, and the prover map, once;
-  `proveReq` fetches through each attestor's prover, signs a fresh nonce into the
-  context, and requires every witness to agree on one claim before any attestor
+  `proveReq(request, holder)` takes a per-claim holder commitment, fetches through
+  each attestor's prover, signs a fresh nonce into the context, and requires every witness to agree on one claim before any attestor
   is contacted. The client does not re-verify the Reclaim signature. It is the
   side that ran the witnessed interaction, and each pinned attestor verifies
   the evidence before signing.
@@ -96,6 +96,12 @@ prover that the client can use to obtain evidence:
   `zkFetchProver(config)` runs the Reclaim zkFetch protocol against a
   caller-chosen witness over WebSocket and returns the canonical
   `ZkFetchEvidence` the client's `provers` map expects.
+
+The caller derives `holder` with `holderCommitmentOf(secret)` from
+`@thoth/core/claim-context`, using a fresh high-entropy 32-byte secret per claim.
+Only the commitment goes to the client and attestors. Keep the secret locally
+for the contract witness when vaulting or opening the claim. Secret reuse links
+claims; Thoth promises no cross-claim identity or unlinkability.
 
 ## Concepts
 

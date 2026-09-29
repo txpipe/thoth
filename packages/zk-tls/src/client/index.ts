@@ -2,7 +2,7 @@ import type { AttestorTransport, CollectedAttestation, TrustedSet } from '@thoth
 import { attestorOf, resolveAttestation } from '@thoth/client';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { claimSchema, claimToMessage } from '@thoth/core/claim';
+import { bytes32Schema, claimSchema, claimToMessage } from '@thoth/core/claim';
 import type { z } from 'zod';
 import { bytesToHex } from '../hex.js';
 import type {
@@ -197,6 +197,8 @@ const buildClaimProposal = async <V extends number>(options: {
   policy: ZkFetchPolicy;
   /** The app the claim is for. */
   appId: Uint8Array;
+  /** Per-claim holder commitment, supplied by the caller. */
+  holder: Uint8Array;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
   /** Start of the window to sign: the earliest observation across the witnesses. */
@@ -204,13 +206,14 @@ const buildClaimProposal = async <V extends number>(options: {
   /** End of the window to sign: the latest observation across the witnesses. */
   windowEnd: bigint;
 }): Promise<Claim<V>> => {
-  const { evidence, policy, appId, valueSlots, windowStart, windowEnd } = options;
+  const { evidence, policy, appId, holder, valueSlots, windowStart, windowEnd } = options;
   const verified = parsedEvidenceView(evidence);
   assertEvidenceMatchesPolicy(verified, policy);
   const derived = deriveClaimFromEvidence({
     verified,
     policy,
     appId,
+    holder,
     valueSlots,
     windowStart,
     windowEnd,
@@ -326,11 +329,13 @@ export interface ZkFetchClient<V extends number, PK, S> {
    * no attestor is contacted.
    *
    * @param request — what to fetch and which of its fields to reveal/redact.
+   * @param holder — 32-byte per-claim commitment from `holderCommitmentOf(secret)`.
+   *   Keep the secret locally for the contract witness; use a fresh secret per claim.
    * @returns a proof handle whose `attest` fan-out collects the N-of-M set.
-   * @throws if a prover answers for a different origin, or the witnesses
-   *   disagree on the claim.
+   * @throws if the holder is not 32 bytes, a prover answers for a different
+   *   origin, or the witnesses disagree on the claim.
    */
-  proveReq(request: ZkFetchRequest): Promise<ZkFetchClientProof<V, PK, S>>;
+  proveReq(request: ZkFetchRequest, holder: Uint8Array): Promise<ZkFetchClientProof<V, PK, S>>;
 }
 
 /**
@@ -344,7 +349,7 @@ export interface ZkFetchClient<V extends number, PK, S> {
  *   trusted, transport, policy, appId, valueSlots,
  *   provers: { txpipeEndpoint: zkFetchProver({ witnessUrl }) },
  * });
- * const proof = await client.proveReq({ url, method, headers });
+ * const proof = await client.proveReq({ url, method, headers }, holder);
  * const attestment = await proof.attest('txpipeEndpoint', 'eryxEndpoint', 'midnightFoundation');
  * ```
  *
@@ -395,7 +400,8 @@ export const zkFetchClient = {
       );
     }
     return {
-      proveReq: async (request): Promise<ZkFetchClientProof<V, PK, S>> => {
+      proveReq: async (request, holder): Promise<ZkFetchClientProof<V, PK, S>> => {
+        const checkedHolder = bytes32Schema.parse(holder).slice();
         const signedRequest: ZkFetchRequest = {
           ...request,
           context: { ...request.context, thothNonce: randomNonce() },
@@ -426,6 +432,7 @@ export const zkFetchClient = {
               evidence,
               policy: checkedPolicy,
               appId,
+              holder: checkedHolder,
               valueSlots,
               windowStart,
               windowEnd,
