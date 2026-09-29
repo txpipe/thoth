@@ -46,6 +46,7 @@ export type TrustedSetInvariant =
   | 'registry-size'
   | 'empty'
   | 'duplicate-id'
+  | 'duplicate-key'
   | 'registry-index'
   | 'duplicate-slot';
 
@@ -54,7 +55,8 @@ export type TrustedSetInvariant =
  *
  * `reason` discriminates the failing check: a `registrySize` that is not a
  * positive integer (`'registry-size'`), an empty set (`'empty'`), two members
- * with the same `id` (`'duplicate-id'`), two members assigned the same
+ * with the same `id` (`'duplicate-id'`), two members pinning the same public
+ * key (`'duplicate-key'`), two members assigned the same
  * registry slot (`'duplicate-slot'`), or a `registryIndex` outside
  * `[0, registrySize)` (`'registry-index'`).
  */
@@ -74,6 +76,7 @@ export class InvalidTrustedSetError extends Error {
       empty: 'the trusted set is empty',
       'duplicate-id': `attestor "${attestorId}" appears more than once`,
       'registry-index': `attestor "${attestorId}" has a registryIndex outside the registry`,
+      'duplicate-key': `attestor "${attestorId}" pins an already-pinned public key`,
       'duplicate-slot': `attestor "${attestorId}" claims an already-taken registry slot`,
     };
     super(`invalid trusted set: ${detail[reason]}`);

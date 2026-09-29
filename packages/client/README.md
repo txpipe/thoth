@@ -24,8 +24,8 @@ npm install @thoth/client
   the attestor.
 - `buildTrustedSet({ registrySize, attestors })` — assemble the checked trusted
   set: rejects an invalid registry size, an empty set, duplicate ids, duplicate
-  slots, and slots outside `[0, registrySize)` (`InvalidTrustedSetError`, from
-  `@thoth/client/errors`).
+  public keys, duplicate slots, and slots outside `[0, registrySize)`
+  (`InvalidTrustedSetError`, from `@thoth/client/errors`).
 - `attestorOf(trusted, id)` — resolve a string-named attestor to its trusted
   member (descriptor + slot).
 - `AttestorTransport<D, PK, S>` — the seam between the client and a remote
@@ -54,8 +54,9 @@ their own threshold policy, and add their own prove/attest ergonomics.
 every kind SDK shares. The app supplies each attestor's slot from its own
 deployed registry, and the registry's key count bounds those slots. A set may
 pin fewer attestors than the registry holds. It rejects an invalid registry
-size, an empty set, duplicate ids, duplicate slots, and out-of-range slots, so
-a `TrustedSet` is valid by construction (or not built at all).
+size, an empty set, duplicate ids, duplicate public keys, duplicate slots, and
+out-of-range slots, so a `TrustedSet` is valid by construction (or not built at
+all).
 
 ```ts
 import { buildTrustedSet } from '@thoth/client';

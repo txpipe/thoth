@@ -61,8 +61,10 @@ export interface TrustedSet<
  *
  * Ensure a trusted set is well-formed by construction: it rejects a
  * `registrySize` that is not a positive integer, an empty set, two members
- * sharing an `id`, two members assigned the same slot, and any slot that is
- * not an integer in `[0, registrySize)`. The set may pin fewer attestors than
+ * sharing an `id`, two members pinning the same public key, two members
+ * assigned the same slot, and any slot that is not an integer in
+ * `[0, registrySize)`. A key pinned under two ids could never reach threshold
+ * on-chain, because the registry rejects one key signing in two slots. The set may pin fewer attestors than
  * the registry holds. Uniqueness keeps downstream placement deterministic; see
  * {@link TrustedAttestor.registryIndex}.
  *
@@ -88,9 +90,13 @@ export function buildTrustedSet<
   }
   const ids = new Set<string>();
   const slots = new Set<number>();
+  const keys: PK[] = [];
   for (const { attestor, registryIndex } of attestors) {
     if (ids.has(attestor.id)) {
       throw new InvalidTrustedSetError(attestor.id, 'duplicate-id');
+    }
+    if (keys.some((key) => structuredEquals(key, attestor.publicKey))) {
+      throw new InvalidTrustedSetError(attestor.id, 'duplicate-key');
     }
     if (!isSlotOf(registrySize, registryIndex)) {
       throw new InvalidTrustedSetError(attestor.id, 'registry-index');
@@ -99,6 +105,7 @@ export function buildTrustedSet<
       throw new InvalidTrustedSetError(attestor.id, 'duplicate-slot');
     }
     ids.add(attestor.id);
+    keys.push(attestor.publicKey);
     slots.add(registryIndex);
   }
   return { registrySize, attestors };

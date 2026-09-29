@@ -271,6 +271,19 @@ describe('buildTrustedSet', () => {
     ).toThrow(expect.objectContaining({ reason: 'duplicate-slot', attestorId: 'bob' }));
   });
 
+  it('rejects two ids pinning the same public key', () => {
+    const alias = { ...bob, publicKey: jubjubSchnorrVerifyingKey(17n) };
+    expect(() =>
+      buildTrustedSet({
+        registrySize: 3,
+        attestors: [
+          { attestor, registryIndex: 0 },
+          { attestor: alias, registryIndex: 1 },
+        ],
+      }),
+    ).toThrow(expect.objectContaining({ reason: 'duplicate-key', attestorId: 'bob' }));
+  });
+
   it('rejects one attestor id pinned twice', () => {
     expect(() =>
       buildTrustedSet({
