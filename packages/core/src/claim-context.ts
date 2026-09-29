@@ -54,8 +54,8 @@ const HASH_BYTES = 32;
  * Serialize a value canonically.
  *
  * JSON with object keys sorted by UTF-16 code unit and no whitespace. A
- * `bigint` becomes its decimal string, a `Uint8Array` its lowercase hex
- * string without a prefix. Numbers must be finite.
+ * `bigint` becomes a quoted decimal string, a `Uint8Array` a quoted lowercase
+ * hex string without a prefix. Numbers must be finite.
  *
  * @param value — the value to serialize.
  * @returns the canonical JSON text.

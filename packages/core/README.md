@@ -63,13 +63,14 @@ const def: AttestorDefinition<'zkfetch', z.ZodType, z.ZodType, z.ZodType> = {
 ### The claim context
 
 The claim-context helpers are shared by every kind; each kind supplies its own
-policy and subject structs. `policyHashOf` and `claimContextDigestOf` are
-SHA-256 over one canonical serialization: JSON with sorted keys and no
-whitespace, a `bigint` as its decimal string, and bytes as lowercase hex.
-Another implementation reproduces them from that rule alone. `subjectHashOf` is
-a circuit hash instead, because an app recomputes the subject hash in-circuit
-from private fields. It requires a subject struct whose fields are all
-`Bytes<32>`.
+policy and subject structs. `policyHashOf` is SHA-256 of the canonical
+serialization of `[law, version, policy]`; `claimContextDigestOf` is SHA-256 of
+`['thoth:claim-context', context]`. Both use the same canonical serialization:
+JSON with sorted keys and no whitespace, a `bigint` as a quoted decimal string,
+and bytes as lowercase hex. Another implementation reproduces them from those
+rules alone. `subjectHashOf` is a circuit hash instead, because an app
+recomputes the subject hash in-circuit from private fields. It requires a
+subject struct whose fields are all `Bytes<32>`.
 
 ## Links
 
