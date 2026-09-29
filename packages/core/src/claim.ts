@@ -34,7 +34,7 @@ export interface Claim<V extends number> {
   /** The app the claim is for. 32 bytes. */
   appId: Uint8Array;
   /**
-   * Hash of the policy the attestors enforced (see `@thoth/core/intent`'s
+   * Hash of the policy the attestors enforced (see `@thoth/core/claim-context`'s
    * `policyHashOf`). The contract accepts it only if it is in its sealed set.
    * 32 bytes.
    */
@@ -65,9 +65,9 @@ export interface Claim<V extends number> {
 export interface ClaimInput<V extends number> {
   /** Schema version; a raw payload may omit it (defaults to {@link CLAIM_VERSION}). */
   version: number | bigint;
-  /** The app the claim is for. */
+  /** The app the claim is for. 32 bytes. */
   appId: Uint8Array;
-  /** Hash of the policy the attestors enforced. */
+  /** Hash of the policy the attestors enforced. 32 bytes. */
   policyHash: Uint8Array;
   /** Unix seconds at which the attestation was produced. */
   timestamp: number | bigint;
@@ -88,6 +88,14 @@ export interface ClaimInput<V extends number> {
 export const CLAIM_VERSION = 1n;
 
 /**
+ * Zod schema for a claim's 32-byte fields that carry an identity
+ * (`appId`, `policyHash`).
+ */
+export const bytes32Schema = z
+  .instanceof(Uint8Array)
+  .refine((bytes) => bytes.length === 32, { message: 'expected 32 bytes' });
+
+/**
  * Zod schema for a fixed `V` claim.
  *
  * Runtime validator + type source: `z.output` is a {@link Claim}, `z.input` a
@@ -105,8 +113,8 @@ export function claimSchema<V extends number>(
   const schema = z
     .object({
       version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
-      appId: z.instanceof(Uint8Array),
-      policyHash: z.instanceof(Uint8Array),
+      appId: bytes32Schema,
+      policyHash: bytes32Schema,
       timestamp: z.union([z.number(), z.bigint()]),
       nonce: z.instanceof(Uint8Array),
       evidenceHash: z.instanceof(Uint8Array),

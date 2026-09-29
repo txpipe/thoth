@@ -59,9 +59,8 @@ import "attestor_registry"<3, 16> prefix R_;
 
 See `examples/example_app.compact` for a complete top-level embedding that
 pins registry keys, the accepted policy hashes, and the freshness window in the
-constructor, re-exports the
-module types/ledgers/pure circuits, and exports a `verifyAttestation` entry
-point.
+constructor, re-exports the module types/ledgers/pure circuits, and exports a
+`verifyAttestation` entry point.
 
 ## Module parameters
 

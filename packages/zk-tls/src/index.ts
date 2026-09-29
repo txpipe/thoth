@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
-import { CLAIM_VERSION } from '@thoth/core/claim';
+import { bytes32Schema, CLAIM_VERSION } from '@thoth/core/claim';
 import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
 import { hexToBytes } from './hex.js';
@@ -94,8 +94,8 @@ export const zkFetchClaimSchema: z.ZodType<
 > = z
   .object({
     version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
-    appId: z.instanceof(Uint8Array),
-    policyHash: z.instanceof(Uint8Array),
+    appId: bytes32Schema,
+    policyHash: bytes32Schema,
     timestamp: z.union([z.number(), z.bigint()]),
     nonce: z.instanceof(Uint8Array),
     evidenceHash: z.instanceof(Uint8Array),

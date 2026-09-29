@@ -48,7 +48,7 @@ export pure circuit message(a: A_Claim): Vector<16, Field> {
 witness seedKeys(): Vector<3, JubjubPoint>;
 
 // Deploy-time witness providing the policy hashes the app accepts, one per
-// policy (kind) it serves.
+// policy (kind) it serves. Size the vector to the number of policies.
 witness seedPolicies(): Vector<1, Bytes<32>>;
 
 constructor() {

@@ -78,11 +78,11 @@ witness seedKeys(): Vector<3, JubjubPoint>;
 
 witness freshWindow(): Uint<64>;
 
-witness acceptedPolicies(): Vector<2, Bytes<32>>;
+witness seedPolicies(): Vector<2, Bytes<32>>;
 
 constructor() {
   A_freshnessWindow = disclose(freshWindow());
-  for (const h of acceptedPolicies()) {
+  for (const h of seedPolicies()) {
     A_policyHashes.insert(disclose(h));
   }
   R_keys = disclose(seedKeys());

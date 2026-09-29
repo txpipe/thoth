@@ -123,6 +123,25 @@ describe('verifyZkFetchProof', () => {
 });
 
 describe('zkFetch claim schema', () => {
+  it('rejects an appId or policyHash that is not 32 bytes', () => {
+    const claim = {
+      version: 1,
+      appId: APP_ID,
+      policyHash: new Uint8Array(32),
+      timestamp: 1_786_122_944,
+      nonce: new Uint8Array(32),
+      evidenceHash: new Uint8Array(32),
+      present: [true],
+      values: [12],
+    };
+    expect(() => zkFetchClaimSchema.parse({ ...claim, appId: new Uint8Array(31) })).toThrow(
+      /expected 32 bytes/,
+    );
+    expect(() => zkFetchClaimSchema.parse({ ...claim, policyHash: new Uint8Array(33) })).toThrow(
+      /expected 32 bytes/,
+    );
+  });
+
   it('parses a derived claim into bigint values', () => {
     const claim = zkFetchClaimSchema.parse({
       version: 1,

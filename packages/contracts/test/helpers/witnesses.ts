@@ -38,7 +38,7 @@ export const makeWitnesses = (
     freshnessWindow,
   ],
 
-  acceptedPolicies: ({ privateState }: WitnessBase): [PrivateState, Uint8Array[]] => [
+  seedPolicies: ({ privateState }: WitnessBase): [PrivateState, Uint8Array[]] => [
     privateState,
     [...policyHashes],
   ],

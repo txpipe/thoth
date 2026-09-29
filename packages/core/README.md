@@ -26,6 +26,7 @@ The package exposes three entry points:
 - **`@thoth/core/claim`**:
   - `Claim<V>` / `ClaimInput<V>` — the canonical claim: header (version, appId, policyHash, timestamp, nonce, evidenceHash), a `present` mask, and `V` numeric `values`
   - `claimSchema<V>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape
+  - `bytes32Schema` — a zod schema for the claim's 32-byte `appId` and `policyHash`
   - `claimToMessage` — encode a parsed `Claim` into the exact `FlatMessage` the contract's `buildMessage` verifies
   - `FlatMessage` — a Compact `Vector<K, Field>` as a `readonly bigint[]`
 - **`@thoth/core/claim-context`**:
