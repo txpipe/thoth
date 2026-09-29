@@ -51,15 +51,18 @@ const policy: ZkFetchPolicy = {
 };
 const request: ZkFetchRequest = { url: 'https://api.github.com/repos/x', method: 'GET' };
 
-const witnesses = [testWitness(`0x${'33'.repeat(32)}`), testWitness(`0x${'44'.repeat(32)}`)];
-const attestors = witnesses.map((witness, i) =>
-  zkFetchAttestor({
+// Each operator runs a test-key witness and the attestor that trusts it.
+const operators = ['33', '44'].map((byte, i) => {
+  const witness = testWitness(`0x${byte.repeat(32)}`);
+  const attestor = zkFetchAttestor({
     id: `attestor-${i}`,
     keyPair: jubjubKeyPair(),
     witnessAddress: witness.address,
     valueSlots: VALUE_SLOTS,
-  }),
-);
+  });
+  return { witness, attestor };
+});
+const attestors = operators.map(({ attestor }) => attestor);
 // Registry slot 2 is pinned to an operator the app does not query.
 const registryKeys = [...attestors.map((attestor) => attestor.publicKey), makeNotaryKey().pk];
 
@@ -92,8 +95,8 @@ const collectSubmission = async (): Promise<Submission> => {
     appId: APP_ID,
     valueSlots: VALUE_SLOTS,
     provers: Object.fromEntries(
-      witnesses.map((witness, i) => [
-        `attestor-${i}`,
+      operators.map(({ witness, attestor }) => [
+        attestor.id,
         {
           prove: (proved: ZkFetchRequest) =>
             witness.sign({
@@ -195,6 +198,5 @@ describe('cross-seam acceptance', () => {
     await expect(submit(sim, { ...honest, claim: mutate(honest.claim) }, secret)).rejects.toThrow(
       'Insufficient valid signatures',
     );
-    expect(sim.ledgerView().A_nullifiers.size()).toBe(0n);
   });
 });

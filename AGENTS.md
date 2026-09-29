@@ -135,10 +135,8 @@ thoth/
   `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.
 - After changing Compact sources, recompile before running tests:
   `npm run compact:no-zk` (the `pretest` hook does this automatically).
-- `packages/contracts/test/acceptance.test.ts` is the cross-seam check: test-key
-  witnesses → zkFetch attestors with real Jubjub keys → client collection →
-  simulator. Mutations of signed bindings each run on a fresh ledger, so the
-  rejection is the signature check, not a leftover nullifier.
+- `packages/contracts/test/acceptance.test.ts` is the cross-seam check (zk-tls
+  witnesses → attestors → client → simulator); its header explains the setup.
 - `packages/zk-tls/test/live.test.ts` is an opt-in live check against two real
   witnesses; it skips unless `WITNESS_URLS` names them, so `npm test` and CI
   stay offline. See the package README's "Live check".
