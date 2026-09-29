@@ -127,8 +127,8 @@ function splitBytes(bytes: Uint8Array): [bigint, bigint] {
     throw new Error(`expected 32 bytes, got ${bytes.length}`);
   }
   return [
-    convertBytesToUint(UINT128_MAX, 16, bytes.slice(0, 16), 'claimToMessage'),
-    convertBytesToUint(UINT128_MAX, 16, bytes.slice(16, 32), 'claimToMessage'),
+    convertBytesToUint(UINT128_MAX, 16, bytes.slice(0, 16), 'Uint<128>', 'claimToMessage'),
+    convertBytesToUint(UINT128_MAX, 16, bytes.slice(16, 32), 'Uint<128>', 'claimToMessage'),
   ];
 }
 
