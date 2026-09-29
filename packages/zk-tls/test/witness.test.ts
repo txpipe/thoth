@@ -2,13 +2,14 @@
 // sign provider claim data. Checks the zkFetch attestor accepts evidence signed
 // by the witness key it pins — offline and deterministically — and rejects
 // evidence from any other witness.
-import { claimToMessage, type FlatMessage } from '@thoth/core/claim';
+import { type Claim, claimToMessage, type FlatMessage } from '@thoth/core/claim';
 import {
   deriveClaimFromEvidence,
   parsedEvidenceView,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
   zkFetchPolicyHashOf,
+  zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
@@ -59,15 +60,17 @@ const attestWith = (
   evidence: ZkFetchEvidence,
   timestamp: bigint,
   overrides: Partial<ZkFetchPolicy> = {},
+  claimOverrides: Partial<Claim<number>> = {},
 ) => {
   const activePolicy = { ...policy, ...overrides };
-  const claim = deriveClaimFromEvidence({
+  const derived = deriveClaimFromEvidence({
     verified: parsedEvidenceView(evidence),
     policy: activePolicy,
     appId: APP_ID,
     valueSlots: 3,
     timestamp,
   });
+  const claim = { ...derived, ...claimOverrides };
   return attestor.attest({ policy: activePolicy, evidence, claim } as unknown as Parameters<
     typeof attestor.attest
   >[0]);
@@ -109,6 +112,20 @@ describe('test-key witness', () => {
     expect(attestation.claim.present).toEqual([true, true, false]);
     expect(attestation.claim.values).toEqual([0n, 8n, 0n]);
     expect(attestation.signature).toMatch(/^sig:/);
+  });
+
+  it('signs the subject hash of the request its witness observed', async () => {
+    const attestation = await attestWith(aliceAttestor, await observe(alice), 1_786_000_000n);
+    expect(attestation.claim.subjectHash).toEqual(
+      zkFetchSubjectHashOf({ method: 'GET', url: 'https://api.example.com/v1/account', body: '' }),
+    );
+  });
+
+  it('rejects a proposal about another subject', async () => {
+    const other = zkFetchSubjectHashOf({ method: 'GET', url: 'https://api.example.com/v1/other' });
+    await expect(
+      attestWith(aliceAttestor, await observe(alice), 1_786_000_000n, {}, { subjectHash: other }),
+    ).rejects.toThrow(/subjectHash does not match/);
   });
 
   it('is rejected when signed by another witness', async () => {

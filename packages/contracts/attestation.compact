@@ -10,6 +10,9 @@
 //   - reject a claim whose `policyHash` is not in the sealed `policyHashes`
 //     set. The policy hash is the on-chain binding: there is no kind code, and
 //     a contract serves several policies (kinds) by sealing several hashes;
+//   - sign `subjectHash` into the message but not check it: an app that binds
+//     the source recomputes it in-circuit from private subject fields and
+//     compares it to `claim.subjectHash` (ADR 0001);
 //   - reject nonce replay via the nullifiers set;
 //   - reject stale/future timestamps when the sealed `freshnessWindow` is set
 //     (0 disables the check);
@@ -26,7 +29,7 @@
 //     policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
 //     timestamp,
 //     nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
-//     evidenceHash[0..16] as Uint<128>, evidenceHash[16..32] as Uint<128>,
+//     subjectHash[0..16] as Uint<128>, subjectHash[16..32] as Uint<128>,
 //     present[0] as Field, ..., present[V-1] as Field,
 //     values[0] as Field, ..., values[V-1] as Field ]
 // Byte ranges are half-open (nonce[0..16] is bytes 0-15). Each 32-byte field
@@ -59,7 +62,7 @@ module attestation<#K, #V, #N, #M> {
     policyHash: Bytes<32>; // hash of the policy the attestors enforced
     timestamp: Uint<32>; // Unix seconds of the attestation
     nonce: Bytes<32>; // per-claim randomness (replay protection)
-    evidenceHash: Bytes<32>; // kind-defined hash binding the claim to its evidence
+    subjectHash: Bytes<32>; // circuit hash of what the claim is about (ADR 0001)
     present: Vector<V, Boolean>; // present[i] = values[i] was populated (measured), even if 0
     values: Vector<V, Uint<64>>; // positional numeric claim values last; 0 IS a valid value
   }
@@ -90,7 +93,7 @@ module attestation<#K, #V, #N, #M> {
 
   /// Reconstruct the flat signed message: a 10-field fixed header (version,
   /// appId and policyHash each as two 16-byte halves, timestamp, then nonce
-  /// and evidenceHash each as two 16-byte halves) followed by the `present`
+  /// and subjectHash each as two 16-byte halves) followed by the `present`
   /// flags and the values mapped to `Field`. Tuple/vector spread
   /// (`...`) appends the flags and values, so at specialization
   /// `[header..., present..., values...]` has length 10 + 2*V, which must equal
@@ -100,7 +103,7 @@ module attestation<#K, #V, #N, #M> {
     const appId = splitBytes(c.appId);
     const policyHash = splitBytes(c.policyHash);
     const nonce = splitBytes(c.nonce);
-    const evidenceHash = splitBytes(c.evidenceHash);
+    const subjectHash = splitBytes(c.subjectHash);
     const header: Vector<10, Field> =
             [c.version as Field,
              appId[0],
@@ -110,8 +113,8 @@ module attestation<#K, #V, #N, #M> {
              c.timestamp as Field,
              nonce[0],
              nonce[1],
-             evidenceHash[0],
-             evidenceHash[1],];
+             subjectHash[0],
+             subjectHash[1],];
     const presentFields: Vector<V, Field> = map((p: Boolean) => p as Field, c.present);
     const valuesFields: Vector<V, Field> = map((v: Uint<64>) => v as Field, c.values);
     return [...header, ...presentFields, ...valuesFields];

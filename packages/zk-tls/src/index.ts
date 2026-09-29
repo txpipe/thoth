@@ -98,7 +98,7 @@ export const zkFetchClaimSchema: z.ZodType<
     policyHash: bytes32Schema,
     timestamp: z.union([z.number(), z.bigint()]),
     nonce: z.instanceof(Uint8Array),
-    evidenceHash: z.instanceof(Uint8Array),
+    subjectHash: bytes32Schema,
     present: z.array(z.boolean()),
     values: z.array(z.union([z.number(), z.bigint()])),
   })
@@ -108,7 +108,7 @@ export const zkFetchClaimSchema: z.ZodType<
     policyHash: input.policyHash,
     timestamp: BigInt(input.timestamp),
     nonce: input.nonce,
-    evidenceHash: input.evidenceHash,
+    subjectHash: input.subjectHash,
     present: input.present,
     values: input.values.map((value) => BigInt(value)),
   })) as unknown as z.ZodType<
@@ -380,6 +380,33 @@ export const claimUrl = (claim: ProviderClaimData): string => {
 };
 
 /**
+ * Read the request a claim attests from its signed parameters.
+ *
+ * The witness signs the `method`, `url` and `body` it fetched; this is the
+ * request the claim's subject hash is taken over (see
+ * {@link zkFetchSubjectHashOf}).
+ *
+ * @param claim — the signed claim data.
+ * @returns the attested request; an absent body is left out.
+ * @throws if the parameters are not JSON, or do not carry a non-empty `url`
+ *   and `method`, or carry a `body` that is not a string.
+ */
+export const claimRequestOf = (claim: ProviderClaimData): ZkFetchSubjectRequest => {
+  const url = claimUrl(claim);
+  const { method, body } = JSON.parse(claim.parameters) as Readonly<{
+    method?: unknown;
+    body?: unknown;
+  }>;
+  if (typeof method !== 'string' || method === '') {
+    throw new Error('claim parameters carry no method');
+  }
+  if (body !== undefined && typeof body !== 'string') {
+    throw new Error('claim parameters carry a body that is not a string');
+  }
+  return body === undefined ? { method, url } : { method, url, body };
+};
+
+/**
  * Read the values the witness extracted from the response it saw.
  *
  * The signature already binds `claim.context`; this parser only interprets it.
@@ -511,14 +538,16 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
  * Derive the canonical {@link Claim} the attestor signs from parsed evidence.
  *
  * The claim reflects the evidence, not the client's proposal. `values`/`present`
- * come from the policy-declared disclosures, and `evidenceHash` is the Reclaim
- * identifier, which depends only on provider, parameters, and context, so every
- * witness derives the same identifier for the same observation. `version`
- * comes from the policy's `claimVersion` (default 1) and `policyHash` is
- * {@link zkFetchPolicyHashOf} the policy; `appId` is the caller's. The
+ * come from the policy-declared disclosures, and `subjectHash` is
+ * {@link zkFetchSubjectHashOf} the signed request ({@link claimRequestOf}), so
+ * every witness that fetched the same request derives the same subject.
+ * `version` comes from the policy's `claimVersion` (default 1) and
+ * `policyHash` is {@link zkFetchPolicyHashOf} the policy; `appId` is the
+ * caller's. The
  * timestamp is the caller's `timestamp`, which the client proposes and the law
  * bounds against the witness's own observation. The nonce is a domain-separated
- * SHA-256 of that identifier, so one observation with one context yields the
+ * SHA-256 of the Reclaim identifier, which depends only on provider,
+ * parameters, and context, so one observation with one context yields the
  * same nonce from every witness, and a fresh context yields a fresh nonce. A
  * slot whose disclosure is absent stays unpresent. The evidence carries only
  * what the witness saw.
@@ -527,8 +556,9 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
  * @param options — the parsed evidence view, the policy, the app id, the slot
  *   count, and the timestamp to sign.
  * @returns the derived claim.
- * @throws if a policy slot is out of the claim's value range, or the policy
- *   fails {@link zkFetchPolicySchema}.
+ * @throws if a policy slot is out of the claim's value range, the policy
+ *   fails {@link zkFetchPolicySchema}, or the signed parameters carry no
+ *   request (see {@link claimRequestOf}).
  */
 export const deriveClaimFromEvidence = <V extends number>(options: {
   /** The evidence view (see {@link parsedEvidenceView}). */
@@ -570,7 +600,7 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
     policyHash: zkFetchPolicyHashOf(policy),
     timestamp,
     nonce: hexToBytes(sha256Hex(`thoth:nonce:${verified.identifier}`)),
-    evidenceHash: hexToBytes(verified.identifier),
+    subjectHash: zkFetchSubjectHashOf(claimRequestOf(verified.claim)),
     present,
     values,
   } as Claim<V>;

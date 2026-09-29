@@ -84,7 +84,7 @@ All are fixed when a contract embeds the module.
   policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
   timestamp,
   nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
-  evidenceHash[0..16] as Uint<128>, evidenceHash[16..32] as Uint<128>,
+  subjectHash[0..16] as Uint<128>, subjectHash[16..32] as Uint<128>,
   present[0] as Field, ..., present[V-1] as Field,
   values[0] as Field, ..., values[V-1] as Field ]
 ```
@@ -100,7 +100,7 @@ presence flags, V values) — fixed when a contract embeds the module.
 
 - **The claim is the entire message.** Everything the contract inspects —
   freshness (`timestamp`), replay protection (`nonce`), source binding
-  (`evidenceHash`), the policy (`policyHash`), the app (`appId`), and the
+  (`subjectHash`), the policy (`policyHash`), the app (`appId`), and the
   version — is inside the signed field vector.
   Kinds must not rely on un-signed side-channels: any data the contract needs
   has to be a field of the message the attestor signs.
@@ -112,6 +112,14 @@ presence flags, V values) — fixed when a contract embeds the module.
   sealing one hash per policy. The membership check discloses which accepted
   policy a claim used. `appId` is signed but not checked by the module; an app
   that needs it compares it in its own predicate.
+- **Source binding is the app's in-circuit check.** `subjectHash` is a circuit
+  hash (`persistentHash`) of what the claim is about, such as a zkFetch
+  request. The module signs it but does not check it. An app that must accept
+  only one source takes the subject fields as private input, recomputes the
+  hash, compares it to the opened claim's `subjectHash`, and pins only the
+  fields its policy needs (the mock's `openAndBindHost` pins the host and keeps
+  the path private). The claim does not commit to the evidence behind it, so
+  it cannot be audited against the transcript offline (ADR 0007).
 - **The holder is a per-claim commitment, not an identity.** The pure
   `holderCommitment(secret)` circuit derives it as a `persistentHash` over a
   tagged holder secret; `@thoth/core/claim-context`'s `holderCommitmentOf`

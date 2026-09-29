@@ -78,6 +78,15 @@ export circuit openAndRequireMetric0(id: Bytes<32>, expected: Uint<64>): [] {
   assert(c.values[0] == expected, "value[0] mismatch");
 }
 
+// App-predicate demo: source binding (ADR 0001). The caller supplies the
+// subject privately; the circuit recomputes its hash against the vaulted
+// claim's `subjectHash` and pins only the host, so the path stays private.
+export circuit openAndBindHost(id: Bytes<32>, s: Subject, host: Bytes<32>): [] {
+  const c = A_openClaim(id);
+  assert(persistentHash<Subject>(s) == c.subjectHash, "Subject mismatch");
+  assert(s.host == host, "Host not accepted");
+}
+
 witness seedKeys(): Vector<3, JubjubPoint>;
 
 witness freshWindow(): Uint<64>;

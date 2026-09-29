@@ -20,6 +20,7 @@ import {
   zkFetchClaimSchema,
   zkFetchEvidenceSchema,
   zkFetchPolicyHashOf,
+  zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
 import { verifyZkFetchProof, zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import {
@@ -123,14 +124,14 @@ describe('verifyZkFetchProof', () => {
 });
 
 describe('zkFetch claim schema', () => {
-  it('rejects an appId or policyHash that is not 32 bytes', () => {
+  it('rejects an appId, policyHash or subjectHash that is not 32 bytes', () => {
     const claim = {
       version: 1,
       appId: APP_ID,
       policyHash: new Uint8Array(32),
       timestamp: 1_786_122_944,
       nonce: new Uint8Array(32),
-      evidenceHash: new Uint8Array(32),
+      subjectHash: new Uint8Array(32),
       present: [true],
       values: [12],
     };
@@ -138,6 +139,9 @@ describe('zkFetch claim schema', () => {
       /expected 32 bytes/,
     );
     expect(() => zkFetchClaimSchema.parse({ ...claim, policyHash: new Uint8Array(33) })).toThrow(
+      /expected 32 bytes/,
+    );
+    expect(() => zkFetchClaimSchema.parse({ ...claim, subjectHash: new Uint8Array(16) })).toThrow(
       /expected 32 bytes/,
     );
   });
@@ -149,7 +153,7 @@ describe('zkFetch claim schema', () => {
       policyHash: new Uint8Array(32),
       timestamp: 1_786_122_944,
       nonce: new Uint8Array(32),
-      evidenceHash: new Uint8Array(32),
+      subjectHash: new Uint8Array(32),
       present: [true, false],
       values: [12, 0],
     });
@@ -376,6 +380,13 @@ describe('zkFetch attestor + client', () => {
     const attestment = await prove().then((proof) => proof.attest());
     expect(attestment.claim.appId).toEqual(APP_ID);
     expect(attestment.claim.policyHash).toEqual(zkFetchPolicyHashOf(policy()));
+  });
+
+  it('collects a claim about the requested subject', async () => {
+    const attestment = await prove().then((proof) => proof.attest());
+    expect(attestment.claim.subjectHash).toEqual(
+      zkFetchSubjectHashOf({ method: 'GET', url: 'https://api.github.com/repos/x', body: '' }),
+    );
   });
 
   it('signs a derived claim and attests only what was disclosed', async () => {

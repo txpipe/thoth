@@ -18,7 +18,7 @@ export type FlatMessage = readonly bigint[];
  * The fixed claim shape every kind is expected to sign.
  *
  * Mirror of `attestation.compact`'s `Claim` struct: a header (version, appId,
- * policyHash, timestamp, nonce, evidenceHash), a per-position `present` mask,
+ * policyHash, timestamp, nonce, subjectHash), a per-position `present` mask,
  * and `V` numeric `values`. There is no kind code: the policy hash is the
  * on-chain binding, and the kind stays an off-chain concept.
  *
@@ -43,8 +43,12 @@ export interface Claim<V extends number> {
   timestamp: bigint;
   /** Per-claim randomness; prevents signature/claim replay on-chain. */
   nonce: Uint8Array;
-  /** Hash of the evidence artifacts; binds the claim to its evidence. */
-  evidenceHash: Uint8Array;
+  /**
+   * Circuit hash of what the claim is about (see `@thoth/core/claim-context`'s
+   * `subjectHashOf`); an app recomputes it in-circuit to bind the source.
+   * 32 bytes.
+   */
+  subjectHash: Uint8Array;
   /** Per-position present mask; `present[i]` true means `values[i]` was populated. */
   present: readonly boolean[];
   /** Positional numeric claim values, exactly `V` of them. */
@@ -73,8 +77,8 @@ export interface ClaimInput<V extends number> {
   timestamp: number | bigint;
   /** Per-claim randomness, replay protection. */
   nonce: Uint8Array;
-  /** Hash of the evidence artifacts. */
-  evidenceHash: Uint8Array;
+  /** Circuit hash of what the claim is about. 32 bytes. */
+  subjectHash: Uint8Array;
   /** Per-position present mask; length constrained to `V` by the schema. */
   present: readonly boolean[];
   /** Positional claim values; length constrained to `V` by the schema. */
@@ -89,7 +93,7 @@ export const CLAIM_VERSION = 1n;
 
 /**
  * Zod schema for a claim's 32-byte fields that carry an identity
- * (`appId`, `policyHash`).
+ * (`appId`, `policyHash`, `subjectHash`).
  */
 export const bytes32Schema = z
   .instanceof(Uint8Array)
@@ -117,7 +121,7 @@ export function claimSchema<V extends number>(
       policyHash: bytes32Schema,
       timestamp: z.union([z.number(), z.bigint()]),
       nonce: z.instanceof(Uint8Array),
-      evidenceHash: z.instanceof(Uint8Array),
+      subjectHash: bytes32Schema,
       present: z.array(z.boolean()).length(v),
       values: z.array(z.union([z.number(), z.bigint()])).length(v),
     })
@@ -127,7 +131,7 @@ export function claimSchema<V extends number>(
       policyHash: input.policyHash,
       timestamp: BigInt(input.timestamp),
       nonce: input.nonce,
-      evidenceHash: input.evidenceHash,
+      subjectHash: input.subjectHash,
       present: input.present,
       values: input.values.map((value) => BigInt(value)),
     }));
@@ -157,7 +161,7 @@ function splitBytes(bytes: Uint8Array): [bigint, bigint] {
  * The canonical default for kinds whose `message` is exactly the canonical
  * `Claim` shape: a 10-field header (version, then `appId` and `policyHash`
  * each split into two 16-byte halves, timestamp, then `nonce` and
- * `evidenceHash` split the same way, exactly as `attestation.compact`'s
+ * `subjectHash` split the same way, exactly as `attestation.compact`'s
  * `buildMessage` does), followed by the `present` flags (`1`/`0`) and the
  * `values`. The result has length `2*V + 10`, which is
  * the signed-message length `K` the target contract is specialized with.
@@ -169,7 +173,7 @@ function splitBytes(bytes: Uint8Array): [bigint, bigint] {
  * @param claim — a parsed {@link Claim}.
  * @returns the flat message the signer commits to and the contract verifies.
  * @throws if `claim.appId`, `claim.policyHash`, `claim.nonce` or
- *   `claim.evidenceHash` is not exactly 32 bytes.
+ *   `claim.subjectHash` is not exactly 32 bytes.
  */
 export function claimToMessage<V extends number>(claim: Claim<V>): FlatMessage {
   return [
@@ -178,7 +182,7 @@ export function claimToMessage<V extends number>(claim: Claim<V>): FlatMessage {
     ...splitBytes(claim.policyHash),
     claim.timestamp,
     ...splitBytes(claim.nonce),
-    ...splitBytes(claim.evidenceHash),
+    ...splitBytes(claim.subjectHash),
     ...claim.present.map((p) => (p ? 1n : 0n)),
     ...claim.values,
   ];

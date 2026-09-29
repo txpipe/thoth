@@ -13,6 +13,7 @@ import { claimToMessage } from '@thoth/core/claim';
 import { hexToBytes } from '../hex.js';
 import {
   assertEvidenceMatchesPolicy,
+  claimRequestOf,
   deriveClaimFromEvidence,
   normalizePolicy,
   parseDisclosedValue,
@@ -25,6 +26,7 @@ import {
   zkFetchClaimSchema,
   zkFetchEvidenceSchema,
   zkFetchPolicySchema,
+  zkFetchSubjectHashOf,
 } from '../index.js';
 
 const witnessAddressOf = (witnessKey: string): string => {
@@ -115,6 +117,30 @@ export const assertClaimMatchesDisclosures = (options: {
 };
 
 /**
+ * Check a client-proposed claim's subject against the signed request.
+ *
+ * The attestor derives the subject hash from the request its witness signed
+ * ({@link claimRequestOf}) and requires the proposal to carry it, so a client
+ * cannot have the attestor certify a claim about another source (ADR 0001).
+ *
+ * @param options — the proposed claim and the verified evidence.
+ * @throws if the proposed `subjectHash` is not the signed request's, or the
+ *   signed parameters carry no request.
+ */
+export const assertClaimMatchesSubject = (options: {
+  /** The client-proposed claim. */
+  claim: Claim<number>;
+  /** The verified evidence whose signed parameters name the request. */
+  verified: VerifiedEvidence;
+}): void => {
+  const { claim, verified } = options;
+  const expected = zkFetchSubjectHashOf(claimRequestOf(verified.claim));
+  if (!Buffer.from(claim.subjectHash).equals(expected)) {
+    throw new Error('claim subjectHash does not match the request the witness signed');
+  }
+};
+
+/**
  * Create the zkFetch attestor kind's shareable definition.
  *
  * `verify` implements the kind's check: verify the evidence
@@ -122,7 +148,8 @@ export const assertClaimMatchesDisclosures = (options: {
  * ({@link assertEvidenceMatchesPolicy}), bound the client-proposed timestamp
  * against the witness's own observation (`maxSkewS`, default
  * `DEFAULT_MAX_SKEW_S`), and enforce that the proposed claim matches the
- * disclosed values ({@link assertClaimMatchesDisclosures}). `message` encodes a
+ * signed request ({@link assertClaimMatchesSubject}) and the disclosed values
+ * ({@link assertClaimMatchesDisclosures}). `message` encodes a
  * claim into its flat field vector via `claimToMessage`.
  *
  * @returns the shareable definition; instantiate it with `@thoth/attestor`'s
@@ -146,6 +173,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
           `claim timestamp ${input.claim.timestamp} is ${absSkew} s from the witness observation ${observedAt}, beyond the ${maxSkewS} s skew`,
         );
       }
+      assertClaimMatchesSubject({ claim: input.claim, verified });
       assertClaimMatchesDisclosures({
         claim: input.claim,
         disclosures: verified.disclosedValues,
@@ -162,7 +190,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  * Specialization of `@thoth/attestor`'s `buildAttestor` that knows the kind:
  * it accepts evidence only from the operator's own Reclaim witness, rejects
  * proposals that do not match the disclosures, derives the *authoritative*
- * claim from the verified evidence (deterministic nonce, evidence-bound hash)
+ * claim from the verified evidence (deterministic nonce, request-bound subject hash)
  * sized to the proposed claim's own length, and signs `message(claim)` with
  * the key pair's signer.
  *
@@ -194,7 +222,7 @@ export function zkFetchAttestor<PK, S>(parts: {
       const policy = definition.policy.parse(input.policy);
       const evidence = definition.evidence.parse(input.evidence);
       const proposed = definition.claim.parse(input.claim);
-      // One full check pass (ECDSA + policy + disclosures cross-check).
+      // One full check pass (ECDSA + policy + subject and disclosures cross-check).
       await definition.verify({ policy, evidence, claim: proposed });
       if (evidence.attestorAddress.toLowerCase() !== witnessAddress) {
         throw new Error(

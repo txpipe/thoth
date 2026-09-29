@@ -36,8 +36,11 @@ prover that the client can use to obtain evidence:
     and are signed unpresent.
   - `deriveClaimFromEvidence({ verified, policy, appId, valueSlots, timestamp })`
     derives the canonical `Claim` the attestor signs: values/present from the
-    disclosed values, a deterministic nonce, the Reclaim identifier as
-    `evidenceHash`, and `zkFetchPolicyHashOf(policy)` as `policyHash`.
+    disclosed values, a deterministic nonce, `zkFetchSubjectHashOf` the signed
+    request as `subjectHash`, and `zkFetchPolicyHashOf(policy)` as
+    `policyHash`.
+  - `claimRequestOf(claim)` reads the method, URL and body the witness signed
+    into the Reclaim claim's parameters: the request the subject hash is over.
   - `parsedEvidenceView(evidence)` returns the parsed evidence view claim
     derivation runs on, without a signature check; the caller decides trust.
   - `parseDisclosedValue(value, rule)` applies the parse law: a disclosed string
@@ -64,12 +67,15 @@ prover that the client can use to obtain evidence:
   - `verifyZkFetchProof(evidence)` verifies the witness's ECDSA signature
     with the Reclaim SDK and extracts the values it disclosed, returned as
     `VerifiedEvidence.disclosedValues`.
+  - `assertClaimMatchesSubject({ claim, verified })` enforces that a
+    client-proposed claim's `subjectHash` is the one of the request the witness
+    signed.
   - `assertClaimMatchesDisclosures({ claim, disclosures, policy })` enforces
     that a client-proposed claim says exactly what the evidence disclosed.
   - `createZkFetchDefinition()` returns the shareable definition: the three
     schemas, the `verify` step, which verifies the proof, checks the policy,
     bounds the proposed timestamp by `maxSkewS`, and checks the claim against
-    the disclosures, and a `message` that encodes the claim into the flat
+    the signed request and the disclosures, and a `message` that encodes the claim into the flat
     message via `claimToMessage`.
   - `zkFetchAttestor({ id, keyPair, registryIndex, witnessKey })` returns a
     deployable instance: a specialization of `@thoth/attestor`'s `buildAttestor`
@@ -96,10 +102,10 @@ prover that the client can use to obtain evidence:
   Compact contract verifies over Jubjub-Schnorr in zero knowledge. They must
   differ. A Compact circuit cannot verify Reclaim's secp256k1 signature, so the
   attestor re-signs a canonical, circuit-compatible statement. The claim's
-  `evidenceHash` is the Reclaim claim identifier, which covers the request,
-  context, and disclosed values. Every witness computes the same identifier for
-  the same observation, and an app holding the evidence can independently
-  recompute the mapping.
+  `subjectHash` is the circuit hash of the request the witness signed, so every
+  witness that fetched the same request agrees on it, and an app can recompute
+  it in-circuit to bind the source host while the path stays private. The
+  claim does not commit to the Reclaim evidence itself.
 - **Canonical evidence in.** The attestor accepts one evidence shape only; the
   zod schema is the boundary. Normalizing third-party zkFetch output, such as
   raw `transformProof` shells and address/witness plumbing, belongs to the
@@ -163,7 +169,7 @@ The kind sits in the middle of the Thoth layering:
         │  evidence (ProviderClaimData + signature + address)
         ▼
   @thoth/zk-tls attestor — verify own witness's signature → policy → disclosures
-        │  signs Claim (numeric slots + present + evidenceHash), Jubjub-Schnorr
+        │  signs Claim (numeric slots + present + subjectHash), Jubjub-Schnorr
         ▼
   N-of-M of these → @thoth/contracts registry (Midnight)
 ```
@@ -182,9 +188,9 @@ The kind sits in the middle of the Thoth layering:
   explicit.
 - **The attestor derives its claim.** Rather than trust a client-provided claim,
   the attestor re-derives values from the verified disclosures and only accepts
-  a proposal that matches, checked by `assertClaimMatchesDisclosures`. The
-  client cannot make the attestor certify a reading the evidence does not
-  support.
+  a proposal that matches, checked by `assertClaimMatchesSubject` and
+  `assertClaimMatchesDisclosures`. The client cannot make the attestor certify
+  a reading, or a source, the evidence does not support.
 - **The client does not re-verify.** The client is the side that ran the
   witnessed HTTPS interaction; each attestor checks the Reclaim ECDSA signature
   and that it came from its own witness before signing. The client derives the

@@ -48,7 +48,7 @@ export const makeClaim = (
     policyHash: POLICY_A,
     timestamp: nowSeconds(),
     nonce: randomBytes(32),
-    evidenceHash: randomBytes(32),
+    subjectHash: randomBytes(32),
     values,
     present,
     ...overrides,

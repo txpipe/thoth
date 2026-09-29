@@ -41,7 +41,7 @@ describe('mock attestation', () => {
       const msg = pureCircuits.message(claim);
       expect(msg).toHaveLength(16);
       // [version, appId0, appId1, policyHash0, policyHash1, timestamp,
-      //  nonce0, nonce1, evidenceHash0, evidenceHash1, p0, p1, p2, v0, v1, v2]
+      //  nonce0, nonce1, subjectHash0, subjectHash1, p0, p1, p2, v0, v1, v2]
       // APP_ID is 32 × 0xa1 and POLICY_A 32 × 0xb1, so each half repeats the byte.
       const half = (byte: string): bigint => BigInt(`0x${byte.repeat(16)}`);
       expect(msg.slice(0, 6)).toEqual([
@@ -58,16 +58,16 @@ describe('mock attestation', () => {
     it('pins each 16-byte half to its slot (little-endian)', () => {
       const nonce = new Uint8Array(32);
       nonce[0] = 1;
-      const evidenceHash = new Uint8Array(32);
-      evidenceHash[16] = 2;
-      const msg = pureCircuits.message(makeClaim({ nonce, evidenceHash }));
+      const subjectHash = new Uint8Array(32);
+      subjectHash[16] = 2;
+      const msg = pureCircuits.message(makeClaim({ nonce, subjectHash }));
       expect(msg.slice(6, 10)).toEqual([1n, 0n, 0n, 2n]);
     });
 
     it('distinguishes a change to every byte of every 32-byte field', () => {
       const claim = makeClaim();
       const msg = pureCircuits.message(claim);
-      for (const field of ['appId', 'policyHash', 'nonce', 'evidenceHash'] as const) {
+      for (const field of ['appId', 'policyHash', 'nonce', 'subjectHash'] as const) {
         for (let i = 0; i < 32; i++) {
           expect(pureCircuits.message({ ...claim, [field]: flip(claim[field], i) })).not.toEqual(
             msg,
@@ -151,15 +151,15 @@ describe('mock attestation', () => {
       { name: 'nonce[0]', mutate: (c: A_Claim) => ({ ...c, nonce: flip(c.nonce, 0) }) },
       { name: 'nonce[31]', mutate: (c: A_Claim) => ({ ...c, nonce: flip(c.nonce, 31) }) },
       {
-        name: 'evidenceHash[31]',
-        mutate: (c: A_Claim) => ({ ...c, evidenceHash: flip(c.evidenceHash, 31) }),
+        name: 'subjectHash[31]',
+        mutate: (c: A_Claim) => ({ ...c, subjectHash: flip(c.subjectHash, 31) }),
       },
       {
-        name: 'nonce[31] and evidenceHash[31]',
+        name: 'nonce[31] and subjectHash[31]',
         mutate: (c: A_Claim) => ({
           ...c,
           nonce: flip(c.nonce, 31),
-          evidenceHash: flip(c.evidenceHash, 31),
+          subjectHash: flip(c.subjectHash, 31),
         }),
       },
     ])('rejects a replay of accepted signatures with $name mutated', async ({ mutate }) => {
@@ -377,6 +377,62 @@ describe('mock attestation', () => {
       const state = ps({ ...signed, holderSecret: holder });
       await sim.call('openAndRead', state, id, 999n, 0n);
       await sim.call('openAndRead', state, id, 999n, 0n);
+    });
+  });
+
+  // ADR 0001: the app supplies the subject privately and the circuit binds it
+  // to the vaulted claim through `subjectHash`, pinning only the host.
+  describe('source binding (subjectHash)', () => {
+    const subject = {
+      method: randomBytes(32),
+      host: randomBytes(32),
+      path: randomBytes(32),
+      body: randomBytes(32),
+    };
+
+    const storeAbout = async () => {
+      const claim = makeClaim({ subjectHash: pureCircuits.subjectHash(subject) });
+      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+      return { signed, id: idOf(signed.claim, signed.commitRand) };
+    };
+
+    it('accepts the subject the claim is about under the pinned host', async () => {
+      const { signed, id } = await storeAbout();
+      await sim.call(
+        'openAndBindHost',
+        ps({ ...signed, holderSecret: holder }),
+        id,
+        subject,
+        subject.host,
+      );
+    });
+
+    it('rejects a subject the claim is not about', async () => {
+      const { signed, id } = await storeAbout();
+      const other = { ...subject, path: flip(subject.path, 0) };
+      await expect(
+        sim.call(
+          'openAndBindHost',
+          ps({ ...signed, holderSecret: holder }),
+          id,
+          other,
+          subject.host,
+        ),
+      ).rejects.toThrow('Subject mismatch');
+    });
+
+    it('rejects the right subject under another host', async () => {
+      const { signed, id } = await storeAbout();
+      await expect(
+        sim.call(
+          'openAndBindHost',
+          ps({ ...signed, holderSecret: holder }),
+          id,
+          subject,
+          flip(subject.host, 0),
+        ),
+      ).rejects.toThrow('Host not accepted');
     });
   });
 });

@@ -54,10 +54,11 @@ attested value can feed different predicates in different applications.
 
 What makes a claim meaningful is the consuming contract. The app pins its trusted
 attestor set and threshold at deploy time, and its predicate decides which claims it
-accepts. A claim does not carry the host, request, or policy that produced it as a
-field the contract can compare, only an opaque `evidenceHash`, so matching values do
-not by themselves prove where they came from. An app that needs source binding has to
-put the commitment it needs into the claim layout and check it on-chain.
+accepts. A claim carries `policyHash`, which the contract checks against its sealed
+set, and `subjectHash`, a circuit hash of what the claim is about. Matching values do
+not by themselves prove where they came from: an app that needs source binding supplies
+the subject privately, recomputes `subjectHash` in-circuit, and pins only the fields
+its policy needs, such as the host.
 
 On the other side is the *client* — the component that runs on the user's machine,
 inside the dApp. It first obtains evidence of a fact. In the zkFetch kind that means

@@ -44,13 +44,15 @@ its own schemas and runs the full check before signing:
    size bound.
 3. The law bounds the client-proposed timestamp by `maxSkewS` (default 60
    seconds) against the witness's own observation.
-4. `assertClaimMatchesDisclosures({ claim, disclosures, policy })` enforces
+4. `assertClaimMatchesSubject({ claim, verified })` derives the subject hash
+   from the request the witness signed and requires the proposal to carry it.
+5. `assertClaimMatchesDisclosures({ claim, disclosures, policy })` enforces
    that the client-proposed claim says exactly what the evidence disclosed.
 
 After those checks, `attestor.attest` also rejects evidence whose signing
 witness is not the instance's own `witnessKey`. Only then does it sign the
 attestor-derived claim: values and present bits from the disclosed values, a
-deterministic nonce, the Reclaim identifier as the claim's `evidenceHash`, and
+deterministic nonce, the signed request's subject hash as `subjectHash`, and
 the hash of its own policy as `policyHash`. The `appId` and the timestamp are
 the only fields it takes from the proposal.
 
