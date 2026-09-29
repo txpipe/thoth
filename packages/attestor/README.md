@@ -39,10 +39,10 @@ Concrete attestor kinds are built with `buildAttestor`:
 
 ```ts
 import { buildAttestor, defineAttestor, descriptorOf } from '@thoth/attestor';
-import { claimSchema } from '@thoth/core/claim';
+import { claimSchema, claimToMessage } from '@thoth/core/claim';
 
 const kindLaw = defineAttestor({
-  kind: 'zkTLS',
+  kind: 'my-kind@1', // the kind's versioned law tag
   policy: /* … */,
   evidence: /* … */,
   claim: claimSchema<8>(8),
@@ -51,7 +51,7 @@ const kindLaw = defineAttestor({
 });
 
 const attestor = buildAttestor({
-  id: 'zkTLS',
+  id: 'my-kind-operator-1',
   definition: kindLaw,
   keyPair,                        // produced by the kind's key package
   attest: async (definition, signer, input) => {
@@ -105,5 +105,6 @@ owned by each kind's package: core and host declare only the interface contract
 
 - [Thoth (repo root)](https://github.com/txpipe-shop/thoth) — overall architecture and docs
 - [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — architecture overview, flow, and out-of-scope
+- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md) — how to add an attestor kind on top of this package
 - [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core) — the keyless law this package instantiates alongside keys
 - [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts) — the on-chain registry that verifies the signatures positionally

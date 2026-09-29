@@ -275,7 +275,7 @@ The kind sits in the middle of the Thoth layering:
 
 - [Thoth (repo root)](https://github.com/txpipe-shop/thoth): overall architecture and docs
 - [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md): the attestor kinds, claim/evidence split, and flow
-- [docs/postmortem-zk-tls-redaction.md](https://github.com/txpipe-shop/thoth/blob/main/docs/postmortem-zk-tls-redaction.md): why `responseRedactions` is a reveal whitelist, and the bug that proved it
+- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md): how to add a kind, with this package as the worked example
 - [docs/dapp-integration.md](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md): the dApp guide, from client setup to handing the attestment to the contract
 - [docs/attestor-guide.md](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/attestor-guide.md): deploying a zkFetch attestor and running a Reclaim witness
 - [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): `AttestorDefinition`, the canonical `Claim` and `claimToMessage`

@@ -20,6 +20,11 @@ Thoth is a private N-of-M attestation system for Midnight. Three layers:
 Attestors certify facts, not decisions: a claim is a canonical statement of
 what was observed; the application defines the predicate over it.
 
+Use the glossary in [`CONTEXT.md`](CONTEXT.md) for domain terms. The claim's
+fields and wire order are in [`docs/DESIGN.md`](docs/DESIGN.md#the-claim). To
+add an attestor kind, follow [`docs/kind-author-guide.md`](docs/kind-author-guide.md);
+a new kind needs no contract change.
+
 ## Commands
 
 Run everything from the repo root (npm workspace):
@@ -63,7 +68,13 @@ thoth/
 │   │   ├── src/claim.ts                   — claim types served at @thoth/core/claim
 │   │   └── src/claim-context.ts           — claim-context hashes at @thoth/core/claim-context
 │   └── zk-tls/         # @thoth/zk-tls    — zkFetch kind: attestor law + client (fixture-backed tests)
-├── docs/DESIGN.md      # design overview & decisions
+├── docs/
+│   ├── DESIGN.md       # design overview, the claim and its wire order
+│   ├── kind-author-guide.md  # how to add an attestor kind
+│   ├── adr/            # architecture decision records
+│   └── agents/         # agent skill configuration
+├── examples/demo-attestation/  # recorded zkFetch evidence fixture
+├── CONTEXT.md          # domain glossary
 ├── README.md           # human-oriented overview
 └── AGENTS.md           # this file
 ```
@@ -103,7 +114,8 @@ thoth/
 - **Compact**: `pragma language_version >= 0.22`; follow the style in
   `packages/contracts/*.compact`; module params are uppercase (`<#K, #V, #N, #M>`).
   Metadata in `attestation.compact`'s header comment is load-bearing — keep the
-  wire-layout doc synchronized with `buildMessage`. The claim’s `version` stays `1` until a layout is deployed; pre-launch, change the wire layout freely and keep `version = 1`.
+  wire-layout doc synchronized with `buildMessage`, `claimToMessage`, and the
+  wire-order tables in `docs/DESIGN.md` and `packages/contracts/README.md`. The claim’s `version` stays `1` until a layout is deployed; pre-launch, change the wire layout freely and keep `version = 1`.
 - **Public API style**: every export is documented with JSDoc (block-comment
   `/** … */`) — `@param`, `@returns`, `@typeParam`, `@see` where relevant.
   The file header line uses `//` for file-level notes.
@@ -120,7 +132,14 @@ thoth/
 - Design decisions and their rationale live in the **package README that owns
   them** (e.g. `packages/attestor/README.md` "Design rationale"). If a decision
   changes the public surface, update the affected package READMEs together.
-  `docs/DESIGN.md` keeps only the architecture overview, flow, and out-of-scope.
+  `docs/DESIGN.md` keeps only the architecture overview, the claim and its wire
+  order, flow, and out-of-scope. Cross-package decisions are ADRs in
+  `docs/adr/`; code comments cite them as `ADR 000N`.
+- Domain terms come from `CONTEXT.md`; do not use a synonym it lists under
+  _Avoid_. Add a term there when a new concept appears.
+- `docs/kind-author-guide.md` is the one guide that spans packages. Update it
+  when a seam a kind implements changes (`@thoth/core`, `@thoth/attestor`,
+  `@thoth/client`, or the claim).
 - JSDoc lives inline in source; there is no generated API doc site (TypeDoc
   intentionally deferred — packages are small).
 

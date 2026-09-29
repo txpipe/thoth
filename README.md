@@ -32,8 +32,9 @@ Three pieces:
 3. The client submits the claim with N signatures to the Midnight contract as
    **private witness data**. The contract verifies, in zero knowledge: each
    signature is valid and from a **distinct** attestor in the app's pinned
-   registry; the observation hasn't been submitted before (no replay); and the
-   claim satisfies the app's observation and freshness windows.
+   registry; the claim is under a policy the app accepts; the observation
+   hasn't been submitted before (no replay); and the claim satisfies the app's
+   observation and freshness windows.
 4. Only if those checks pass does the app's **predicate** run over the claim
    values. Claim values are never stored on-chain — only their commitments and
    the predicate outcome — and, depending on the app's configuration, which
@@ -57,7 +58,12 @@ thoth/
 │   │   └── README.md               # how to embed the modules in your own contract
 │   ├── core/                  # @thoth/core — keyless claim/envelope types
 │   └── zk-tls/                # @thoth/zk-tls — zkFetch kind: shared logic + attestor + client
-├── docs/DESIGN.md              # design overview & decisions
+├── docs/
+│   ├── DESIGN.md               # design overview, the claim and its wire order
+│   ├── kind-author-guide.md    # how to add a new attestor kind
+│   └── adr/                    # architecture decision records
+├── examples/demo-attestation/  # recorded zkFetch evidence fixture
+├── CONTEXT.md                  # domain glossary
 ├── tsconfig.base.json          # shared TypeScript compiler options for all packages
 └── package.json                # repo root: npm workspace + shared scripts, CI
 ```
@@ -91,7 +97,10 @@ vitest, and biome on every push/PR.
 
 ## Docs
 
-- `docs/DESIGN.md` — design overview
+- `docs/DESIGN.md` — design overview, the claim, and its wire order
+- `docs/kind-author-guide.md` — how to add a new attestor kind
+- `CONTEXT.md` — the domain glossary
+- `docs/adr/` — the design decisions and their reasons
 - `AGENTS.md` — guide for AI coding agents working in this repo
 - `packages/core/README.md` — the keyless internal law (`@thoth/core/claim`)
 - `packages/attestor/README.md` — the host: key boundary, instances, helpers

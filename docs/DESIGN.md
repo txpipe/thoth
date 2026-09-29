@@ -75,9 +75,55 @@ pinged by any dApp that needs to use external data in-contract. Each dApp choose
 own threshold at deployment time, meaning how many attestors'
 signatures are needed for a claim to be valid.
 
-A claim can be *portable* — reusable to feed different predicates in different apps —
-or *scoped*: binding a claim to an app id forbids it from being used by any other app.
-Scoping is a claim-layout and contract concern; the base `Claim` carries no app id.
+Every claim is signed for one app: it carries the app's `appId`, and the
+contract's replay check keys on it, so a claim accepted by one app cannot be
+replayed into another. Within that app, the same claim can feed any number of
+predicates.
+
+New kinds plug into this without a contract change; see
+[kind-author-guide.md](kind-author-guide.md).
+
+## The claim
+
+The claim is the same object everywhere — client, attestors, and contract —
+and it is the whole signed message: anything the contract checks is a field of
+it. The terms are defined in [`CONTEXT.md`](../CONTEXT.md); the decisions
+behind them are the ADRs in [`adr/`](adr/).
+
+| Field | What it is |
+|-------|------------|
+| `version` | Wire version, `1` until a layout is deployed |
+| `appId` | The app the claim is for |
+| `policyHash` | Hash of the policy the attestors enforced; stands in for the kind (ADR 0002) |
+| `windowStart`, `windowEnd` | When the attestor observed, in Unix seconds (ADR 0005) |
+| `subjectHash` | Circuit hash of what the claim is about (ADR 0001) |
+| `holder` | Per-claim commitment of the caller's secret (ADR 0004) |
+| `present` | One flag per value slot: was it measured |
+| `values` | `V` positional `Uint<64>` measurements |
+
+There is no nonce and no kind code. The contract derives replay protection from
+the observation identity (ADR 0006), and the policy hash binds the kind.
+
+### Wire order
+
+Attestors sign, and the contract rebuilds, a flat vector of `K = 2*V + 11`
+fields. `buildMessage` in
+[`attestation.compact`](../packages/contracts/attestation.compact) defines it;
+`claimToMessage` in `@thoth/core/claim` mirrors it, and a parity test keeps the
+two equal. Each 32-byte field is split into two 16-byte halves, each read as a
+`Uint<128>`, so every byte is signed.
+
+| Index | Field | Encoding |
+|-------|-------|----------|
+| 0 | `version` | `1` |
+| 1, 2 | `appId` | bytes 0–15, then bytes 16–31 |
+| 3, 4 | `policyHash` | two halves |
+| 5 | `windowStart` | Unix seconds |
+| 6 | `windowEnd` | Unix seconds |
+| 7, 8 | `subjectHash` | two halves |
+| 9, 10 | `holder` | two halves |
+| 11 … 10+V | `present[0]` … `present[V-1]` | `1` measured, `0` absent |
+| 11+V … 10+2V | `values[0]` … `values[V-1]` | the value; `0` when absent |
 
 ## The contract
 
@@ -88,8 +134,11 @@ pinned trusted set — and with the app's N-of-M threshold fixed at deployment t
 When the client submits a claim with N attestor signatures, the contract verifies,
 in zero knowledge, that:
 
+- the claim's `policyHash` is in the app's sealed set of accepted policies;
 - each signature is valid and comes from a **distinct** attestor in the registry —
   so the N-of-M threshold holds against exactly the attestors the app pinned;
+- every slot not marked `present` carries zero;
+- the caller knows the secret behind the claim's `holder`;
 - the observation identity has not been submitted before — no replay;
 - the attestors' observation window does not exceed the app's sealed maximum,
   and the block time falls between its start and its end plus the sealed
@@ -102,6 +151,8 @@ configuration, which attestors vouched may be hidden too.
 
 The claim and the signature scheme are the same object everywhere — client,
 attestors, and contract — so a signature produced off-chain verifies on-chain.
+Signatures are checked positionally: the client places each one at the
+registry slot its trusted set assigned the attestor.
 
 ## Flow
 
@@ -132,6 +183,9 @@ sequenceDiagram
 
 ## Out of scope
 
+- **Colluding attestors**: N or more pinned attestors can sign a claim under a
+  policy they do not enforce, and nothing on-chain can stop it. The threshold
+  assumes the pinned operators are honest and independent (ADR 0003).
 - **Org / 1-of-1 attestation**: a single authority makes the registry, N-of-M, and
   verifier redundant; a plain signature checked by a witness function does the whole
   job.

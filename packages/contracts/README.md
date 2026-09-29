@@ -89,6 +89,9 @@ All are fixed when a contract embeds the module.
   values[0] as Field, ..., values[V-1] as Field ]
 ```
 
+[docs/DESIGN.md, "The claim"](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#the-claim)
+gives the same order with field indices.
+
 The attestor MUST reproduce this exact flat field vector to sign the same
 message (same order, sizes, presence-flag semantics, and the split of each
 32-byte field into two 16-byte halves, so every byte is signed). `present` is a
@@ -198,10 +201,12 @@ returned `Claim` inside their own circuits — one open, read any subset of
 
 ## Notes / open questions
 
-- Reusability across apps: the claim shape is positional (`values: Vector<N, Uint<64>>`)
+- Reusability across apps: the claim shape is positional (`values: Vector<V, Uint<64>>`)
   plus per-slot `present` flags. It is simple enough that any app can parse it, but the
   *meaning* of each slot is app-defined. There is no per-value tag in the signed
   message; the policy that produced the claim is identified by `policyHash`.
+- A new attestor kind needs no change here: an app accepts it by sealing its
+  policy hash. See [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md).
 
 ## Development
 

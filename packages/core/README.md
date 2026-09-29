@@ -53,12 +53,11 @@ test in the contracts suite.
 
 ```ts
 import { claimSchema, claimToMessage } from '@thoth/core/claim';
-import type { Claim } from '@thoth/core/claim';
 import type { AttestorDefinition } from '@thoth/core';
 
 // A kind's definition uses the claim schema as its claim law.
-const def: AttestorDefinition<'zkfetch', z.ZodType, z.ZodType, z.ZodType> = {
-  kind: 'zkTLS',
+const def: AttestorDefinition<'my-kind@1', z.ZodType, z.ZodType, z.ZodType> = {
+  kind: 'my-kind@1', // the kind's versioned law tag
   policy: /* … */,
   evidence: /* … */,
   claim: claimSchema<8>(8),
@@ -88,6 +87,7 @@ identity or unlinkability promise.
 ## Links
 
 - [Thoth (repo root)](https://github.com/txpipe-shop/thoth) — overall architecture and docs
-- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — design overview
+- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — design overview, the claim and its wire order
+- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md) — how to add an attestor kind on top of this package
 - [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor) — the host (key boundary, instances)
 - [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts) — the on-chain Compact modules the claim shape mirrors
