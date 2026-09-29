@@ -4,7 +4,6 @@ import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema, claimSchema, claimToMessage } from '@thoth/core/claim';
 import type { z } from 'zod';
-import { bytesToHex } from '../hex.js';
 import type {
   ProviderClaimData,
   ZkFetchDefinition,
@@ -19,9 +18,6 @@ import {
   zkFetchEvidenceSchema,
   zkFetchPolicySchema,
 } from '../index.js';
-
-/** A fresh random 32-byte nonce, hex-encoded with an `0x` prefix. */
-const randomNonce = (): string => `0x${bytesToHex(crypto.getRandomValues(new Uint8Array(32)))}`;
 
 /** Byte length of a claim's `appId`. */
 const APP_ID_BYTES = 32;
@@ -178,7 +174,7 @@ const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetc
  * Runs the policy check and derives the canonical claim. The client
  * deliberately does **not** re-verify the Reclaim ECDSA signature, and each
  * pinned attestor verifies the evidence before signing.
- * Because the claim (incl. its nonce) is deterministic in the evidence, the
+ * Because the claim is deterministic in the evidence, the
  * proposal is byte-identical to what each attestor will sign, so the client
  * can precompute the expected message and vet each returned attestation
  * against it (`resolveAttestation`'s `expectedMessage`).
@@ -323,8 +319,8 @@ export interface ZkFetchClient<V extends number, PK, S> {
   /**
    * Obtain evidence for an HTTPS request from every attestor's witness.
    *
-   * A fresh random nonce goes into the signed context of every fetch, so one
-   * `proveReq` cannot be replayed as another. Each witness must attest
+   * Replay protection keys on the signed observation, including its window
+   * and disclosed values. Each witness must attest
    * `request.url`'s origin, and all of them must agree on one claim; otherwise
    * no attestor is contacted.
    *
@@ -402,10 +398,7 @@ export const zkFetchClient = {
     return {
       proveReq: async (request, holder): Promise<ZkFetchClientProof<V, PK, S>> => {
         const checkedHolder = bytes32Schema.parse(holder).slice();
-        const signedRequest: ZkFetchRequest = {
-          ...request,
-          context: { ...request.context, thothNonce: randomNonce() },
-        };
+        const signedRequest: ZkFetchRequest = { ...request };
         const entries = await Promise.all(
           trusted.attestors.map(async (attestor): Promise<readonly [string, ZkFetchEvidence]> => {
             const prover = provers[attestor.id];

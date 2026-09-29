@@ -36,7 +36,7 @@ prover that the client can use to obtain evidence:
     and are signed unpresent.
   - `deriveClaimFromEvidence({ verified, policy, appId, holder, valueSlots, windowStart, windowEnd })`
     derives the canonical `Claim` the attestor signs: values/present from the
-    disclosed values, a deterministic nonce, `zkFetchSubjectHashOf` the signed
+    disclosed values, `zkFetchSubjectHashOf` the signed
     request as `subjectHash`, and `zkFetchPolicyHashOf(policy)` as
     `policyHash`.
   - `claimRequestOf(claim)` reads the method, URL and body the witness signed
@@ -88,7 +88,7 @@ prover that the client can use to obtain evidence:
   `toCanonicalEvidence`, `addressFromWitnessId`, and the prover/config types.
   `init` validates the policy, its slot map, and the prover map, once;
   `proveReq(request, holder)` takes a per-claim holder commitment, fetches through
-  each attestor's prover, signs a fresh nonce into the context, and requires every witness to agree on one claim before any attestor
+  each attestor's prover and requires every witness to agree on one claim before any attestor
   is contacted. The client does not re-verify the Reclaim signature. It is the
   side that ran the witnessed interaction, and each pinned attestor verifies
   the evidence before signing.

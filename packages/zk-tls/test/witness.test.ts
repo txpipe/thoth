@@ -198,8 +198,8 @@ describe('test-key witness', () => {
     expect(claimToMessage(bobClaim)).toEqual(claimToMessage(aliceClaim));
   });
 
-  it('derives a different nonce when the signed context changes', async () => {
-    const deriveNonce = async (overrides: Partial<Observation> = {}) =>
+  it('derives the same claim when only the signed context changes', async () => {
+    const deriveClaim = async (overrides: Partial<Observation> = {}) =>
       deriveClaimFromEvidence({
         verified: parsedEvidenceView(await observe(alice, overrides)),
         policy,
@@ -207,9 +207,9 @@ describe('test-key witness', () => {
         holder: new Uint8Array(32).fill(0xc1),
         valueSlots: 3,
         ...WINDOW,
-      }).nonce;
-    expect(await deriveNonce({ context: { intent: 'cd'.repeat(32) } })).not.toEqual(
-      await deriveNonce(),
+      });
+    expect(claimToMessage(await deriveClaim({ context: { intent: 'cd'.repeat(32) } }))).toEqual(
+      claimToMessage(await deriveClaim()),
     );
   });
 });

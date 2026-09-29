@@ -90,7 +90,7 @@ in zero knowledge, that:
 
 - each signature is valid and comes from a **distinct** attestor in the registry —
   so the N-of-M threshold holds against exactly the attestors the app pinned;
-- the claim's nonce has not been used before — no replay;
+- the observation identity has not been submitted before — no replay;
 - the attestors' observation window does not exceed the app's sealed maximum,
   and the block time falls between its start and its end plus the sealed
   freshness window. This check also applies when the freshness window is zero.

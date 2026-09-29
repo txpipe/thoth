@@ -52,10 +52,10 @@ its own schemas and runs the full check before signing:
 
 After those checks, `attestor.attest` also rejects evidence whose signing
 witness is not the instance's own `witnessKey`. Only then does it sign the
-attestor-derived claim: values and present bits from the disclosed values, a
-deterministic nonce, the signed request's subject hash as `subjectHash`, and
-the hash of its own policy as `policyHash`. The `appId` and the window are
-the only fields it takes from the proposal.
+attestor-derived claim: values and present bits from the disclosed values,
+the signed request's subject hash as `subjectHash`, and the hash of its own
+policy as `policyHash`. It takes `appId`, the window, and the per-claim holder
+commitment from the proposal.
 
 The attestor derives its own claim rather than trusting the proposal, so a
 client cannot make it certify a reading the evidence does not support.

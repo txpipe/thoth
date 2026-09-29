@@ -4,7 +4,6 @@ import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema, CLAIM_VERSION } from '@thoth/core/claim';
 import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
-import { hexToBytes } from './hex.js';
 
 /** The zkFetch kind's law tag, also its kind identifier. */
 export const ZK_FETCH_LAW = 'zk-fetch@1';
@@ -91,7 +90,6 @@ export const zkFetchClaimSchema: z.ZodType<
     policyHash: bytes32Schema,
     windowStart: z.union([z.number(), z.bigint()]),
     windowEnd: z.union([z.number(), z.bigint()]),
-    nonce: z.instanceof(Uint8Array),
     subjectHash: bytes32Schema,
     holder: bytes32Schema,
     present: z.array(z.boolean()),
@@ -103,7 +101,6 @@ export const zkFetchClaimSchema: z.ZodType<
     policyHash: input.policyHash,
     windowStart: BigInt(input.windowStart),
     windowEnd: BigInt(input.windowEnd),
-    nonce: input.nonce,
     subjectHash: input.subjectHash,
     holder: input.holder,
     present: input.present,
@@ -547,11 +544,7 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
  * `policyHash` is {@link zkFetchPolicyHashOf} the policy; `appId` is the
  * caller's, as is the per-claim `holder` commitment (ADR 0004). The observation
  * window is the caller's `windowStart` and `windowEnd`, which the client proposes and the law requires to contain the
- * witness's own observation (ADR 0005). The
- * nonce is a domain-separated SHA-256 of the Reclaim identifier, which depends
- * only on provider, parameters, and context, so one observation with one
- * context yields the same nonce from every witness, and a fresh context yields
- * a fresh nonce. A slot whose disclosure is absent stays unpresent. The
+ * witness's own observation (ADR 0005). A slot whose disclosure is absent stays unpresent. The
  * evidence carries only what the witness saw.
  *
  * @typeParam V — the claim's value-slot count.
@@ -607,7 +600,6 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
     policyHash: zkFetchPolicyHashOf(policy),
     windowStart,
     windowEnd,
-    nonce: hexToBytes(sha256Hex(`thoth:nonce:${verified.identifier}`)),
     subjectHash: zkFetchSubjectHashOf(claimRequestOf(verified.claim)),
     present,
     values,

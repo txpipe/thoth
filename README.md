@@ -32,8 +32,8 @@ Three pieces:
 3. The client submits the claim with N signatures to the Midnight contract as
    **private witness data**. The contract verifies, in zero knowledge: each
    signature is valid and from a **distinct** attestor in the app's pinned
-   registry; the nonce hasn't been reused (no replay); and optionally that the
-   claim is fresh within the app's configured time window.
+   registry; the observation hasn't been submitted before (no replay); and the
+   claim satisfies the app's observation and freshness windows.
 4. Only if those checks pass does the app's **predicate** run over the claim
    values. Claim values are never stored on-chain — only their commitments and
    the predicate outcome — and, depending on the app's configuration, which
@@ -74,7 +74,7 @@ Two embeddable Compact modules plus a top-level example (`packages/contracts/REA
 |------|--------|------|
 | `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and the observation window (`maxWindow`, `freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)` |
 | `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` via the stdlib `jubjubSchnorrVerify` — counts only, no threshold |
-| `examples/example_app.compact` | top-level | Example app embedding `Attestation<19, 3, 2, 3>` (2-of-3) |
+| `examples/example_app.compact` | top-level | Example app embedding `Attestation<17, 3, 2, 3>` (2-of-3) |
 
 ## Development
 

@@ -132,7 +132,6 @@ describe('zkFetch claim schema', () => {
       policyHash: new Uint8Array(32),
       windowStart: 1_786_122_944,
       windowEnd: 1_786_122_944,
-      nonce: new Uint8Array(32),
       subjectHash: new Uint8Array(32),
       present: [true],
       values: [12],
@@ -159,7 +158,6 @@ describe('zkFetch claim schema', () => {
       policyHash: new Uint8Array(32),
       windowStart: 1_786_122_944,
       windowEnd: 1_786_122_944,
-      nonce: new Uint8Array(32),
       subjectHash: new Uint8Array(32),
       present: [true, false],
       values: [12, 0],
@@ -492,7 +490,7 @@ describe('zkFetch attestor + client', () => {
     expect(calls).toBe(0);
   });
 
-  it('signs the same thothNonce into every witness context, next to the caller context', async () => {
+  it('preserves caller context without adding replay randomness', async () => {
     const requests: Record<string, ZkFetchRequest> = {};
     const client = clientWith({
       provers: proversWith({
@@ -509,24 +507,8 @@ describe('zkFetch attestor + client', () => {
       },
       new Uint8Array(32).fill(0xc1),
     );
-    const nonces = ids.map((id) => requestOf(requests, id).context?.thothNonce);
-    expect(new Set(nonces).size).toBe(1);
-    for (const nonce of nonces) {
-      expect(nonce).toMatch(/^0x[0-9a-f]{64}$/);
+    for (const id of ids) {
+      expect(requestOf(requests, id).context).toEqual({ label: 'commute' });
     }
-    expect(requestOf(requests, 'attestor-0').context?.label).toBe('commute');
-  });
-
-  it('uses a fresh thothNonce for every proveReq', async () => {
-    const nonceOf = async (): Promise<string | undefined> => {
-      const proof = await prove();
-      const context = JSON.parse(evidenceOf(proof.evidences, 'attestor-0').claim.context) as {
-        thothNonce?: string;
-      };
-      return context.thothNonce;
-    };
-    const first = await nonceOf();
-    expect(first).toBeDefined();
-    expect(await nonceOf()).not.toBe(first);
   });
 });

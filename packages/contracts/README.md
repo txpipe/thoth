@@ -39,10 +39,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//            K=19 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "node_modules/@thoth/contracts/attestation"<19, 3, 2, 3> prefix A_;
+//            K=17 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "node_modules/@thoth/contracts/attestation"<17, 3, 2, 3> prefix A_;
 
-import "node_modules/@thoth/contracts/attestor_registry"<3, 19> prefix R_;
+import "node_modules/@thoth/contracts/attestor_registry"<3, 17> prefix R_;
 ```
 
 If the package is hoisted elsewhere by your package manager, add the package
@@ -53,8 +53,8 @@ export COMPACT_PATH="$(node -p 'require.resolve("@thoth/contracts/package.json")
 ```
 
 ```compact
-import "attestation"<19, 3, 2, 3> prefix A_;
-import "attestor_registry"<3, 19> prefix R_;
+import "attestation"<17, 3, 2, 3> prefix A_;
+import "attestor_registry"<3, 17> prefix R_;
 ```
 
 See `examples/example_app.compact` for a complete top-level embedding that
@@ -66,7 +66,7 @@ maximum observation window in the constructor, re-exports the module types/ledge
 
 `attestation<#K, #V, #N, #M>` — embed as `import "attestation"<K, V, N, M>`:
 
-- `#K` — signed-message length in fields (`K` must equal `2*V + 13`)
+- `#K` — signed-message length in fields (`K` must equal `2*V + 11`)
 - `#V` — number of claim value slots (`Claim.values: Vector<V, Uint<64>>`)
 - `#N` — the app's N-of-M threshold
 - `#M` — number of attestor signatures supplied / registry key slots
@@ -83,7 +83,6 @@ All are fixed when a contract embeds the module.
   appId[0..16] as Uint<128>, appId[16..32] as Uint<128>,
   policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
   windowStart, windowEnd,
-  nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
   subjectHash[0..16] as Uint<128>, subjectHash[16..32] as Uint<128>,
   holder[0..16] as Uint<128>, holder[16..32] as Uint<128>,
   present[0] as Field, ..., present[V-1] as Field,
@@ -94,17 +93,24 @@ The attestor MUST reproduce this exact flat field vector to sign the same
 message (same order, sizes, presence-flag semantics, and the split of each
 32-byte field into two 16-byte halves, so every byte is signed). `present` is a
 `Vector<V, Boolean>`: one flag per value slot; `present[i] = true` means
-`values[i]` was populated (its value may still be `0`). The message length is `K = 13 + 2*V` (13 header fields, V
+`values[i]` was populated (its value may still be `0`). The message length is `K = 11 + 2*V` (11 header fields, V
 presence flags, V values) — fixed when a contract embeds the module.
 
 ## Design notes
 
 - **The claim is the entire message.** Everything the contract inspects —
-  the observation window (`windowStart`, `windowEnd`), replay protection (`nonce`), source binding
+  the observation window (`windowStart`, `windowEnd`), source binding
   (`subjectHash`), caller binding (`holder`), the policy (`policyHash`), the app (`appId`), and the
   version — is inside the signed field vector.
   Kinds must not rely on un-signed side-channels: any data the contract needs
   has to be a field of the message the attestor signs.
+- **Replay protection follows the observation identity.** The nullifier is
+  `persistentHash` of a struct containing `appId`, `policyHash`, `subjectHash`,
+  `windowStart`, `windowEnd`, `values`, and `present`, in that order. It excludes
+  `holder` and `version`. The claim carries no nonce. Re-attesting the same
+  observation for a fresh holder or using fresh vault commitment randomness
+  still fails with `"Observation replay"` (ADR 0006). Presence flags distinguish
+  an absent slot from a measured zero.
 - **No kind on-chain; the policy is the commitment.** The claim carries no
   kind code. `policyHash` binds it to the policy the attestors enforced, and
   `verifyAttestation` rejects a claim whose `policyHash` is not in the sealed
@@ -182,7 +188,7 @@ returned `Claim` inside their own circuits — one open, read any subset of
 - **Consumes no nullifier** — opening is repeatable. "Use once" rules (e.g. the
   same claim can mint a given badge at most once) are enforced by the **app's
   own state** (`Set`/`Counter`/map), not by claim nullification.
-  Nonce replay (depositing the same attested fact twice) is already prevented by `verifyAttestation`.
+  Observation replay (depositing the same attested fact twice) is already prevented by `verifyAttestation`.
 
 ## Notes / open questions
 

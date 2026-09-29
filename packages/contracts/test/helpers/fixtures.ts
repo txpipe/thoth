@@ -55,7 +55,6 @@ export const makeClaim = (
     policyHash: POLICY_A,
     windowStart: nowSeconds() - 10n,
     windowEnd: nowSeconds(),
-    nonce: randomBytes(32),
     subjectHash: randomBytes(32),
     holder: pureCircuits.holderCommitment(DEFAULT_HOLDER_SECRET),
     values,

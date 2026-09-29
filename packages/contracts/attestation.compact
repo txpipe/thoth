@@ -14,7 +14,7 @@
 //     the source recomputes it in-circuit from private subject fields and
 //     compares it to `claim.subjectHash` (ADR 0001);
 //   - require the caller secret to match the signed per-claim holder commitment;
-//   - reject nonce replay via the nullifiers set;
+//   - reject observation replay via the nullifiers set;
 //   - check the observation window (ADR 0005), unconditionally: it must not be
 //     inverted nor longer than the sealed `maxWindow`, the block time must be
 //     at or after `windowStart`, and before `windowEnd + freshnessWindow`.
@@ -28,21 +28,20 @@
 // (#N) lives here. The message shape (order+sizes) is the single thing the
 // attestor must mirror, per the documented wire layout below.
 //
-// Wire layout (buildMessage), K = 2*V + 13 fields:
+// Wire layout (buildMessage), K = 2*V + 11 fields:
 //   [ version,
 //     appId[0..16] as Uint<128>, appId[16..32] as Uint<128>,
 //     policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
 //     windowStart, windowEnd,
-//     nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
 //     subjectHash[0..16] as Uint<128>, subjectHash[16..32] as Uint<128>,
 //     holder[0..16] as Uint<128>, holder[16..32] as Uint<128>,
 //     present[0] as Field, ..., present[V-1] as Field,
 //     values[0] as Field, ..., values[V-1] as Field ]
-// Byte ranges are half-open (nonce[0..16] is bytes 0-15). Each 32-byte field
+// Byte ranges are half-open (appId[0..16] is bytes 0-15). Each 32-byte field
 // is split in two halves so every byte is signed.
 //
 // Module parameters (import "attestation"<K, V, N, M>):
-//   #K — signed-message length in fields. Must equal 2*V + 13 (the 13-field
+//   #K — signed-message length in fields. Must equal 2*V + 11 (the 11-field
 //        header in buildMessage, the V `present` fields, and the V value
 //        fields). This is what the registry's countValidSignatures verifies
 //        over.
@@ -69,11 +68,21 @@ module attestation<#K, #V, #N, #M> {
     policyHash: Bytes<32>; // hash of the policy the attestors enforced
     windowStart: Uint<32>; // Unix seconds the attestor's observation began (ADR 0005)
     windowEnd: Uint<32>; // Unix seconds the attestor's observation ended
-    nonce: Bytes<32>; // per-claim randomness (replay protection)
     subjectHash: Bytes<32>; // circuit hash of what the claim is about (ADR 0001)
     holder: Bytes<32>; // per-claim commitment of the caller secret (ADR 0004)
     present: Vector<V, Boolean>; // present[i] = values[i] was populated (measured), even if 0
     values: Vector<V, Uint<64>>; // positional numeric claim values last; 0 IS a valid value
+  }
+
+  // Observation identity (ADR 0006). Holder and version do not distinguish facts.
+  struct Observation {
+    appId: Bytes<32>;
+    policyHash: Bytes<32>;
+    subjectHash: Bytes<32>;
+    windowStart: Uint<32>;
+    windowEnd: Uint<32>;
+    values: Vector<V, Uint<64>>;
+    present: Vector<V, Boolean>;
   }
 
   /// Freshness window (seconds), sealed at deploy by the top-level
@@ -104,22 +113,21 @@ module attestation<#K, #V, #N, #M> {
     return [(slice<16>(b, 0) as Uint<128>) as Field, (slice<16>(b, 16) as Uint<128>) as Field];
   }
 
-  /// Reconstruct the flat signed message: a 13-field fixed header (version,
+  /// Reconstruct the flat signed message: an 11-field fixed header (version,
   /// appId and policyHash each as two 16-byte halves, windowStart, windowEnd,
-  /// then nonce and subjectHash each as two 16-byte halves, then the holder commitment
+  /// then subjectHash as two 16-byte halves, then the holder commitment
   /// as two halves) followed by the `present`
   /// flags and the values mapped to `Field`. Tuple/vector spread
   /// (`...`) appends the flags and values, so at specialization
-  /// `[header..., present..., values...]` has length 13 + 2*V, which must equal
+  /// `[header..., present..., values...]` has length 11 + 2*V, which must equal
   /// K (enforced by the embedder). This is the single wire shape the attestor
   /// must mirror.
   export pure circuit buildMessage(c: Claim): Vector<K, Field> {
     const appId = splitBytes(c.appId);
     const policyHash = splitBytes(c.policyHash);
-    const nonce = splitBytes(c.nonce);
     const subjectHash = splitBytes(c.subjectHash);
     const holder = splitBytes(c.holder);
-    const header: Vector<13, Field> =
+    const header: Vector<11, Field> =
             [c.version as Field,
              appId[0],
              appId[1],
@@ -127,8 +135,6 @@ module attestation<#K, #V, #N, #M> {
              policyHash[1],
              c.windowStart as Field,
              c.windowEnd as Field,
-             nonce[0],
-             nonce[1],
              subjectHash[0],
              subjectHash[1],
              holder[0],
@@ -178,8 +184,17 @@ module attestation<#K, #V, #N, #M> {
     const secret = getHolderSecret();
     assert(claim.holder == holderCommitment(secret), "Holder mismatch");
 
-    const nullifier = persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:nonce:"), claim.nonce]);
-    assert(!nullifiers.member(disclose(nullifier)), "Nonce replay");
+    const nullifier =
+            persistentHash<Observation>(
+              Observation { appId: claim.appId,
+                            policyHash: claim.policyHash,
+                            subjectHash: claim.subjectHash,
+                            windowStart: claim.windowStart,
+                            windowEnd: claim.windowEnd,
+                            values: claim.values,
+                            present: claim.present }
+              );
+    assert(!nullifiers.member(disclose(nullifier)), "Observation replay");
     nullifiers.insert(disclose(nullifier));
 
     const id = persistentCommit<Claim>(claim, rand);

@@ -147,8 +147,8 @@ with that witness's key. The dApp points each attestor's prover at the matching
 witness URL, so the evidence an attestor receives comes from the one witness it
 trusts. See [attestor-guide.md](attestor-guide.md) for running one.
 
-`proveReq` also signs a fresh random nonce (`thothNonce`) into every witness's
-context, so one observation cannot be replayed as another. If the witnesses
+Replay protection uses the signed observation fields, including the window and
+disclosed values. Changing caller context or holder does not create a new observation. If the witnesses
 disagree on the request, context, or disclosed values, `proveReq` throws before
 contacting any attestor.
 

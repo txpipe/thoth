@@ -207,7 +207,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  * Specialization of `@thoth/attestor`'s `buildAttestor` that knows the kind:
  * it accepts evidence only from the operator's own Reclaim witness, rejects
  * proposals that do not match the disclosures, derives the *authoritative*
- * claim from the verified evidence (deterministic nonce, request-bound subject hash)
+ * claim from the verified evidence (request-bound subject hash)
  * sized to the proposed claim's own length, and signs `message(claim)` with
  * the key pair's signer.
  *
