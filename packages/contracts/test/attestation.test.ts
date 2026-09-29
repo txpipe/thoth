@@ -49,6 +49,15 @@ describe('mock attestation', () => {
       expect(msg[12]).toBe(300n);
     });
 
+    it('pins each 16-byte half to its slot (little-endian)', () => {
+      const nonce = new Uint8Array(32);
+      nonce[0] = 1;
+      const evidenceHash = new Uint8Array(32);
+      evidenceHash[16] = 2;
+      const msg = pureCircuits.message(makeClaim({ nonce, evidenceHash }));
+      expect(msg.slice(3, 7)).toEqual([1n, 0n, 0n, 2n]);
+    });
+
     it('distinguishes a change to every byte of nonce and evidenceHash', () => {
       const claim = makeClaim();
       const msg = pureCircuits.message(claim);
