@@ -392,11 +392,16 @@ export const claimUrl = (claim: ProviderClaimData): string => {
  *   and `method`, or carry a `body` that is not a string.
  */
 export const claimRequestOf = (claim: ProviderClaimData): ZkFetchSubjectRequest => {
-  const url = claimUrl(claim);
-  const { method, body } = JSON.parse(claim.parameters) as Readonly<{
-    method?: unknown;
-    body?: unknown;
-  }>;
+  let parameters: Readonly<{ url?: unknown; method?: unknown; body?: unknown }>;
+  try {
+    parameters = JSON.parse(claim.parameters) as typeof parameters;
+  } catch {
+    throw new Error('claim parameters are not valid JSON');
+  }
+  const { url, method, body } = parameters;
+  if (typeof url !== 'string' || url === '') {
+    throw new Error('claim parameters carry no url');
+  }
   if (typeof method !== 'string' || method === '') {
     throw new Error('claim parameters carry no method');
   }
@@ -543,14 +548,13 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
  * every witness that fetched the same request derives the same subject.
  * `version` comes from the policy's `claimVersion` (default 1) and
  * `policyHash` is {@link zkFetchPolicyHashOf} the policy; `appId` is the
- * caller's. The
- * timestamp is the caller's `timestamp`, which the client proposes and the law
- * bounds against the witness's own observation. The nonce is a domain-separated
- * SHA-256 of the Reclaim identifier, which depends only on provider,
- * parameters, and context, so one observation with one context yields the
- * same nonce from every witness, and a fresh context yields a fresh nonce. A
- * slot whose disclosure is absent stays unpresent. The evidence carries only
- * what the witness saw.
+ * caller's. The timestamp is the caller's `timestamp`, which the client
+ * proposes and the law bounds against the witness's own observation. The
+ * nonce is a domain-separated SHA-256 of the Reclaim identifier, which depends
+ * only on provider, parameters, and context, so one observation with one
+ * context yields the same nonce from every witness, and a fresh context yields
+ * a fresh nonce. A slot whose disclosure is absent stays unpresent. The
+ * evidence carries only what the witness saw.
  *
  * @typeParam V — the claim's value-slot count.
  * @param options — the parsed evidence view, the policy, the app id, the slot

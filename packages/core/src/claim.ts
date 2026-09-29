@@ -92,7 +92,7 @@ export interface ClaimInput<V extends number> {
 export const CLAIM_VERSION = 1n;
 
 /**
- * Zod schema for a claim's 32-byte fields that carry an identity
+ * Zod schema for a claim's 32-byte identity and hash fields
  * (`appId`, `policyHash`, `subjectHash`).
  */
 export const bytes32Schema = z
