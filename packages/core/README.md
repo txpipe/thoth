@@ -32,6 +32,7 @@ The package exposes three entry points:
 - **`@thoth/core/claim-context`**:
   - `policyHashOf(law, policy, version?)` — hash a kind's policy, tagged with its law and the wire version
   - `subjectHashOf(fields)` — hash a kind's subject struct; equals the circuit's `persistentHash` of that struct
+  - `holderCommitmentOf(secret)` — the per-claim holder commitment of a holder secret; equals the circuit's `holderCommitment`
   - `claimContextDigestOf(context)` — the digest of a `ClaimContext` that every witness signs into its context
 
 ### The flat message type
@@ -71,7 +72,10 @@ JSON with sorted keys and no whitespace, a `bigint` as a quoted decimal string,
 and bytes as lowercase hex. Another implementation reproduces them from those
 rules alone. `subjectHashOf` is a circuit hash instead, because an app
 recomputes the subject hash in-circuit from private fields. It requires a
-subject struct whose fields are all `Bytes<32>`.
+subject struct whose fields are all `Bytes<32>`. `holderCommitmentOf` is a
+circuit hash for the same reason: the contract re-derives the holder from the
+caller's secret. Its tag keeps it apart from the vault pseudonym the contract
+derives from the same secret.
 
 ## Links
 

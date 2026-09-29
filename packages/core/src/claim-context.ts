@@ -50,6 +50,13 @@ const CLAIM_CONTEXT_TAG = 'thoth:claim-context';
 
 const HASH_BYTES = 32;
 
+/** Domain tag of the holder commitment, zero-padded like the circuit's `pad(32, …)`. */
+const HOLDER_COMMITMENT_TAG = (() => {
+  const tag = new Uint8Array(HASH_BYTES);
+  tag.set(new TextEncoder().encode('thoth:holder-commitment:v1'));
+  return tag;
+})();
+
 /**
  * Serialize a value canonically.
  *
@@ -156,6 +163,28 @@ export function subjectHashOf(fields: readonly Uint8Array[]): Uint8Array {
   });
   return persistentHash(new CompactTypeVector(fields.length, new CompactTypeBytes(HASH_BYTES)), [
     ...fields,
+  ]);
+}
+
+/**
+ * Derive the per-claim holder commitment from a holder secret.
+ *
+ * Equals the circuit's `holderCommitment(secret)`:
+ * `persistentHash<Vector<2, Bytes<32>>>([pad(32, 'thoth:holder-commitment:v1'), secret])`.
+ * The tag keeps it apart from the vault pseudonym the contract derives from
+ * the same secret. A fresh secret per claim gives a fresh holder, so claims
+ * are unlinkable by default.
+ *
+ * @param secret — the holder secret. 32 bytes.
+ * @returns the 32-byte holder commitment, the claim context's `holder`.
+ * @throws if the secret is not 32 bytes.
+ * @see ClaimContext.holder
+ */
+export function holderCommitmentOf(secret: Uint8Array): Uint8Array {
+  assertHashBytes('holder secret', secret);
+  return persistentHash(new CompactTypeVector(2, new CompactTypeBytes(HASH_BYTES)), [
+    HOLDER_COMMITMENT_TAG,
+    secret,
   ]);
 }
 

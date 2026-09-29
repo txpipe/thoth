@@ -1,14 +1,21 @@
 // Unit tests for the claim-context hashes (`@thoth/core/claim-context`): the
-// policy hash, the subject hash, and the claim-context digest.
+// policy hash, the subject hash, the holder commitment, and the claim-context
+// digest.
 //
 // Each expected digest is rebuilt from a hand-written canonical serialization
 // (or, for the subject hash, a digest the compiled circuit produced), so the
 // vectors pin the encoding itself rather than this implementation's output.
-// The subject hash's circuit parity is re-checked in the contracts suite
-// (`packages/contracts/test/subject-parity.test.ts`).
+// The subject hash's and the holder commitment's circuit parity is re-checked
+// in the contracts suite (`packages/contracts/test/subject-parity.test.ts`,
+// `packages/contracts/test/holder-parity.test.ts`).
 
 import { createHash } from 'node:crypto';
-import { claimContextDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
+import {
+  claimContextDigestOf,
+  holderCommitmentOf,
+  policyHashOf,
+  subjectHashOf,
+} from '@thoth/core/claim-context';
 import { describe, expect, it } from 'vitest';
 
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
@@ -73,6 +80,20 @@ describe('subjectHashOf', () => {
   it('rejects an empty subject and fields that are not 32 bytes', () => {
     expect(() => subjectHashOf([])).toThrow(/at least one field/);
     expect(() => subjectHashOf([filled(1), new Uint8Array(31)])).toThrow(/field 1/);
+  });
+});
+
+describe('holderCommitmentOf', () => {
+  it('matches the holderCommitment circuit', () => {
+    // holderCommitment(secret) of the compiled attestation module, for a
+    // secret filled with 1.
+    expect(hex(holderCommitmentOf(filled(1)))).toBe(
+      '9276ed0a85553eebda01f7dc401428f107b97ec6ccd4806f89f222d4b636e914',
+    );
+  });
+
+  it('rejects a secret that is not 32 bytes', () => {
+    expect(() => holderCommitmentOf(new Uint8Array(31))).toThrow(/holder secret/);
   });
 });
 
