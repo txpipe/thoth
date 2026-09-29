@@ -141,21 +141,36 @@ export interface CollectedAttestation<K, C, PK, S, Msg = FlatMessage> {
 }
 
 /**
+ * Signature verification supplied by the application's signature scheme.
+ * @typeParam PK - Public key type.
+ * @typeParam S - Signature type.
+ * @typeParam Msg - Signed message type.
+ */
+export interface AttestationVerifier<PK, S, Msg = FlatMessage> {
+  /**
+   * Check a signature against the pinned key and message.
+   * @param publicKey - The trusted public key.
+   * @param message - The message to authenticate.
+   * @param signature - The returned signature.
+   * @returns true for a valid signature; false or throw to reject.
+   */
+  verify(publicKey: PK, message: Msg, signature: S): boolean | Promise<boolean>;
+}
+
+/**
  * Validate one attestation against its descriptor and tag it with its slot.
  *
- * The client's per-attestation validity primitive: it checks that the
- * attestation comes from the pinned key (`'public-key'`), that its
- * `registryIndex` names a real slot in the trusted set (`'registry-index'`),
- * and — when given `expectedMessage` — that the attestor signed the message
- * the caller asked for (`'message'`).
+ * Checks the pinned key, registry slot, kind, expected claim, claim-to-message
+ * binding, and signature. When provided, `expectedMessage` must also match.
+ * Verifier errors reject the signature; schema failures reject the claim.
  *
  * @param options — the trusted set, the attestor that was asked, the returned
- *   attestation, and optionally the expected signed message.
- * @returns the slot-tagged {@link CollectedAttestation}.
+ *   attestation, verifier, expected parsed claim, and optional expected message.
+ * @returns a promise of the slot-tagged {@link CollectedAttestation}.
  * @throws {@link AttestationMismatchError} if a check fails; the `reason`
  *   discriminates which one.
  */
-export function resolveAttestation<
+export async function resolveAttestation<
   const D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
   PK,
   S,
@@ -166,10 +181,14 @@ export function resolveAttestation<
   readonly attestor: AttestorDescriptor<D, PK>;
   /** The attestation returned for that attestor. */
   readonly attestation: Attestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>;
+  /** The scheme that verifies the returned signature. */
+  readonly verifier: AttestationVerifier<PK, S, MessageOf<D>>;
+  /** The parsed claim the caller asked the attestor to certify. */
+  readonly expectedClaim: z.output<D['claim']>;
   /** The message the attestor was expected to sign; checked when provided. */
   readonly expectedMessage?: MessageOf<D>;
-}): CollectedAttestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>> {
-  const { trusted, attestor, attestation, expectedMessage } = options;
+}): Promise<CollectedAttestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>> {
+  const { trusted, attestor, attestation, expectedMessage, verifier } = options;
 
   if (!structuredEquals(attestation.publicKey, attestor.publicKey)) {
     throw new AttestationMismatchError(attestor.id, 'public-key');
@@ -181,6 +200,29 @@ export function resolveAttestation<
     throw new AttestationMismatchError(attestor.id, 'registry-index');
   }
 
+  if (attestation.kind !== attestor.definition.kind) {
+    throw new AttestationMismatchError(attestor.id, 'kind');
+  }
+  const parsedClaim = attestor.definition.claim.safeParse(attestation.claim);
+  if (!parsedClaim.success || !structuredEquals(attestation.claim, options.expectedClaim)) {
+    throw new AttestationMismatchError(attestor.id, 'claim');
+  }
+  if (!structuredEquals(attestation.message, attestor.definition.message(parsedClaim.data))) {
+    throw new AttestationMismatchError(attestor.id, 'message');
+  }
+  let validSignature = false;
+  try {
+    validSignature = await verifier.verify(
+      attestor.publicKey,
+      attestation.message,
+      attestation.signature,
+    );
+  } catch {
+    // Malformed signatures must fail vetting just like cryptographic mismatches.
+  }
+  if (!validSignature) {
+    throw new AttestationMismatchError(attestor.id, 'signature');
+  }
   return { registryIndex: attestor.registryIndex, attestation };
 }
 

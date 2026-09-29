@@ -27,15 +27,14 @@ npm install @thoth/client
 - `AttestorTransport<D, PK, S>` — the seam between the client and a remote
   attestor: `request(attestor, input): Promise<Attestation>`. A kind SDK or the
   app supplies the concrete transport. The host-side mirror is `Attestor.attest` in `@thoth/attestor`.
-- `resolveAttestation({ trusted, attestor, attestation, expectedMessage? })` —
-  the per-attestation validity primitive: checks the signing key, the
-  `registryIndex` bounds, and (optionally) that the signed message is the one
-  you asked for, then tags the attestation with its slot as a
-  `CollectedAttestation`.
+- `await resolveAttestation({ trusted, attestor, attestation, verifier, expectedClaim, expectedMessage? })` —
+  checks the pinned key, kind, expected claim, signature, claim-to-message
+  binding, slot bounds, and optionally the expected message, then tags the
+  attestation with its slot as a `CollectedAttestation`.
 - `CollectedAttestation<K, C, PK, S, Msg>` — the collection output shape:
   an `Attestation` plus the `registryIndex` it belongs to.
 - Errors: `AttestationMismatchError` (thrown by `resolveAttestation`; `reason`
-  is `'public-key' | 'message' | 'registry-index'`),
+  is `'public-key' | 'message' | 'registry-index' | 'kind' | 'claim' | 'signature'`),
   `AttestorNotInTrustedSetError`, `InvalidTrustedSetError` (thrown by
   `buildTrustedSet`) — exported from `@thoth/client/errors`.
 
@@ -95,28 +94,40 @@ membership:
 const attestor = attestorOf(trusted, 'txpipeEndpoint'); // throws AttestorNotInTrustedSetError if not pinned
 ```
 
-### Vetting one attestation (optional)
+### Vet one attestation
 
-`resolveAttestation` is the only collection logic this package owns: it vets a
-single pairing — the returned public key matches the descriptor, the signed
-message is the one you asked for (when `expectedMessage` is given), and the
-slot is in range — and tags it with its `registryIndex`. Fan-out, aggregation,
-and threshold stay yours:
+Supply an `AttestationVerifier<PK, S, Msg>` whose `verify(publicKey, message,
+signature)` returns a boolean or a promise. `resolveAttestation` requires that
+verifier and the parsed `expectedClaim`. It rejects a different kind or claim,
+a message that does not encode the returned claim, and an invalid signature.
+Verifier errors become a `'signature'` mismatch; invalid returned claims become
+a `'claim'` mismatch. The result is a promise of a slot-tagged attestation.
+
+For the contract's Jubjub Schnorr scheme, use the adapter from the separate
+`@thoth/client/jubjub` entry point. It uses Compact runtime `0.19.0`, the same
+version as the contracts. The generic entry point imports no crypto library.
 
 ```ts
-import { AttestationMismatchError } from '@thoth/client/errors';
+import { resolveAttestation } from '@thoth/client';
+import { jubjubVerifier } from '@thoth/client/jubjub';
 
-try {
-  const collected = resolveAttestation({ trusted, attestor, attestation });
-  // collected.registryIndex  →  the on-chain slot to place this signature at
-} catch (error) {
-  if (error instanceof AttestationMismatchError) {
-    // report / drop the offending attestor; the contract decides anyway
-    return;
-  }
-  throw error;
-}
+const collected = await resolveAttestation({
+  trusted, attestor, attestation,
+  expectedClaim: claim,
+  verifier: jubjubVerifier,
+});
+// Place collected.attestation.signature at collected.registryIndex.
 ```
+
+### Design rationale
+
+The client verifies attestor signatures before collecting them. A broken or
+malicious transport can otherwise return a forged signature with the correct
+public key and message, causing a transaction to fail after submission and
+costing fees. Kind and claim checks also reject misleading off-chain metadata
+that the signed message alone does not authenticate. Contract verification
+still enforces the registry and N-of-M threshold. Transport implementations
+must decode wire values into the typed attestation before vetting.
 
 ## Links
 

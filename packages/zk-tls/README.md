@@ -217,12 +217,14 @@ The kind sits in the middle of the Thoth layering:
   a proposal that matches, checked by `assertClaimMatchesSubject` and
   `assertClaimMatchesDisclosures`. The client cannot make the attestor certify
   a reading, or a source, the evidence does not support.
-- **The client does not re-verify.** The client is the side that ran the
+- **The client verifies attestor signatures.** The client is the side that ran the
   witnessed HTTPS interaction; each attestor checks the Reclaim ECDSA signature
   and that it came from its own witness before signing. The client derives the
   deterministic expected claim from the evidence, and `resolveAttestation`
-  forces every returned attestation to commit to exactly that message. The
-  on-chain N-of-M threshold is the enforcement.
+  checks the pinned key, kind, claim, message binding, and attestor signature
+  using the configured verifier. Forged transport responses fail before
+  submission. The client does not repeat the witness ECDSA check. The
+  on-chain registry still enforces the N-of-M threshold.
 - **Strict input.** Fewer shapes to reason about at a trust boundary, and no
   witness-address decoding inside the verifier.
 

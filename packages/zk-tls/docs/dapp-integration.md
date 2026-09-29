@@ -7,7 +7,7 @@ See the [package README](../README.md) for what the package exports and
 
 ## Client setup
 
-Six things go into `zkFetchClient.init`:
+Seven things go into `zkFetchClient.init`:
 
 - **`trusted`.** The attestors your app pins, assembled with `@thoth/client`'s
   `buildTrustedSet(descriptors)`. A descriptor is `{ id, definition, publicKey,
@@ -16,6 +16,8 @@ Six things go into `zkFetchClient.init`:
 - **`transport`.** How the client reaches each attestor. App-supplied; the
   host-side mirror is `Attestor.attest`, and `@thoth/client` has a minimal HTTP
   example.
+- **`verifier`.** The attestor signature verifier. For Jubjub Schnorr, use
+  `jubjubVerifier` from `@thoth/client/jubjub`.
 - **`policy`.** The law every attestor in the set will check against; see below.
   Every claim carries `zkFetchPolicyHashOf(policy)` as its `policyHash`, and
   the consuming contract must seal that hash in its `policyHashes` set at
@@ -32,6 +34,7 @@ A complete setup:
 
 ```ts
 import { buildTrustedSet, type AttestorTransport } from '@thoth/client';
+import { jubjubVerifier } from '@thoth/client/jubjub';
 import type { ZkFetchDefinition } from '@thoth/zk-tls';
 import { zkFetchClient } from '@thoth/zk-tls/client';
 import { zkFetchProver } from '@thoth/zk-tls/prover';
@@ -61,6 +64,7 @@ const policy = zkFetchPolicySchema.parse({
 const client = zkFetchClient.init({
   trusted,
   transport,
+  verifier: jubjubVerifier,
   policy,
   appId, // 32 bytes
   valueSlots: 2, // the contract's #V

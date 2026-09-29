@@ -1,22 +1,24 @@
 /**
- * A collected attestation failed a structural integrity check.
+ * A collected attestation failed vetting.
  *
- * `reason` discriminates the failing check: the returned public key does not
- * match the descriptor's (`'public-key'`), the signed message disagrees with
- * the other collected attestation's (`'message'`), or the attestor's
- * `registryIndex` is outside the trusted set's slot range (`'registry-index'`).
+ * `reason` identifies a key, message, registry slot, kind, claim, or signature
+ * mismatch. Schema failures count as claim mismatches; verifier failures,
+ * including thrown errors, count as signature mismatches.
  */
 export class AttestationMismatchError extends Error {
   /** The id of the offending attestor. */
   readonly attestorId: string;
   /** Which integrity check failed. */
-  readonly reason: 'public-key' | 'message' | 'registry-index';
+  readonly reason: 'public-key' | 'message' | 'registry-index' | 'kind' | 'claim' | 'signature';
 
   /**
    * @param attestorId — the offending attestor's id.
    * @param reason — the failed check.
    */
-  constructor(attestorId: string, reason: 'public-key' | 'message' | 'registry-index') {
+  constructor(
+    attestorId: string,
+    reason: 'public-key' | 'message' | 'registry-index' | 'kind' | 'claim' | 'signature',
+  ) {
     super(`attestation from "${attestorId}" failed ${reason} check`);
     this.attestorId = attestorId;
     this.reason = reason;

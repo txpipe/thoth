@@ -1,4 +1,9 @@
-import type { AttestorTransport, CollectedAttestation, TrustedSet } from '@thoth/client';
+import type {
+  AttestationVerifier,
+  AttestorTransport,
+  CollectedAttestation,
+  TrustedSet,
+} from '@thoth/client';
 import { attestorOf, resolveAttestation } from '@thoth/client';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
@@ -268,6 +273,8 @@ export interface ZkFetchClientConfig<V extends number, PK, S> {
   readonly trusted: TrustedSet<ZkFetchDefinition, PK>;
   /** How the client reaches each remote attestor. */
   readonly transport: AttestorTransport<ZkFetchDefinition, PK, S>;
+  /** Verifies attestor signatures before collecting responses. */
+  readonly verifier: AttestationVerifier<PK, S>;
   /** The policy the attestors enforce; members of a trusted set must share it. */
   readonly policy: ZkFetchPolicy;
   /**
@@ -343,7 +350,7 @@ export interface ZkFetchClient<V extends number, PK, S> {
  * import { zkFetchClient } from '@thoth/zk-tls/client';
  *
  * const client = zkFetchClient.init({
- *   trusted, transport, policy, appId, valueSlots,
+ *   trusted, transport, verifier, policy, appId, valueSlots,
  *   provers: { txpipeEndpoint: zkFetchProver({ witnessUrl }) },
  * });
  * const proof = await client.proveReq({ url, method, headers }, holder);
@@ -362,7 +369,7 @@ export const zkFetchClient = {
    * @typeParam V — the claim's value-slot count.
    * @typeParam PK — the signature scheme's public-key type.
    * @typeParam S — the signature scheme's signature type.
-   * @param config — trusted set, transport, policy, app id, slot count, and
+   * @param config — trusted set, transport, verifier, policy, app id, slot count, and
    *   provers.
    * @returns a client ready to `proveReq`.
    * @throws if the policy is invalid, the appId is not 32 bytes, a policy slot
@@ -372,7 +379,7 @@ export const zkFetchClient = {
   init: <const V extends number, PK, S>(
     config: ZkFetchClientConfig<V, PK, S>,
   ): ZkFetchClient<V, PK, S> => {
-    const { trusted, transport, policy, appId, valueSlots, provers } = config;
+    const { trusted, transport, verifier, policy, appId, valueSlots, provers } = config;
     const checkedPolicy = zkFetchPolicySchema.parse(policy);
     if (appId.length !== APP_ID_BYTES) {
       throw new Error(`appId must be ${APP_ID_BYTES} bytes, got ${appId.length}`);
@@ -446,6 +453,7 @@ export const zkFetchClient = {
             collectAttestations({
               trusted,
               transport,
+              verifier,
               evidences,
               claim: first.claim,
               message: first.message,
@@ -474,9 +482,9 @@ export type ZkFetchAttestationInput = AttestationInput<
  *
  * For each target attestor: resolve it in the trusted set, forward the raw
  * input over the transport, and vet the returned attestation — signing key
- * matches the descriptor and the signed message is the one this claim
- * deterministically produces. The registry's signature threshold is the
- * contract's job; the client's job is that every collected attestation
+ * matches the descriptor, kind and claim match the request, the message
+ * encodes that claim, and the signature verifies. The registry's signature
+ * threshold is the contract's job; the client's job is that every collected attestation
  * commits to the *same* message.
  *
  * @typeParam V — the claim's value-slot count.
@@ -493,6 +501,8 @@ const collectAttestations = async <V extends number, PK, S>(options: {
   trusted: TrustedSet<ZkFetchDefinition, PK>;
   /** How the client reaches each attestor. */
   transport: AttestorTransport<ZkFetchDefinition, PK, S>;
+  /** Verifies the attestor signature scheme. */
+  verifier: AttestationVerifier<PK, S>;
   /** Canonical evidence per attestor id, from `proveReq`. */
   evidences: Readonly<Record<string, ZkFetchEvidence>>;
   /** The shared claim every witness's evidence agreed on. */
@@ -504,7 +514,7 @@ const collectAttestations = async <V extends number, PK, S>(options: {
   /** Attestor ids to query; empty means every pinned attestor. */
   ids: string[];
 }): Promise<Attestment<V, PK, S>> => {
-  const { trusted, transport, evidences, claim, message, policy, ids } = options;
+  const { trusted, transport, verifier, evidences, claim, message, policy, ids } = options;
   const targetIds = ids.length > 0 ? ids : trusted.attestors.map((a) => a.id);
   const collected: ZkFetchCollectedAttestation<V, PK, S>[] = [];
   for (const id of targetIds) {
@@ -519,7 +529,14 @@ const collectAttestations = async <V extends number, PK, S>(options: {
     const input = { policy, evidence, claim } as unknown as ZkFetchAttestationInput;
     const attestation = await transport.request(attestor, input);
     collected.push(
-      resolveAttestation({ trusted, attestor, attestation, expectedMessage: message }),
+      await resolveAttestation({
+        trusted,
+        attestor,
+        attestation,
+        verifier,
+        expectedClaim: claim,
+        expectedMessage: message,
+      }),
     );
   }
   return { claim, message, collected };

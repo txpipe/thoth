@@ -60,6 +60,11 @@ const policy = (
 type FakePublicKey = { id: string };
 type FakeSignature = string;
 
+const fakeVerifier = {
+  verify: (_key: FakePublicKey, message: FlatMessage, signature: FakeSignature) =>
+    signature === `sig:${message.length}`,
+};
+
 const fakeKey = (id: string): KeyPair<FakePublicKey, FakeSignature, FlatMessage> => ({
   publicKey: { id },
   signer: { sign: (message: FlatMessage): FakeSignature => `sig:${message.length}` },
@@ -271,12 +276,46 @@ describe('zkFetch attestor + client', () => {
   ) =>
     zkFetchClient.init({
       trusted,
+      verifier: fakeVerifier,
       transport: overrides.transport ?? transport,
       policy: overrides.policy ?? policy(),
       appId: overrides.appId ?? APP_ID,
       valueSlots: 3,
       provers: overrides.provers ?? provers,
     });
+
+  it('rejects a forged attestor signature returned by the transport', async () => {
+    const broken = {
+      request: async (...args: Parameters<typeof transport.request>) => ({
+        ...(await transport.request(...args)),
+        signature: 'forged',
+      }),
+    };
+    const proof = await clientWith({ transport: broken }).proveReq(
+      { url: 'https://api.github.com/repos/x', method: 'GET' },
+      new Uint8Array(32).fill(0xc1),
+    );
+    await expect(proof.attest()).rejects.toMatchObject({ reason: 'signature' });
+  });
+
+  it.each(['kind', 'claim'] as const)(
+    'rejects wrong off-chain %s from the transport',
+    async (field) => {
+      const broken = {
+        request: async (...args: Parameters<typeof transport.request>) => {
+          const result = await transport.request(...args);
+          return field === 'kind'
+            ? { ...result, kind: 'wrong@1' as typeof result.kind }
+            : { ...result, claim: { ...result.claim, holder: new Uint8Array(32).fill(0xff) } };
+        },
+      };
+      const proof = await clientWith({ transport: broken }).proveReq(
+        { url: 'https://api.github.com/repos/x', method: 'GET' },
+        new Uint8Array(32).fill(0xc1),
+      );
+      await expect(proof.attest()).rejects.toMatchObject({ reason: field });
+    },
+  );
 
   const prove = () =>
     clientWith().proveReq(
@@ -373,6 +412,7 @@ describe('zkFetch attestor + client', () => {
     expect(() =>
       zkFetchClient.init({
         trusted,
+        verifier: fakeVerifier,
         transport,
         policy: policy(),
         appId: APP_ID,
@@ -383,6 +423,7 @@ describe('zkFetch attestor + client', () => {
     expect(() =>
       zkFetchClient.init({
         trusted,
+        verifier: fakeVerifier,
         transport,
         policy: policy(),
         appId: APP_ID,
