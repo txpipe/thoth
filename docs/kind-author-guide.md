@@ -6,7 +6,8 @@ what policy they enforce, and which claim they sign. zkFetch
 guide names its pieces as the example for each step. Terms follow
 [`CONTEXT.md`](../CONTEXT.md).
 
-A new kind needs **no contract change**. The contract knows nothing about kinds.
+A new kind that signs the standard claim needs **no contract change**. The
+contract knows nothing about kinds.
 It sees a claim in the fixed [wire layout](DESIGN.md#the-claim), checks the
 signatures against its registry, and accepts the claim's `policyHash` only if
 it is in its sealed set. An app accepts your kind by sealing your policy's
@@ -38,9 +39,9 @@ accepts an old policy under the new meaning.
 
 ## 2. The policy
 
-The policy is the app's rules for one request, for example which hosts
+The policy is what the app requires of one attestation, for example which hosts
 zkFetch accepts and which disclosed field lands in which value slot. The dApp
-sends it with each request, and the attestor enforces it for that request.
+sends it with each attestation input, and the attestor enforces it for that input.
 Never bake an app's policy into an attestor instance.
 
 - Write a zod schema. Then write a normalizer that fills defaults and sorts or
@@ -85,16 +86,17 @@ for `message`. Your kind decides only the header fields that come from the
 evidence and the values:
 
 - `policyHash` is your policy hash and `subjectHash` is your subject hash.
-- `windowStart` and `windowEnd` are when the attestor's source observed. Check
-  that the observation falls inside the window the client proposed. When the
+- `windowStart` and `windowEnd` are the window the client proposed. Sign it
+  only if your source's observation falls inside it. When the
   fact itself happened, such as a block height or event time, is a value, not
   the window (ADR 0005).
 - `values` are `Uint<64>`, positional, one per slot of the policy's slot map.
   Set `present[i]` for every measured slot, even when its value is zero. An
   unmeasured slot is `present[i] = false` with value `0`; the contract rejects
   anything else. Do not guess a value you could not read.
-- `appId` and `holder` come from the client's proposal. The attestor signs
-  them but cannot check them; the contract does.
+- `appId` and `holder` come from the claim proposal. The attestor signs them
+  but cannot check them. The contract checks `holder` against the caller's
+  secret; `appId` is compared by the app's own predicate, not by the module.
 
 The claim does not commit to the evidence (ADR 0007). Everything the contract
 or app must rely on has to be a field of the signed message.
@@ -162,7 +164,7 @@ witness (ADR 0004).
 - Seal the policy's hash into the contract's `policyHashes` in the constructor.
   One contract can accept several kinds by sealing several hashes.
 - Pin the operators' public keys in the registry. Every attestor in one trusted
-  set must run the same law and the same policy, or their messages differ and
+  set must run the same law and be sent the same policy, or their messages differ and
   never count together.
 - Bind the source in the app's own circuit if the app needs it (step 3).
 

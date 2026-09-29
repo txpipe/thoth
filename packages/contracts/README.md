@@ -161,6 +161,9 @@ zero remains valid with `present[i] = true`.
   holding its signer's public key. Placement is the app's: the client's trusted
   set records each attestor's slot in this registry, and each collected
   signature goes at that slot.
+- **A new kind needs no change here** as long as it signs the standard claim:
+  an app accepts it by sealing its policy hash. See
+  [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md).
 
 ## Reading presence in-circuit
 
@@ -205,8 +208,6 @@ returned `Claim` inside their own circuits — one open, read any subset of
   plus per-slot `present` flags. It is simple enough that any app can parse it, but the
   *meaning* of each slot is app-defined. There is no per-value tag in the signed
   message; the policy that produced the claim is identified by `policyHash`.
-- A new attestor kind needs no change here: an app accepts it by sealing its
-  policy hash. See [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md).
 
 ## Development
 

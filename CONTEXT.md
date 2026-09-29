@@ -39,7 +39,7 @@ The claim's wire version, `1`. It stays `1` until a layout is deployed.
 _Avoid_: Schema id.
 
 **App id**:
-The 32 bytes naming the app a claim is for. Signed into the claim and into the observation identity, so a claim cannot be replayed into another app.
+The 32 bytes naming the app a claim is for. Signed into the claim and into the observation identity. The module does not check it; an app that must refuse another app's claims compares it in its own predicate.
 _Avoid_: Scope, contract id.
 
 **Policy**:
@@ -68,11 +68,15 @@ _Avoid_: Timestamp, event time.
 
 **present**:
 The mask marking which value slots were measured. `present[i]` true means slot i was measured, even when its value is zero. An absent slot must carry zero.
-_Avoid_: Flags, mask.
+_Avoid_: Valid, filled.
 
 **Values**:
-The measured numbers of a claim, positional. Zero is a valid measured value; read `present` to know whether a slot was filled. What each slot means is the policy's slot map, not the claim's.
-_Avoid_: Data, payload, slots.
+The measured numbers of a claim, one per value slot. Zero is a valid measured value; read `present` to know whether a slot was measured. What each slot means is the policy's slot map, not the claim's.
+_Avoid_: Data, payload.
+
+**Claim proposal**:
+The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder and window from the proposal.
+_Avoid_: Draft, request.
 
 **Claim context**:
 The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` digests it for a witness to sign.

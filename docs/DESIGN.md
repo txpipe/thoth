@@ -75,12 +75,12 @@ pinged by any dApp that needs to use external data in-contract. Each dApp choose
 own threshold at deployment time, meaning how many attestors'
 signatures are needed for a claim to be valid.
 
-Every claim is signed for one app: it carries the app's `appId`, and the
-contract's replay check keys on it, so a claim accepted by one app cannot be
-replayed into another. Within that app, the same claim can feed any number of
-predicates.
+Every claim is signed for one app: it carries the app's `appId`. The module
+signs it but does not check it, and each contract keeps its own replay set, so
+an app that must refuse claims made for another app compares `appId` in its own
+predicate. Within one app, the same claim can feed any number of predicates.
 
-New kinds plug into this without a contract change; see
+A new kind that signs the standard claim plugs in without a contract change; see
 [kind-author-guide.md](kind-author-guide.md).
 
 ## The claim
