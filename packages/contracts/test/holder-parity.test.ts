@@ -7,16 +7,17 @@
 // in-circuit from the caller's secret, so the two must agree byte for byte.
 // The compiled pure circuit is the oracle.
 import { randomBytes } from 'node:crypto';
-import {
-  CompactTypeBytes,
-  CompactTypeVector,
-  persistentHash,
-} from '@midnight-ntwrk/compact-runtime';
 import { holderCommitmentOf } from '@thoth/core/claim-context';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 
 const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
+
+/** Read 32 bytes as an unsigned integer, big-endian or little-endian. */
+const asInteger = (bytes: Uint8Array, littleEndian: boolean): bigint => {
+  const ordered = littleEndian ? Uint8Array.from(bytes).reverse() : bytes;
+  return BigInt(`0x${Buffer.from(ordered).toString('hex')}`);
+};
 
 describe('holderCommitmentOf circuit parity', () => {
   it('matches the holderCommitment circuit for fixed and random secrets', () => {
@@ -24,24 +25,25 @@ describe('holderCommitmentOf circuit parity', () => {
       expect(holderCommitmentOf(secret)).toEqual(pureCircuits.holderCommitment(secret));
     }
   });
+});
 
+describe('holderCommitment circuit', () => {
   it('gives distinct secrets distinct commitments', () => {
     expect(pureCircuits.holderCommitment(filled(1))).not.toEqual(
       pureCircuits.holderCommitment(filled(2)),
     );
   });
 
-  it('is domain-separated from the vault pseudonym tag', () => {
-    // The same hash under deriveHolder's `thoth:holder:v1` tag must not
-    // collide with the commitment, so one secret yields unrelated values.
-    const secret = filled(7);
-    const vaultTag = new Uint8Array(32);
-    vaultTag.set(new TextEncoder().encode('thoth:holder:v1'));
-    const underVaultTag = persistentHash(new CompactTypeVector(2, new CompactTypeBytes(32)), [
-      vaultTag,
-      secret,
-    ]);
+  it('differs from the vault pseudonym of the same secret', () => {
+    // deriveHolder (exported as holderOf) is the vault pseudonym, a Field.
+    // Read the commitment as an integer in either byte order: the two roles
+    // must not collapse to one value.
+    for (const secret of [filled(7), randomBytes(32)]) {
+      const pseudonym = pureCircuits.holderOf(secret);
+      const commitment = pureCircuits.holderCommitment(secret);
 
-    expect(pureCircuits.holderCommitment(secret)).not.toEqual(underVaultTag);
+      expect(asInteger(commitment, false)).not.toBe(pseudonym);
+      expect(asInteger(commitment, true)).not.toBe(pseudonym);
+    }
   });
 });

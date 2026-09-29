@@ -2,8 +2,8 @@
 // modules, specialized to V=3 values, K=16 message fields, M=3 signatures,
 // N=2 threshold (2-of-3). Exists only to give the modules a top-level shell to
 // compile against and to re-export the pure parity surface (`message`,
-// `computeId`, `holderOf`, `holderCommitment`, `subjectHash`) plus types and ledger fields
-// the simulator/tests need.
+// `computeId`, `holderOf`, `holderCommitment`, `subjectHash`) plus types and
+// ledger fields the simulator/tests need.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
