@@ -288,6 +288,15 @@ export const zkFetchPolicyHashOf = (policy: ZkFetchPolicy): Uint8Array => {
   return policyHashOf(ZK_FETCH_LAW, normalized, normalized.claimVersion);
 };
 
+/**
+ * SHA-256 of a string, raw bytes.
+ *
+ * @param data — the input string.
+ * @returns the 32-byte digest.
+ */
+const sha256 = (data: string): Uint8Array =>
+  new Uint8Array(createHash('sha256').update(data, 'utf-8').digest());
+
 /** The request identity a zkFetch claim is about: the method, URL and body. */
 export interface ZkFetchRequest {
   /** The HTTP method. */
@@ -325,13 +334,11 @@ export interface ZkFetchSubject {
  */
 export const zkFetchSubjectOf = (request: ZkFetchRequest): ZkFetchSubject => {
   const url = new URL(request.url);
-  const digest = (text: string): Uint8Array =>
-    new Uint8Array(createHash('sha256').update(text, 'utf-8').digest());
   return {
-    method: digest(request.method.toUpperCase()),
-    host: digest(url.host),
-    path: digest(`${url.pathname}${url.search}`),
-    body: digest(request.body ?? ''),
+    method: sha256(request.method.toUpperCase()),
+    host: sha256(url.host),
+    path: sha256(`${url.pathname}${url.search}`),
+    body: sha256(request.body ?? ''),
   };
 };
 
@@ -429,8 +436,7 @@ const canonicalJson = (value: unknown): string => {
  * @param data — the input string.
  * @returns the lower-hex digest.
  */
-const sha256Hex = (data: string): string =>
-  createHash('sha256').update(data, 'utf-8').digest('hex');
+const sha256Hex = (data: string): string => Buffer.from(sha256(data)).toString('hex');
 
 /** The contract's value type is `Uint<64>`; only non-negative values below 2^64 are certifiable. */
 const UINT64_MAX = 1n << 64n;
