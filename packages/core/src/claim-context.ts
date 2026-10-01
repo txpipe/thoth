@@ -79,6 +79,9 @@ const canonicalJson = (value: CanonicalValue): string => {
     return JSON.stringify(Buffer.from(value).toString('hex'));
   }
   if (Array.isArray(value)) {
+    if (value.length !== Object.keys(value).length) {
+      throw new Error('cannot canonicalize a sparse array');
+    }
     return `[${value.map((item: CanonicalValue) => canonicalJson(item)).join(',')}]`;
   }
   const proto: unknown = Object.getPrototypeOf(value);

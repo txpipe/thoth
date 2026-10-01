@@ -50,6 +50,8 @@ describe('policyHashOf', () => {
   it('rejects values with no canonical form', () => {
     expect(() => policyHashOf('law', { n: Number.NaN })).toThrow(/finite/);
     expect(() => policyHashOf('law', { d: new Date(0) } as never)).toThrow(/canonical/);
+    expect(() => policyHashOf('law', Array(1))).toThrow(/sparse/);
+    expect(() => policyHashOf('law', { slots: Array(2) })).toThrow(/sparse/);
   });
 });
 
