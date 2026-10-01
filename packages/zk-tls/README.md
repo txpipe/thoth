@@ -57,7 +57,7 @@ prover that the client can use to obtain evidence:
     `zkFetchSubjectHashOf(request)` hashes it. The host is its own field so an
     app can compare the host digest in-circuit and keep the path private.
   - Types: `ZkFetchDefinition`, `ProviderClaimData`, `ZkFetchEvidence`,
-    `VerifiedEvidence`, `ZkFetchPolicy`, `ZkFetchSlot`, `ZkFetchRequest`,
+    `VerifiedEvidence`, `ZkFetchPolicy`, `ZkFetchSlot`, `ZkFetchSubjectRequest`,
     `ZkFetchSubject`.
 - **`@thoth/zk-tls/attestor`.** The attestor, or host, side:
   - `verifyZkFetchProof(evidence)` verifies the witness's ECDSA signature

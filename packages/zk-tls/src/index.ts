@@ -298,7 +298,7 @@ const sha256 = (data: string): Uint8Array =>
   new Uint8Array(createHash('sha256').update(data, 'utf-8').digest());
 
 /** The request identity a zkFetch claim is about: the method, URL and body. */
-export interface ZkFetchRequest {
+export interface ZkFetchSubjectRequest {
   /** The HTTP method. */
   method: string;
   /** The requested URL. */
@@ -332,7 +332,7 @@ export interface ZkFetchSubject {
  * @returns the subject struct.
  * @throws if the URL does not parse.
  */
-export const zkFetchSubjectOf = (request: ZkFetchRequest): ZkFetchSubject => {
+export const zkFetchSubjectOf = (request: ZkFetchSubjectRequest): ZkFetchSubject => {
   const url = new URL(request.url);
   return {
     method: sha256(request.method.toUpperCase()),
@@ -349,7 +349,7 @@ export const zkFetchSubjectOf = (request: ZkFetchRequest): ZkFetchSubject => {
  * @returns the 32-byte subject hash of {@link zkFetchSubjectOf} the request.
  * @throws if the URL does not parse.
  */
-export const zkFetchSubjectHashOf = (request: ZkFetchRequest): Uint8Array => {
+export const zkFetchSubjectHashOf = (request: ZkFetchSubjectRequest): Uint8Array => {
   const { method, host, path, body } = zkFetchSubjectOf(request);
   return subjectHashOf([method, host, path, body]);
 };
