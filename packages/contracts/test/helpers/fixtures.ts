@@ -45,6 +45,18 @@ export const makeClaim = (
   };
 };
 
+// A copy of `bytes` with byte `i` inverted. Throws on an out-of-range index,
+// which a typed array would otherwise ignore, leaving the copy unchanged.
+export const flip = (bytes: Uint8Array, i: number): Uint8Array => {
+  const byte = bytes[i];
+  if (byte === undefined) {
+    throw new RangeError(`flip: index ${i} out of range for ${bytes.length} bytes`);
+  }
+  const copy = Uint8Array.from(bytes);
+  copy[i] = byte ^ 0xff;
+  return copy;
+};
+
 export type SignedClaim = {
   claim: A_Claim;
   signatures: JubjubSchnorrSignature[]; // valid sigs for the keys given; absent slot = dummy (never verifies)

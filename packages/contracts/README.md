@@ -39,10 +39,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//            K=11 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "node_modules/@thoth/contracts/attestation"<11, 3, 2, 3> prefix A_;
+//            K=13 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "node_modules/@thoth/contracts/attestation"<13, 3, 2, 3> prefix A_;
 
-import "node_modules/@thoth/contracts/attestor_registry"<3, 11> prefix R_;
+import "node_modules/@thoth/contracts/attestor_registry"<3, 13> prefix R_;
 ```
 
 If the package is hoisted elsewhere by your package manager, add the package
@@ -53,8 +53,8 @@ export COMPACT_PATH="$(node -p 'require.resolve("@thoth/contracts/package.json")
 ```
 
 ```compact
-import "attestation"<11, 3, 2, 3> prefix A_;
-import "attestor_registry"<3, 11> prefix R_;
+import "attestation"<13, 3, 2, 3> prefix A_;
+import "attestor_registry"<3, 13> prefix R_;
 ```
 
 See `examples/example_app.compact` for a complete top-level embedding that
@@ -66,7 +66,7 @@ point.
 
 `attestation<#K, #V, #N, #M>` — embed as `import "attestation"<K, V, N, M>`:
 
-- `#K` — signed-message length in fields (`K` must equal `2*V + 5`)
+- `#K` — signed-message length in fields (`K` must equal `2*V + 7`)
 - `#V` — number of claim value slots (`Claim.values: Vector<V, Uint<64>>`)
 - `#N` — the app's N-of-M threshold
 - `#M` — number of attestor signatures supplied / registry key slots
@@ -80,16 +80,17 @@ All are fixed when a contract embeds the module.
 
 ```
 [ version, kind, timestamp,
-  degradeToTransient(nonce), degradeToTransient(evidenceHash),
-  present[0] as Field, ..., present[N-1] as Field,
-  values[0] as Field, ..., values[N-1] as Field ]
+  nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
+  evidenceHash[0..16] as Uint<128>, evidenceHash[16..32] as Uint<128>,
+  present[0] as Field, ..., present[V-1] as Field,
+  values[0] as Field, ..., values[V-1] as Field ]
 ```
 
 The attestor MUST reproduce this exact flat field vector to sign the same
-message (same order, sizes, presence-flag semantics, and the two
-`degradeToTransient` transforms). `present` is a `Vector<V, Boolean>`: one flag
-per value slot; `present[i] = true` means `values[i]` was populated (its value
-may still be `0`). The message length is `K = 5 + 2*V` (5 header fields, V
+message (same order, sizes, presence-flag semantics, and the split of each
+32-byte field into two 16-byte halves, so every byte is signed). `present` is a
+`Vector<V, Boolean>`: one flag per value slot; `present[i] = true` means
+`values[i]` was populated (its value may still be `0`). The message length is `K = 7 + 2*V` (7 header fields, V
 presence flags, V values) — fixed when a contract embeds the module.
 
 ## Design notes

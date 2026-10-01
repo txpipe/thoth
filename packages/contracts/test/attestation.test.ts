@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import {
+  flip,
   holderOf,
   idOf,
   makeClaim,
@@ -31,27 +32,49 @@ describe('mock attestation', () => {
   });
 
   describe('buildMessage (frozen wire shape)', () => {
-    it('returns exactly K=11 fields in the frozen order', () => {
+    it('returns exactly K=13 fields in the frozen order', () => {
       const claim = makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] });
       const msg = pureCircuits.message(claim);
-      expect(msg).toHaveLength(11);
-      // [version, kind, timestamp, nonce, evidenceHash, p0, p1, p2, v0, v1, v2]
+      expect(msg).toHaveLength(13);
+      // [version, kind, timestamp, nonce0, nonce1, evidenceHash0, evidenceHash1,
+      //  p0, p1, p2, v0, v1, v2]
       expect(msg[0]).toBe(1n);
       expect(msg[1]).toBe(1n);
       expect(msg[2]).toBe(claim.timestamp);
-      expect(msg[5]).toBe(1n);
-      expect(msg[6]).toBe(1n);
       expect(msg[7]).toBe(1n);
-      expect(msg[8]).toBe(100n);
-      expect(msg[9]).toBe(200n);
-      expect(msg[10]).toBe(300n);
+      expect(msg[8]).toBe(1n);
+      expect(msg[9]).toBe(1n);
+      expect(msg[10]).toBe(100n);
+      expect(msg[11]).toBe(200n);
+      expect(msg[12]).toBe(300n);
+    });
+
+    it('pins each 16-byte half to its slot (little-endian)', () => {
+      const nonce = new Uint8Array(32);
+      nonce[0] = 1;
+      const evidenceHash = new Uint8Array(32);
+      evidenceHash[16] = 2;
+      const msg = pureCircuits.message(makeClaim({ nonce, evidenceHash }));
+      expect(msg.slice(3, 7)).toEqual([1n, 0n, 0n, 2n]);
+    });
+
+    it('distinguishes a change to every byte of nonce and evidenceHash', () => {
+      const claim = makeClaim();
+      const msg = pureCircuits.message(claim);
+      for (const field of ['nonce', 'evidenceHash'] as const) {
+        for (let i = 0; i < 32; i++) {
+          expect(pureCircuits.message({ ...claim, [field]: flip(claim[field], i) })).not.toEqual(
+            msg,
+          );
+        }
+      }
     });
 
     it('distinguishes absent (present all false) from a genuine 0 value', () => {
       const absent = makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] });
       const presentZero = makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] });
       expect(pureCircuits.message(absent)).not.toEqual(pureCircuits.message(presentZero));
-      expect(pureCircuits.message(presentZero)[5]).toBe(1n);
+      expect(pureCircuits.message(presentZero)[7]).toBe(1n);
     });
   });
 
@@ -112,6 +135,33 @@ describe('mock attestation', () => {
       };
       await expect(
         sim.call('verifyAttestation', ps({ ...signed, ...tampered, holderSecret: holder })),
+      ).rejects.toThrow('Insufficient valid signatures');
+    });
+
+    // Replaying accepted signatures with a mutated byte must fail the signature
+    // check: the nullifier and vault id key on all 32 bytes, so a byte the
+    // message did not sign would let one attestment be vaulted repeatedly (#66).
+    it.each([
+      { name: 'nonce[0]', mutate: (c: A_Claim) => ({ ...c, nonce: flip(c.nonce, 0) }) },
+      { name: 'nonce[31]', mutate: (c: A_Claim) => ({ ...c, nonce: flip(c.nonce, 31) }) },
+      {
+        name: 'evidenceHash[31]',
+        mutate: (c: A_Claim) => ({ ...c, evidenceHash: flip(c.evidenceHash, 31) }),
+      },
+      {
+        name: 'nonce[31] and evidenceHash[31]',
+        mutate: (c: A_Claim) => ({
+          ...c,
+          nonce: flip(c.nonce, 31),
+          evidenceHash: flip(c.evidenceHash, 31),
+        }),
+      },
+    ])('rejects a replay of accepted signatures with $name mutated', async ({ mutate }) => {
+      const signed = signClaim(makeClaim(), [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
+      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+      const replayed = { ...signed, claim: mutate(signed.claim) };
+      await expect(
+        sim.call('verifyAttestation', ps({ ...replayed, holderSecret: holder })),
       ).rejects.toThrow('Insufficient valid signatures');
     });
 

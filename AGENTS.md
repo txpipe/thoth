@@ -75,7 +75,7 @@ thoth/
   from `workspaces` are **placeholders** — intentionally not compiled.
 - **`@midnight-ntwrk/compact-runtime` is pinned to `0.19.0`** everywhere
   (root, contracts, core). Off-chain code that mirrors an in-circuit primitive
-  (e.g. `degradeToTransient`, `jubjubSchnorrSign`) only matches the circuit at
+  (e.g. `convertBytesToUint`, `jubjubSchnorrSign`) only matches the circuit at
   the **same pinned version** — do not bump one workspace in isolation. The
   matching Compact compiler is `0.34.0` (README + both CI workflows).
 - **Claim types are keyless.** `@thoth/core` carries no signing key; anything
@@ -126,7 +126,7 @@ thoth/
 - Contract logic is tested with the **simulator** via vitest in
   `packages/contracts/test/`. The mock top-level shell
   (`packages/contracts/test/mocks/MockAttestation.compact`) specializes the
-  modules (V=3, K=11, M=3, N=2) so tests run against real artifacts.
+  modules (V=3, K=13, M=3, N=2) so tests run against real artifacts.
 - `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
   compiled pure circuits — never hand-roll the message encoding; use
   `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.
