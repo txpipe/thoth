@@ -360,24 +360,40 @@ const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => 
 };
 
 /**
- * Decode the URL a claim attests from its signed parameters.
+ * Parse a claim's signed parameters and validate the field both callers need.
+ *
+ * The witness signs the `method`, `url` and `body` it fetched; this is the one
+ * place that parses them, so the JSON handling and the `url` check stay
+ * consistent. `method` and `body` come back raw — each caller validates the
+ * ones it uses, so {@link claimUrl} keeps its url-only contract.
  *
  * @param claim — the signed claim data.
- * @returns the attested URL.
- * @throws if the parameters do not carry a non-empty `url`.
+ * @returns the parsed parameters, with a non-empty `url` guaranteed.
+ * @throws if the parameters are not JSON, or carry no non-empty `url`.
  */
-export const claimUrl = (claim: ProviderClaimData): string => {
-  let parameters: Readonly<{ url?: string }>;
+const claimParametersOf = (
+  claim: ProviderClaimData,
+): Readonly<{ url: string; method?: unknown; body?: unknown }> => {
+  let parameters: Readonly<{ url?: unknown; method?: unknown; body?: unknown }>;
   try {
-    parameters = JSON.parse(claim.parameters) as Readonly<{ url?: string }>;
+    parameters = JSON.parse(claim.parameters) as typeof parameters;
   } catch {
     throw new Error('claim parameters are not valid JSON');
   }
   if (typeof parameters.url !== 'string' || parameters.url === '') {
     throw new Error('claim parameters carry no url');
   }
-  return parameters.url;
+  return { url: parameters.url, method: parameters.method, body: parameters.body };
 };
+
+/**
+ * Decode the URL a claim attests from its signed parameters.
+ *
+ * @param claim — the signed claim data.
+ * @returns the attested URL.
+ * @throws if the parameters are not JSON, or carry no non-empty `url`.
+ */
+export const claimUrl = (claim: ProviderClaimData): string => claimParametersOf(claim).url;
 
 /**
  * Read the request a claim attests from its signed parameters.
@@ -392,16 +408,7 @@ export const claimUrl = (claim: ProviderClaimData): string => {
  *   and `method`, or carry a `body` that is not a string.
  */
 export const claimRequestOf = (claim: ProviderClaimData): ZkFetchSubjectRequest => {
-  let parameters: Readonly<{ url?: unknown; method?: unknown; body?: unknown }>;
-  try {
-    parameters = JSON.parse(claim.parameters) as typeof parameters;
-  } catch {
-    throw new Error('claim parameters are not valid JSON');
-  }
-  const { url, method, body } = parameters;
-  if (typeof url !== 'string' || url === '') {
-    throw new Error('claim parameters carry no url');
-  }
+  const { url, method, body } = claimParametersOf(claim);
   if (typeof method !== 'string' || method === '') {
     throw new Error('claim parameters carry no method');
   }
