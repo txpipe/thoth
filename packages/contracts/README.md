@@ -112,6 +112,14 @@ presence flags, V values) — fixed when a contract embeds the module.
   sealing one hash per policy. The membership check discloses which accepted
   policy a claim used. `appId` is signed but not checked by the module; an app
   that needs it compares it in its own predicate.
+- **The holder is a per-claim commitment, not an identity.** The pure
+  `holderCommitment(secret)` circuit derives it as a `persistentHash` over a
+  tagged holder secret; `@thoth/core/claim-context`'s `holderCommitmentOf`
+  matches it off-chain. Its tag differs from the vault pseudonym
+  (`deriveHolder`), so one secret yields unrelated values in the two roles. A
+  fresh secret per claim gives a fresh holder, so the layer promises no link
+  between claims. The claim does not carry the commitment yet, so the wire
+  layout is unchanged.
 - **Registry slots are positional.** `attestor_registry` verifies
   `signatures[i]` against `keys[i]` — a signature is valid *only* in the slot
   holding its signer's public key. The client therefore places each collected

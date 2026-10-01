@@ -129,6 +129,14 @@ module attestation<#K, #V, #N, #M> {
     return deriveHolder(secret);
   }
 
+  /// Per-claim holder commitment (ADR 0004): persistentHash over a
+  /// domain-separated holder secret. Tagged apart from `deriveHolder`'s vault
+  /// pseudonym, so one secret yields unrelated values in the two roles.
+  /// Exported pure so the off-chain `holderCommitmentOf` can match it.
+  export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
+    return persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:holder-commitment:v1"), secret]);
+  }
+
   /// Verify an attested claim, on replay + freshness gates, then store it.
   export circuit verifyAttestation(): [] {
     const [claim, sigs, rand] = getAttestationWitness();
