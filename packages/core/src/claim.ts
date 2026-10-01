@@ -17,9 +17,10 @@ export type FlatMessage = readonly bigint[];
 /**
  * The fixed claim shape every kind is expected to sign.
  *
- * Mirror of `attestation.compact`'s `Claim` struct: a header (version, kind,
- * timestamp, nonce, evidenceHash), a per-position `present` mask, and `V`
- * numeric `values`.
+ * Mirror of `attestation.compact`'s `Claim` struct: a header (version, appId,
+ * policyHash, timestamp, nonce, evidenceHash), a per-position `present` mask,
+ * and `V` numeric `values`. There is no kind code: the policy hash is the
+ * on-chain binding, and the kind stays an off-chain concept.
  *
  * This is the canonical shape kinds adopt unless they deviate.
  *
@@ -30,8 +31,14 @@ export type FlatMessage = readonly bigint[];
 export interface Claim<V extends number> {
   /** Schema version of the claim format. Currently `1`. */
   version: bigint;
-  /** Attestor kind identifier (e.g. `1` for the reclaim/zkFetch kind). */
-  kind: bigint;
+  /** The app the claim is for. 32 bytes. */
+  appId: Uint8Array;
+  /**
+   * Hash of the policy the attestors enforced (see `@thoth/core/claim-context`'s
+   * `policyHashOf`). The contract accepts it only if it is in its sealed set.
+   * 32 bytes.
+   */
+  policyHash: Uint8Array;
   /** Unix seconds at which the attestation was produced. */
   timestamp: bigint;
   /** Per-claim randomness; prevents signature/claim replay on-chain. */
@@ -58,8 +65,10 @@ export interface Claim<V extends number> {
 export interface ClaimInput<V extends number> {
   /** Schema version; a raw payload may omit it (defaults to {@link CLAIM_VERSION}). */
   version: number | bigint;
-  /** Attestor kind identifier. */
-  kind: number | bigint;
+  /** The app the claim is for. 32 bytes. */
+  appId: Uint8Array;
+  /** Hash of the policy the attestors enforced. 32 bytes. */
+  policyHash: Uint8Array;
   /** Unix seconds at which the attestation was produced. */
   timestamp: number | bigint;
   /** Per-claim randomness, replay protection. */
@@ -79,6 +88,14 @@ export interface ClaimInput<V extends number> {
 export const CLAIM_VERSION = 1n;
 
 /**
+ * Zod schema for a claim's 32-byte fields that carry an identity
+ * (`appId`, `policyHash`).
+ */
+export const bytes32Schema = z
+  .instanceof(Uint8Array)
+  .refine((bytes) => bytes.length === 32, { message: 'expected 32 bytes' });
+
+/**
  * Zod schema for a fixed `V` claim.
  *
  * Runtime validator + type source: `z.output` is a {@link Claim}, `z.input` a
@@ -96,7 +113,8 @@ export function claimSchema<V extends number>(
   const schema = z
     .object({
       version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
-      kind: z.union([z.number(), z.bigint()]),
+      appId: bytes32Schema,
+      policyHash: bytes32Schema,
       timestamp: z.union([z.number(), z.bigint()]),
       nonce: z.instanceof(Uint8Array),
       evidenceHash: z.instanceof(Uint8Array),
@@ -105,7 +123,8 @@ export function claimSchema<V extends number>(
     })
     .transform((input) => ({
       version: BigInt(input.version),
-      kind: BigInt(input.kind),
+      appId: input.appId,
+      policyHash: input.policyHash,
       timestamp: BigInt(input.timestamp),
       nonce: input.nonce,
       evidenceHash: input.evidenceHash,
@@ -136,10 +155,11 @@ function splitBytes(bytes: Uint8Array): [bigint, bigint] {
  * Encode a parsed {@link Claim} into the flat signed-message field vector.
  *
  * The canonical default for kinds whose `message` is exactly the canonical
- * `Claim` shape: a 7-field header (version, kind, timestamp, then `nonce` and
- * `evidenceHash` each split into two 16-byte halves, exactly as
- * `attestation.compact`'s `buildMessage` does), followed by the `present`
- * flags (`1`/`0`) and the `values`. The result has length `2*V + 7`, which is
+ * `Claim` shape: a 10-field header (version, then `appId` and `policyHash`
+ * each split into two 16-byte halves, timestamp, then `nonce` and
+ * `evidenceHash` split the same way, exactly as `attestation.compact`'s
+ * `buildMessage` does), followed by the `present` flags (`1`/`0`) and the
+ * `values`. The result has length `2*V + 10`, which is
  * the signed-message length `K` the target contract is specialized with.
  *
  * Kinds that extend the claim or use a different layout keep their own
@@ -148,12 +168,14 @@ function splitBytes(bytes: Uint8Array): [bigint, bigint] {
  *
  * @param claim — a parsed {@link Claim}.
  * @returns the flat message the signer commits to and the contract verifies.
- * @throws if `claim.nonce` or `claim.evidenceHash` is not exactly 32 bytes.
+ * @throws if `claim.appId`, `claim.policyHash`, `claim.nonce` or
+ *   `claim.evidenceHash` is not exactly 32 bytes.
  */
 export function claimToMessage<V extends number>(claim: Claim<V>): FlatMessage {
   return [
     claim.version,
-    claim.kind,
+    ...splitBytes(claim.appId),
+    ...splitBytes(claim.policyHash),
     claim.timestamp,
     ...splitBytes(claim.nonce),
     ...splitBytes(claim.evidenceHash),

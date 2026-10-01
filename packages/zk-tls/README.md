@@ -34,9 +34,10 @@ prover that the client can use to obtain evidence:
     allowlist and the size bound. Required slots must be
     certifiable, meaning disclosed and parseable; optional slots may be absent
     and are signed unpresent.
-  - `deriveClaimFromEvidence({ verified, policy, valueSlots, timestamp })` derives
-    the canonical `Claim` the attestor signs: values/present from the disclosed
-    values, a deterministic nonce, and the Reclaim identifier as `evidenceHash`.
+  - `deriveClaimFromEvidence({ verified, policy, appId, valueSlots, timestamp })`
+    derives the canonical `Claim` the attestor signs: values/present from the
+    disclosed values, a deterministic nonce, the Reclaim identifier as
+    `evidenceHash`, and `zkFetchPolicyHashOf(policy)` as `policyHash`.
   - `parsedEvidenceView(evidence)` returns the parsed evidence view claim
     derivation runs on, without a signature check; the caller decides trust.
   - `parseDisclosedValue(value, rule)` applies the parse law: a disclosed string

@@ -50,7 +50,9 @@ its own schemas and runs the full check before signing:
 After those checks, `attestor.attest` also rejects evidence whose signing
 witness is not the instance's own `witnessKey`. Only then does it sign the
 attestor-derived claim: values and present bits from the disclosed values, a
-deterministic nonce, and the Reclaim identifier as the claim's `evidenceHash`.
+deterministic nonce, the Reclaim identifier as the claim's `evidenceHash`, and
+the hash of its own policy as `policyHash`. The `appId` and the timestamp are
+the only fields it takes from the proposal.
 
 The attestor derives its own claim rather than trusting the proposal, so a
 client cannot make it certify a reading the evidence does not support.

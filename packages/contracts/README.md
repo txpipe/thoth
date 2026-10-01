@@ -39,10 +39,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//            K=13 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "node_modules/@thoth/contracts/attestation"<13, 3, 2, 3> prefix A_;
+//            K=16 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "node_modules/@thoth/contracts/attestation"<16, 3, 2, 3> prefix A_;
 
-import "node_modules/@thoth/contracts/attestor_registry"<3, 13> prefix R_;
+import "node_modules/@thoth/contracts/attestor_registry"<3, 16> prefix R_;
 ```
 
 If the package is hoisted elsewhere by your package manager, add the package
@@ -53,20 +53,20 @@ export COMPACT_PATH="$(node -p 'require.resolve("@thoth/contracts/package.json")
 ```
 
 ```compact
-import "attestation"<13, 3, 2, 3> prefix A_;
-import "attestor_registry"<3, 13> prefix R_;
+import "attestation"<16, 3, 2, 3> prefix A_;
+import "attestor_registry"<3, 16> prefix R_;
 ```
 
 See `examples/example_app.compact` for a complete top-level embedding that
-pins registry keys and the freshness window in the constructor, re-exports the
-module types/ledgers/pure circuits, and exports a `verifyAttestation` entry
-point.
+pins registry keys, the accepted policy hashes, and the freshness window in the
+constructor, re-exports the module types/ledgers/pure circuits, and exports a
+`verifyAttestation` entry point.
 
 ## Module parameters
 
 `attestation<#K, #V, #N, #M>` — embed as `import "attestation"<K, V, N, M>`:
 
-- `#K` — signed-message length in fields (`K` must equal `2*V + 7`)
+- `#K` — signed-message length in fields (`K` must equal `2*V + 10`)
 - `#V` — number of claim value slots (`Claim.values: Vector<V, Uint<64>>`)
 - `#N` — the app's N-of-M threshold
 - `#M` — number of attestor signatures supplied / registry key slots
@@ -79,7 +79,10 @@ All are fixed when a contract embeds the module.
 `Vector<K, Field>` fields, in this order:
 
 ```
-[ version, kind, timestamp,
+[ version,
+  appId[0..16] as Uint<128>, appId[16..32] as Uint<128>,
+  policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
+  timestamp,
   nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
   evidenceHash[0..16] as Uint<128>, evidenceHash[16..32] as Uint<128>,
   present[0] as Field, ..., present[V-1] as Field,
@@ -90,16 +93,25 @@ The attestor MUST reproduce this exact flat field vector to sign the same
 message (same order, sizes, presence-flag semantics, and the split of each
 32-byte field into two 16-byte halves, so every byte is signed). `present` is a
 `Vector<V, Boolean>`: one flag per value slot; `present[i] = true` means
-`values[i]` was populated (its value may still be `0`). The message length is `K = 7 + 2*V` (7 header fields, V
+`values[i]` was populated (its value may still be `0`). The message length is `K = 10 + 2*V` (10 header fields, V
 presence flags, V values) — fixed when a contract embeds the module.
 
 ## Design notes
 
 - **The claim is the entire message.** Everything the contract inspects —
   freshness (`timestamp`), replay protection (`nonce`), source binding
-  (`evidenceHash`), and kind/version — is inside the signed field vector.
+  (`evidenceHash`), the policy (`policyHash`), the app (`appId`), and the
+  version — is inside the signed field vector.
   Kinds must not rely on un-signed side-channels: any data the contract needs
   has to be a field of the message the attestor signs.
+- **No kind on-chain; the policy is the commitment.** The claim carries no
+  kind code. `policyHash` binds it to the policy the attestors enforced, and
+  `verifyAttestation` rejects a claim whose `policyHash` is not in the sealed
+  `policyHashes` set (`"Unaccepted policy"`), so a requester cannot substitute
+  a laxer policy. A contract serves several policies, and so several kinds, by
+  sealing one hash per policy. The membership check discloses which accepted
+  policy a claim used. `appId` is signed but not checked by the module; an app
+  that needs it compares it in its own predicate.
 - **Registry slots are positional.** `attestor_registry` verifies
   `signatures[i]` against `keys[i]` — a signature is valid *only* in the slot
   holding its signer's public key. The client therefore places each collected
@@ -120,8 +132,10 @@ flag disagrees with an asserted predicate can never pass signature verification.
 
 ## Deploy wiring
 
-Both `freshnessWindow` (Attestation) and `keys` (Registry) are **sealed** ledgers
-set exactly once in the top-level constructor. See `examples/example_app.compact`
+`freshnessWindow` and `policyHashes` (Attestation) and `keys` (Registry) are
+**sealed** ledgers set exactly once in the top-level constructor. Fill
+`policyHashes` by inserting each accepted policy hash there; no circuit can add
+one after deploy. See `examples/example_app.compact`
 for the full wiring.
 
 ## Opening a vaulted claim
@@ -145,7 +159,7 @@ returned `Claim` inside their own circuits — one open, read any subset of
 - Reusability across apps: the claim shape is positional (`values: Vector<N, Uint<64>>`)
   plus per-slot `present` flags. It is simple enough that any app can parse it, but the
   *meaning* of each slot is app-defined. There is no per-value tag in the signed
-  message; the provider is identified by `kind`.
+  message; the policy that produced the claim is identified by `policyHash`.
 
 ## Development
 

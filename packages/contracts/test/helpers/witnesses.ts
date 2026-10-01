@@ -4,6 +4,7 @@ import type {
   Ledger,
   Witnesses,
 } from '../../artifacts/mock_attestation/contract/index.js';
+import { ACCEPTED_POLICIES } from './fixtures.js';
 import type { PrivateState } from './private-state.js';
 
 export type WitnessBase = WitnessContext<Ledger, PrivateState>;
@@ -11,6 +12,7 @@ export type WitnessBase = WitnessContext<Ledger, PrivateState>;
 export const makeWitnesses = (
   registryKeys: JubjubPoint[],
   freshnessWindow = 0n,
+  policyHashes: readonly Uint8Array[] = ACCEPTED_POLICIES,
 ): Witnesses<PrivateState> => ({
   getAttestationWitness: ({
     privateState,
@@ -34,5 +36,10 @@ export const makeWitnesses = (
   freshWindow: ({ privateState }: WitnessBase): [PrivateState, bigint] => [
     privateState,
     freshnessWindow,
+  ],
+
+  seedPolicies: ({ privateState }: WitnessBase): [PrivateState, Uint8Array[]] => [
+    privateState,
+    [...policyHashes],
   ],
 });

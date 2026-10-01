@@ -8,10 +8,14 @@ import {
   parsedEvidenceView,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
+  zkFetchPolicyHashOf,
 } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
 import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
+
+/** The app id every claim in this suite is for. */
+const APP_ID = new Uint8Array(32).fill(0xa1);
 
 const alice = testWitness(`0x${'11'.repeat(32)}`);
 const bob = testWitness(`0x${'22'.repeat(32)}`);
@@ -60,6 +64,7 @@ const attestWith = (
   const claim = deriveClaimFromEvidence({
     verified: parsedEvidenceView(evidence),
     policy: activePolicy,
+    appId: APP_ID,
     valueSlots: 3,
     timestamp,
   });
@@ -98,6 +103,8 @@ describe('test-key witness', () => {
   it('is accepted and signed by the attestor whose witness it is', async () => {
     const attestation = await attestWith(aliceAttestor, await observe(alice), 1_786_000_000n);
     expect(attestation.claim.timestamp).toBe(1_786_000_000n);
+    expect(attestation.claim.appId).toEqual(APP_ID);
+    expect(attestation.claim.policyHash).toEqual(zkFetchPolicyHashOf(policy));
     // A present zero stays present.
     expect(attestation.claim.present).toEqual([true, true, false]);
     expect(attestation.claim.values).toEqual([0n, 8n, 0n]);
@@ -153,12 +160,14 @@ describe('test-key witness', () => {
     const aliceClaim = deriveClaimFromEvidence({
       verified: parsedEvidenceView(await observe(alice)),
       policy,
+      appId: APP_ID,
       valueSlots: 3,
       timestamp: 1_786_000_000n,
     });
     const bobClaim = deriveClaimFromEvidence({
       verified: parsedEvidenceView(await observe(bob)),
       policy,
+      appId: APP_ID,
       valueSlots: 3,
       timestamp: 1_786_000_000n,
     });
@@ -170,6 +179,7 @@ describe('test-key witness', () => {
       deriveClaimFromEvidence({
         verified: parsedEvidenceView(await observe(alice, overrides)),
         policy,
+        appId: APP_ID,
         valueSlots: 3,
         timestamp: 1_786_000_000n,
       }).nonce;

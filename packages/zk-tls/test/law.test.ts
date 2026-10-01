@@ -14,9 +14,13 @@ import {
   type VerifiedEvidence,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
+  zkFetchPolicyHashOf,
 } from '@thoth/zk-tls';
 import { assertClaimMatchesDisclosures } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
+
+/** The app id every claim in this suite is for. */
+const APP_ID = new Uint8Array(32).fill(0xa1);
 
 /** A signed-shape claim whose parameters/context are JSON I control. */
 const claimWith = (parameters: unknown, context: unknown): ProviderClaimData => ({
@@ -58,6 +62,7 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 0, name: 'v', parse }],
       },
+      appId: APP_ID,
       valueSlots: 1,
       timestamp: 1_786_122_944n,
     });
@@ -146,6 +151,7 @@ describe('deriveClaimFromEvidence', () => {
     const claim = deriveClaimFromEvidence({
       verified,
       policy: policy([{ slot: 0, name: 'distance', parse: 'float' }]),
+      appId: APP_ID,
       valueSlots: 2,
       timestamp: 1_786_122_944n,
     });
@@ -161,11 +167,27 @@ describe('deriveClaimFromEvidence', () => {
     const claim = deriveClaimFromEvidence({
       verified,
       policy: policy([{ slot: 0, name: 'time', parse: 'int' }]),
+      appId: APP_ID,
       valueSlots: 2,
       timestamp: 1_786_122_944n,
     });
     expect(claim.values).toEqual([300n, 0n]);
     expect(claim.present).toEqual([true, false]);
+  });
+
+  it('carries the given appId and the hash of the policy it was derived under', () => {
+    const verified = verifiedOf(claimWith({}, { extractedParameters: { a: '1' } }), { a: '1' });
+    const activePolicy = policy([{ slot: 0, name: 'a', parse: 'int' }]);
+    const claim = deriveClaimFromEvidence({
+      verified,
+      policy: activePolicy,
+      appId: APP_ID,
+      valueSlots: 1,
+      timestamp: 1_786_122_944n,
+    });
+    expect(claim.appId).toEqual(APP_ID);
+    expect(claim.policyHash).toEqual(zkFetchPolicyHashOf(activePolicy));
+    expect(claim).not.toHaveProperty('kind');
   });
 
   it('throws when a policy slot exceeds the claim value count', () => {
@@ -174,6 +196,7 @@ describe('deriveClaimFromEvidence', () => {
       deriveClaimFromEvidence({
         verified,
         policy: policy([{ slot: 1, name: 'a', parse: 'int' }]),
+        appId: APP_ID,
         valueSlots: 1,
         timestamp: 1_786_122_944n,
       }),

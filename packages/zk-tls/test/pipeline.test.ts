@@ -19,6 +19,7 @@ import {
   type ZkFetchPolicy,
   zkFetchClaimSchema,
   zkFetchEvidenceSchema,
+  zkFetchPolicyHashOf,
 } from '@thoth/zk-tls';
 import { verifyZkFetchProof, zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import {
@@ -30,6 +31,9 @@ import {
 } from '@thoth/zk-tls/client';
 import { describe, expect, it } from 'vitest';
 import { type TestWitness, testWitness } from './helpers/witness.js';
+
+/** The app id every claim in this suite is for. */
+const APP_ID = new Uint8Array(32).fill(0xa1);
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = join(
@@ -119,10 +123,30 @@ describe('verifyZkFetchProof', () => {
 });
 
 describe('zkFetch claim schema', () => {
+  it('rejects an appId or policyHash that is not 32 bytes', () => {
+    const claim = {
+      version: 1,
+      appId: APP_ID,
+      policyHash: new Uint8Array(32),
+      timestamp: 1_786_122_944,
+      nonce: new Uint8Array(32),
+      evidenceHash: new Uint8Array(32),
+      present: [true],
+      values: [12],
+    };
+    expect(() => zkFetchClaimSchema.parse({ ...claim, appId: new Uint8Array(31) })).toThrow(
+      /expected 32 bytes/,
+    );
+    expect(() => zkFetchClaimSchema.parse({ ...claim, policyHash: new Uint8Array(33) })).toThrow(
+      /expected 32 bytes/,
+    );
+  });
+
   it('parses a derived claim into bigint values', () => {
     const claim = zkFetchClaimSchema.parse({
       version: 1,
-      kind: 1,
+      appId: APP_ID,
+      policyHash: new Uint8Array(32),
       timestamp: 1_786_122_944,
       nonce: new Uint8Array(32),
       evidenceHash: new Uint8Array(32),
@@ -219,12 +243,14 @@ describe('zkFetch attestor + client', () => {
       policy?: ZkFetchPolicy;
       transport?: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature>;
       provers?: Record<string, ZkFetchProver>;
+      appId?: Uint8Array;
     } = {},
   ) =>
     zkFetchClient.init({
       trusted,
       transport: overrides.transport ?? transport,
       policy: overrides.policy ?? policy(),
+      appId: overrides.appId ?? APP_ID,
       valueSlots: 3,
       provers: overrides.provers ?? provers,
     });
@@ -314,6 +340,7 @@ describe('zkFetch attestor + client', () => {
         trusted,
         transport,
         policy: policy(),
+        appId: APP_ID,
         valueSlots: 3,
         provers: {},
       }),
@@ -323,6 +350,7 @@ describe('zkFetch attestor + client', () => {
         trusted,
         transport,
         policy: policy(),
+        appId: APP_ID,
         valueSlots: 3,
         provers: {
           ...provers,
@@ -338,6 +366,16 @@ describe('zkFetch attestor + client', () => {
         policy: policy([{ slot: 5, name: 'data', parse: 'float', optional: true }]),
       }),
     ).toThrow(/out of the claim's 3 value slots/);
+  });
+
+  it('refuses an appId that is not 32 bytes at init', () => {
+    expect(() => clientWith({ appId: new Uint8Array(31) })).toThrow(/appId must be 32 bytes/);
+  });
+
+  it('collects a claim for the configured app under the policy hash', async () => {
+    const attestment = await prove().then((proof) => proof.attest());
+    expect(attestment.claim.appId).toEqual(APP_ID);
+    expect(attestment.claim.policyHash).toEqual(zkFetchPolicyHashOf(policy()));
   });
 
   it('signs a derived claim and attests only what was disclosed', async () => {

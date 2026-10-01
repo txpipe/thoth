@@ -7,7 +7,7 @@ See the [package README](../README.md) for what the package exports and
 
 ## Client setup
 
-Five things go into `zkFetchClient.init`:
+Six things go into `zkFetchClient.init`:
 
 - **`trusted`.** The attestors your app pins, assembled with `@thoth/client`'s
   `buildTrustedSet(descriptors)`. A descriptor is `{ id, definition, publicKey,
@@ -17,6 +17,10 @@ Five things go into `zkFetchClient.init`:
   host-side mirror is `Attestor.attest`, and `@thoth/client` has a minimal HTTP
   example.
 - **`policy`.** The law every attestor in the set will check against; see below.
+  Every claim carries `zkFetchPolicyHashOf(policy)` as its `policyHash`, and
+  the consuming contract must seal that hash in its `policyHashes` set at
+  deploy, or it rejects the claim.
+- **`appId`.** The 32 bytes naming your app, signed into every claim.
 - **`valueSlots`.** The value-slot count of the contract that consumes the
   claim, its `#V`.
 - **`provers`.** Where evidence comes from, keyed by attestor id. Each entry
@@ -58,6 +62,7 @@ const client = zkFetchClient.init({
   trusted,
   transport,
   policy,
+  appId, // 32 bytes
   valueSlots: 2, // the contract's #V
   provers: {
     'attestor-0': zkFetchProver({ witnessUrl: 'ws://localhost:8001/ws' }),
