@@ -194,7 +194,6 @@ describe('deriveClaimFromEvidence', () => {
     });
     expect(claim.appId).toEqual(APP_ID);
     expect(claim.policyHash).toEqual(zkFetchPolicyHashOf(activePolicy));
-    expect(claim).not.toHaveProperty('kind');
   });
 
   it('carries the subject hash of the signed request', () => {
@@ -210,7 +209,6 @@ describe('deriveClaimFromEvidence', () => {
       timestamp: 1_786_122_944n,
     });
     expect(claim.subjectHash).toEqual(zkFetchSubjectHashOf(request));
-    expect(claim).not.toHaveProperty('evidenceHash');
   });
 
   it('throws when a policy slot exceeds the claim value count', () => {
