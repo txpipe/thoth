@@ -2,4 +2,5 @@ set -e
 npx biome ci
 npm run compact:no-zk
 npm run types
+npm run build
 npx vitest run
