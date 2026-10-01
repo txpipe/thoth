@@ -38,6 +38,10 @@
     "./claim": {
       "types": "./dist/claim.d.ts",
       "import": "./dist/claim.js"
+    },
+    "./claim-context": {
+      "types": "./dist/claim-context.d.ts",
+      "import": "./dist/claim-context.js"
     }
   },
   "scripts": {

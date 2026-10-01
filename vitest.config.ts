@@ -4,7 +4,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['packages/contracts/**/*.test.ts', 'packages/zk-tls/**/*.test.ts'],
+    include: [
+      'packages/contracts/**/*.test.ts',
+      'packages/core/**/*.test.ts',
+      'packages/zk-tls/**/*.test.ts',
+    ],
     exclude: [...configDefaults.exclude],
     reporters: 'verbose',
   },

@@ -2,7 +2,7 @@
 // modules, specialized to V=3 values, K=11 message fields, M=3 signatures,
 // N=2 threshold (2-of-3). Exists only to give the modules a top-level shell to
 // compile against and to re-export the pure parity surface (`message`,
-// `computeId`, `holderOf`) plus types and ledger fields
+// `computeId`, `holderOf`, `subjectHash`) plus types and ledger fields
 // the simulator/tests need.
 pragma language_version >= 0.22;
 
@@ -16,6 +16,20 @@ import "../../attestor_registry"<3, 11> prefix R_;
 export { A_Claim, A_ClaimEntry };
 
 export { A_freshnessWindow, A_claimsVault, A_nullifiers };
+
+// Parity surface for the claim context: a struct of four Bytes<32> fields, so
+// a test can check the compiled `persistentHash<Subject>` against the
+// off-chain `@thoth/core/claim-context` subject hash.
+export struct Subject {
+  method: Bytes<32>;
+  host: Bytes<32>;
+  path: Bytes<32>;
+  body: Bytes<32>;
+}
+
+export pure circuit subjectHash(s: Subject): Bytes<32> {
+  return persistentHash<Subject>(s);
+}
 
 export circuit verifyAttestation(): [] {
   A_verifyAttestation();

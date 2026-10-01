@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { CLAIM_VERSION } from '@thoth/core/claim';
+import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
 import { hexToBytes } from './hex.js';
 
@@ -11,6 +12,9 @@ import { hexToBytes } from './hex.js';
  * {@link ZkFetchPolicy.maxSkewS}.
  */
 export const DEFAULT_MAX_SKEW_S = 60;
+
+/** The zkFetch kind's law tag, also its kind identifier. */
+export const ZK_FETCH_LAW = 'zk-fetch@1';
 
 /**
  * The claim a Reclaim witness signs: a canonical, JSON-stringified record of
@@ -120,7 +124,7 @@ export const zkFetchClaimSchema: z.ZodType<
  */
 export interface ZkFetchDefinition {
   /** The kind identifier, `zk-fetch@1`. */
-  readonly kind: 'zk-fetch@1';
+  readonly kind: typeof ZK_FETCH_LAW;
   /** Runtime schema for the policy. */
   readonly policy: typeof zkFetchPolicySchema;
   /** Runtime schema for the evidence. */
@@ -241,6 +245,115 @@ export const zkFetchPolicySchema = z.object({
   claimKind: z.bigint().optional(),
 });
 
+/**
+ * Parse and normalize a zkFetch policy into the form every hash and check
+ * reads.
+ *
+ * So that policies that mean the same thing agree: unknown keys are dropped,
+ * defaults are filled in, hosts are lowercased, deduplicated and sorted, and
+ * slots are sorted by index and have `optional` filled.
+ *
+ * @param policy — the policy to normalize.
+ * @returns the parsed, normalized policy.
+ * @throws if the policy fails {@link zkFetchPolicySchema}.
+ */
+export const normalizePolicy = (policy: ZkFetchPolicy) => {
+  const parsed = zkFetchPolicySchema.parse(policy);
+  return {
+    allowedHosts: [...new Set(parsed.allowedHosts.map((host) => host.toLowerCase()))].sort(),
+    slots: parsed.slots
+      .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
+      .sort((a, b) => a.slot - b.slot),
+    maxSkewS: parsed.maxSkewS ?? DEFAULT_MAX_SKEW_S,
+    maxResponseBytes: parsed.maxResponseBytes,
+    claimVersion: parsed.claimVersion ?? CLAIM_VERSION,
+    claimKind: parsed.claimKind ?? 1n,
+  };
+};
+
+/**
+ * Hash a zkFetch policy under the `zk-fetch@1` law.
+ *
+ * The policy is normalized first (see {@link normalizePolicy}), so policies
+ * that mean the same thing hash the same. The wire version is the policy's
+ * `claimVersion` (default 1).
+ *
+ * @param policy — the policy to hash.
+ * @returns the 32-byte policy hash.
+ * @throws if the policy fails {@link zkFetchPolicySchema}.
+ * @see policyHashOf
+ */
+export const zkFetchPolicyHashOf = (policy: ZkFetchPolicy): Uint8Array => {
+  const normalized = normalizePolicy(policy);
+  return policyHashOf(ZK_FETCH_LAW, normalized, normalized.claimVersion);
+};
+
+/**
+ * SHA-256 of a string, raw bytes.
+ *
+ * @param data — the input string.
+ * @returns the 32-byte digest.
+ */
+const sha256 = (data: string): Uint8Array =>
+  new Uint8Array(createHash('sha256').update(data, 'utf-8').digest());
+
+/** The request identity a zkFetch claim is about: the method, URL and body. */
+export interface ZkFetchSubjectRequest {
+  /** The HTTP method. */
+  method: string;
+  /** The requested URL. */
+  url: string;
+  /** The request body; absent means empty. */
+  body?: string;
+}
+
+/**
+ * The zkFetch subject struct: one SHA-256 digest per part of the request.
+ *
+ * Mirrors a Compact `struct { method, host, path, body: Bytes<32> }`. Keeping
+ * the host apart lets an app bind the source host in-circuit while the path,
+ * which may name an account, stays private.
+ */
+export interface ZkFetchSubject {
+  /** SHA-256 of the uppercased method. */
+  method: Uint8Array;
+  /** SHA-256 of the URL host, lowercased, with any non-default port. */
+  host: Uint8Array;
+  /** SHA-256 of the URL path and query, without the fragment. */
+  path: Uint8Array;
+  /** SHA-256 of the body. */
+  body: Uint8Array;
+}
+
+/**
+ * Build the zkFetch subject struct of a request.
+ *
+ * @param request — the request identity.
+ * @returns the subject struct.
+ * @throws if the URL does not parse.
+ */
+export const zkFetchSubjectOf = (request: ZkFetchSubjectRequest): ZkFetchSubject => {
+  const url = new URL(request.url);
+  return {
+    method: sha256(request.method.toUpperCase()),
+    host: sha256(url.host),
+    path: sha256(`${url.pathname}${url.search}`),
+    body: sha256(request.body ?? ''),
+  };
+};
+
+/**
+ * Hash the subject of a zkFetch request.
+ *
+ * @param request — the request identity.
+ * @returns the 32-byte subject hash of {@link zkFetchSubjectOf} the request.
+ * @throws if the URL does not parse.
+ */
+export const zkFetchSubjectHashOf = (request: ZkFetchSubjectRequest): Uint8Array => {
+  const { method, host, path, body } = zkFetchSubjectOf(request);
+  return subjectHashOf([method, host, path, body]);
+};
+
 const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => {
   const lower = host.toLowerCase();
   return allowedHosts.some(
@@ -323,8 +436,7 @@ const canonicalJson = (value: unknown): string => {
  * @param data — the input string.
  * @returns the lower-hex digest.
  */
-const sha256Hex = (data: string): string =>
-  createHash('sha256').update(data, 'utf-8').digest('hex');
+const sha256Hex = (data: string): string => Buffer.from(sha256(data)).toString('hex');
 
 /** The contract's value type is `Uint<64>`; only non-negative values below 2^64 are certifiable. */
 const UINT64_MAX = 1n << 64n;
@@ -449,9 +561,10 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
     present[slot.slot] = true;
     values[slot.slot] = value;
   }
+  const { claimVersion, claimKind } = normalizePolicy(policy);
   return {
-    version: policy.claimVersion ?? CLAIM_VERSION,
-    kind: policy.claimKind ?? 1n,
+    version: claimVersion,
+    kind: claimKind,
     timestamp,
     nonce: hexToBytes(sha256Hex(`thoth:nonce:${verified.identifier}`)),
     evidenceHash: hexToBytes(verified.identifier),

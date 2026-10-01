@@ -13,11 +13,12 @@ import { claimToMessage } from '@thoth/core/claim';
 import { hexToBytes } from '../hex.js';
 import {
   assertEvidenceMatchesPolicy,
-  DEFAULT_MAX_SKEW_S,
   deriveClaimFromEvidence,
+  normalizePolicy,
   parseDisclosedValue,
   parsedEvidenceView,
   type VerifiedEvidence,
+  ZK_FETCH_LAW,
   type ZkFetchDefinition,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
@@ -120,7 +121,7 @@ export const assertClaimMatchesDisclosures = (options: {
  * ({@link verifyZkFetchProof}), check it against the policy
  * ({@link assertEvidenceMatchesPolicy}), bound the client-proposed timestamp
  * against the witness's own observation (`maxSkewS`, default
- * {@link DEFAULT_MAX_SKEW_S}), and enforce that the proposed claim matches the
+ * `DEFAULT_MAX_SKEW_S`), and enforce that the proposed claim matches the
  * disclosed values ({@link assertClaimMatchesDisclosures}). `message` encodes a
  * claim into its flat field vector via `claimToMessage`.
  *
@@ -129,7 +130,7 @@ export const assertClaimMatchesDisclosures = (options: {
  */
 export function createZkFetchDefinition(): ZkFetchDefinition {
   return defineAttestor({
-    kind: 'zk-fetch@1',
+    kind: ZK_FETCH_LAW,
     policy: zkFetchPolicySchema,
     evidence: zkFetchEvidenceSchema,
     claim: zkFetchClaimSchema,
@@ -137,7 +138,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
       const verified = await verifyZkFetchProof(input.evidence);
       assertEvidenceMatchesPolicy(verified, input.policy);
       const observedAt = BigInt(input.evidence.claim.timestampS);
-      const maxSkewS = BigInt(input.policy.maxSkewS ?? DEFAULT_MAX_SKEW_S);
+      const maxSkewS = BigInt(normalizePolicy(input.policy).maxSkewS);
       const skew = input.claim.timestamp - observedAt;
       const absSkew = skew < 0n ? -skew : skew;
       if (absSkew > maxSkewS) {
