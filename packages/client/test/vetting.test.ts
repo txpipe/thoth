@@ -42,6 +42,35 @@ describe('resolveAttestation', () => {
     ).resolves.toMatchObject({ registryIndex: 0 });
   });
 
+  it.each([
+    { name: 'string-to-bigint', schema: z.string().transform(BigInt), input: '42' },
+    { name: 'non-idempotent', schema: z.bigint().transform((value) => value + 1n), input: 41n },
+  ])('vets parsed claims with a $name transform', async ({ schema, input }) => {
+    const transformedDefinition = {
+      ...definition,
+      claim: z.object({ value: schema }),
+    };
+    const parsedClaim = transformedDefinition.claim.parse({ value: input });
+    const transformedAttestor = { ...attestor, definition: transformedDefinition };
+    const transformedOptions = {
+      ...options,
+      trusted: buildTrustedSet([transformedAttestor]),
+      attestor: transformedAttestor,
+      expectedClaim: parsedClaim,
+      attestation: { ...attestation, claim: parsedClaim },
+    };
+
+    await expect(resolveAttestation(transformedOptions)).resolves.toMatchObject({
+      registryIndex: 0,
+    });
+    await expect(
+      resolveAttestation({
+        ...transformedOptions,
+        attestation: { ...transformedOptions.attestation, claim: { value: 43n } },
+      }),
+    ).rejects.toMatchObject({ reason: 'claim' });
+  });
+
   it('rejects a message inconsistent with the claim even without expectedMessage', async () => {
     await expect(
       resolveAttestation({ ...options, attestation: { ...attestation, message: [43n] } }),

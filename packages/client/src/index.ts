@@ -162,7 +162,7 @@ export interface AttestationVerifier<PK, S, Msg = FlatMessage> {
  *
  * Checks the pinned key, registry slot, kind, expected claim, claim-to-message
  * binding, and signature. When provided, `expectedMessage` must also match.
- * Verifier errors reject the signature; schema failures reject the claim.
+ * Verifier errors reject the signature. The caller supplies the parsed expected claim.
  *
  * @param options — the trusted set, the attestor that was asked, the returned
  *   attestation, verifier, expected parsed claim, and optional expected message.
@@ -203,11 +203,10 @@ export async function resolveAttestation<
   if (attestation.kind !== attestor.definition.kind) {
     throw new AttestationMismatchError(attestor.id, 'kind');
   }
-  const parsedClaim = attestor.definition.claim.safeParse(attestation.claim);
-  if (!parsedClaim.success || !structuredEquals(attestation.claim, options.expectedClaim)) {
+  if (!structuredEquals(attestation.claim, options.expectedClaim)) {
     throw new AttestationMismatchError(attestor.id, 'claim');
   }
-  if (!structuredEquals(attestation.message, attestor.definition.message(parsedClaim.data))) {
+  if (!structuredEquals(attestation.message, attestor.definition.message(options.expectedClaim))) {
     throw new AttestationMismatchError(attestor.id, 'message');
   }
   let validSignature = false;

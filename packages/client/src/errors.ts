@@ -2,8 +2,8 @@
  * A collected attestation failed vetting.
  *
  * `reason` identifies a key, message, registry slot, kind, claim, or signature
- * mismatch. Schema failures count as claim mismatches; verifier failures,
- * including thrown errors, count as signature mismatches.
+ * mismatch. Verifier failures, including thrown errors, count as signature
+ * mismatches.
  */
 export class AttestationMismatchError extends Error {
   /** The id of the offending attestor. */

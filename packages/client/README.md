@@ -100,8 +100,10 @@ Supply an `AttestationVerifier<PK, S, Msg>` whose `verify(publicKey, message,
 signature)` returns a boolean or a promise. `resolveAttestation` requires that
 verifier and the parsed `expectedClaim`. It rejects a different kind or claim,
 a message that does not encode the returned claim, and an invalid signature.
-Verifier errors become a `'signature'` mismatch; invalid returned claims become
-a `'claim'` mismatch. The result is a promise of a slot-tagged attestation.
+Verifier errors become a `'signature'` mismatch; a returned claim that differs
+from the expected claim becomes a `'claim'` mismatch. The caller must parse the
+expected claim first. Vetting compares schema outputs without applying input
+transforms again. The result is a promise of a slot-tagged attestation.
 
 For the contract's Jubjub Schnorr scheme, use the adapter from the separate
 `@thoth/client/jubjub` entry point. It uses Compact runtime `0.19.0`, the same
