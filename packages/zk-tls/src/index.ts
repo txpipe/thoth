@@ -464,6 +464,37 @@ const sha256Hex = (data: string): string => Buffer.from(sha256(data)).toString('
 /** The contract's value type is `Uint<64>`; only non-negative values below 2^64 are certifiable. */
 const UINT64_MAX = 1n << 64n;
 
+/** Parse an unsigned decimal, round halves up, and require a Uint<64> result. */
+const parseDecimalUint64 = (value: string): bigint | null => {
+  const match = /^([0-9]+)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/.exec(value);
+  if (match?.[1] === undefined || match[0] !== value) {
+    return null;
+  }
+  const whole = match[1];
+  const fraction = match[2] ?? '';
+  const exponent = BigInt(match[3] ?? '0');
+  const digits = (whole + fraction).replace(/^0+/, '');
+  if (digits.length === 0) {
+    return 0n;
+  }
+
+  // Removing leading zeros preserves the number of digits after the decimal point.
+  const integerDigitCount = BigInt(digits.length) - BigInt(fraction.length) + exponent;
+  if (integerDigitCount < 0n) {
+    return 0n;
+  }
+  // Uint<64> has at most 20 digits; reject before padding enormous exponents.
+  if (integerDigitCount > 20n) {
+    return null;
+  }
+
+  const position = Number(integerDigitCount);
+  const integerDigits = digits.slice(0, position).padEnd(position, '0') || '0';
+  const roundUp = (digits[position] ?? '0') >= '5';
+  const rounded = BigInt(integerDigits) + (roundUp ? 1n : 0n);
+  return rounded < UINT64_MAX ? rounded : null;
+};
+
 /**
  * Parse a disclosed string value into the claim's numeric slot value.
  *
@@ -492,32 +523,8 @@ export const parseDisclosedValue = (value: string, rule: ZkFetchParseRule): bigi
       const big = BigInt(value);
       return big < UINT64_MAX ? big : null;
     }
-    case 'float': {
-      const match = /^([0-9]+)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/.exec(value);
-      if (!match || match[0] !== value) {
-        return null;
-      }
-      const whole = match[1] ?? '';
-      const coefficient = whole + (match[2] ?? '');
-      const digits = coefficient.replace(/^0+/, '');
-      if (digits.length === 0) {
-        return 0n;
-      }
-      // Move the decimal point without converting the disclosed value to a double.
-      const decimalPosition =
-        BigInt(whole.length - (coefficient.length - digits.length)) + BigInt(match[3] ?? '0');
-      if (decimalPosition < 0n) {
-        return 0n;
-      }
-      // A Uint<64> has at most 20 digits. Bound padding even for enormous exponents.
-      if (decimalPosition > 20n) {
-        return null;
-      }
-      const position = Number(decimalPosition);
-      const integer = BigInt(digits.slice(0, position).padEnd(position, '0') || '0');
-      const rounded = integer + ((digits[position] ?? '0') >= '5' ? 1n : 0n);
-      return rounded < UINT64_MAX ? rounded : null;
-    }
+    case 'float':
+      return parseDecimalUint64(value);
   }
 };
 
