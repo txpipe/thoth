@@ -63,7 +63,6 @@ const attestor = buildAttestor({
     const message = definition.message(parsed.claim);
     const signature = await signer.sign(message);
     return {
-      kind: definition.kind,
       claim: parsed.claim,
       message,
       publicKey: /* the key pair's public key */,

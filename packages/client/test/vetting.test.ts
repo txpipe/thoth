@@ -23,7 +23,7 @@ const publicKey = jubjubSchnorrVerifyingKey(17n);
 const signature = jubjubSchnorrSign(new CompactTypeVector(1, CompactTypeField), message, 17n);
 const attestor = { id: 'alice', definition, publicKey, registryIndex: 0 };
 const trusted = buildTrustedSet([attestor]);
-const attestation = { kind: definition.kind, claim, message, publicKey, signature };
+const attestation = { claim, message, publicKey, signature };
 const options = { trusted, attestor, attestation, verifier: jubjubVerifier, expectedClaim: claim };
 
 describe('resolveAttestation', () => {
@@ -130,11 +130,6 @@ describe('resolveAttestation', () => {
     await expect(
       resolveAttestation({ ...options, attestation: { ...attestation, claim: { value: 43n } } }),
     ).rejects.toMatchObject({ reason: 'claim' });
-  });
-  it('rejects an off-chain kind different from the descriptor', async () => {
-    await expect(
-      resolveAttestation({ ...options, attestation: { ...attestation, kind: 'other@1' } }),
-    ).rejects.toMatchObject({ reason: 'kind' });
   });
   it('rejects a forged signature with the pinned key and expected message', async () => {
     await expect(

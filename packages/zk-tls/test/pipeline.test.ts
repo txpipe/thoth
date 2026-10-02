@@ -298,24 +298,19 @@ describe('zkFetch attestor + client', () => {
     await expect(proof.attest()).rejects.toMatchObject({ reason: 'signature' });
   });
 
-  it.each(['kind', 'claim'] as const)(
-    'rejects wrong off-chain %s from the transport',
-    async (field) => {
-      const broken = {
-        request: async (...args: Parameters<typeof transport.request>) => {
-          const result = await transport.request(...args);
-          return field === 'kind'
-            ? { ...result, kind: 'wrong@1' as typeof result.kind }
-            : { ...result, claim: { ...result.claim, holder: new Uint8Array(32).fill(0xff) } };
-        },
-      };
-      const proof = await clientWith({ transport: broken }).proveReq(
-        { url: 'https://api.github.com/repos/x', method: 'GET' },
-        new Uint8Array(32).fill(0xc1),
-      );
-      await expect(proof.attest()).rejects.toMatchObject({ reason: field });
-    },
-  );
+  it('rejects a wrong claim from the transport', async () => {
+    const broken = {
+      request: async (...args: Parameters<typeof transport.request>) => {
+        const result = await transport.request(...args);
+        return { ...result, claim: { ...result.claim, holder: new Uint8Array(32).fill(0xff) } };
+      },
+    };
+    const proof = await clientWith({ transport: broken }).proveReq(
+      { url: 'https://api.github.com/repos/x', method: 'GET' },
+      new Uint8Array(32).fill(0xc1),
+    );
+    await expect(proof.attest()).rejects.toMatchObject({ reason: 'claim' });
+  });
 
   const prove = () =>
     clientWith().proveReq(

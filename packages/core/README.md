@@ -22,7 +22,7 @@ The package exposes three entry points:
   - `AttestationInput<P, E, C>` — the raw policy / evidence / claim submitted to an attestor
   - `AttestorDefinition<K, P, E, C>` — the shareable, keyless law a kind of attestor implements: zod schemas for `policy`/`evidence`/`claim`, plus `verify` (decide whether to attest) and `message` (encode a claim into the message type)
   - `AttestorDescriptor<D, PK>` — the client-facing face of an attestor: everything a client needs to address it
-  - `Attestation<K, C, PK, S>` — the signed artifact an attestor produces and a client collects
+  - `Attestation<C, PK, S>` — the signed artifact an attestor produces and a client collects
 - **`@thoth/core/claim`**:
   - `Claim<V>` / `ClaimInput<V>` — the canonical claim: header (version, appId, policyHash, windowStart, windowEnd, subjectHash, holder), a `present` mask, and `V` numeric `values`
   - `claimSchema<V>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape
@@ -34,6 +34,11 @@ The package exposes three entry points:
   - `subjectHashOf(fields)` — hash a kind's subject struct; equals the circuit's `persistentHash` of that struct
   - `holderCommitmentOf(secret)` — the per-claim holder commitment of a holder secret; equals the circuit's `holderCommitment`
   - `claimContextDigestOf(context)` — the digest of a `ClaimContext` that every witness signs into its context
+
+Kind identity belongs to `AttestorDefinition`. An attestation carries the
+claim, message, public key, and signature; callers already have the definition
+of the attestor they queried. For standard claims, `policyHashOf` commits to
+the law tag, policy, and wire version inside the signed claim.
 
 ### The flat message type
 

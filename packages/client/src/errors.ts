@@ -1,7 +1,7 @@
 /**
  * A collected attestation failed vetting.
  *
- * `reason` identifies a key, message, registry slot, kind, claim, or signature
+ * `reason` identifies a key, message, registry slot, claim, or signature
  * mismatch. Verifier failures, including thrown errors, count as signature
  * mismatches.
  */
@@ -9,7 +9,7 @@ export class AttestationMismatchError extends Error {
   /** The id of the offending attestor. */
   readonly attestorId: string;
   /** Which integrity check failed. */
-  readonly reason: 'public-key' | 'message' | 'registry-index' | 'kind' | 'claim' | 'signature';
+  readonly reason: 'public-key' | 'message' | 'registry-index' | 'claim' | 'signature';
 
   /**
    * @param attestorId — the offending attestor's id.
@@ -17,7 +17,7 @@ export class AttestationMismatchError extends Error {
    */
   constructor(
     attestorId: string,
-    reason: 'public-key' | 'message' | 'registry-index' | 'kind' | 'claim' | 'signature',
+    reason: 'public-key' | 'message' | 'registry-index' | 'claim' | 'signature',
   ) {
     super(`attestation from "${attestorId}" failed ${reason} check`);
     this.attestorId = attestorId;

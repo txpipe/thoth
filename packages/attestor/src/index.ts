@@ -111,7 +111,7 @@ export interface Attestor<
    */
   attest(
     input: AttestationInput<z.input<D['policy']>, z.input<D['evidence']>, z.input<D['claim']>>,
-  ): Promise<Attestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>>;
+  ): Promise<Attestation<z.output<D['claim']>, PK, S, MessageOf<D>>>;
 }
 
 /**
@@ -170,7 +170,7 @@ export function buildAttestor<
     definition: D,
     signer: AttestorSigner<S, MessageOf<D>>,
     input: AttestationInput<z.input<D['policy']>, z.input<D['evidence']>, z.input<D['claim']>>,
-  ) => Promise<Attestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>>;
+  ) => Promise<Attestation<z.output<D['claim']>, PK, S, MessageOf<D>>>;
 }): Attestor<D, PK, S> {
   const { id, definition, keyPair, registryIndex, attest } = parts;
   return {

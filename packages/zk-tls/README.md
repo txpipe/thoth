@@ -221,7 +221,7 @@ The kind sits in the middle of the Thoth layering:
   witnessed HTTPS interaction; each attestor checks the Reclaim ECDSA signature
   and that it came from its own witness before signing. The client derives the
   deterministic expected claim from the evidence, and `resolveAttestation`
-  checks the pinned key, kind, claim, message binding, and attestor signature
+  checks the pinned key, claim, message binding, and attestor signature
   using the configured verifier. Forged transport responses fail before
   submission. The client does not repeat the witness ECDSA check. The
   on-chain registry still enforces the N-of-M threshold.

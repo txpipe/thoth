@@ -232,7 +232,6 @@ const buildClaimProposal = async <V extends number>(options: {
  * @typeParam S — the signature scheme's signature type.
  */
 export type ZkFetchCollectedAttestation<V extends number, PK, S> = CollectedAttestation<
-  ZkFetchDefinition['kind'],
   Claim<V>,
   PK,
   S,
@@ -482,7 +481,7 @@ export type ZkFetchAttestationInput = AttestationInput<
  *
  * For each target attestor: resolve it in the trusted set, forward the raw
  * input over the transport, and vet the returned attestation — signing key
- * matches the descriptor, kind and claim match the request, the message
+ * matches the descriptor, the claim matches the request, the message
  * encodes that claim, and the signature verifies. The registry's signature
  * threshold is the contract's job; the client's job is that every collected attestation
  * commits to the *same* message.

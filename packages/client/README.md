@@ -28,13 +28,13 @@ npm install @thoth/client
   attestor: `request(attestor, input): Promise<Attestation>`. A kind SDK or the
   app supplies the concrete transport. The host-side mirror is `Attestor.attest` in `@thoth/attestor`.
 - `await resolveAttestation({ trusted, attestor, attestation, verifier, expectedClaim, expectedMessage? })` —
-  checks the pinned key, kind, expected claim, signature, claim-to-message
+  checks the pinned key, expected claim, signature, claim-to-message
   binding, slot bounds, and optionally the expected message, then tags the
   attestation with its slot as a `CollectedAttestation`.
-- `CollectedAttestation<K, C, PK, S, Msg>` — the collection output shape:
+- `CollectedAttestation<C, PK, S, Msg>` — the collection output shape:
   an `Attestation` plus the `registryIndex` it belongs to.
 - Errors: `AttestationMismatchError` (thrown by `resolveAttestation`; `reason`
-  is `'public-key' | 'message' | 'registry-index' | 'kind' | 'claim' | 'signature'`),
+  is `'public-key' | 'message' | 'registry-index' | 'claim' | 'signature'`),
   `AttestorNotInTrustedSetError`, `InvalidTrustedSetError` (thrown by
   `buildTrustedSet`) — exported from `@thoth/client/errors`.
 
@@ -72,7 +72,7 @@ const httpTransport: AttestorTransport<MyDefinition, MyPublicKey, MySignature> =
   async request(
     attestor: AttestorDescriptor<MyDefinition, MyPublicKey>,
     input: AttestationInput<MyPolicy, MyEvidence, MyClaim>,
-  ): Promise<Attestation<MyDefinition['kind'], MyClaim, MyPublicKey, MySignature, MyMessage>> {
+  ): Promise<Attestation<MyClaim, MyPublicKey, MySignature, MyMessage>> {
     const res = await fetch(`${attestor.id}/attest`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -98,7 +98,7 @@ const attestor = attestorOf(trusted, 'txpipeEndpoint'); // throws AttestorNotInT
 
 Supply an `AttestationVerifier<PK, S, Msg>` whose `verify(publicKey, message,
 signature)` returns a boolean or a promise. `resolveAttestation` requires that
-verifier and the parsed `expectedClaim`. It rejects a different kind or claim,
+verifier and the parsed `expectedClaim`. It rejects a different claim,
 a message that does not encode the returned claim, and an invalid signature.
 Verifier errors become a `'signature'` mismatch; a returned claim that differs
 from the expected claim becomes a `'claim'` mismatch. The caller must parse the
@@ -126,10 +126,12 @@ const collected = await resolveAttestation({
 The client verifies attestor signatures before collecting them. A broken or
 malicious transport can otherwise return a forged signature with the correct
 public key and message, causing a transaction to fail after submission and
-costing fees. Kind and claim checks also reject misleading off-chain metadata
-that the signed message alone does not authenticate. Contract verification
-still enforces the registry and N-of-M threshold. Transport implementations
-must decode wire values into the typed attestation before vetting.
+costing fees. The returned claim must match the expected claim and encode the
+signed message. Kind identity belongs to the pinned definition, so the response
+carries no kind label to check. For zkFetch, the signed policy hash commits to
+the law tag, policy, and wire version. Contract verification still enforces the
+registry and N-of-M threshold. Transport implementations must decode wire
+values into the typed attestation before vetting.
 
 ## Links
 

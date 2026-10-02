@@ -259,7 +259,7 @@ export function zkFetchAttestor<PK, S>(parts: {
       });
       const message = claimToMessage(claim);
       const signature = await signer.sign(message);
-      return { kind: definition.kind, claim, message, publicKey, signature };
+      return { claim, message, publicKey, signature };
     },
   });
 }

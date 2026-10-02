@@ -125,20 +125,17 @@ export interface AttestorDescriptor<
 
 /**
  * The artifact an attestor produces and a client collects: it ties the signed
- * `message` and `signature` together with the `kind`, the certified `claim`,
- * and the `publicKey` that produced the signature — everything the client
- * later needs to submit the attestation to a contract.
+ * `message` and `signature` together with the certified `claim` and the
+ * `publicKey` that produced the signature. These are the values the client
+ * later uses to submit the attestation to a contract.
  *
- * @typeParam K — the attestor kind.
  * @typeParam C — the certified claim (the client-proposed claim that
  *   survived `verify` and was signed).
  * @typeParam PK — the attesting public key.
  * @typeParam S — the signature scheme type.
  * @typeParam Msg — the signed-message type; defaults to {@link FlatMessage}.
  */
-export interface Attestation<K, C, PK, S, Msg = FlatMessage> {
-  /** The attestor kind that produced this attestation. */
-  kind: K;
+export interface Attestation<C, PK, S, Msg = FlatMessage> {
   /** The parsed claim that was verified and is now certified. */
   claim: C;
   /** The message the signature commits to (`definition.message(claim)`). */

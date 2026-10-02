@@ -121,23 +121,22 @@ export interface AttestorTransport<
   request(
     attestor: AttestorDescriptor<D, PK>,
     input: AttestationInput<z.input<D['policy']>, z.input<D['evidence']>, z.input<D['claim']>>,
-  ): Promise<Attestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>>;
+  ): Promise<Attestation<z.output<D['claim']>, PK, S, MessageOf<D>>>;
 }
 
 /**
  * One collected attestation paired with the registry slot it answered from.
  *
- * @typeParam K — the attestor kind.
  * @typeParam C — the certified claim.
  * @typeParam PK — the attesting public key.
  * @typeParam S — the signature scheme type.
  * @typeParam Msg — the signed-message type; defaults to {@link FlatMessage}.
  */
-export interface CollectedAttestation<K, C, PK, S, Msg = FlatMessage> {
+export interface CollectedAttestation<C, PK, S, Msg = FlatMessage> {
   /** The registry slot the attestation was collected from. */
   readonly registryIndex: number;
   /** The attested artifact collected from that slot. */
-  readonly attestation: Attestation<K, C, PK, S, Msg>;
+  readonly attestation: Attestation<C, PK, S, Msg>;
 }
 
 /**
@@ -160,7 +159,7 @@ export interface AttestationVerifier<PK, S, Msg = FlatMessage> {
 /**
  * Validate one attestation against its descriptor and tag it with its slot.
  *
- * Checks the pinned key, registry slot, kind, expected claim, claim-to-message
+ * Checks the pinned key, registry slot, expected claim, claim-to-message
  * binding, and signature. When provided, `expectedMessage` must also match.
  * Verifier errors reject the signature. The caller supplies the parsed expected claim.
  *
@@ -180,14 +179,14 @@ export async function resolveAttestation<
   /** The attestor that was asked. */
   readonly attestor: AttestorDescriptor<D, PK>;
   /** The attestation returned for that attestor. */
-  readonly attestation: Attestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>;
+  readonly attestation: Attestation<z.output<D['claim']>, PK, S, MessageOf<D>>;
   /** The scheme that verifies the returned signature. */
   readonly verifier: AttestationVerifier<PK, S, MessageOf<D>>;
   /** The parsed claim the caller asked the attestor to certify. */
   readonly expectedClaim: z.output<D['claim']>;
   /** The message the attestor was expected to sign; checked when provided. */
   readonly expectedMessage?: MessageOf<D>;
-}): Promise<CollectedAttestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>> {
+}): Promise<CollectedAttestation<z.output<D['claim']>, PK, S, MessageOf<D>>> {
   const { trusted, attestor, attestation, expectedMessage, verifier } = options;
 
   if (!structuredEquals(attestation.publicKey, attestor.publicKey)) {
@@ -200,9 +199,6 @@ export async function resolveAttestation<
     throw new AttestationMismatchError(attestor.id, 'registry-index');
   }
 
-  if (attestation.kind !== attestor.definition.kind) {
-    throw new AttestationMismatchError(attestor.id, 'kind');
-  }
   if (!structuredEquals(attestation.claim, options.expectedClaim)) {
     throw new AttestationMismatchError(attestor.id, 'claim');
   }
