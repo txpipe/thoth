@@ -510,6 +510,49 @@ describe('zkFetch attestor + client', () => {
     expect(contacted).toBe(false);
   });
 
+  it('does not count a verifier that blocks past the operator timeout', async () => {
+    const blockingVerifier = {
+      verify: (key: FakePublicKey, message: FlatMessage, signature: string) => {
+        if (key.id === 'attestor-0') {
+          // Blocks the event loop, so the timeout timer cannot fire first.
+          const until = Date.now() + 150;
+          while (Date.now() < until) {}
+        }
+        return fakeVerifier.verify(key, message, signature);
+      },
+    };
+    const client = zkFetchClient.init({
+      trusted,
+      transport,
+      verifier: blockingVerifier,
+      policy: policy(),
+      appId: APP_ID,
+      valueSlots: 3,
+      provers,
+    });
+    // Threshold 1, so the blocked operator runs alone and the spare starts on a fresh deadline.
+    const result = await client.collect(collectionRequest, {
+      ...intent(),
+      threshold: 1,
+      operatorTimeoutMs: 100,
+    });
+    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([1]);
+    expect(result.failures).toEqual([{ registryIndex: 0, reason: 'timeout' }]);
+  });
+
+  it('rejects an uncloneable request without exposing its values', async () => {
+    const request = {
+      ...collectionRequest,
+      secretHeaders: { authorization: 'Bearer private-token' },
+      context: { leak: () => 'Bearer private-token' },
+    };
+    const rejection = await clientWith()
+      .collect(request, intent())
+      .catch((error: unknown) => error);
+    expect(rejection).toMatchObject({ reason: 'invalid-request' });
+    expect(String(rejection)).not.toContain('private-token');
+  });
+
   it.each(['transport', 'verifier'] as const)(
     'bounds a hanging %s by the operator timeout',
     async (phase) => {

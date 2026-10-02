@@ -146,10 +146,10 @@ and `collected` describe one threshold group, sorted by registry slot.
 `failures` contains only registry slots and safe phase reasons. Valid
 but disagreeing responses belong to other groups and do not appear as failures.
 
-`ZkFetchCollectionError.reason` is `invalid-intent`, `expired`, or `threshold`.
+`ZkFetchCollectionError.reason` is `invalid-request`, `invalid-intent`, `expired`, or `threshold`.
 The error retains safe `failures`, never a remote exception or its cause.
 Operator diagnostics use `evidence`, `attestation`, `timeout`, or `secret`.
-The timeout covers proving, transport, and asynchronous signature verification
+The timeout covers proving, transport, and signature verification
 together. Late responses cannot count or proceed to a later phase. The current
 prover and transport interfaces cannot cancel underlying network work, so
 requests already started may continue after the client stops waiting.

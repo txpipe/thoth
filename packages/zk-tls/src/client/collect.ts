@@ -40,7 +40,7 @@ export interface ZkFetchCollection<V extends number, PK, S> extends Attestment<V
 /** No threshold was collected. Carries no request, evidence, or remote error text. */
 export class ZkFetchCollectionError extends Error {
   /** Why collection failed. */
-  readonly reason: 'invalid-intent' | 'expired' | 'threshold';
+  readonly reason: 'invalid-request' | 'invalid-intent' | 'expired' | 'threshold';
   /** Operators that failed before collection stopped. */
   readonly failures: readonly ZkFetchCollectionFailure[];
 
@@ -139,6 +139,15 @@ const parseIntent = <PK>(
   }
 };
 
+/** Snapshot the request. A clone error can quote request values, so it is never rethrown. */
+const snapshotRequest = (request: ZkFetchRequest): ZkFetchRequest => {
+  try {
+    return structuredClone(request);
+  } catch {
+    throw new ZkFetchCollectionError('invalid-request');
+  }
+};
+
 /** Whether evidence carries a secret anywhere, including inside JSON-encoded strings. */
 const containsSecret = (value: unknown, secrets: readonly string[]): boolean => {
   if (typeof value === 'string') {
@@ -174,27 +183,33 @@ const runSession = async <V extends number, PK, S>(
   attestor: Attestor<PK>,
 ): Promise<Signed<V, PK, S>> => {
   const { trusted, transport, verifier, policy, appId, valueSlots, provers } = config;
+  const deadline = Math.min(Date.now() + intent.operatorTimeoutMs, intent.expiresAt);
+  // The timer bounds phases that never settle; the clock check also catches
+  // phases that block the event loop past the deadline, so the timer cannot fire.
   let timedOut = false;
+  const assertOpen = () => {
+    if (timedOut || Date.now() >= deadline) {
+      throw new SessionError('timeout');
+    }
+  };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    const deadline = Math.min(Date.now() + intent.operatorTimeoutMs, intent.expiresAt);
     timer = setTimeout(() => {
       timedOut = true;
       reject(new SessionError('timeout'));
     }, deadline - Date.now());
   });
 
-  /** Run one phase, replacing any error with `reason`. */
+  /** Run one phase within the deadline, replacing any error with `reason`. */
   const phase = async <T>(reason: FailureReason, run: () => T | Promise<T>) => {
+    assertOpen();
     let result: Awaited<T>;
     try {
       result = await run();
     } catch {
       throw new SessionError(reason);
     }
-    if (timedOut) {
-      throw new SessionError('timeout');
-    }
+    assertOpen();
     return result;
   };
 
@@ -227,13 +242,15 @@ const runSession = async <V extends number, PK, S>(
       });
     });
     const message = claimToMessage(claim);
-    // A copy, so the transport cannot alter the claim it is vetted against.
-    const input = structuredClone({
-      policy,
-      evidence,
-      claim,
-    }) as unknown as ZkFetchAttestationInput;
-    const attestation = await phase('attestation', () => transport.request(attestor, input));
+    const attestation = await phase('attestation', () => {
+      // A copy, so the transport cannot alter the claim it is vetted against.
+      const input = structuredClone({
+        policy,
+        evidence,
+        claim,
+      }) as unknown as ZkFetchAttestationInput;
+      return transport.request(attestor, input);
+    });
     const collected = await phase('attestation', () =>
       resolveAttestation({
         trusted,
@@ -276,7 +293,7 @@ export const collectThreshold = async <V extends number, PK, S>(
   supplied: ZkFetchCollectionIntent,
 ): Promise<ZkFetchCollection<V, PK, S>> => {
   const { intent, candidates } = parseIntent(config.trusted, supplied);
-  const snapshot = structuredClone(request);
+  const snapshot = snapshotRequest(request);
   const failures: ZkFetchCollectionFailure[] = [];
   const assertUnexpired = () => {
     if (Date.now() >= intent.expiresAt) {
