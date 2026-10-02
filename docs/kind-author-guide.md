@@ -105,7 +105,8 @@ or app must rely on has to be a field of the signed message.
 
 `defineAttestor({ kind, policy, evidence, claim, verify, message })` is the
 keyless, shareable law. `verify` receives parsed input and throws to reject.
-In order, it should:
+Validate that `values` and `present` have equal lengths and that every policy
+slot fits within the requested count before proof verification. Then:
 
 1. verify the evidence's own signature;
 2. check the evidence against the policy;
@@ -127,16 +128,19 @@ In your `attest`:
 - check per-instance trust anchors, such as "the evidence was signed by *my*
   witness";
 - **derive the claim yourself** from the verified evidence and sign that, not
-  the proposal. Take only `appId`, `holder` and the window from the proposal;
+  the proposal. Take `appId`, `holder`, the window and the requested size from
+  the proposal, but derive every value and present flag;
 - sign `definition.message(claim)` and return the claim, message, public key
   and signature.
 
-The instance has no registry slot. The message binds no slot, registry or
-contract, so one instance serves every app that pins its key.
+The instance has no registry slot or fixed value-slot count, so one instance
+and signing key can serve apps with different claim layouts. Each consuming
+contract enforces its own fixed `#V`.
 
-Size the claim schema to the target contract's `#V`, as `zkFetchAttestor`'s
-`valueSlots` does, so a proposal with the wrong slot count fails at the
-boundary.
+Infer the requested count from `claim.values.length`, as `zkFetchAttestor`
+does. Derive the authoritative claim at that count, filling unused positions
+with `present = false` and `value = 0`. The dApp client configures its count
+for the consuming contract; the attestor instance needs no `valueSlots` field.
 
 ## 8. The client
 
