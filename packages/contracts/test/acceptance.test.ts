@@ -58,7 +58,6 @@ const operators = ['33', '44'].map((byte, i) => {
     id: `attestor-${i}`,
     keyPair: jubjubKeyPair(),
     witnessAddress: witness.address,
-    valueSlots: VALUE_SLOTS,
   });
   return { witness, attestor };
 });
