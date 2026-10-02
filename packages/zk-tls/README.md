@@ -139,7 +139,7 @@ trusted descriptors' order; optional `attestorIds` limits and orders the
 candidates. Duplicate ids count once. Unselected and unused spare provers do
 not receive the request. Each selected prover receives its own request copy.
 
-Every response passes the same key, kind, claim, message-binding, and signature
+Every response passes the same key, claim, message-binding, and signature
 checks as `proof.attest()`. Collection groups responses by the exact flat
 message and counts distinct registry slots. The returned `claim`, `message`,
 and `collected` describe one threshold group, sorted by registry slot.
