@@ -78,8 +78,8 @@ export const zkFetchEvidenceSchema = z.object({
  * The zkFetch kind's claim schema.
  *
  * Mirror of `@thoth/core/claim`'s `claimSchema` minus the exact-length
- * constraints (see issue #26). An attestor instance instead exposes a sized
- * `definition.claim` schema for its configured value-slot count.
+ * constraints (see issue #26). The value count is requested implicitly by
+ * `values.length`; `present` must have the same length.
  */
 export const zkFetchClaimSchema: z.ZodType<
   Claim<number>,
@@ -95,6 +95,10 @@ export const zkFetchClaimSchema: z.ZodType<
     holder: bytes32Schema,
     present: z.array(z.boolean()),
     values: z.array(z.union([z.number(), z.bigint()])),
+  })
+  .refine((input) => input.present.length === input.values.length, {
+    message: 'present and values must have the same length',
+    path: ['present'],
   })
   .transform((input) => ({
     version: BigInt(input.version),
@@ -560,6 +564,22 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
 };
 
 /**
+ * Require every policy slot index to fit within a requested claim size.
+ *
+ * @param policy — a parsed policy whose slot indices are nonnegative integers.
+ * @param valueSlots — the requested number of value slots.
+ * @throws if a policy slot is outside the requested count.
+ */
+export function assertPolicySlotsInRange(policy: ZkFetchPolicy, valueSlots: number): void {
+  const outOfRange = policy.slots.find((slot) => slot.slot >= valueSlots);
+  if (outOfRange !== undefined) {
+    throw new Error(
+      `policy slot ${outOfRange.slot} is out of the claim's ${valueSlots} value slots`,
+    );
+  }
+}
+
+/**
  * Derive the canonical {@link Claim} the attestor signs from parsed evidence.
  *
  * The claim reflects the evidence, not the client's proposal. `values`/`present`
@@ -598,12 +618,7 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   windowEnd: bigint;
 }): Claim<V> => {
   const { verified, policy, appId, holder, valueSlots, windowStart, windowEnd } = options;
-  const outOfRange = policy.slots.find((slot) => slot.slot >= valueSlots);
-  if (outOfRange !== undefined) {
-    throw new Error(
-      `policy slot ${outOfRange.slot} is out of the claim's ${valueSlots} value slots`,
-    );
-  }
+  assertPolicySlotsInRange(policy, valueSlots);
   const present = Array.from({ length: valueSlots }, () => false);
   const values = Array.from({ length: valueSlots }, () => 0n);
   for (const slot of policy.slots) {

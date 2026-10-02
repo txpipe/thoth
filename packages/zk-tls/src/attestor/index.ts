@@ -9,10 +9,11 @@ import type { Attestor, KeyPair } from '@thoth/attestor';
 import { buildAttestor, defineAttestor } from '@thoth/attestor';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { claimSchema, claimToMessage } from '@thoth/core/claim';
+import { claimToMessage } from '@thoth/core/claim';
 import { hexToBytes } from '../hex.js';
 import {
   assertEvidenceMatchesPolicy,
+  assertPolicySlotsInRange,
   claimRequestOf,
   deriveClaimFromEvidence,
   parseDisclosedValue,
@@ -22,6 +23,7 @@ import {
   type ZkFetchDefinition,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
+  zkFetchClaimSchema,
   zkFetchEvidenceSchema,
   zkFetchPolicySchema,
   zkFetchSubjectHashOf,
@@ -171,26 +173,27 @@ export const assertObservationInWindow = (options: {
 /**
  * Create the zkFetch attestor kind's shareable definition.
  *
- * `verify` implements the kind's check: verify the evidence
- * ({@link verifyZkFetchProof}), check it against the policy
- * ({@link assertEvidenceMatchesPolicy}), require the witness's own
+ * The claim schema requires equal `values` and `present` lengths.
+ * `verify` checks policy slot bounds at that requested size before verifying the evidence
+ * ({@link verifyZkFetchProof}), checking it against the policy
+ * ({@link assertEvidenceMatchesPolicy}), requiring the witness's own
  * observation to fall inside the client-proposed window
- * ({@link assertObservationInWindow}), and enforce that the proposed claim matches the
+ * ({@link assertObservationInWindow}), and enforcing that the proposed claim matches the
  * signed request ({@link assertClaimMatchesSubject}) and the disclosed values
  * ({@link assertClaimMatchesDisclosures}). `message` encodes a
  * claim into its flat field vector via `claimToMessage`.
  *
- * @param valueSlots — the configured value-slot count of the target contract.
  * @returns the shareable definition; instantiate it with `@thoth/attestor`'s
  *   `buildAttestor` (see {@link zkFetchAttestor}).
  */
-export function createZkFetchDefinition(valueSlots: number): ZkFetchDefinition {
+export function createZkFetchDefinition(): ZkFetchDefinition {
   return defineAttestor({
     kind: ZK_FETCH_LAW,
     policy: zkFetchPolicySchema,
     evidence: zkFetchEvidenceSchema,
-    claim: claimSchema(valueSlots),
+    claim: zkFetchClaimSchema,
     verify: async (input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number>>) => {
+      assertPolicySlotsInRange(input.policy, input.claim.values.length);
       const verified = await verifyZkFetchProof(input.evidence);
       assertEvidenceMatchesPolicy(verified, input.policy);
       assertObservationInWindow({ claim: input.claim, verified });
@@ -212,12 +215,12 @@ export function createZkFetchDefinition(valueSlots: number): ZkFetchDefinition {
  * it accepts evidence only from the operator's own Reclaim witness, rejects
  * proposals that do not match the disclosures, derives the *authoritative*
  * claim from the verified evidence (request-bound subject hash)
- * sized to the instance's configured value-slot count, and signs `message(claim)` with
+ * sized to the proposed claim's values length, and signs `message(claim)` with
  * the key pair's signer.
  *
  * @typeParam PK — the signature scheme's public key type.
  * @typeParam S — the signature scheme's signature type.
- * @param parts — instance id, key material, registry slot, witness key, and value-slot count.
+ * @param parts — instance id, key material, registry slot, and witness key.
  * @returns a working `Attestor` for the kind.
  */
 export function zkFetchAttestor<PK, S>(parts: {
@@ -229,12 +232,10 @@ export function zkFetchAttestor<PK, S>(parts: {
   registryIndex: number;
   /** The operator's own Reclaim witness key (`0x` + 32-byte hex secp256k1). */
   witnessKey: string;
-  /** The target contract's value-slot count (`#V`), enforced by the claim schema. */
-  valueSlots: number;
 }): Attestor<ZkFetchDefinition, PK, S> {
-  const { id, keyPair, registryIndex, witnessKey, valueSlots } = parts;
+  const { id, keyPair, registryIndex, witnessKey } = parts;
   const witnessAddress = witnessAddressOf(witnessKey);
-  const definition = createZkFetchDefinition(valueSlots);
+  const definition = createZkFetchDefinition();
   const publicKey = keyPair.publicKey;
   return buildAttestor({
     id,
@@ -259,7 +260,7 @@ export function zkFetchAttestor<PK, S>(parts: {
         policy,
         appId: proposed.appId,
         holder: proposed.holder,
-        valueSlots,
+        valueSlots: proposed.values.length,
         windowStart: proposed.windowStart,
         windowEnd: proposed.windowEnd,
       });

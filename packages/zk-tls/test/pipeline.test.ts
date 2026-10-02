@@ -198,7 +198,7 @@ describe('zkFetch attestor + client', () => {
   const ids = Object.keys(witnessById);
 
   const attestors = Object.entries(witnessKeyById).map(([id, witnessKey], i) =>
-    zkFetchAttestor({ id, keyPair: fakeKey(id), registryIndex: i, witnessKey, valueSlots: 3 }),
+    zkFetchAttestor({ id, keyPair: fakeKey(id), registryIndex: i, witnessKey }),
   );
   const byId = new Map(attestors.map((a) => [a.id, a]));
   const trusted = buildTrustedSet(attestors.map(descriptorOf));

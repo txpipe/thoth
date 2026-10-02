@@ -12,6 +12,7 @@ import type {
 } from '../index.js';
 import {
   assertEvidenceMatchesPolicy,
+  assertPolicySlotsInRange,
   claimUrl,
   deriveClaimFromEvidence,
   parsedEvidenceView,
@@ -389,12 +390,7 @@ export const zkFetchClient = {
     }
     // Same guard `deriveClaimFromEvidence` enforces later — fail at init
     // instead of on the first `attest()`.
-    const outOfRange = checkedPolicy.slots.find((slot) => slot.slot >= valueSlots);
-    if (outOfRange !== undefined) {
-      throw new Error(
-        `policy slot ${outOfRange.slot} is out of the claim's ${valueSlots} value slots`,
-      );
-    }
+    assertPolicySlotsInRange(checkedPolicy, valueSlots);
     return {
       proveReq: async (request, holder): Promise<ZkFetchClientProof<V, PK, S>> => {
         const checkedHolder = bytes32Schema.parse(holder).slice();

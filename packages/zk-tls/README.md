@@ -75,18 +75,20 @@ prover that the client can use to obtain evidence:
     signed.
   - `assertClaimMatchesDisclosures({ claim, disclosures, policy })` enforces
     that a client-proposed claim says exactly what the evidence disclosed.
-  - `createZkFetchDefinition(valueSlots)` returns the shareable definition: the three
+  - `createZkFetchDefinition()` returns the shareable definition: the three
     schemas, the `verify` step, which verifies the proof, checks the policy,
     requires the witness observation inside the proposed window, and checks the claim against
     the signed request and the disclosures, and a `message` that encodes the claim into the flat
     message via `claimToMessage`.
-  - `zkFetchAttestor({ id, keyPair, registryIndex, witnessKey, valueSlots })` returns a
+  - `zkFetchAttestor({ id, keyPair, registryIndex, witnessKey })` returns a
     deployable instance: a specialization of `@thoth/attestor`'s `buildAttestor`
     that knows the kind, accepts evidence only from the witness `witnessKey`
-    names, and signs the attestor-derived claim at its configured `valueSlots` count.
-    Its claim schema requires both `values` and `present` to have that exact length
-    before verification. The shared `zkFetchClaimSchema` remains unsized; use the
-    instance's `definition.claim` for its boundary validation.
+    names, and signs the attestor-derived claim at the proposed `values.length`.
+    The claim schema requires `present` and `values` to have equal lengths;
+    verification rejects policy slot indices outside that length before checking
+    the proof. Unused positions are derived as absent and zero-valued, regardless
+    of their proposed contents. One instance and signing key can serve contracts
+    with different slot counts. Each consuming contract enforces its own fixed `#V`.
 - **`@thoth/zk-tls/client`.** The dApp side: `zkFetchClient`,
   `toCanonicalEvidence`, `addressFromWitnessId`, and the prover/config types.
   `init` validates the policy, its slot map, and the prover map, once;
@@ -139,15 +141,15 @@ claims; Thoth promises no cross-claim identity or unlinkability.
   signed as unpresent rather than guessed.
 - **One policy per trusted set.** N-of-M only means "N independent attestors
   agree on the same signed message". The contract cannot see what a slot means,
-  so every attestor in a pinned trusted set must share the exact same law: same
+  so every attestor answering a request must enforce the exact same law: same
   `V`, slot map, parse rules, and encoding. Message equality then enforces
   semantic agreement in practice: different interpretations of the same evidence
   produce different messages, and the registry refuses to count them together.
   The policy constrains hosts and slot semantics; which witness an attestor
   trusts is per instance, via its `witnessKey`, not part of the shared law.
   The policy is the dApp's law, carried with each request and enforced by the
-  attestor for that request; an attestor holds no app-specific policy. Keeping
-  a claim meaningful is the consuming contract's job: it pins the trusted set
+  attestor for that request; an attestor holds no app-specific policy or slot count.
+  Keeping a claim meaningful is the consuming contract's job: it pins the trusted set
   and the predicate, and a claim's values are not source-bound on-chain.
 
 ## Live check

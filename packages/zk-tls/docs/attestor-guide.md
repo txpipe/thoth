@@ -20,7 +20,6 @@ const attestor = zkFetchAttestor({
   keyPair, // the attestor's signing key, not the witness's
   registryIndex: 0,
   witnessKey: '0x…the secp256k1 key of your Reclaim witness…',
-  valueSlots: 2, // the target contract's #V
 });
 ```
 
@@ -32,17 +31,22 @@ must match the deployment's registry slot.
 The instance derives its address once, at build time, and rejects any evidence
 signed by a different witness.
 
-`valueSlots` is the target contract's `#V`. The instance's claim schema requires
-both `values` and `present` to have exactly that length before checking the
-proof, and claim derivation uses this configured count when signing. Set it to
-the same count as the dApp client's `valueSlots`. Existing instance builders must
-supply this required field; standalone definitions now use
-`createZkFetchDefinition(valueSlots)`.
+The requested value-slot count is implicit in each claim's `values.length`.
+`present` must have the same length, and every policy slot index must fit within
+that count. These checks run before proof verification. Claim derivation uses
+this requested count and fills unused positions with `present = false` and
+`value = 0`, regardless of their proposed contents.
+
+One attestor instance and signing key can serve contracts with different slot
+counts. Each dApp configures its client for its contract's `#V`, and that contract
+enforces the fixed layout it accepts. Attestor instances take no `valueSlots`
+configuration; standalone definitions use `createZkFetchDefinition()`.
 
 ## The attest flow
 
 The dApp sends the raw input over the transport; the attestor parses it with
-its own schemas, including the configured claim length, and runs the full check before signing:
+its own schemas, checks array lengths and policy slot bounds, and runs the full
+check before signing:
 
 1. `verifyZkFetchProof(evidence)` re-verifies the Reclaim witness's ECDSA
    signature over the claim, checks the claim identifier against its signed

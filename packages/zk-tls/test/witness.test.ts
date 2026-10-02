@@ -50,7 +50,6 @@ const makeAttestor = (id: string, witnessKey: string, registryIndex: number) =>
     },
     registryIndex,
     witnessKey,
-    valueSlots: 3,
   });
 
 const aliceAttestor = makeAttestor('attestor-alice', `0x${'11'.repeat(32)}`, 0);
@@ -80,21 +79,68 @@ const attestWith = (
 };
 
 describe('test-key witness', () => {
+  it('reuses one attestor and key across claim sizes and applications', async () => {
+    const evidence = await observe(alice);
+    for (const [size, appByte] of [
+      [2, 0xa2],
+      [5, 0xa5],
+    ] as const) {
+      const attestation = await attestWith(aliceAttestor, evidence, WINDOW, {
+        appId: new Uint8Array(32).fill(appByte),
+        present: [true, true, ...Array<boolean>(size - 2).fill(false)],
+        values: [0n, 8n, ...Array<bigint>(size - 2).fill(0n)],
+      });
+      expect(attestation.publicKey).toBe('attestor-alice');
+      expect(attestation.claim.appId).toEqual(new Uint8Array(32).fill(appByte));
+      expect(attestation.claim.values).toHaveLength(size);
+      expect(attestation.claim.values.slice(2)).toEqual(Array<bigint>(size - 2).fill(0n));
+      expect(attestation.claim.present.slice(2)).toEqual(Array<boolean>(size - 2).fill(false));
+      expect(attestation.signature).toBe(`sig:${attestation.message.join(',')}`);
+      expect(attestation.message).toHaveLength(11 + 2 * size);
+    }
+  });
+
   it.each([
-    { present: [true, true], values: [0n, 8n] },
-    { present: [true, true, false, false], values: [0n, 8n, 0n, 0n] },
     { present: [true, true], values: [0n, 8n, 0n] },
     { present: [true, true, false], values: [0n, 8n] },
-  ])('rejects a proposal with mismatched slot lengths, case %#', async (claimOverrides) => {
+  ])('rejects unequal slot arrays before proof verification, case %#', async (claimOverrides) => {
     await expect(
-      // Invalid proof data ensures rejection happens at the claim schema boundary.
       attestWith(
         aliceAttestor,
         { ...(await observe(alice)), signatureHex: '0x00' },
         WINDOW,
         claimOverrides,
       ),
-    ).rejects.toThrow(/expected array to have exactly 3 items/);
+    ).rejects.toThrow(/present and values must have the same length/);
+  });
+
+  it('rejects a policy slot outside the requested count before proof verification', async () => {
+    await expect(
+      attestWith(aliceAttestor, { ...(await observe(alice)), signatureHex: '0x00' }, WINDOW, {
+        present: [true],
+        values: [0n],
+      }),
+    ).rejects.toThrow(/policy slot 1 is out of the claim's 1 value slots/);
+  });
+
+  it('signs unused positions as absent and zero despite caller-supplied contents', async () => {
+    const attestation = await attestWith(aliceAttestor, await observe(alice), WINDOW, {
+      present: [true, true, true],
+      values: [0n, 8n, 999n],
+    });
+    expect(attestation.claim.present).toEqual([true, true, false]);
+    expect(attestation.claim.values).toEqual([0n, 8n, 0n]);
+    expect(attestation.message.slice(11)).toEqual([1n, 1n, 0n, 0n, 8n, 0n]);
+    expect(attestation.signature).toBe(`sig:${attestation.message.join(',')}`);
+  });
+
+  it.each([
+    { present: [true, true, false], values: [999n, 8n, 0n] },
+    { present: [false, true, false], values: [0n, 8n, 0n] },
+  ])('rejects unsupported contents in measured positions, case %#', async (claimOverrides) => {
+    await expect(
+      attestWith(aliceAttestor, await observe(alice), WINDOW, claimOverrides),
+    ).rejects.toThrow(/claim slot 0 does not match the disclosed value/);
   });
 
   it('derives the Ethereum address of its key', () => {
