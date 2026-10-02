@@ -116,16 +116,17 @@ describe('resolveAttestation', () => {
     };
     const parsedClaim = transformedDefinition.claim.parse({ value: input });
     const transformedAttestor = { ...attestor, definition: transformedDefinition };
+    const transformedMember = { attestor: transformedAttestor, registryIndex: 2 };
     const transformedOptions = {
       ...options,
-      trusted: buildTrustedSet([transformedAttestor]),
-      attestor: transformedAttestor,
+      trusted: buildTrustedSet({ registrySize: 3, attestors: [transformedMember] }),
+      member: transformedMember,
       expectedClaim: parsedClaim,
       attestation: { ...attestation, claim: parsedClaim },
     };
 
     await expect(resolveAttestation(transformedOptions)).resolves.toMatchObject({
-      registryIndex: 0,
+      registryIndex: 2,
     });
     await expect(
       resolveAttestation({
