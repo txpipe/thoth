@@ -26,9 +26,70 @@ const trusted = buildTrustedSet([attestor]);
 const attestation = { claim, message, publicKey, signature };
 const options = { trusted, attestor, attestation, verifier: jubjubVerifier, expectedClaim: claim };
 
+// Keep the message and its valid signature fixed to isolate claim comparison.
+const vetClaim = (expected: unknown, returned: unknown) => {
+  const claimDefinition = { ...definition, claim: z.unknown(), message: () => message };
+  const claimAttestor = { ...attestor, definition: claimDefinition };
+  return resolveAttestation({
+    ...options,
+    trusted: buildTrustedSet([claimAttestor]),
+    attestor: claimAttestor,
+    expectedClaim: expected,
+    attestation: { ...attestation, claim: returned },
+  });
+};
+
 describe('resolveAttestation', () => {
   it('accepts a valid signature and tags it with its registry slot', async () => {
-    await expect(resolveAttestation(options)).resolves.toEqual({ registryIndex: 0, attestation });
+    await expect(
+      resolveAttestation({ ...options, attestation: structuredClone(attestation) }),
+    ).resolves.toEqual({ registryIndex: 0, attestation });
+  });
+
+  it.each([
+    {
+      name: 'nested claims with different object key order',
+      expected: { value: 42n, metadata: { present: [true, false], bytes: new Uint8Array([1, 2]) } },
+      returned: { metadata: { bytes: new Uint8Array([1, 2]), present: [true, false] }, value: 42n },
+    },
+    { name: 'null', expected: null, returned: null },
+    { name: 'empty arrays', expected: [], returned: [] },
+    { name: 'empty objects', expected: {}, returned: {} },
+    {
+      name: 'undefined-valued own keys',
+      expected: { value: undefined },
+      returned: { value: undefined },
+    },
+  ])('accepts equal $name', async ({ expected, returned }) => {
+    await expect(vetClaim(expected, returned)).resolves.toMatchObject({ registryIndex: 0 });
+  });
+
+  it.each([
+    { name: 'primitive types', expected: 42n, returned: '42' },
+    { name: 'null and an object', expected: null, returned: {} },
+    {
+      name: 'different undefined-valued keys',
+      expected: { a: undefined },
+      returned: { b: undefined },
+    },
+    { name: 'a missing key', expected: { a: 42n, b: undefined }, returned: { a: 42n } },
+    { name: 'an extra key', expected: { a: 42n }, returned: { a: 42n, b: undefined } },
+    {
+      name: 'nested values',
+      expected: { reading: { value: 42n } },
+      returned: { reading: { value: 43n } },
+    },
+    { name: 'byte contents', expected: new Uint8Array([1, 2]), returned: new Uint8Array([1, 3]) },
+    { name: 'byte lengths', expected: new Uint8Array([1, 2]), returned: new Uint8Array([1]) },
+    { name: 'bytes and an array', expected: new Uint8Array([1, 2]), returned: [1, 2] },
+    { name: 'array order', expected: [1n, 2n], returned: [2n, 1n] },
+    { name: 'array lengths', expected: [1n, 2n], returned: [1n] },
+    { name: 'an array and an object', expected: [42n], returned: { 0: 42n, length: 1 } },
+    { name: 'a sparse returned array', expected: [42n], returned: new Array(1) },
+    { name: 'a sparse expected array', expected: new Array(1), returned: [42n] },
+    { name: 'a hole and explicit undefined', expected: [undefined], returned: new Array(1) },
+  ])('rejects claims with $name', async ({ expected, returned }) => {
+    await expect(vetClaim(expected, returned)).rejects.toMatchObject({ reason: 'claim' });
   });
 
   it('accepts an asynchronous scheme verifier', async () => {

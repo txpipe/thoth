@@ -244,19 +244,24 @@ const structuredEquals = (a: unknown, b: unknown): boolean => {
     );
   }
   if (Array.isArray(a) || Array.isArray(b)) {
-    return (
-      Array.isArray(a) &&
-      Array.isArray(b) &&
-      a.length === b.length &&
-      a.every((value, i) => structuredEquals(value, b[i]))
-    );
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+      return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+      if (Object.hasOwn(a, i) !== Object.hasOwn(b, i) || !structuredEquals(a[i], b[i])) {
+        return false;
+      }
+    }
+    return true;
   }
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
   return (
     aKeys.length === bKeys.length &&
-    aKeys.every((key) =>
-      structuredEquals((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+    aKeys.every(
+      (key) =>
+        Object.hasOwn(b, key) &&
+        structuredEquals((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
     )
   );
 };
