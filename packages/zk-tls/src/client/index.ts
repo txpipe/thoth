@@ -22,7 +22,13 @@ import type {
   ZkFetchThresholdOptions,
 } from './collect.js';
 import { collectThreshold, ZkFetchThresholdError } from './collect.js';
-import { assertNoSecretHeaders, attestWith, buildClaimProposal, proveWith } from './proposal.js';
+import {
+  assertNoSecretHeaders,
+  attestWith,
+  buildClaimProposal,
+  copyRequest,
+  proveWith,
+} from './proposal.js';
 
 export type { ZkFetchAttestorFailure, ZkFetchThresholdAttestment, ZkFetchThresholdOptions };
 export { ZkFetchThresholdError };
@@ -348,7 +354,7 @@ export const zkFetchClient = {
         collectThreshold({ ...config, policy: checkedPolicy }, request, options),
       proveReq: async (request, holder): Promise<ZkFetchClientProof<V, PK, S>> => {
         const checkedHolder = bytes32Schema.parse(holder).slice();
-        const signedRequest: ZkFetchRequest = { ...request };
+        const signedRequest = copyRequest(request);
         const entries = await Promise.all(
           trusted.attestors.map(async (attestor) => {
             const evidence = await proveWith(provers, attestor, signedRequest);

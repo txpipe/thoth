@@ -390,6 +390,31 @@ describe('zkFetch attestor + client', () => {
     expect(seen.contacted).toBe(false);
   });
 
+  it('checks secret headers a prover cannot change through its own request', async () => {
+    const { seen, watched } = watchSlot0();
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async (request) => {
+            const evidence = await observe(aliceWitness, request);
+            const context = { ...JSON.parse(evidence.claim.context), echo: 'Bearer private-token' };
+            evidence.claim.context = JSON.stringify(context);
+            (request.secretHeaders as Record<string, string>).authorization = 'changed';
+            return evidence;
+          },
+        },
+      },
+      transport: watched,
+    });
+    const result = await client.collect(
+      { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
+      options(),
+    );
+    expect(result.failures).toEqual([{ registryIndex: 0, reason: 'secret' }]);
+    expect(seen.contacted).toBe(false);
+  });
+
   it('refuses a proof handle whose evidence carries a secret header value', async () => {
     const client = clientWith({
       provers: {

@@ -19,7 +19,11 @@ import type {
   ZkFetchRequest,
 } from './index.js';
 
-/** One pinned attestor descriptor. */
+/**
+ * One pinned attestor descriptor.
+ *
+ * @typeParam PK — the signature scheme's public-key type.
+ */
 export type Attestor<PK> = TrustedSet<ZkFetchDefinition, PK>['attestors'][number];
 
 /**
@@ -93,8 +97,24 @@ export const buildClaimProposal = async <V extends number>(options: {
 };
 
 /**
+ * Copy a request so that whoever holds the copy cannot change the original's
+ * secret headers.
+ *
+ * @param request — the request to copy.
+ * @returns a shallow copy with its own `secretHeaders` record.
+ */
+export const copyRequest = (request: ZkFetchRequest): ZkFetchRequest => ({
+  ...request,
+  secretHeaders: { ...request.secretHeaders },
+});
+
+/**
  * Prove `request` with the attestor's own witness and check the evidence.
  *
+ * The prover gets its own copy, so it cannot change the request that other
+ * provers or the secret header check read.
+ *
+ * @typeParam PK — the signature scheme's public-key type.
  * @param provers — evidence source per attestor id.
  * @param attestor — whose witness to use.
  * @param request — what the caller asked the client to prove.
@@ -110,7 +130,7 @@ export const proveWith = async <PK>(
   if (prover === undefined) {
     throw new Error(`no prover configured for attestor ${attestor.id}`);
   }
-  const evidence = zkFetchEvidenceSchema.parse(await prover.prove(request));
+  const evidence = zkFetchEvidenceSchema.parse(await prover.prove(copyRequest(request)));
   assertEvidenceMatchesRequest(evidence, request);
   return evidence;
 };

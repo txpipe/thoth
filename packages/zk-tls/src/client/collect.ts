@@ -13,7 +13,13 @@ import type {
   ZkFetchRequest,
 } from './index.js';
 import type { Attestor } from './proposal.js';
-import { assertNoSecretHeaders, attestWith, buildClaimProposal, proveWith } from './proposal.js';
+import {
+  assertNoSecretHeaders,
+  attestWith,
+  buildClaimProposal,
+  copyRequest,
+  proveWith,
+} from './proposal.js';
 
 /** Why one attestor's attempt was dropped. Carries no remote error text. */
 export interface ZkFetchAttestorFailure {
@@ -207,6 +213,8 @@ export const collectThreshold = async <V extends number, PK, S>(
   supplied: ZkFetchThresholdOptions,
 ): Promise<ZkFetchThresholdAttestment<V, PK, S>> => {
   const { options, candidates } = parseOptions(config.trusted, supplied);
+  // A snapshot, so the caller cannot change the secret headers mid-call.
+  const snapshot = copyRequest(request);
   const failures: ZkFetchAttestorFailure[] = [];
   const assertUnexpired = () => {
     if (Date.now() >= options.expiresAt) {
@@ -225,7 +233,7 @@ export const collectThreshold = async <V extends number, PK, S>(
       if (attestor === undefined) {
         return;
       }
-      pending.set(attestor.registryIndex, runAttempt(config, request, options, attestor));
+      pending.set(attestor.registryIndex, runAttempt(config, snapshot, options, attestor));
     }
   };
 
@@ -234,7 +242,6 @@ export const collectThreshold = async <V extends number, PK, S>(
   while (pending.size > 0) {
     const outcome = await Promise.race(pending.values());
     pending.delete(outcome.slot);
-    assertUnexpired();
     if ('reason' in outcome) {
       failures.push({ registryIndex: outcome.slot, reason: outcome.reason });
     } else {
@@ -248,6 +255,9 @@ export const collectThreshold = async <V extends number, PK, S>(
       }
       largestGroup = Math.max(largestGroup, group.length);
     }
+    // Checked after recording the outcome, so a reached threshold is returned
+    // and the expired error lists every failure.
+    assertUnexpired();
     startNeeded();
   }
   throw new ZkFetchThresholdError('threshold', failures);
