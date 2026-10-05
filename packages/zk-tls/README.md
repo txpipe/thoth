@@ -121,16 +121,18 @@ for an example.
 - **Resilient.** `collect` starts `threshold` attempts and contacts a spare
   attestor only when no message group can still reach the threshold, so a
   down, disagreeing, or invalid attestor does not fail a healthy subset. Spare
-  provers that are never needed do not receive the request.
+  provers that are never needed do not receive the request. Set `expiresAt` to
+  at least the start plus twice `attestorTimeoutMs`, so a spare can still
+  prove after one hung attestor times out.
 - **Verified and distinct.** Every response passes the same checks as
   `proof.attest()`, then counts once per registry slot within its exact-message
   group. `threshold` comes from the caller; the client cannot read the
   contract's N, so set it to match.
 - **Bounded.** `attestorTimeoutMs` covers proving, transport, and verification;
   a late result never proceeds or counts. When a group reaches the threshold,
-  no other attempt is in flight. An attempt that times out is dropped but not
-  stopped. Its witness fetch and local ZK proving run to completion in the
-  background. Reclaim's `createClaimOnAttestor`
+  `collect` returns without waiting for any other attempt. An attempt that
+  times out is dropped but not stopped. Its witness fetch and local ZK proving
+  run to completion in the background. Reclaim's `createClaimOnAttestor`
   (`@reclaimprotocol/attestor-core` 5.0.8) accepts no abort signal, so
   `ZkFetchProver.prove` has nothing to pass one to. Terminating the attestor
   client could cut the network side, but only for a private client. The

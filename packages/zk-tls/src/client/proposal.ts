@@ -1,7 +1,7 @@
 // Per-attestor steps shared by `proveReq` and `collect`.
 
-import type { TrustedSet } from '@thoth/client';
 import { resolveAttestation } from '@thoth/client';
+import type { AttestorDescriptor } from '@thoth/core';
 import type { Claim } from '@thoth/core/claim';
 import { claimSchema } from '@thoth/core/claim';
 import type { ZkFetchDefinition, ZkFetchEvidence, ZkFetchPolicy } from '../index.js';
@@ -18,13 +18,6 @@ import type {
   ZkFetchCollectedAttestation,
   ZkFetchRequest,
 } from './index.js';
-
-/**
- * One pinned attestor descriptor.
- *
- * @typeParam PK — the signature scheme's public-key type.
- */
-export type Attestor<PK> = TrustedSet<ZkFetchDefinition, PK>['attestors'][number];
 
 /**
  * The URL the signed evidence attests is the one the request asked for.
@@ -119,11 +112,13 @@ export const copyRequest = (request: ZkFetchRequest): ZkFetchRequest => ({
  * @param attestor — whose witness to use.
  * @param request — what the caller asked the client to prove.
  * @returns canonical evidence for the requested origin.
- * @throws if the attestor has no prover, or the evidence is invalid or for another origin.
+ * @throws if the attestor has no prover, the evidence is invalid or for
+ *   another origin, or it carries a secret header value
+ *   ({@link SecretHeaderError}).
  */
 export const proveWith = async <PK>(
   provers: ZkFetchClientConfig<number, PK, unknown>['provers'],
-  attestor: Attestor<PK>,
+  attestor: AttestorDescriptor<ZkFetchDefinition, PK>,
   request: ZkFetchRequest,
 ): Promise<ZkFetchEvidence> => {
   const prover = provers[attestor.id];
@@ -132,6 +127,7 @@ export const proveWith = async <PK>(
   }
   const evidence = zkFetchEvidenceSchema.parse(await prover.prove(copyRequest(request)));
   assertEvidenceMatchesRequest(evidence, request);
+  assertNoSecretHeaders(evidence, request);
   return evidence;
 };
 
@@ -150,7 +146,7 @@ export const proveWith = async <PK>(
  */
 export const attestWith = async <V extends number, PK, S>(
   config: Pick<ZkFetchClientConfig<V, PK, S>, 'trusted' | 'transport' | 'verifier' | 'policy'>,
-  attestor: Attestor<PK>,
+  attestor: AttestorDescriptor<ZkFetchDefinition, PK>,
   evidence: ZkFetchEvidence,
   claim: Claim<V>,
 ): Promise<ZkFetchCollectedAttestation<V, PK, S>> => {
@@ -185,6 +181,17 @@ const containsSecret = (value: unknown, secrets: readonly string[]): boolean => 
 };
 
 /**
+ * The evidence carried a secret header value. Carries no value itself, so it
+ * is safe to surface to a caller.
+ */
+export class SecretHeaderError extends Error {
+  constructor() {
+    super('evidence carries a secret header value');
+    this.name = 'SecretHeaderError';
+  }
+}
+
+/**
  * The evidence carries no secret header value, before it goes to an attestor.
  *
  * Catches each value as written, percent-encoded (as echoed into a URL), and
@@ -193,13 +200,13 @@ const containsSecret = (value: unknown, secrets: readonly string[]): boolean => 
  *
  * @param evidence — canonical evidence from the prover.
  * @param request — the request whose `secretHeaders` must stay private.
- * @throws if the evidence carries a secret header value.
+ * @throws {@link SecretHeaderError} if the evidence carries a secret header value.
  */
-export const assertNoSecretHeaders = (evidence: ZkFetchEvidence, request: ZkFetchRequest): void => {
+const assertNoSecretHeaders = (evidence: ZkFetchEvidence, request: ZkFetchRequest): void => {
   const secrets = Object.values(request.secretHeaders ?? {})
     .filter(Boolean)
     .flatMap((secret) => [secret, encodeURIComponent(secret)]);
   if (containsSecret(evidence, secrets)) {
-    throw new Error('evidence carries a secret header value');
+    throw new SecretHeaderError();
   }
 };

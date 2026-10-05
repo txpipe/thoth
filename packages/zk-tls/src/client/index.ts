@@ -22,13 +22,7 @@ import type {
   ZkFetchThresholdOptions,
 } from './collect.js';
 import { collectThreshold, ZkFetchThresholdError } from './collect.js';
-import {
-  assertNoSecretHeaders,
-  attestWith,
-  buildClaimProposal,
-  copyRequest,
-  proveWith,
-} from './proposal.js';
+import { attestWith, buildClaimProposal, copyRequest, proveWith } from './proposal.js';
 
 export type { ZkFetchAttestorFailure, ZkFetchThresholdAttestment, ZkFetchThresholdOptions };
 export { ZkFetchThresholdError };
@@ -311,7 +305,9 @@ export interface ZkFetchClient<V extends number, PK, S> {
  * `init` validates the policy, its slot map, and the prover map once;
  * `proveReq` shapes each prover's output through the evidence schema, binds it
  * to the requested URL, and requires every witness to agree on one claim, so
- * only canonical, matching evidence ever reaches an attestor.
+ * only canonical, matching evidence ever reaches an attestor. `collect` runs
+ * one attempt per attestor and returns the first message to reach the
+ * caller's threshold.
  */
 export const zkFetchClient = {
   /**
@@ -322,7 +318,7 @@ export const zkFetchClient = {
    * @typeParam S — the signature scheme's signature type.
    * @param config — trusted set, transport, verifier, policy, app id, slot count, and
    *   provers.
-   * @returns a client ready to `proveReq`.
+   * @returns a client ready to `proveReq` or `collect`.
    * @throws if the policy is invalid, the appId is not 32 bytes, a policy slot
    *   exceeds `valueSlots`, or the prover map does not match the trusted set
    *   exactly.
@@ -358,7 +354,6 @@ export const zkFetchClient = {
         const entries = await Promise.all(
           trusted.attestors.map(async (attestor) => {
             const evidence = await proveWith(provers, attestor, signedRequest);
-            assertNoSecretHeaders(evidence, signedRequest);
             return [attestor.id, evidence] as const;
           }),
         );

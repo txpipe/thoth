@@ -3,6 +3,8 @@
 
 import type { TrustedSet } from '@thoth/client';
 import { attestorOf } from '@thoth/client';
+import type { AttestorDescriptor } from '@thoth/core';
+import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema } from '@thoth/core/claim';
 import { z } from 'zod';
 import type { ZkFetchDefinition } from '../index.js';
@@ -12,13 +14,12 @@ import type {
   ZkFetchCollectedAttestation,
   ZkFetchRequest,
 } from './index.js';
-import type { Attestor } from './proposal.js';
 import {
-  assertNoSecretHeaders,
   attestWith,
   buildClaimProposal,
   copyRequest,
   proveWith,
+  SecretHeaderError,
 } from './proposal.js';
 
 /** Why one attestor's attempt was dropped. Carries no remote error text. */
@@ -101,7 +102,12 @@ const optionsSchema = z
 type Options = z.output<typeof optionsSchema>;
 type FailureReason = ZkFetchAttestorFailure['reason'];
 type Outcome<V extends number, PK, S> =
-  | { readonly slot: number; readonly collected: ZkFetchCollectedAttestation<V, PK, S> }
+  | {
+      readonly slot: number;
+      readonly collected: ZkFetchCollectedAttestation<V, PK, S>;
+      readonly claim: Claim<V>;
+      readonly message: FlatMessage;
+    }
   | { readonly slot: number; readonly reason: FailureReason };
 
 /** Rejects one attestor's attempt with a safe reason. */
@@ -118,7 +124,7 @@ class AttemptError extends Error {
 const parseOptions = <PK>(
   trusted: TrustedSet<ZkFetchDefinition, PK>,
   supplied: ZkFetchThresholdOptions,
-): { options: Options; candidates: Attestor<PK>[] } => {
+): { options: Options; candidates: AttestorDescriptor<ZkFetchDefinition, PK>[] } => {
   try {
     const options = optionsSchema.parse(supplied);
     const ids = options.attestorIds ?? trusted.attestors.map((attestor) => attestor.id);
@@ -145,7 +151,7 @@ const runAttempt = async <V extends number, PK, S>(
   config: ZkFetchClientConfig<V, PK, S>,
   request: ZkFetchRequest,
   options: Options,
-  attestor: Attestor<PK>,
+  attestor: AttestorDescriptor<ZkFetchDefinition, PK>,
 ): Promise<Outcome<V, PK, S>> => {
   const slot = attestor.registryIndex;
   const deadline = Math.min(Date.now() + options.attestorTimeoutMs, options.expiresAt);
@@ -155,15 +161,17 @@ const runAttempt = async <V extends number, PK, S>(
   });
 
   /**
-   * Run one step, replacing any error with `reason`. The clock check also
-   * catches a step that blocked the event loop past the deadline.
+   * Run one step, replacing any error with `reason`. A secret-header refusal
+   * keeps its own reason, so a leak is not reported as a failed proof. The
+   * clock check also catches a step that blocked the event loop past the
+   * deadline.
    */
   const step = async <T>(reason: FailureReason, run: () => Promise<T>): Promise<T> => {
     let result: T;
     try {
       result = await run();
-    } catch {
-      throw new AttemptError(reason);
+    } catch (error) {
+      throw new AttemptError(error instanceof SecretHeaderError ? 'secret' : reason);
     }
     if (Date.now() >= deadline) {
       throw new AttemptError('timeout');
@@ -173,17 +181,20 @@ const runAttempt = async <V extends number, PK, S>(
 
   const attempt = async () => {
     const evidence = await step('evidence', () => proveWith(config.provers, attestor, request));
-    await step('secret', async () => assertNoSecretHeaders(evidence, request));
     const { policy, appId, valueSlots } = config;
     const { holder, windowStart, windowEnd } = options;
     const claim = await step('evidence', () =>
       buildClaimProposal({ evidence, policy, appId, holder, valueSlots, windowStart, windowEnd }),
     );
-    return step('attestation', () => attestWith(config, attestor, evidence, claim));
+    const collected = await step('attestation', () =>
+      attestWith(config, attestor, evidence, claim),
+    );
+    return { collected, claim, message: collected.attestation.message };
   };
 
   try {
-    return { slot, collected: await Promise.race([attempt(), timeout]) };
+    const settled = await Promise.race([attempt(), timeout]);
+    return { slot, ...settled };
   } catch (error) {
     return { slot, reason: error instanceof AttemptError ? error.reason : 'evidence' };
   } finally {
@@ -224,11 +235,11 @@ export const collectThreshold = async <V extends number, PK, S>(
 
   const groups = new Map<string, ZkFetchCollectedAttestation<V, PK, S>[]>();
   const pending = new Map<number, Promise<Outcome<V, PK, S>>>();
-  let largestGroup = 0;
-  // `largestGroup + pending.size` never exceeds the threshold, so when a group
-  // reaches it, no other attempt is still pending.
+  let largestGroupSize = 0;
+  // `largestGroupSize + pending.size` never exceeds the threshold, so when a
+  // group reaches it, no other attempt is still pending.
   const startNeeded = () => {
-    while (largestGroup + pending.size < options.threshold) {
+    while (largestGroupSize + pending.size < options.threshold) {
       const attestor = candidates.shift();
       if (attestor === undefined) {
         return;
@@ -245,7 +256,7 @@ export const collectThreshold = async <V extends number, PK, S>(
     if ('reason' in outcome) {
       failures.push({ registryIndex: outcome.slot, reason: outcome.reason });
     } else {
-      const { claim, message } = outcome.collected.attestation;
+      const { claim, message } = outcome;
       const key = message.join(',');
       const group = [...(groups.get(key) ?? []), outcome.collected];
       groups.set(key, group);
@@ -253,7 +264,7 @@ export const collectThreshold = async <V extends number, PK, S>(
         group.sort((a, b) => a.registryIndex - b.registryIndex);
         return { claim, message, collected: group, failures };
       }
-      largestGroup = Math.max(largestGroup, group.length);
+      largestGroupSize = Math.max(largestGroupSize, group.length);
     }
     // Checked after recording the outcome, so a reached threshold is returned
     // and the expired error lists every failure.
