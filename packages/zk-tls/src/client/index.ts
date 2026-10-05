@@ -17,15 +17,15 @@ import type {
 } from '../index.js';
 import { assertPolicySlotsInRange, zkFetchPolicySchema } from '../index.js';
 import type {
-  ZkFetchCollection,
-  ZkFetchCollectionFailure,
-  ZkFetchCollectionIntent,
+  ZkFetchAttestorFailure,
+  ZkFetchThresholdAttestment,
+  ZkFetchThresholdOptions,
 } from './collect.js';
-import { collectThreshold, ZkFetchCollectionError } from './collect.js';
-import { attestWith, buildClaimProposal, proveWith } from './proposal.js';
+import { collectThreshold, ZkFetchThresholdError } from './collect.js';
+import { assertNoSecretHeaders, attestWith, buildClaimProposal, proveWith } from './proposal.js';
 
-export type { ZkFetchCollection, ZkFetchCollectionFailure, ZkFetchCollectionIntent };
-export { ZkFetchCollectionError };
+export type { ZkFetchAttestorFailure, ZkFetchThresholdAttestment, ZkFetchThresholdOptions };
+export { ZkFetchThresholdError };
 
 /** Byte length of a claim's `appId`. */
 const APP_ID_BYTES = 32;
@@ -175,9 +175,9 @@ export type ZkFetchCollectedAttestation<V extends number, PK, S> = CollectedAtte
  *
  * `claim`/`message` are the shared, deterministically derived claim and its
  * flat-message encoding; `collected` is one per attestor that answered. All
- * members must agree on `message` — the client enforces that via
- * `resolveAttestation`'s `expectedMessage`, and the registry counts signatures
- * over exactly this message.
+ * members must agree on `message` — `resolveAttestation` checks each one
+ * against the message of the claim it was asked to sign, and the registry
+ * counts signatures over exactly this message.
  *
  * @typeParam V — the claim's value-slot count.
  * @typeParam PK — the signature scheme's public-key type.
@@ -268,19 +268,23 @@ export interface ZkFetchClient<V extends number, PK, S> {
    *   Keep the secret locally for the contract witness; use a fresh secret per claim.
    * @returns a proof handle whose `attest` fan-out collects the N-of-M set.
    * @throws if the holder is not 32 bytes, a prover answers for a different
-   *   origin, or the witnesses disagree on the claim.
+   *   origin, evidence carries a secret header value, or the witnesses
+   *   disagree on the claim.
    */
   proveReq(request: ZkFetchRequest, holder: Uint8Array): Promise<ZkFetchClientProof<V, PK, S>>;
   /**
-   * Run independent witnessed sessions and collect a threshold under one intent.
-   * @param request - The HTTPS request, including headers private to the prover.
-   * @param intent - Fixed holder, observation window, deadline, and collection limits.
-   * @returns A set of verified signatures over one exact message, sorted by registry slot.
+   * Prove with each attestor's own witness and collect a threshold over one message.
+   *
+   * @param request — the HTTPS request, including headers private to the prover.
+   * @param options — the fixed holder and window, the deadline, and the limits.
+   * @returns an attestment over one exact message, sorted by registry slot.
+   * @throws {@link ZkFetchThresholdError} if the options are invalid, expire, or
+   *   no message reaches the threshold.
    */
   collect(
     request: ZkFetchRequest,
-    intent: ZkFetchCollectionIntent,
-  ): Promise<ZkFetchCollection<V, PK, S>>;
+    options: ZkFetchThresholdOptions,
+  ): Promise<ZkFetchThresholdAttestment<V, PK, S>>;
 }
 
 /**
@@ -340,16 +344,17 @@ export const zkFetchClient = {
     // instead of on the first `attest()`.
     assertPolicySlotsInRange(checkedPolicy, valueSlots);
     return {
-      collect: (request, intent) =>
-        collectThreshold({ ...config, policy: checkedPolicy }, request, intent),
+      collect: (request, options) =>
+        collectThreshold({ ...config, policy: checkedPolicy }, request, options),
       proveReq: async (request, holder): Promise<ZkFetchClientProof<V, PK, S>> => {
         const checkedHolder = bytes32Schema.parse(holder).slice();
         const signedRequest: ZkFetchRequest = { ...request };
         const entries = await Promise.all(
-          trusted.attestors.map(
-            async (attestor) =>
-              [attestor.id, await proveWith(provers, attestor, signedRequest)] as const,
-          ),
+          trusted.attestors.map(async (attestor) => {
+            const evidence = await proveWith(provers, attestor, signedRequest);
+            assertNoSecretHeaders(evidence, signedRequest);
+            return [attestor.id, evidence] as const;
+          }),
         );
         const evidences: Record<string, ZkFetchEvidence> = {};
         for (const [id, evidence] of entries) {

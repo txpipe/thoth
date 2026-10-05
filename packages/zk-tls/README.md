@@ -108,37 +108,41 @@ Only the commitment goes to the client and attestors. Keep the secret locally
 for the contract witness when vaulting or opening the claim. Secret reuse links
 claims; Thoth promises no cross-claim identity or unlinkability.
 
-## Threshold collection
+## Collecting a threshold
 
-`client.collect(request, intent)` obtains an N-of-M set in one call; see the
-[dApp integration guide](docs/dapp-integration.md#collecting-a-threshold) for
-an example.
+`client.collect(request, options)` obtains an N-of-M attestment in one call;
+see the [dApp integration guide](docs/dapp-integration.md#collecting-a-threshold)
+for an example.
 
-- **Fixed intent.** The caller fixes the holder and observation window before
-  any session starts, so every witness signs under the same window. Choose its
+- **Fixed window.** The caller fixes the holder and observation window before
+  any attempt starts, so every witness signs under the same window. Choose its
   width to satisfy the contract's freshness rules. `expiresAt` is a local
   deadline only; it is not signed.
-- **Resilient.** Collection starts `threshold` sessions and contacts a spare
-  only when no message group can still reach the threshold, so a down,
-  disagreeing, or invalid operator does not fail a healthy subset. Spare
+- **Resilient.** `collect` starts `threshold` attempts and contacts a spare
+  attestor only when no message group can still reach the threshold, so a
+  down, disagreeing, or invalid attestor does not fail a healthy subset. Spare
   provers that are never needed do not receive the request.
 - **Verified and distinct.** Every response passes the same checks as
   `proof.attest()`, then counts once per registry slot within its exact-message
-  group.
-- **Bounded.** `operatorTimeoutMs` covers proving, transport, and verification;
-  a late result never proceeds or counts. Collection stops waiting for a
-  session that times out, or is still running when a group reaches the
-  threshold, but cannot stop its work. That session's witness fetch and local
-  ZK proving run to completion in the background. Reclaim's
-  `createClaimOnAttestor` (`@reclaimprotocol/attestor-core` 5.0.8) accepts no
-  abort signal, so `ZkFetchProver.prove` has nothing to pass one to.
-  Terminating the attestor client could cut the network side, but only for a
-  private client. The prover uses Reclaim's per-URL client pool, which other
-  claims to the same witness share.
-- **Safe failures.** Errors carry only registry slots and phase reasons, never
-  remote error text. Evidence containing a secret header value, including
-  JSON-escaped forms, is never forwarded. The prover must still redact; the
-  guard cannot recognize arbitrary transformations of a secret.
+  group. `threshold` comes from the caller; the client cannot read the
+  contract's N, so set it to match.
+- **Bounded.** `attestorTimeoutMs` covers proving, transport, and verification;
+  a late result never proceeds or counts. When a group reaches the threshold,
+  no other attempt is in flight. An attempt that times out is dropped but not
+  stopped. Its witness fetch and local ZK proving run to completion in the
+  background. Reclaim's `createClaimOnAttestor`
+  (`@reclaimprotocol/attestor-core` 5.0.8) accepts no abort signal, so
+  `ZkFetchProver.prove` has nothing to pass one to. Terminating the attestor
+  client could cut the network side, but only for a private client. The
+  prover uses Reclaim's per-URL client pool, which other claims to the same
+  witness share.
+- **Safe failures.** Errors carry only registry slots and step reasons, never
+  remote error text. Both `collect` and `proveReq` refuse evidence that
+  carries a secret header value as written, percent-encoded, or JSON-escaped,
+  before it reaches an attestor. The prover must still redact; the check
+  cannot recognize every transformation of a secret. It fails closed, so a
+  very short secret value can match unrelated text and drop a healthy
+  attestor as `secret`.
 
 ## Concepts
 
@@ -257,10 +261,10 @@ The kind sits in the middle of the Thoth layering:
   using the configured verifier. Forged transport responses fail before
   submission. The client does not repeat the witness ECDSA check. The
   on-chain registry still enforces the N-of-M threshold.
-- **One intent across fallback.** Threshold collection uses a caller-fixed
-  observation window. Extending a window after each fallback would change the
-  signed message and discard earlier signatures. The local deadline bounds
-  collection while the contract remains responsible for signed-window freshness.
+- **One window across fallback.** `collect` uses a caller-fixed observation
+  window. Extending a window after each fallback would change the signed
+  message and discard earlier signatures. The local deadline bounds `collect`
+  while the contract remains responsible for signed-window freshness.
 - **Strict input.** Fewer shapes to reason about at a trust boundary, and no
   witness-address decoding inside the verifier.
 

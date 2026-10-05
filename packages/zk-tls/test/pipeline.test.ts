@@ -284,13 +284,13 @@ describe('zkFetch attestor + client', () => {
       provers: overrides.provers ?? provers,
     });
 
-  const intent = () => ({
+  const options = () => ({
     holder: new Uint8Array(32).fill(0xc1),
     windowStart: BigInt(BASE_TIMESTAMP_S),
     windowEnd: BigInt(BASE_TIMESTAMP_S + 60),
     expiresAt: Date.now() + 60_000,
     threshold: 2,
-    operatorTimeoutMs: 5_000,
+    attestorTimeoutMs: 5_000,
   });
   const collectionRequest = { url: 'https://api.github.com/repos/x', method: 'GET' as const };
   const slots = (result: { collected: readonly { registryIndex: number }[] }) =>
@@ -309,7 +309,7 @@ describe('zkFetch attestor + client', () => {
   };
 
   it('collects a threshold of distinct registry slots in one call', async () => {
-    const result = await clientWith().collect(collectionRequest, intent());
+    const result = await clientWith().collect(collectionRequest, options());
     expect(slots(result)).toEqual([0, 1]);
     expect(
       result.collected.every((entry) =>
@@ -318,13 +318,13 @@ describe('zkFetch attestor + client', () => {
     ).toBe(true);
   });
 
-  it('collects a healthy subset when an operator observes a different value', async () => {
+  it('collects a healthy subset when an attestor observes a different value', async () => {
     const client = clientWith({
       provers: proversWith({
         values: (id) => ({ data: id === 'attestor-0' ? '99' : '42' }),
       }),
     });
-    const result = await client.collect(collectionRequest, intent());
+    const result = await client.collect(collectionRequest, options());
     expect(slots(result)).toEqual([1, 2]);
     expect(result.claim.values[0]).toBe(42n);
   });
@@ -341,7 +341,7 @@ describe('zkFetch attestor + client', () => {
       },
     }).collect(
       { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
-      intent(),
+      options(),
     );
     expect(slots(result)).toEqual([1, 2]);
     expect(result.failures).toEqual([{ registryIndex: 0, reason: 'evidence' }]);
@@ -359,6 +359,11 @@ describe('zkFetch attestor + client', () => {
       encoding: 'Unicode-escaped',
       secret: 'Bearer private-token',
       encode: (json: string) => json.replace('private-token', '\\u0070rivate-token'),
+    },
+    {
+      encoding: 'percent-encoded',
+      secret: 'Bearer private-token',
+      encode: (json: string) => json.replace('Bearer private-token', 'Bearer%20private-token'),
     },
   ])('never forwards evidence carrying a $encoding secret header value', async (leak) => {
     const { seen, watched } = watchSlot0();
@@ -378,15 +383,37 @@ describe('zkFetch attestor + client', () => {
     });
     const result = await client.collect(
       { ...collectionRequest, secretHeaders: { authorization: leak.secret } },
-      intent(),
+      options(),
     );
     expect(slots(result)).toEqual([1, 2]);
     expect(result.failures).toEqual([{ registryIndex: 0, reason: 'secret' }]);
     expect(seen.contacted).toBe(false);
   });
 
+  it('refuses a proof handle whose evidence carries a secret header value', async () => {
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async (request) => {
+            const evidence = await observe(aliceWitness, request);
+            const context = { ...JSON.parse(evidence.claim.context), echo: 'Bearer private-token' };
+            evidence.claim.context = JSON.stringify(context);
+            return evidence;
+          },
+        },
+      },
+    });
+    await expect(
+      client.proveReq(
+        { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
+        new Uint8Array(32).fill(0xc1),
+      ),
+    ).rejects.toThrow(/secret header value/);
+  });
+
   it.each(['prover', 'transport', 'verifier'] as const)(
-    'times out a hanging %s and collects from the next operator',
+    'times out a hanging %s and collects from the next attestor',
     async (step) => {
       vi.useFakeTimers();
       try {
@@ -412,7 +439,7 @@ describe('zkFetch attestor + client', () => {
                 : fakeVerifier.verify(key, message, signature),
           },
         });
-        const pending = client.collect(collectionRequest, { ...intent(), operatorTimeoutMs: 100 });
+        const pending = client.collect(collectionRequest, { ...options(), attestorTimeoutMs: 100 });
         await vi.advanceTimersByTimeAsync(100);
         const result = await pending;
         expect(slots(result)).toEqual([1, 2]);
@@ -423,12 +450,12 @@ describe('zkFetch attestor + client', () => {
     },
   );
 
-  it('expires an intent while its witness session is still pending', async () => {
+  it('expires the deadline while a witness fetch is still pending', async () => {
     vi.useFakeTimers();
     try {
       const pending = clientWith({
         provers: { ...provers, 'attestor-0': { prove: () => hanging<ZkFetchEvidence>() } },
-      }).collect(collectionRequest, { ...intent(), expiresAt: Date.now() + 50 });
+      }).collect(collectionRequest, { ...options(), expiresAt: Date.now() + 50 });
       const rejection = expect(pending).rejects.toMatchObject({ reason: 'expired' });
       await vi.advanceTimersByTimeAsync(50);
       await rejection;
@@ -437,7 +464,7 @@ describe('zkFetch attestor + client', () => {
     }
   }, 500);
 
-  it('runs the initial threshold sessions concurrently and leaves spare witnesses uncontacted', async () => {
+  it('runs the initial threshold attempts concurrently and leaves spare witnesses uncontacted', async () => {
     let release: (() => void) | undefined;
     const ready = new Promise<void>((resolve) => {
       release = resolve;
@@ -463,7 +490,7 @@ describe('zkFetch attestor + client', () => {
         },
       },
     });
-    const result = await client.collect(collectionRequest, intent());
+    const result = await client.collect(collectionRequest, options());
     expect(slots(result)).toEqual([0, 1]);
     expect(result.failures).toEqual([]);
   }, 500);
@@ -472,30 +499,27 @@ describe('zkFetch attestor + client', () => {
     { threshold: 0 },
     { threshold: 4 },
     { threshold: 1.5 },
-    { operatorTimeoutMs: 0 },
-    { operatorTimeoutMs: Number.NaN },
+    { attestorTimeoutMs: 0 },
+    { attestorTimeoutMs: Number.NaN },
     { expiresAt: Number.NaN },
     { holder: new Uint8Array(31) },
     { windowStart: BigInt(BASE_TIMESTAMP_S + 61) },
     { attestorIds: ['attestor-0', 'attestor-0'] },
     { attestorIds: ['unknown'] },
-  ])(
-    'rejects invalid intent limits or selection before contacting witnesses: %o',
-    async (override) => {
-      let contacted = false;
-      const client = clientWith({
-        provers: proversWith({
-          onProve: () => {
-            contacted = true;
-          },
-        }),
-      });
-      await expect(
-        client.collect(collectionRequest, { ...intent(), ...override }),
-      ).rejects.toMatchObject({ reason: 'invalid-intent' });
-      expect(contacted).toBe(false);
-    },
-  );
+  ])('rejects invalid options or selection before contacting witnesses: %o', async (override) => {
+    let contacted = false;
+    const client = clientWith({
+      provers: proversWith({
+        onProve: () => {
+          contacted = true;
+        },
+      }),
+    });
+    await expect(
+      client.collect(collectionRequest, { ...options(), ...override }),
+    ).rejects.toMatchObject({ reason: 'invalid-options' });
+    expect(contacted).toBe(false);
+  });
 
   it('does not count a forged signature toward an otherwise healthy threshold', async () => {
     const client = clientWith({
@@ -506,14 +530,14 @@ describe('zkFetch attestor + client', () => {
         },
       },
     });
-    const result = await client.collect(collectionRequest, intent());
+    const result = await client.collect(collectionRequest, options());
     expect(slots(result)).toEqual([1, 2]);
     expect(result.failures).toEqual([{ registryIndex: 0, reason: 'attestation' }]);
   });
 
   it('counts duplicate target ids only once and preserves registry placement', async () => {
     const result = await clientWith().collect(collectionRequest, {
-      ...intent(),
+      ...options(),
       attestorIds: ['attestor-2', 'attestor-2', 'attestor-0'],
     });
     expect(slots(result)).toEqual([0, 2]);
@@ -527,13 +551,13 @@ describe('zkFetch attestor + client', () => {
         }),
       }),
     });
-    await expect(client.collect(collectionRequest, intent())).rejects.toMatchObject({
+    await expect(client.collect(collectionRequest, options())).rejects.toMatchObject({
       reason: 'threshold',
       failures: [],
     });
   });
 
-  it('rejects an already expired intent before contacting any witness', async () => {
+  it('rejects an already expired deadline before contacting any witness', async () => {
     let contacted = false;
     const client = clientWith({
       provers: proversWith({
@@ -543,7 +567,7 @@ describe('zkFetch attestor + client', () => {
       }),
     });
     await expect(
-      client.collect(collectionRequest, { ...intent(), expiresAt: Date.now() }),
+      client.collect(collectionRequest, { ...options(), expiresAt: Date.now() }),
     ).rejects.toMatchObject({ reason: 'expired' });
     expect(contacted).toBe(false);
   });
@@ -570,9 +594,9 @@ describe('zkFetch attestor + client', () => {
     });
     // Threshold 1, so the blocked operator runs alone and the spare starts on a fresh deadline.
     const result = await client.collect(collectionRequest, {
-      ...intent(),
+      ...options(),
       threshold: 1,
-      operatorTimeoutMs: 100,
+      attestorTimeoutMs: 100,
     });
     expect(slots(result)).toEqual([1]);
     expect(result.failures).toEqual([{ registryIndex: 0, reason: 'timeout' }]);
@@ -590,7 +614,7 @@ describe('zkFetch attestor + client', () => {
         provers: { ...provers, 'attestor-0': { prove: () => late } },
         transport: watched,
       });
-      const pending = client.collect(collectionRequest, { ...intent(), operatorTimeoutMs: 100 });
+      const pending = client.collect(collectionRequest, { ...options(), attestorTimeoutMs: 100 });
       await vi.advanceTimersByTimeAsync(100);
       const result = await pending;
       release?.(await observe(aliceWitness, collectionRequest));

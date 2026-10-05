@@ -35,10 +35,7 @@ export type Attestor<PK> = TrustedSet<ZkFetchDefinition, PK>['attestors'][number
  * @param request — what the caller asked the client to prove.
  * @throws if the evidence attests a different origin than requested.
  */
-export const assertEvidenceMatchesRequest = (
-  evidence: ZkFetchEvidence,
-  request: ZkFetchRequest,
-): void => {
+const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetchRequest): void => {
   const asked = new URL(request.url).origin;
   const attested = new URL(claimUrl(evidence.claim)).origin;
   if (asked !== attested) {
@@ -53,9 +50,9 @@ export const assertEvidenceMatchesRequest = (
  * deliberately does **not** re-verify the Reclaim ECDSA signature, and each
  * pinned attestor verifies the evidence before signing.
  * Because the claim is deterministic in the evidence, the
- * proposal is byte-identical to what each attestor will sign, so the client
- * can precompute the expected message and vet each returned attestation
- * against it (`resolveAttestation`'s `expectedMessage`).
+ * proposal is byte-identical to what each attestor will sign, so
+ * `resolveAttestation` can vet each returned message against the message
+ * derived from this claim.
  *
  * @typeParam V — the claim's value-slot count (the dApp contract's `#V`).
  * @param options — the evidence, the shared policy, the app id, the slot
@@ -144,4 +141,45 @@ export const attestWith = async <V extends number, PK, S>(
   const input = { policy, evidence, claim } as unknown as ZkFetchAttestationInput;
   const attestation = await transport.request(attestor, input);
   return resolveAttestation({ trusted, attestor, attestation, verifier, expectedClaim: claim });
+};
+
+/** Whether a value carries a secret anywhere, including inside JSON-encoded strings. */
+const containsSecret = (value: unknown, secrets: readonly string[]): boolean => {
+  if (typeof value === 'string') {
+    if (secrets.some((secret) => value.includes(secret))) {
+      return true;
+    }
+    // Decoding catches escaped forms such as `private`.
+    try {
+      return containsSecret(JSON.parse(value), secrets);
+    } catch {
+      return false;
+    }
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.entries(value).some(
+      ([key, field]) => containsSecret(key, secrets) || containsSecret(field, secrets),
+    );
+  }
+  return false;
+};
+
+/**
+ * The evidence carries no secret header value, before it goes to an attestor.
+ *
+ * Catches each value as written, percent-encoded (as echoed into a URL), and
+ * JSON-escaped. A prover must still redact; no check can recognize every
+ * transformation of a secret.
+ *
+ * @param evidence — canonical evidence from the prover.
+ * @param request — the request whose `secretHeaders` must stay private.
+ * @throws if the evidence carries a secret header value.
+ */
+export const assertNoSecretHeaders = (evidence: ZkFetchEvidence, request: ZkFetchRequest): void => {
+  const secrets = Object.values(request.secretHeaders ?? {})
+    .filter(Boolean)
+    .flatMap((secret) => [secret, encodeURIComponent(secret)]);
+  if (containsSecret(evidence, secrets)) {
+    throw new Error('evidence carries a secret header value');
+  }
 };

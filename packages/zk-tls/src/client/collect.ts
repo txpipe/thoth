@@ -1,5 +1,5 @@
-// `zkFetchClient.collect`: one witnessed session per operator, until a
-// threshold of registry slots signs the same message.
+// `zkFetchClient.collect`: one attempt per attestor, until a threshold of
+// registry slots signs the same message.
 
 import type { TrustedSet } from '@thoth/client';
 import { attestorOf } from '@thoth/client';
@@ -13,52 +13,52 @@ import type {
   ZkFetchRequest,
 } from './index.js';
 import type { Attestor } from './proposal.js';
-import { attestWith, buildClaimProposal, proveWith } from './proposal.js';
+import { assertNoSecretHeaders, attestWith, buildClaimProposal, proveWith } from './proposal.js';
 
-/** Why an operator's session was dropped. Carries no remote error text. */
-export interface ZkFetchCollectionFailure {
-  /** The operator's registry slot. */
+/** Why one attestor's attempt was dropped. Carries no remote error text. */
+export interface ZkFetchAttestorFailure {
+  /** The attestor's registry slot. */
   readonly registryIndex: number;
-  /** The phase that failed. */
+  /** The step that failed. */
   readonly reason: 'evidence' | 'secret' | 'attestation' | 'timeout';
 }
 
 /**
- * A threshold of attestations over one message.
+ * An attestment that reached the threshold, plus the attestors that failed.
  *
  * @typeParam V — the claim's value-slot count.
  * @typeParam PK — the signature scheme's public-key type.
  * @typeParam S — the signature scheme's signature type.
  */
-export interface ZkFetchCollection<V extends number, PK, S> extends Attestment<V, PK, S> {
-  /** Operators that failed. Valid signatures over another message are not failures. */
-  readonly failures: readonly ZkFetchCollectionFailure[];
+export interface ZkFetchThresholdAttestment<V extends number, PK, S> extends Attestment<V, PK, S> {
+  /** Attestors that failed. Valid signatures over another message are not failures. */
+  readonly failures: readonly ZkFetchAttestorFailure[];
 }
 
-/** No threshold was collected. Carries no request, evidence, or remote error text. */
-export class ZkFetchCollectionError extends Error {
-  /** Why collection failed. */
-  readonly reason: 'invalid-intent' | 'expired' | 'threshold';
-  /** Operators that failed before collection stopped. */
-  readonly failures: readonly ZkFetchCollectionFailure[];
+/** No threshold was reached. Carries no request, evidence, or remote error text. */
+export class ZkFetchThresholdError extends Error {
+  /** Why no threshold was reached. */
+  readonly reason: 'invalid-options' | 'expired' | 'threshold';
+  /** Attestors that failed before `collect` stopped. */
+  readonly failures: readonly ZkFetchAttestorFailure[];
 
   /**
-   * @param reason — why collection failed.
-   * @param failures — operators that failed.
+   * @param reason — why no threshold was reached.
+   * @param failures — attestors that failed.
    */
   constructor(
-    reason: ZkFetchCollectionError['reason'],
-    failures: readonly ZkFetchCollectionFailure[] = [],
+    reason: ZkFetchThresholdError['reason'],
+    failures: readonly ZkFetchAttestorFailure[] = [],
   ) {
-    super(`zkFetch collection failed: ${reason}`);
-    this.name = 'ZkFetchCollectionError';
+    super(`zkFetch threshold not reached: ${reason}`);
+    this.name = 'ZkFetchThresholdError';
     this.reason = reason;
     this.failures = [...failures];
   }
 }
 
-/** The claim inputs and limits shared by every operator in one `collect` call. */
-export interface ZkFetchCollectionIntent {
+/** The claim inputs and limits shared by every attestor in one `collect` call. */
+export interface ZkFetchThresholdOptions {
   /** Per-claim holder commitment, 32 bytes. */
   readonly holder: Uint8Array;
   /** Inclusive start of the signed observation window, Unix seconds. */
@@ -69,13 +69,13 @@ export interface ZkFetchCollectionIntent {
   readonly expiresAt: number;
   /** Distinct registry slots that must sign the same message. */
   readonly threshold: number;
-  /** Time limit per operator, covering proving, transport, and verification. */
-  readonly operatorTimeoutMs: number;
+  /** Time limit per attestor, covering proving, transport, and verification. */
+  readonly attestorTimeoutMs: number;
   /** Candidate ids in contact order; defaults to the trusted set's order. */
   readonly attestorIds?: readonly string[];
 }
 
-const intentSchema = z
+const optionsSchema = z
   .object({
     holder: bytes32Schema,
     windowStart: z.bigint().nonnegative(),
@@ -83,7 +83,7 @@ const intentSchema = z
     expiresAt: z.number().int(),
     threshold: z.number().int().positive(),
     // `setTimeout` fires immediately past 2^31 - 1 ms.
-    operatorTimeoutMs: z
+    attestorTimeoutMs: z
       .number()
       .int()
       .positive()
@@ -92,81 +92,60 @@ const intentSchema = z
   })
   .refine(({ windowStart, windowEnd }) => windowStart <= windowEnd);
 
-type Intent = z.output<typeof intentSchema>;
-type FailureReason = ZkFetchCollectionFailure['reason'];
+type Options = z.output<typeof optionsSchema>;
+type FailureReason = ZkFetchAttestorFailure['reason'];
 type Outcome<V extends number, PK, S> =
   | { readonly slot: number; readonly collected: ZkFetchCollectedAttestation<V, PK, S> }
   | { readonly slot: number; readonly reason: FailureReason };
 
-/** Rejects an operator session with a safe reason. */
-class SessionError extends Error {
+/** Rejects one attestor's attempt with a safe reason. */
+class AttemptError extends Error {
   readonly reason: FailureReason;
 
   constructor(reason: FailureReason) {
-    super(`operator session failed: ${reason}`);
+    super(`attestor attempt failed: ${reason}`);
     this.reason = reason;
   }
 }
 
-/** Validate the intent; resolve its ids to one candidate per registry slot. */
-const parseIntent = <PK>(
+/** Validate the options; resolve their ids to one candidate per registry slot. */
+const parseOptions = <PK>(
   trusted: TrustedSet<ZkFetchDefinition, PK>,
-  supplied: ZkFetchCollectionIntent,
-): { intent: Intent; candidates: Attestor<PK>[] } => {
+  supplied: ZkFetchThresholdOptions,
+): { options: Options; candidates: Attestor<PK>[] } => {
   try {
-    const intent = intentSchema.parse(supplied);
-    const ids = intent.attestorIds ?? trusted.attestors.map((attestor) => attestor.id);
+    const options = optionsSchema.parse(supplied);
+    const ids = options.attestorIds ?? trusted.attestors.map((attestor) => attestor.id);
     // A trusted set maps ids one-to-one onto slots, so distinct ids are distinct slots.
     const candidates = [...new Set(ids)].map((id) => attestorOf(trusted, id));
-    if (candidates.length < intent.threshold) {
+    if (candidates.length < options.threshold) {
       throw new Error('fewer candidate slots than the threshold');
     }
-    return { intent: { ...intent, holder: intent.holder.slice() }, candidates };
+    return { options: { ...options, holder: options.holder.slice() }, candidates };
   } catch {
-    throw new ZkFetchCollectionError('invalid-intent');
+    throw new ZkFetchThresholdError('invalid-options');
   }
-};
-
-/** Whether evidence carries a secret anywhere, including inside JSON-encoded strings. */
-const containsSecret = (value: unknown, secrets: readonly string[]): boolean => {
-  if (typeof value === 'string') {
-    if (secrets.some((secret) => value.includes(secret))) {
-      return true;
-    }
-    // Decoding catches escaped forms such as `\u0070rivate`.
-    try {
-      return containsSecret(JSON.parse(value), secrets);
-    } catch {
-      return false;
-    }
-  }
-  if (typeof value === 'object' && value !== null) {
-    return Object.entries(value).some(
-      ([key, field]) => containsSecret(key, secrets) || containsSecret(field, secrets),
-    );
-  }
-  return false;
 };
 
 /**
- * Prove, check, and attest with one operator, within its time limit.
+ * Prove, check, and attest with one attestor, within its time limit.
  *
- * A session that times out keeps running in the background, because
+ * An attempt that times out keeps running in the background, because
  * Reclaim's `createClaimOnAttestor` takes no abort signal (see the README's
- * "Threshold collection"). It stops at its next step, so a late result is
+ * "Collecting a threshold"). It stops at its next step, so a late result is
  * never forwarded or counted.
  */
-const runSession = async <V extends number, PK, S>(
+const runAttempt = async <V extends number, PK, S>(
   config: ZkFetchClientConfig<V, PK, S>,
   request: ZkFetchRequest,
-  intent: Intent,
+  options: Options,
   attestor: Attestor<PK>,
 ): Promise<Outcome<V, PK, S>> => {
   const slot = attestor.registryIndex;
-  const deadline = Math.min(Date.now() + intent.operatorTimeoutMs, intent.expiresAt);
+  const deadline = Math.min(Date.now() + options.attestorTimeoutMs, options.expiresAt);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new SessionError('timeout')), deadline - Date.now());
+    timer = setTimeout(() => reject(new AttemptError('timeout')), deadline - Date.now());
   });
 
   /**
@@ -178,22 +157,19 @@ const runSession = async <V extends number, PK, S>(
     try {
       result = await run();
     } catch {
-      throw new SessionError(reason);
+      throw new AttemptError(reason);
     }
     if (Date.now() >= deadline) {
-      throw new SessionError('timeout');
+      throw new AttemptError('timeout');
     }
     return result;
   };
 
-  const session = async () => {
+  const attempt = async () => {
     const evidence = await step('evidence', () => proveWith(config.provers, attestor, request));
-    const secrets = Object.values(request.secretHeaders ?? {}).filter(Boolean);
-    if (containsSecret(evidence, secrets)) {
-      throw new SessionError('secret');
-    }
+    await step('secret', async () => assertNoSecretHeaders(evidence, request));
     const { policy, appId, valueSlots } = config;
-    const { holder, windowStart, windowEnd } = intent;
+    const { holder, windowStart, windowEnd } = options;
     const claim = await step('evidence', () =>
       buildClaimProposal({ evidence, policy, appId, holder, valueSlots, windowStart, windowEnd }),
     );
@@ -201,9 +177,9 @@ const runSession = async <V extends number, PK, S>(
   };
 
   try {
-    return { slot, collected: await Promise.race([session(), timeout]) };
+    return { slot, collected: await Promise.race([attempt(), timeout]) };
   } catch (error) {
-    return { slot, reason: error instanceof SessionError ? error.reason : 'evidence' };
+    return { slot, reason: error instanceof AttemptError ? error.reason : 'evidence' };
   } finally {
     clearTimeout(timer);
   }
@@ -212,42 +188,44 @@ const runSession = async <V extends number, PK, S>(
 /**
  * Collect a threshold of attestations over one exact message.
  *
- * Starts `threshold` sessions at once, and a spare only when the sessions in
+ * Starts `threshold` attempts at once, and a spare only when the attempts in
  * flight can no longer bring any message to the threshold.
  *
  * @typeParam V — the claim's value-slot count.
  * @typeParam PK — the signature scheme's public-key type.
  * @typeParam S — the signature scheme's signature type.
  * @param config — the client config, with its checked policy.
- * @param request — the request each operator's witness proves.
- * @param supplied — the caller's intent.
+ * @param request — the request each attestor's witness proves.
+ * @param supplied — the caller's holder, window, and limits.
  * @returns the first message to reach the threshold, attestations sorted by registry slot.
- * @throws {@link ZkFetchCollectionError} if the intent is invalid, expires, or
+ * @throws {@link ZkFetchThresholdError} if the options are invalid, expire, or
  *   the candidates run out.
  */
 export const collectThreshold = async <V extends number, PK, S>(
   config: ZkFetchClientConfig<V, PK, S>,
   request: ZkFetchRequest,
-  supplied: ZkFetchCollectionIntent,
-): Promise<ZkFetchCollection<V, PK, S>> => {
-  const { intent, candidates } = parseIntent(config.trusted, supplied);
-  const failures: ZkFetchCollectionFailure[] = [];
+  supplied: ZkFetchThresholdOptions,
+): Promise<ZkFetchThresholdAttestment<V, PK, S>> => {
+  const { options, candidates } = parseOptions(config.trusted, supplied);
+  const failures: ZkFetchAttestorFailure[] = [];
   const assertUnexpired = () => {
-    if (Date.now() >= intent.expiresAt) {
-      throw new ZkFetchCollectionError('expired', failures);
+    if (Date.now() >= options.expiresAt) {
+      throw new ZkFetchThresholdError('expired', failures);
     }
   };
 
   const groups = new Map<string, ZkFetchCollectedAttestation<V, PK, S>[]>();
   const pending = new Map<number, Promise<Outcome<V, PK, S>>>();
   let largestGroup = 0;
+  // `largestGroup + pending.size` never exceeds the threshold, so when a group
+  // reaches it, no other attempt is still pending.
   const startNeeded = () => {
-    while (largestGroup + pending.size < intent.threshold) {
+    while (largestGroup + pending.size < options.threshold) {
       const attestor = candidates.shift();
       if (attestor === undefined) {
         return;
       }
-      pending.set(attestor.registryIndex, runSession(config, request, intent, attestor));
+      pending.set(attestor.registryIndex, runAttempt(config, request, options, attestor));
     }
   };
 
@@ -264,7 +242,7 @@ export const collectThreshold = async <V extends number, PK, S>(
       const key = message.join(',');
       const group = [...(groups.get(key) ?? []), outcome.collected];
       groups.set(key, group);
-      if (group.length === intent.threshold) {
+      if (group.length === options.threshold) {
         group.sort((a, b) => a.registryIndex - b.registryIndex);
         return { claim, message, collected: group, failures };
       }
@@ -272,5 +250,5 @@ export const collectThreshold = async <V extends number, PK, S>(
     }
     startNeeded();
   }
-  throw new ZkFetchCollectionError('threshold', failures);
+  throw new ZkFetchThresholdError('threshold', failures);
 };

@@ -108,15 +108,15 @@ const attestment = await client.collect(request, {
   windowEnd: BigInt(start + 60),
   expiresAt: Date.now() + 60_000,
   threshold: 2,
-  operatorTimeoutMs: 20_000,
+  attestorTimeoutMs: 20_000,
 });
 ```
 
 Set the window to the consuming contract's permitted freshness and width, and
 `threshold` to its on-chain N. Pass an ordered `attestorIds` list to limit which
-witnesses' sessions use your secret headers. The result is one agreeing group,
+witnesses use your secret headers. The result is one agreeing group,
 submitted with the registry placement described below; see the
-[README](../README.md#threshold-collection) for the failure semantics.
+[README](../README.md#collecting-a-threshold) for the failure semantics.
 
 ## Building the request
 
