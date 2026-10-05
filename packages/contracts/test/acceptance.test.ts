@@ -114,7 +114,7 @@ const collectSubmission = async (): Promise<Submission> => {
     windowEnd: WINDOW_END,
     expiresAt: Date.now() + 60_000,
     threshold: 2,
-    operatorTimeoutMs: 5_000,
+    attestorTimeoutMs: 5_000,
   });
   const signatures = registryKeys.map(
     (_, slot) =>
