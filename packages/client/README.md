@@ -26,19 +26,21 @@ npm install @thoth/client
   set: rejects an invalid registry size, an empty set, duplicate ids, duplicate
   public keys, duplicate slots, and slots outside `[0, registrySize)`
   (`InvalidTrustedSetError`, from `@thoth/client/errors`).
-- `attestorOf(trusted, id)` — resolve a string-named attestor to its trusted
-  member (descriptor + slot).
+- `memberOf(trusted, id)` — resolve a string-named attestor to its trusted
+  member (descriptor + slot). `attestorOf(trusted, id)` returns the descriptor
+  alone, and `attestorIdsOf(trusted)` lists every member's id.
 - `AttestorTransport<D, PK, S>` — the seam between the client and a remote
   attestor: `request(attestor, input): Promise<Attestation>`. A kind SDK or the
   app supplies the concrete transport. The host-side mirror is `Attestor.attest` in `@thoth/attestor`.
 - `await resolveAttestation({ trusted, member, attestation, verifier, expectedClaim, expectedMessage? })` —
-  checks trusted-set membership, the pinned key, expected claim, signature, claim-to-message
-  binding, slot bounds, and optionally the expected message, then tags the
+  checks trusted-set membership (by id, slot, and key, so a copied member is
+  accepted), the pinned key, expected claim, signature, claim-to-message
+  binding, and optionally the expected message, then tags the
   attestation with the member's slot as a `CollectedAttestation`.
 - `CollectedAttestation<C, PK, S, Msg>` — the collection output shape:
   an `Attestation` plus the `registryIndex` it belongs to.
 - Errors: `AttestationMismatchError` (thrown by `resolveAttestation`; `reason`
-  is `'public-key' | 'message' | 'registry-index' | 'claim' | 'signature'`),
+  is `'public-key' | 'message' | 'claim' | 'signature'`),
   `AttestorNotInTrustedSetError`, `InvalidTrustedSetError` (thrown by
   `buildTrustedSet`) — exported from `@thoth/client/errors`.
 
@@ -100,13 +102,13 @@ const httpTransport: AttestorTransport<MyDefinition, MyPublicKey, MySignature> =
 
 ### Resolve string-named endpoints
 
-`attestorOf(trusted, id)` is the name→member lookup behind a friendly
+`memberOf(trusted, id)` is the name→member lookup behind a friendly
 `proof.attest("txpipeEndpoint", …)` API, without each SDK re-checking
 membership:
 
 ```ts
 // throws AttestorNotInTrustedSetError if not pinned
-const member = attestorOf(trusted, 'txpipeEndpoint');
+const member = memberOf(trusted, 'txpipeEndpoint');
 await transport.request(member.attestor, input); // transports never see the slot
 ```
 

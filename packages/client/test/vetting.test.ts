@@ -4,7 +4,13 @@ import {
   jubjubSchnorrSign,
   jubjubSchnorrVerifyingKey,
 } from '@midnight-ntwrk/compact-runtime';
-import { attestorOf, buildTrustedSet, resolveAttestation } from '@thoth/client';
+import {
+  attestorIdsOf,
+  attestorOf,
+  buildTrustedSet,
+  memberOf,
+  resolveAttestation,
+} from '@thoth/client';
 import { AttestorNotInTrustedSetError } from '@thoth/client/errors';
 import { jubjubVerifier } from '@thoth/client/jubjub';
 import { describe, expect, it } from 'vitest';
@@ -24,7 +30,7 @@ const publicKey = jubjubSchnorrVerifyingKey(17n);
 const signature = jubjubSchnorrSign(new CompactTypeVector(1, CompactTypeField), message, 17n);
 const attestor = { id: 'alice', definition, publicKey };
 const trusted = buildTrustedSet({ registrySize: 3, attestors: [{ attestor, registryIndex: 2 }] });
-const member = attestorOf(trusted, 'alice');
+const member = memberOf(trusted, 'alice');
 const attestation = { claim, message, publicKey, signature };
 const options = { trusted, member, attestation, verifier: jubjubVerifier, expectedClaim: claim };
 
@@ -185,21 +191,23 @@ describe('resolveAttestation', () => {
     ).rejects.toMatchObject({ reason: 'public-key' });
   });
 
+  it('accepts a copy of a trusted member', async () => {
+    await expect(
+      resolveAttestation({ ...options, member: { attestor: { ...attestor }, registryIndex: 2 } }),
+    ).resolves.toEqual({ registryIndex: 2, attestation });
+  });
+
+  it('rejects a trusted id pinned under a different key', async () => {
+    const impostor = { ...attestor, publicKey: jubjubSchnorrVerifyingKey(18n) };
+    await expect(
+      resolveAttestation({ ...options, member: { attestor: impostor, registryIndex: 2 } }),
+    ).rejects.toBeInstanceOf(AttestorNotInTrustedSetError);
+  });
+
   it('rejects a member the trusted set never assigned', async () => {
     await expect(
       resolveAttestation({ ...options, member: { attestor, registryIndex: 1 } }),
     ).rejects.toBeInstanceOf(AttestorNotInTrustedSetError);
-  });
-
-  it('rejects a slot outside the on-chain registry of an unchecked set', async () => {
-    const unchecked = { attestor, registryIndex: 3 };
-    await expect(
-      resolveAttestation({
-        ...options,
-        trusted: { registrySize: 3, attestors: [unchecked] },
-        member: unchecked,
-      }),
-    ).rejects.toMatchObject({ reason: 'registry-index' });
   });
 
   it('rejects a wrong returned claim even with the expected signed message', async () => {
@@ -229,8 +237,10 @@ describe('buildTrustedSet', () => {
       ],
     });
     expect(set.registrySize).toBe(5);
-    expect(attestorOf(set, 'alice').registryIndex).toBe(4);
-    expect(attestorOf(set, 'bob')).toEqual({ attestor: bob, registryIndex: 1 });
+    expect(memberOf(set, 'alice').registryIndex).toBe(4);
+    expect(memberOf(set, 'bob')).toEqual({ attestor: bob, registryIndex: 1 });
+    expect(attestorOf(set, 'bob')).toBe(bob);
+    expect(attestorIdsOf(set)).toEqual(['alice', 'bob']);
   });
 
   it('bounds slots by the on-chain registry size, not by the set size', () => {

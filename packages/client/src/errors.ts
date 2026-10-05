@@ -9,16 +9,13 @@ export class AttestationMismatchError extends Error {
   /** The id of the offending attestor. */
   readonly attestorId: string;
   /** Which integrity check failed. */
-  readonly reason: 'public-key' | 'message' | 'registry-index' | 'claim' | 'signature';
+  readonly reason: 'public-key' | 'message' | 'claim' | 'signature';
 
   /**
    * @param attestorId — the offending attestor's id.
    * @param reason — the failed check.
    */
-  constructor(
-    attestorId: string,
-    reason: 'public-key' | 'message' | 'registry-index' | 'claim' | 'signature',
-  ) {
+  constructor(attestorId: string, reason: 'public-key' | 'message' | 'claim' | 'signature') {
     super(`attestation from "${attestorId}" failed ${reason} check`);
     this.attestorId = attestorId;
     this.reason = reason;

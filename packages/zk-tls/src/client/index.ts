@@ -4,7 +4,7 @@ import type {
   CollectedAttestation,
   TrustedSet,
 } from '@thoth/client';
-import { attestorOf } from '@thoth/client';
+import { attestorIdsOf, memberOf } from '@thoth/client';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema, claimToMessage } from '@thoth/core/claim';
@@ -29,10 +29,6 @@ export { ZkFetchThresholdError };
 
 /** Byte length of a claim's `appId`. */
 const APP_ID_BYTES = 32;
-
-/** The trusted set's attestor ids, in descriptor order. */
-const idsOf = <PK>(trusted: TrustedSet<ZkFetchDefinition, PK>): string[] =>
-  trusted.attestors.map((member) => member.attestor.id);
 
 /** Field-wise equality of two flat messages. */
 const sameMessage = (a: FlatMessage, b: FlatMessage): boolean =>
@@ -335,7 +331,7 @@ export const zkFetchClient = {
     if (appId.length !== APP_ID_BYTES) {
       throw new Error(`appId must be ${APP_ID_BYTES} bytes, got ${appId.length}`);
     }
-    const trustedIds = new Set(idsOf(trusted));
+    const trustedIds = new Set(attestorIdsOf(trusted));
     for (const id of trustedIds) {
       if (provers[id] === undefined) {
         throw new Error(`no prover configured for attestor ${id}`);
@@ -463,10 +459,10 @@ const collectAttestations = async <V extends number, PK, S>(options: {
   ids: string[];
 }): Promise<Attestment<V, PK, S>> => {
   const { trusted, evidences, claim, message, ids } = options;
-  const targetIds = ids.length > 0 ? ids : idsOf(trusted);
+  const targetIds = ids.length > 0 ? ids : attestorIdsOf(trusted);
   const collected: ZkFetchCollectedAttestation<V, PK, S>[] = [];
   for (const id of targetIds) {
-    const member = attestorOf(trusted, id);
+    const member = memberOf(trusted, id);
     const evidence = evidences[id];
     if (evidence === undefined) {
       throw new Error(`no evidence for attestor ${id}`);

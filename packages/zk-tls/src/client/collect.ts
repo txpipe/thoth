@@ -1,8 +1,8 @@
 // `zkFetchClient.collect`: one attempt per attestor, until a threshold of
 // registry slots signs the same message.
 
-import type { TrustedSet } from '@thoth/client';
-import { attestorOf } from '@thoth/client';
+import type { TrustedAttestor, TrustedSet } from '@thoth/client';
+import { attestorIdsOf, memberOf } from '@thoth/client';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema } from '@thoth/core/claim';
 import { z } from 'zod';
@@ -98,17 +98,16 @@ const optionsSchema = z
   })
   .refine(({ windowStart, windowEnd }) => windowStart <= windowEnd);
 
-type Member<PK> = TrustedSet<ZkFetchDefinition, PK>['attestors'][number];
 type Options = z.output<typeof optionsSchema>;
 type FailureReason = ZkFetchAttestorFailure['reason'];
 type Outcome<V extends number, PK, S> =
   | {
-      readonly slot: number;
+      readonly registryIndex: number;
       readonly collected: ZkFetchCollectedAttestation<V, PK, S>;
       readonly claim: Claim<V>;
       readonly message: FlatMessage;
     }
-  | { readonly slot: number; readonly reason: FailureReason };
+  | { readonly registryIndex: number; readonly reason: FailureReason };
 
 /** Rejects one attestor's attempt with a safe reason. */
 class AttemptError extends Error {
@@ -124,12 +123,12 @@ class AttemptError extends Error {
 const parseOptions = <PK>(
   trusted: TrustedSet<ZkFetchDefinition, PK>,
   supplied: ZkFetchThresholdOptions,
-): { options: Options; candidates: Member<PK>[] } => {
+): { options: Options; candidates: TrustedAttestor<ZkFetchDefinition, PK>[] } => {
   try {
     const options = optionsSchema.parse(supplied);
-    const ids = options.attestorIds ?? trusted.attestors.map((member) => member.attestor.id);
+    const ids = options.attestorIds ?? attestorIdsOf(trusted);
     // A trusted set maps ids one-to-one onto slots, so distinct ids are distinct slots.
-    const candidates = [...new Set(ids)].map((id) => attestorOf(trusted, id));
+    const candidates = [...new Set(ids)].map((id) => memberOf(trusted, id));
     if (candidates.length < options.threshold) {
       throw new Error('fewer candidate slots than the threshold');
     }
@@ -151,9 +150,9 @@ const runAttempt = async <V extends number, PK, S>(
   config: ZkFetchClientConfig<V, PK, S>,
   request: ZkFetchRequest,
   options: Options,
-  member: Member<PK>,
+  member: TrustedAttestor<ZkFetchDefinition, PK>,
 ): Promise<Outcome<V, PK, S>> => {
-  const { attestor, registryIndex: slot } = member;
+  const { attestor, registryIndex } = member;
   const deadline = Math.min(Date.now() + options.attestorTimeoutMs, options.expiresAt);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -192,9 +191,9 @@ const runAttempt = async <V extends number, PK, S>(
 
   try {
     const settled = await Promise.race([attempt(), timeout]);
-    return { slot, ...settled };
+    return { registryIndex, ...settled };
   } catch (error) {
-    return { slot, reason: error instanceof AttemptError ? error.reason : 'evidence' };
+    return { registryIndex, reason: error instanceof AttemptError ? error.reason : 'evidence' };
   } finally {
     clearTimeout(timer);
   }
@@ -250,9 +249,9 @@ export const collectThreshold = async <V extends number, PK, S>(
   startNeeded();
   while (pending.size > 0) {
     const outcome = await Promise.race(pending.values());
-    pending.delete(outcome.slot);
+    pending.delete(outcome.registryIndex);
     if ('reason' in outcome) {
-      failures.push({ registryIndex: outcome.slot, reason: outcome.reason });
+      failures.push({ registryIndex: outcome.registryIndex, reason: outcome.reason });
     } else {
       const { claim, message } = outcome;
       const key = message.join(',');

@@ -84,6 +84,10 @@ _Avoid_: Payload, digest.
 An app's pinned attestors and the registry slot each answers from.
 _Avoid_: Allowlist.
 
+**Trusted member**:
+One entry of a trusted set: an attestor's descriptor paired with the registry slot the app assigned it (`TrustedAttestor` in code).
+_Avoid_: Pinned attestor, entry.
+
 ### On-chain
 
 **Registry**:
