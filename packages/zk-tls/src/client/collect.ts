@@ -2,20 +2,18 @@
 // threshold of registry slots signs the same message.
 
 import type { TrustedSet } from '@thoth/client';
-import { attestorOf, resolveAttestation } from '@thoth/client';
-import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { bytes32Schema, claimToMessage } from '@thoth/core/claim';
+import { attestorOf } from '@thoth/client';
+import { bytes32Schema } from '@thoth/core/claim';
 import { z } from 'zod';
 import type { ZkFetchDefinition } from '../index.js';
-import { zkFetchEvidenceSchema } from '../index.js';
 import type {
   Attestment,
-  ZkFetchAttestationInput,
   ZkFetchClientConfig,
   ZkFetchCollectedAttestation,
   ZkFetchRequest,
 } from './index.js';
-import { assertEvidenceMatchesRequest, buildClaimProposal } from './proposal.js';
+import type { Attestor } from './proposal.js';
+import { attestWith, buildClaimProposal, proveWith } from './proposal.js';
 
 /** Why an operator's session was dropped. Carries no remote error text. */
 export interface ZkFetchCollectionFailure {
@@ -40,7 +38,7 @@ export interface ZkFetchCollection<V extends number, PK, S> extends Attestment<V
 /** No threshold was collected. Carries no request, evidence, or remote error text. */
 export class ZkFetchCollectionError extends Error {
   /** Why collection failed. */
-  readonly reason: 'invalid-request' | 'invalid-intent' | 'expired' | 'threshold';
+  readonly reason: 'invalid-intent' | 'expired' | 'threshold';
   /** Operators that failed before collection stopped. */
   readonly failures: readonly ZkFetchCollectionFailure[];
 
@@ -94,9 +92,11 @@ const intentSchema = z
   })
   .refine(({ windowStart, windowEnd }) => windowStart <= windowEnd);
 
-type Attestor<PK> = TrustedSet<ZkFetchDefinition, PK>['attestors'][number];
 type Intent = z.output<typeof intentSchema>;
 type FailureReason = ZkFetchCollectionFailure['reason'];
+type Outcome<V extends number, PK, S> =
+  | { readonly slot: number; readonly collected: ZkFetchCollectedAttestation<V, PK, S> }
+  | { readonly slot: number; readonly reason: FailureReason };
 
 /** Rejects an operator session with a safe reason. */
 class SessionError extends Error {
@@ -108,43 +108,22 @@ class SessionError extends Error {
   }
 }
 
-/** What one operator signed. */
-interface Signed<V extends number, PK, S> {
-  readonly claim: Claim<V>;
-  readonly message: FlatMessage;
-  readonly collected: ZkFetchCollectedAttestation<V, PK, S>;
-}
-
-/** Validate and snapshot the intent; resolve its ids to one candidate per registry slot. */
+/** Validate the intent; resolve its ids to one candidate per registry slot. */
 const parseIntent = <PK>(
   trusted: TrustedSet<ZkFetchDefinition, PK>,
   supplied: ZkFetchCollectionIntent,
 ): { intent: Intent; candidates: Attestor<PK>[] } => {
   try {
-    const intent = intentSchema.parse(structuredClone(supplied));
-    const bySlot = new Map<number, Attestor<PK>>();
-    for (const id of intent.attestorIds ?? trusted.attestors.map((attestor) => attestor.id)) {
-      const attestor = attestorOf(trusted, id);
-      if (!bySlot.has(attestor.registryIndex)) {
-        bySlot.set(attestor.registryIndex, attestor);
-      }
-    }
-    const candidates = [...bySlot.values()];
+    const intent = intentSchema.parse(supplied);
+    const ids = intent.attestorIds ?? trusted.attestors.map((attestor) => attestor.id);
+    // A trusted set maps ids one-to-one onto slots, so distinct ids are distinct slots.
+    const candidates = [...new Set(ids)].map((id) => attestorOf(trusted, id));
     if (candidates.length < intent.threshold) {
       throw new Error('fewer candidate slots than the threshold');
     }
-    return { intent, candidates };
+    return { intent: { ...intent, holder: intent.holder.slice() }, candidates };
   } catch {
     throw new ZkFetchCollectionError('invalid-intent');
-  }
-};
-
-/** Snapshot the request. A clone error can quote request values, so it is never rethrown. */
-const snapshotRequest = (request: ZkFetchRequest): ZkFetchRequest => {
-  try {
-    return structuredClone(request);
-  } catch {
-    throw new ZkFetchCollectionError('invalid-request');
   }
 };
 
@@ -154,7 +133,7 @@ const containsSecret = (value: unknown, secrets: readonly string[]): boolean => 
     if (secrets.some((secret) => value.includes(secret))) {
       return true;
     }
-    // Decoding catches escaped forms such as `private`.
+    // Decoding catches escaped forms such as `\u0070rivate`.
     try {
       return containsSecret(JSON.parse(value), secrets);
     } catch {
@@ -173,7 +152,7 @@ const containsSecret = (value: unknown, secrets: readonly string[]): boolean => 
  * Prove, check, and attest with one operator, within its time limit.
  *
  * A session that times out keeps running in the background (provers and
- * transports cannot be cancelled), but stops at its next phase, so a late
+ * transports cannot be cancelled), but stops at its next step, so a late
  * result is never forwarded or counted.
  */
 const runSession = async <V extends number, PK, S>(
@@ -181,91 +160,49 @@ const runSession = async <V extends number, PK, S>(
   request: ZkFetchRequest,
   intent: Intent,
   attestor: Attestor<PK>,
-): Promise<Signed<V, PK, S>> => {
-  const { trusted, transport, verifier, policy, appId, valueSlots, provers } = config;
+): Promise<Outcome<V, PK, S>> => {
+  const slot = attestor.registryIndex;
   const deadline = Math.min(Date.now() + intent.operatorTimeoutMs, intent.expiresAt);
-  // The timer bounds phases that never settle; the clock check also catches
-  // phases that block the event loop past the deadline, so the timer cannot fire.
-  let timedOut = false;
-  const assertOpen = () => {
-    if (timedOut || Date.now() >= deadline) {
-      throw new SessionError('timeout');
-    }
-  };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      timedOut = true;
-      reject(new SessionError('timeout'));
-    }, deadline - Date.now());
+    timer = setTimeout(() => reject(new SessionError('timeout')), deadline - Date.now());
   });
 
-  /** Run one phase within the deadline, replacing any error with `reason`. */
-  const phase = async <T>(reason: FailureReason, run: () => T | Promise<T>) => {
-    assertOpen();
-    let result: Awaited<T>;
+  /**
+   * Run one step, replacing any error with `reason`. The clock check also
+   * catches a step that blocked the event loop past the deadline.
+   */
+  const step = async <T>(reason: FailureReason, run: () => Promise<T>): Promise<T> => {
+    let result: T;
     try {
       result = await run();
     } catch {
       throw new SessionError(reason);
     }
-    assertOpen();
+    if (Date.now() >= deadline) {
+      throw new SessionError('timeout');
+    }
     return result;
   };
 
-  const session = async (): Promise<Signed<V, PK, S>> => {
+  const session = async () => {
+    const evidence = await step('evidence', () => proveWith(config.provers, attestor, request));
     const secrets = Object.values(request.secretHeaders ?? {}).filter(Boolean);
-    const evidence = await phase('evidence', async () => {
-      const prover = provers[attestor.id];
-      if (prover === undefined) {
-        throw new Error(`no prover configured for attestor ${attestor.id}`);
-      }
-      // A copy per prover, so one cannot alter another's request.
-      return zkFetchEvidenceSchema.parse(await prover.prove(structuredClone(request)));
-    });
-    await phase('secret', () => {
-      if (containsSecret(evidence, secrets)) {
-        throw new Error('evidence carries a secret header value');
-      }
-    });
-    const claim = await phase('evidence', () => {
-      assertEvidenceMatchesRequest(evidence, request);
-      const { holder, windowStart, windowEnd } = intent;
-      return buildClaimProposal({
-        evidence,
-        policy,
-        appId,
-        holder,
-        valueSlots,
-        windowStart,
-        windowEnd,
-      });
-    });
-    const message = claimToMessage(claim);
-    const attestation = await phase('attestation', () => {
-      // A copy, so the transport cannot alter the claim it is vetted against.
-      const input = structuredClone({
-        policy,
-        evidence,
-        claim,
-      }) as unknown as ZkFetchAttestationInput;
-      return transport.request(attestor, input);
-    });
-    const collected = await phase('attestation', () =>
-      resolveAttestation({
-        trusted,
-        attestor,
-        attestation,
-        verifier,
-        expectedClaim: claim,
-        expectedMessage: message,
-      }),
+    if (containsSecret(evidence, secrets)) {
+      throw new SessionError('secret');
+    }
+    const { policy, appId, valueSlots } = config;
+    const { holder, windowStart, windowEnd } = intent;
+    const claim = await step('evidence', () =>
+      buildClaimProposal({ evidence, policy, appId, holder, valueSlots, windowStart, windowEnd }),
     );
-    return { claim, message, collected };
+    return step('attestation', () => attestWith(config, attestor, evidence, claim));
   };
 
   try {
-    return await Promise.race([session(), timeout]);
+    return { slot, collected: await Promise.race([session(), timeout]) };
+  } catch (error) {
+    return { slot, reason: error instanceof SessionError ? error.reason : 'evidence' };
   } finally {
     clearTimeout(timer);
   }
@@ -293,7 +230,6 @@ export const collectThreshold = async <V extends number, PK, S>(
   supplied: ZkFetchCollectionIntent,
 ): Promise<ZkFetchCollection<V, PK, S>> => {
   const { intent, candidates } = parseIntent(config.trusted, supplied);
-  const snapshot = snapshotRequest(request);
   const failures: ZkFetchCollectionFailure[] = [];
   const assertUnexpired = () => {
     if (Date.now() >= intent.expiresAt) {
@@ -301,23 +237,8 @@ export const collectThreshold = async <V extends number, PK, S>(
     }
   };
 
-  type Outcome =
-    | { kind: 'signed'; slot: number; signed: Signed<V, PK, S> }
-    | { kind: 'failed'; slot: number; reason: FailureReason };
-  const start = async (attestor: Attestor<PK>): Promise<Outcome> => {
-    const slot = attestor.registryIndex;
-    try {
-      return { kind: 'signed', slot, signed: await runSession(config, snapshot, intent, attestor) };
-    } catch (error) {
-      if (error instanceof SessionError) {
-        return { kind: 'failed', slot, reason: error.reason };
-      }
-      throw error;
-    }
-  };
-
   const groups = new Map<string, ZkFetchCollectedAttestation<V, PK, S>[]>();
-  const pending = new Map<number, Promise<Outcome>>();
+  const pending = new Map<number, Promise<Outcome<V, PK, S>>>();
   let largestGroup = 0;
   const startNeeded = () => {
     while (largestGroup + pending.size < intent.threshold) {
@@ -325,7 +246,7 @@ export const collectThreshold = async <V extends number, PK, S>(
       if (attestor === undefined) {
         return;
       }
-      pending.set(attestor.registryIndex, start(attestor));
+      pending.set(attestor.registryIndex, runSession(config, request, intent, attestor));
     }
   };
 
@@ -335,17 +256,16 @@ export const collectThreshold = async <V extends number, PK, S>(
     const outcome = await Promise.race(pending.values());
     pending.delete(outcome.slot);
     assertUnexpired();
-    if (outcome.kind === 'failed') {
+    if ('reason' in outcome) {
       failures.push({ registryIndex: outcome.slot, reason: outcome.reason });
     } else {
-      const { signed } = outcome;
-      const key = signed.message.join(',');
-      const group = groups.get(key) ?? [];
-      group.push(signed.collected);
+      const { claim, message } = outcome.collected.attestation;
+      const key = message.join(',');
+      const group = [...(groups.get(key) ?? []), outcome.collected];
       groups.set(key, group);
       if (group.length === intent.threshold) {
         group.sort((a, b) => a.registryIndex - b.registryIndex);
-        return { claim: signed.claim, message: signed.message, collected: group, failures };
+        return { claim, message, collected: group, failures };
       }
       largestGroup = Math.max(largestGroup, group.length);
     }

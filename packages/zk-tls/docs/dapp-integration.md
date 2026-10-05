@@ -112,18 +112,11 @@ const attestment = await client.collect(request, {
 });
 ```
 
-Set the observation window to the consuming contract's permitted freshness and
-width. It stays fixed for every independent witnessed session, including
-fallbacks. Match `threshold` to the on-chain N-of-M configuration.
-
-Collection returns one group of verified signatures over the same message.
-It tolerates failed or disagreeing operators when a healthy subset can still
-reach the threshold, and contacts spare operators as needed. To limit which
-witnesses may receive your secret headers, supply an ordered `attestorIds` list.
-Failures contain only registry slots and safe reasons. See the
-[collection contract](../README.md#threshold-collection) for deadline, timeout,
-privacy, and error semantics. Submit the returned attestment using the registry
-placement described below.
+Set the window to the consuming contract's permitted freshness and width, and
+`threshold` to its on-chain N. Pass an ordered `attestorIds` list to limit which
+witnesses may receive your secret headers. The result is one agreeing group,
+submitted with the registry placement described below; see the
+[README](../README.md#threshold-collection) for the failure semantics.
 
 ## Building the request
 

@@ -110,58 +110,28 @@ claims; Thoth promises no cross-claim identity or unlinkability.
 
 ## Threshold collection
 
-Use `client.collect(request, intent)` to obtain an N-of-M set in one call:
+`client.collect(request, intent)` obtains an N-of-M set in one call; see the
+[dApp integration guide](docs/dapp-integration.md#collecting-a-threshold) for
+an example.
 
-```ts
-const result = await client.collect(request, {
-  holder,
-  windowStart: BigInt(Math.floor(Date.now() / 1000)),
-  windowEnd: BigInt(Math.floor(Date.now() / 1000) + 60),
-  expiresAt: Date.now() + 60_000,
-  threshold: 2,
-  operatorTimeoutMs: 20_000,
-  attestorIds: ['attestor-0', 'attestor-1', 'attestor-2'],
-});
-```
-
-The caller fixes the observation window before any session starts. Every
-operator proves independently and signs a claim under that window and holder.
-The window must contain its witness's observation. Choose its width to satisfy
-the consuming contract's freshness and maximum-window rules. `expiresAt` is a
-local collection deadline in milliseconds; it does not add an expiry field to
-the signed claim or replace the contract's time checks.
-
-Collection starts `threshold` sessions concurrently. It contacts the next
-candidate only when no message group can reach the threshold with the active
-sessions. A down, disagreeing, or invalid operator therefore does not prevent
-an agreeing healthy subset from succeeding. Candidate order defaults to the
-trusted descriptors' order; optional `attestorIds` limits and orders the
-candidates. Duplicate ids count once. Unselected and unused spare provers do
-not receive the request. Each selected prover receives its own request copy.
-
-Every response passes the same key, claim, message-binding, and signature
-checks as `proof.attest()`. Collection groups responses by the exact flat
-message and counts distinct registry slots. The returned `claim`, `message`,
-and `collected` describe one threshold group, sorted by registry slot.
-`failures` contains only registry slots and safe phase reasons. Valid
-but disagreeing responses belong to other groups and do not appear as failures.
-
-`ZkFetchCollectionError.reason` is `invalid-request`, `invalid-intent`, `expired`, or `threshold`.
-The error retains safe `failures`, never a remote exception or its cause.
-Operator diagnostics use `evidence`, `attestation`, `timeout`, or `secret`.
-The timeout covers proving, transport, and signature verification
-together. Late responses cannot count or proceed to a later phase. The current
-prover and transport interfaces cannot cancel underlying network work, so
-requests already started may continue after the client stops waiting.
-
-Secret headers go only to the selected prover. Collection never forwards the
-request to an attestor and rejects evidence containing a secret header value,
-including values escaped inside its JSON fields, before sending that evidence.
-The prover must still implement proper witness redaction. Collection's guard
-checks header values; it cannot recognize arbitrary transformations of secrets.
-
-`proveReq(request, holder)` and `proof.attest(...ids)` retain their existing
-behavior for callers that want a proof handle and require all witnesses to agree.
+- **Fixed intent.** The caller fixes the holder and observation window before
+  any session starts, so every witness signs under the same window. Choose its
+  width to satisfy the contract's freshness rules. `expiresAt` is a local
+  deadline only; it is not signed.
+- **Resilient.** Collection starts `threshold` sessions and contacts a spare
+  only when no message group can still reach the threshold, so a down,
+  disagreeing, or invalid operator does not fail a healthy subset. Spare
+  provers that are never needed do not receive the request.
+- **Verified and distinct.** Every response passes the same checks as
+  `proof.attest()`, then counts once per registry slot within its exact-message
+  group.
+- **Bounded.** `operatorTimeoutMs` covers proving, transport, and verification;
+  a late result never proceeds or counts. Underlying network work cannot be
+  cancelled through the current interfaces.
+- **Safe failures.** Errors carry only registry slots and phase reasons, never
+  remote error text. Evidence containing a secret header value, including
+  JSON-escaped forms, is never forwarded. The prover must still redact; the
+  guard cannot recognize arbitrary transformations of a secret.
 
 ## Concepts
 

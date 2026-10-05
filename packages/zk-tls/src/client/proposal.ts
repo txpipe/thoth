@@ -1,15 +1,26 @@
-// Claim proposal helpers shared by `proveReq` and `collect`.
+// Per-attestor steps shared by `proveReq` and `collect`.
 
+import type { TrustedSet } from '@thoth/client';
+import { resolveAttestation } from '@thoth/client';
 import type { Claim } from '@thoth/core/claim';
 import { claimSchema } from '@thoth/core/claim';
-import type { ZkFetchEvidence, ZkFetchPolicy } from '../index.js';
+import type { ZkFetchDefinition, ZkFetchEvidence, ZkFetchPolicy } from '../index.js';
 import {
   assertEvidenceMatchesPolicy,
   claimUrl,
   deriveClaimFromEvidence,
   parsedEvidenceView,
+  zkFetchEvidenceSchema,
 } from '../index.js';
-import type { ZkFetchRequest } from './index.js';
+import type {
+  ZkFetchAttestationInput,
+  ZkFetchClientConfig,
+  ZkFetchCollectedAttestation,
+  ZkFetchRequest,
+} from './index.js';
+
+/** One pinned attestor descriptor. */
+export type Attestor<PK> = TrustedSet<ZkFetchDefinition, PK>['attestors'][number];
 
 /**
  * The URL the signed evidence attests is the one the request asked for.
@@ -82,4 +93,55 @@ export const buildClaimProposal = async <V extends number>(options: {
     windowEnd,
   });
   return claimSchema(valueSlots).parse(derived);
+};
+
+/**
+ * Prove `request` with the attestor's own witness and check the evidence.
+ *
+ * @param provers — evidence source per attestor id.
+ * @param attestor — whose witness to use.
+ * @param request — what the caller asked the client to prove.
+ * @returns canonical evidence for the requested origin.
+ * @throws if the attestor has no prover, or the evidence is invalid or for another origin.
+ */
+export const proveWith = async <PK>(
+  provers: ZkFetchClientConfig<number, PK, unknown>['provers'],
+  attestor: Attestor<PK>,
+  request: ZkFetchRequest,
+): Promise<ZkFetchEvidence> => {
+  const prover = provers[attestor.id];
+  if (prover === undefined) {
+    throw new Error(`no prover configured for attestor ${attestor.id}`);
+  }
+  const evidence = zkFetchEvidenceSchema.parse(await prover.prove(request));
+  assertEvidenceMatchesRequest(evidence, request);
+  return evidence;
+};
+
+/**
+ * Ask one attestor to sign `claim` and vet the returned attestation.
+ *
+ * @typeParam V — the claim's value-slot count.
+ * @typeParam PK — the signature scheme's public-key type.
+ * @typeParam S — the signature scheme's signature type.
+ * @param config — the trusted set, transport, verifier, and shared policy.
+ * @param attestor — the attestor to ask.
+ * @param evidence — that attestor's witness evidence.
+ * @param claim — the claim proposal it must sign.
+ * @returns the attestation, tagged with the attestor's registry slot.
+ * @throws `AttestationMismatchError` if the key, claim, message, or signature is wrong.
+ */
+export const attestWith = async <V extends number, PK, S>(
+  config: Pick<ZkFetchClientConfig<V, PK, S>, 'trusted' | 'transport' | 'verifier' | 'policy'>,
+  attestor: Attestor<PK>,
+  evidence: ZkFetchEvidence,
+  claim: Claim<V>,
+): Promise<ZkFetchCollectedAttestation<V, PK, S>> => {
+  const { trusted, transport, verifier, policy } = config;
+  // The attestor is the law: it re-parses these with its own schemas, which
+  // accept the already-parsed (superset) shapes. The schemas' *input* types
+  // are the looser pre-parse form, so the payload is bridged here.
+  const input = { policy, evidence, claim } as unknown as ZkFetchAttestationInput;
+  const attestation = await transport.request(attestor, input);
+  return resolveAttestation({ trusted, attestor, attestation, verifier, expectedClaim: claim });
 };

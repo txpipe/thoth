@@ -4,7 +4,7 @@ import type {
   CollectedAttestation,
   TrustedSet,
 } from '@thoth/client';
-import { attestorOf, resolveAttestation } from '@thoth/client';
+import { attestorOf } from '@thoth/client';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema, claimToMessage } from '@thoth/core/claim';
@@ -15,14 +15,14 @@ import type {
   ZkFetchEvidence,
   ZkFetchPolicy,
 } from '../index.js';
-import { assertPolicySlotsInRange, zkFetchEvidenceSchema, zkFetchPolicySchema } from '../index.js';
+import { assertPolicySlotsInRange, zkFetchPolicySchema } from '../index.js';
 import type {
   ZkFetchCollection,
   ZkFetchCollectionFailure,
   ZkFetchCollectionIntent,
 } from './collect.js';
 import { collectThreshold, ZkFetchCollectionError } from './collect.js';
-import { assertEvidenceMatchesRequest, buildClaimProposal } from './proposal.js';
+import { attestWith, buildClaimProposal, proveWith } from './proposal.js';
 
 export type { ZkFetchCollection, ZkFetchCollectionFailure, ZkFetchCollectionIntent };
 export { ZkFetchCollectionError };
@@ -346,15 +346,10 @@ export const zkFetchClient = {
         const checkedHolder = bytes32Schema.parse(holder).slice();
         const signedRequest: ZkFetchRequest = { ...request };
         const entries = await Promise.all(
-          trusted.attestors.map(async (attestor): Promise<readonly [string, ZkFetchEvidence]> => {
-            const prover = provers[attestor.id];
-            if (prover === undefined) {
-              throw new Error(`no prover configured for attestor ${attestor.id}`);
-            }
-            const evidence = zkFetchEvidenceSchema.parse(await prover.prove(signedRequest));
-            assertEvidenceMatchesRequest(evidence, signedRequest);
-            return [attestor.id, evidence] as const;
-          }),
+          trusted.attestors.map(
+            async (attestor) =>
+              [attestor.id, await proveWith(provers, attestor, signedRequest)] as const,
+          ),
         );
         const evidences: Record<string, ZkFetchEvidence> = {};
         for (const [id, evidence] of entries) {
@@ -457,7 +452,7 @@ const collectAttestations = async <V extends number, PK, S>(options: {
   /** Attestor ids to query; empty means every pinned attestor. */
   ids: string[];
 }): Promise<Attestment<V, PK, S>> => {
-  const { trusted, transport, verifier, evidences, claim, message, policy, ids } = options;
+  const { trusted, evidences, claim, message, ids } = options;
   const targetIds = ids.length > 0 ? ids : trusted.attestors.map((a) => a.id);
   const collected: ZkFetchCollectedAttestation<V, PK, S>[] = [];
   for (const id of targetIds) {
@@ -466,21 +461,7 @@ const collectAttestations = async <V extends number, PK, S>(options: {
     if (evidence === undefined) {
       throw new Error(`no evidence for attestor ${id}`);
     }
-    // The attestor is the law: it re-parses these with its own schemas, which
-    // accept the already-parsed (superset) shapes. The schemas' *input* types
-    // are the looser pre-parse form, so the payload is bridged here.
-    const input = { policy, evidence, claim } as unknown as ZkFetchAttestationInput;
-    const attestation = await transport.request(attestor, input);
-    collected.push(
-      await resolveAttestation({
-        trusted,
-        attestor,
-        attestation,
-        verifier,
-        expectedClaim: claim,
-        expectedMessage: message,
-      }),
-    );
+    collected.push(await attestWith(options, attestor, evidence, claim));
   }
   return { claim, message, collected };
 };
