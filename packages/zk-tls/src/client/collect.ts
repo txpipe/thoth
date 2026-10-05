@@ -151,9 +151,10 @@ const containsSecret = (value: unknown, secrets: readonly string[]): boolean => 
 /**
  * Prove, check, and attest with one operator, within its time limit.
  *
- * A session that times out keeps running in the background (provers and
- * transports cannot be cancelled), but stops at its next step, so a late
- * result is never forwarded or counted.
+ * A session that times out keeps running in the background, because
+ * Reclaim's `createClaimOnAttestor` takes no abort signal (see the README's
+ * "Threshold collection"). It stops at its next step, so a late result is
+ * never forwarded or counted.
  */
 const runSession = async <V extends number, PK, S>(
   config: ZkFetchClientConfig<V, PK, S>,

@@ -126,8 +126,15 @@ an example.
   `proof.attest()`, then counts once per registry slot within its exact-message
   group.
 - **Bounded.** `operatorTimeoutMs` covers proving, transport, and verification;
-  a late result never proceeds or counts. Underlying network work cannot be
-  cancelled through the current interfaces.
+  a late result never proceeds or counts. Collection stops waiting for a
+  session that times out, or is still running when a group reaches the
+  threshold, but cannot stop its work. That session's witness fetch and local
+  ZK proving run to completion in the background. Reclaim's
+  `createClaimOnAttestor` (`@reclaimprotocol/attestor-core` 5.0.8) accepts no
+  abort signal, so `ZkFetchProver.prove` has nothing to pass one to.
+  Terminating the attestor client could cut the network side, but only for a
+  private client. The prover uses Reclaim's per-URL client pool, which other
+  claims to the same witness share.
 - **Safe failures.** Errors carry only registry slots and phase reasons, never
   remote error text. Evidence containing a secret header value, including
   JSON-escaped forms, is never forwarded. The prover must still redact; the
