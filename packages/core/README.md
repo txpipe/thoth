@@ -33,7 +33,7 @@ The package exposes three entry points:
   - `policyHashOf(law, policy, version?)` — hash a kind's policy, tagged with its law and the wire version
   - `subjectHashOf(fields)` — hash a kind's subject struct; equals the circuit's `persistentHash` of that struct
   - `holderCommitmentOf(secret)` — the per-claim holder commitment of a holder secret; equals the circuit's `holderCommitment`
-  - `claimContextDigestOf(context)` — the digest of a `ClaimContext` that every witness signs into its context
+  - `claimContextDigestOf(context)` — the hash of a `ClaimContext` that every witness signs into its context
 
 Kind identity belongs to `AttestorDefinition`. An attestation carries the
 claim, message, public key, and signature; callers already have the definition

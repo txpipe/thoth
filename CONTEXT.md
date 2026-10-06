@@ -79,7 +79,7 @@ The claim the client sends an attestor with the evidence. The attestor signs the
 _Avoid_: Draft, request.
 
 **Claim context**:
-The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` digests it for a witness to sign.
+The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` hashes it for a witness to sign.
 _Avoid_: Intent, request, session.
 
 **Observation**:

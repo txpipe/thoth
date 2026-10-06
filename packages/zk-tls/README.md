@@ -58,7 +58,7 @@ prover that the client can use to obtain evidence:
   - `zkFetchSubjectOf(request)` builds the kind's subject struct, one SHA-256
     per request part (method, host, path, body), and
     `zkFetchSubjectHashOf(request)` hashes it. The host is its own field so an
-    app can compare the host digest in-circuit and keep the path private.
+    app can compare the host hash in-circuit and keep the path private.
   - Types: `ZkFetchDefinition`, `ProviderClaimData`, `ZkFetchEvidence`,
     `VerifiedEvidence`, `ZkFetchPolicy`, `ZkFetchSlot`, `ZkFetchSubjectRequest`,
     `ZkFetchSubject`.

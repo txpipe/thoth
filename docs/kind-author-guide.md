@@ -58,7 +58,7 @@ Never bake an app's policy into an attestor instance.
 ## 3. The subject
 
 The subject is what the claim is about. Model it as a struct of `Bytes<32>`
-fields, usually one digest per part, and hash it with
+fields, usually one hash per part, and hash it with
 `subjectHashOf([field, …])` in declaration order. The result equals the
 circuit's `persistentHash` of that struct. An app that must accept only one
 source takes the subject as private input, recomputes the hash in-circuit, and
