@@ -128,7 +128,7 @@ In your `attest`:
 - check per-instance trust anchors, such as "the evidence was signed by *my*
   witness";
 - **derive the claim yourself** from the verified evidence and sign that, not
-  the proposal. Take `appId`, `holder`, the window and the requested size from
+  the proposal. Take `appId`, `holder`, the window and the requested count from
   the proposal, but derive every value and present flag;
 - sign `definition.message(claim)` and return the claim, message, public key
   and signature.
@@ -160,8 +160,8 @@ README, "For kind SDK authors"):
   credentials.
 
 The holder is `holderCommitmentOf(secret)` with a fresh 32-byte secret per
-claim. Only the commitment leaves the machine; the secret goes to the contract
-witness (ADR 0004).
+claim. Only the commitment leaves the machine; the secret reaches the contract only
+as private input (ADR 0004).
 
 ## 9. Accepting the kind in an app
 
@@ -193,9 +193,3 @@ A new kind is a new package under `packages/<kind>`. Add it to the root
 script if another workspace imports it (see `AGENTS.md`, "Stale `dist/`
 footgun"). Pin `@midnight-ntwrk/compact-runtime` to the same version as the
 other packages.
-
-## The wire layout
-
-Every kind signs the same message. The field order is in
-[DESIGN.md, "The claim"](DESIGN.md#the-claim); `attestation.compact`'s
-`buildMessage` defines it and `claimToMessage` mirrors it.

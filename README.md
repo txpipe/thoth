@@ -32,9 +32,11 @@ Three pieces:
 3. The client submits the claim with N signatures to the Midnight contract as
    **private witness data**. The contract verifies, in zero knowledge: each
    signature is valid and from a **distinct** attestor in the app's pinned
-   registry; the claim is under a policy the app accepts; the observation
+   registry; the claim is under a policy the app accepts; absent slots carry
+   zero; the caller knows the secret behind the claim's holder; the observation
    hasn't been submitted before (no replay); and the claim satisfies the app's
-   observation and freshness windows.
+   observation and freshness windows. The full list is in
+   [`docs/DESIGN.md`](docs/DESIGN.md#the-contract).
 4. Only if those checks pass does the app's **predicate** run over the claim
    values. Claim values are never stored on-chain — only their commitments and
    the predicate outcome — and, depending on the app's configuration, which

@@ -76,27 +76,14 @@ All are fixed when a contract embeds the module.
 ## The signed message (contract law)
 
 `buildMessage` (`attestation.compact`) flattens a `Claim` into exactly
-`Vector<K, Field>` fields, in this order:
-
-```
-[ version,
-  appId[0..16] as Uint<128>, appId[16..32] as Uint<128>,
-  policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
-  windowStart, windowEnd,
-  subjectHash[0..16] as Uint<128>, subjectHash[16..32] as Uint<128>,
-  holder[0..16] as Uint<128>, holder[16..32] as Uint<128>,
-  present[0] as Field, ..., present[V-1] as Field,
-  values[0] as Field, ..., values[V-1] as Field ]
-```
-
-[docs/DESIGN.md, "The claim"](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#the-claim)
-gives the same order with field indices.
+`Vector<K, Field>` fields. The order, with field indices, is in
+[docs/DESIGN.md, "The claim"](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#wire-order).
 
 The attestor MUST reproduce this exact flat field vector to sign the same
 message (same order, sizes, presence-flag semantics, and the split of each
 32-byte field into two 16-byte halves, so every byte is signed). `present` is a
 `Vector<V, Boolean>`: one flag per value slot; `present[i] = true` means
-`values[i]` was populated (its value may still be `0`). The message length is `K = 11 + 2*V` (11 header fields, V
+`values[i]` was populated (its value may still be `0`). The message length is `K = 2*V + 11` (11 header fields, V
 presence flags, V values) — fixed when a contract embeds the module.
 
 `verifyAttestation` rejects a claim with `present[i] = false` and `values[i] != 0`
@@ -125,8 +112,9 @@ zero remains valid with `present[i] = true`.
   `policyHashes` set (`"Unaccepted policy"`), so a requester cannot substitute
   a laxer policy. A contract serves several policies, and so several kinds, by
   sealing one hash per policy. The membership check discloses which accepted
-  policy a claim used. `appId` is signed but not checked by the module; an app
-  that needs it compares it in its own predicate.
+  policy a claim used. `appId` is signed but not checked by the module, and
+  each contract keeps its own replay set, so an app that must refuse claims
+  made for another app compares `appId` in its own predicate.
 - **The window is when the attestor observed** (ADR 0005), not when the fact
   happened; a fact's own time travels as a claim value. `verifyAttestation`
   checks it against block time, unconditionally: the window must not be

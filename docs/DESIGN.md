@@ -75,13 +75,10 @@ pinged by any dApp that needs to use external data in-contract. Each dApp choose
 own threshold at deployment time, meaning how many attestors'
 signatures are needed for a claim to be valid.
 
-Every claim is signed for one app: it carries the app's `appId`. The module
-signs it but does not check it, and each contract keeps its own replay set, so
-an app that must refuse claims made for another app compares `appId` in its own
-predicate. Within one app, the same claim can feed any number of predicates.
+Every claim is signed for one app: it carries the app's `appId`. Within one
+app, the same claim can feed any number of predicates.
 
-A new kind that signs the standard claim plugs in without a contract change; see
-[kind-author-guide.md](kind-author-guide.md).
+To add a kind, see [kind-author-guide.md](kind-author-guide.md).
 
 ## The claim
 
@@ -134,24 +131,27 @@ pinned trusted set — and with the app's N-of-M threshold fixed at deployment t
 When the client submits a claim with N attestor signatures, the contract verifies,
 in zero knowledge, that:
 
+- the claim's `version` is `1`;
 - the claim's `policyHash` is in the app's sealed set of accepted policies;
 - each signature is valid and comes from a **distinct** attestor in the registry —
   so the N-of-M threshold holds against exactly the attestors the app pinned;
 - every slot not marked `present` carries zero;
 - the caller knows the secret behind the claim's `holder`;
+- the attestors' observation window is not inverted and does not exceed the
+  app's sealed maximum, and the block time falls between its start and its end
+  plus the sealed freshness window. This check also applies when the freshness
+  window is zero;
 - the observation identity has not been submitted before — no replay;
-- the attestors' observation window does not exceed the app's sealed maximum,
-  and the block time falls between its start and its end plus the sealed
-  freshness window. This check also applies when the freshness window is zero.
+- the same claim, under the same commitment randomness, is not already in the
+  vault.
 
 Only if those checks pass does the app's predicate run over the claim values, as
 private witness data. The claim values are never stored on-chain — only their
 commitments and the predicate outcome are — and, depending on the app's
 configuration, which attestors vouched may be hidden too.
 
-The claim and the signature scheme are the same object everywhere — client,
-attestors, and contract — so a signature produced off-chain verifies on-chain.
-Signatures are checked positionally: the client places each one at the
+A signature produced off-chain verifies on-chain, because the claim and the
+signature scheme are shared. Signatures are checked positionally: the client places each one at the
 registry slot its trusted set assigned the attestor.
 
 ## Flow

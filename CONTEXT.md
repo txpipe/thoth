@@ -75,11 +75,11 @@ The measured numbers of a claim, one per value slot. Zero is a valid measured va
 _Avoid_: Data, payload.
 
 **Claim proposal**:
-The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder and window from the proposal.
+The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder, window and requested value-slot count from the proposal.
 _Avoid_: Draft, request.
 
 **Claim context**:
-The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` hashes it for a witness to sign.
+The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` hashes it for a witness to sign. The app id is not part of it: no witness signs it, and each attestor takes it from the claim proposal.
 _Avoid_: Intent, request, session.
 
 **Observation**:
@@ -124,9 +124,9 @@ _Avoid_: Pinned attestor, entry.
 The position of an attestor's key in the app's registry, `registryIndex` in code. The app assigns it; the attestor does not know it. Signatures are placed by it and by nothing else.
 _Avoid_: Attestor index, rank.
 
-**Collection intent**:
-What the client fixes before collecting: the holder, the window, a local deadline, the threshold, and which attestors to try. Only the holder and window reach the signed claim.
-_Avoid_: Claim context, request.
+**Collection options**:
+What the client fixes before collecting: the holder, the window, a local deadline, the threshold, and which attestors to try (`ZkFetchThresholdOptions` in code). Only the holder and window reach the signed claim.
+_Avoid_: Intent, claim context, request.
 
 ### On-chain
 

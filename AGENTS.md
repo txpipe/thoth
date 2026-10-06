@@ -22,8 +22,7 @@ what was observed; the application defines the predicate over it.
 
 Use the glossary in [`CONTEXT.md`](CONTEXT.md) for domain terms. The claim's
 fields and wire order are in [`docs/DESIGN.md`](docs/DESIGN.md#the-claim). To
-add an attestor kind, follow [`docs/kind-author-guide.md`](docs/kind-author-guide.md);
-a new kind needs no contract change.
+add an attestor kind, follow [`docs/kind-author-guide.md`](docs/kind-author-guide.md).
 
 ## Commands
 
@@ -115,7 +114,7 @@ thoth/
   `packages/contracts/*.compact`; module params are uppercase (`<#K, #V, #N, #M>`).
   Metadata in `attestation.compact`'s header comment is load-bearing — keep the
   wire-layout doc synchronized with `buildMessage`, `claimToMessage`, and the
-  wire-order tables in `docs/DESIGN.md` and `packages/contracts/README.md`.
+  wire-order table in `docs/DESIGN.md`.
   The claim's `version` stays `1` until a layout is deployed; pre-launch,
   change the wire layout freely and keep `version = 1`.
 - **Public API style**: every export is documented with JSDoc (block-comment
