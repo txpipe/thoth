@@ -2,8 +2,6 @@ import type { proto } from '@reclaimprotocol/attestor-core';
 import {
   assertValidClaimSignatures,
   getIdentifierFromClaimInfo,
-  SelectedServiceSignatureType,
-  SIGNATURES,
 } from '@reclaimprotocol/attestor-core';
 import type { Attestor, KeyPair } from '@thoth/attestor';
 import { buildAttestor, defineAttestor } from '@thoth/attestor';
@@ -13,8 +11,9 @@ import { claimToMessage } from '@thoth/core/claim';
 import { hexToBytes } from '../hex.js';
 import {
   assertEvidenceMatchesPolicy,
+  assertPolicySlotsInRange,
+  claimRequestOf,
   deriveClaimFromEvidence,
-  normalizePolicy,
   parseDisclosedValue,
   parsedEvidenceView,
   type VerifiedEvidence,
@@ -25,12 +24,8 @@ import {
   zkFetchClaimSchema,
   zkFetchEvidenceSchema,
   zkFetchPolicySchema,
+  zkFetchSubjectHashOf,
 } from '../index.js';
-
-const witnessAddressOf = (witnessKey: string): string => {
-  const scheme = SIGNATURES[SelectedServiceSignatureType];
-  return scheme.getAddress(scheme.getPublicKey(witnessKey)).toLowerCase();
-};
 
 /**
  * Verify a zkFetch proof and extract the values it disclosed.
@@ -47,6 +42,8 @@ const witnessAddressOf = (witnessKey: string): string => {
  * its expected claim by derivation and relies on its pinned attestors having
  * verified (plus the on-chain N-of-M threshold).
  *
+ * Verification leaves the caller's evidence unchanged, including its context encoding.
+ *
  * @param evidence — canonicalized proof artifacts.
  * @returns the cryptographically verified evidence.
  * @throws if the signature is invalid, malformed, the claim identifier does
@@ -58,7 +55,9 @@ export const verifyZkFetchProof = async (evidence: ZkFetchEvidence): Promise<Ver
     throw new Error(`zkFetch claim signature must be 65 bytes, got ${claimSignature.length}`);
   }
   await assertValidClaimSignatures({
-    claim: evidence.claim,
+    // Reclaim canonicalizes context in place while computing the signed identifier.
+    // All claim fields are scalars, so a shallow copy isolates that mutation.
+    claim: { ...evidence.claim },
     signatures: {
       claimSignature,
       attestorAddress: evidence.attestorAddress,
@@ -115,14 +114,66 @@ export const assertClaimMatchesDisclosures = (options: {
 };
 
 /**
+ * Check a client-proposed claim's subject against the signed request.
+ *
+ * The attestor derives the subject hash from the request its witness signed
+ * ({@link claimRequestOf}) and requires the proposal to carry it, so a client
+ * cannot have the attestor certify a claim about another source (ADR 0001).
+ *
+ * @param options — the proposed claim and the verified evidence.
+ * @throws if the proposed `subjectHash` is not the signed request's, or the
+ *   signed parameters carry no request.
+ */
+export const assertClaimMatchesSubject = (options: {
+  /** The client-proposed claim. */
+  claim: Claim<number>;
+  /** The verified evidence whose signed parameters name the request. */
+  verified: VerifiedEvidence;
+}): void => {
+  const { claim, verified } = options;
+  const expected = zkFetchSubjectHashOf(claimRequestOf(verified.claim));
+  if (!Buffer.from(claim.subjectHash).equals(expected)) {
+    throw new Error('claim subjectHash does not match the request the witness signed');
+  }
+};
+
+/**
+ * Check a client-proposed claim's observation window against the witness.
+ *
+ * The window is when the attestor observed (ADR 0005), so the attestor
+ * requires its own witness's observation time to fall inside the proposed
+ * `[windowStart, windowEnd]`, bounds included. The contract bounds the
+ * window's length and checks it against block time.
+ *
+ * @param options — the proposed claim and the verified evidence.
+ * @throws if the witness observed outside the proposed window.
+ */
+export const assertObservationInWindow = (options: {
+  /** The client-proposed claim. */
+  claim: Claim<number>;
+  /** The verified evidence whose signed claim carries the observation time. */
+  verified: VerifiedEvidence;
+}): void => {
+  const { claim, verified } = options;
+  const observedAt = BigInt(verified.claim.timestampS);
+  if (observedAt < claim.windowStart || observedAt > claim.windowEnd) {
+    throw new Error(
+      `witness observation ${observedAt} is outside the claim window [${claim.windowStart}, ${claim.windowEnd}]`,
+    );
+  }
+};
+
+/**
  * Create the zkFetch attestor kind's shareable definition.
  *
- * `verify` implements the kind's check: verify the evidence
- * ({@link verifyZkFetchProof}), check it against the policy
- * ({@link assertEvidenceMatchesPolicy}), bound the client-proposed timestamp
- * against the witness's own observation (`maxSkewS`, default
- * `DEFAULT_MAX_SKEW_S`), and enforce that the proposed claim matches the
- * disclosed values ({@link assertClaimMatchesDisclosures}). `message` encodes a
+ * The claim schema requires equal `values` and `present` lengths.
+ * `verify` checks policy slot bounds at that requested size before verifying the evidence
+ * ({@link verifyZkFetchProof}), checking it against the policy
+ * ({@link assertEvidenceMatchesPolicy}), requiring the witness's own
+ * observation to fall inside the client-proposed window
+ * ({@link assertObservationInWindow}), and enforcing that the proposed claim matches the
+ * signed request ({@link assertClaimMatchesSubject}) and the disclosed values
+ * ({@link assertClaimMatchesDisclosures}). `message` encodes a
  * claim into its flat field vector via `claimToMessage`.
  *
  * @returns the shareable definition; instantiate it with `@thoth/attestor`'s
@@ -135,17 +186,11 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
     evidence: zkFetchEvidenceSchema,
     claim: zkFetchClaimSchema,
     verify: async (input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number>>) => {
+      assertPolicySlotsInRange(input.policy, input.claim.values.length);
       const verified = await verifyZkFetchProof(input.evidence);
       assertEvidenceMatchesPolicy(verified, input.policy);
-      const observedAt = BigInt(input.evidence.claim.timestampS);
-      const maxSkewS = BigInt(normalizePolicy(input.policy).maxSkewS);
-      const skew = input.claim.timestamp - observedAt;
-      const absSkew = skew < 0n ? -skew : skew;
-      if (absSkew > maxSkewS) {
-        throw new Error(
-          `claim timestamp ${input.claim.timestamp} is ${absSkew} s from the witness observation ${observedAt}, beyond the ${maxSkewS} s skew`,
-        );
-      }
+      assertObservationInWindow({ claim: input.claim, verified });
+      assertClaimMatchesSubject({ claim: input.claim, verified });
       assertClaimMatchesDisclosures({
         claim: input.claim,
         disclosures: verified.disclosedValues,
@@ -162,13 +207,13 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  * Specialization of `@thoth/attestor`'s `buildAttestor` that knows the kind:
  * it accepts evidence only from the operator's own Reclaim witness, rejects
  * proposals that do not match the disclosures, derives the *authoritative*
- * claim from the verified evidence (deterministic nonce, evidence-bound hash)
- * sized to the proposed claim's own length, and signs `message(claim)` with
+ * claim from the verified evidence (request-bound subject hash)
+ * sized to the proposed claim's values length, and signs `message(claim)` with
  * the key pair's signer.
  *
  * @typeParam PK — the signature scheme's public key type.
  * @typeParam S — the signature scheme's signature type.
- * @param parts — instance id, key material, registry slot, and witness key.
+ * @param parts — instance id, key material, and witness address.
  * @returns a working `Attestor` for the kind.
  */
 export function zkFetchAttestor<PK, S>(parts: {
@@ -176,29 +221,26 @@ export function zkFetchAttestor<PK, S>(parts: {
   id: string;
   /** The key material: public key plus the matching signing boundary. */
   keyPair: KeyPair<PK, S, FlatMessage>;
-  /** Slot index of this attestor's key in the on-chain registry. */
-  registryIndex: number;
-  /** The operator's own Reclaim witness key (`0x` + 32-byte hex secp256k1). */
-  witnessKey: string;
+  /** The operator's own Reclaim witness address (`0x` + 20-byte hex). */
+  witnessAddress: string;
 }): Attestor<ZkFetchDefinition, PK, S> {
-  const { id, keyPair, registryIndex, witnessKey } = parts;
-  const witnessAddress = witnessAddressOf(witnessKey);
+  const { id, keyPair, witnessAddress } = parts;
+  const trustedWitnessAddress = witnessAddress.toLowerCase();
   const definition = createZkFetchDefinition();
   const publicKey = keyPair.publicKey;
   return buildAttestor({
     id,
     definition,
     keyPair,
-    registryIndex,
     attest: async (definition, signer, input) => {
       const policy = definition.policy.parse(input.policy);
       const evidence = definition.evidence.parse(input.evidence);
       const proposed = definition.claim.parse(input.claim);
-      // One full check pass (ECDSA + policy + disclosures cross-check).
+      // One full check pass (ECDSA + policy + subject and disclosures cross-check).
       await definition.verify({ policy, evidence, claim: proposed });
-      if (evidence.attestorAddress.toLowerCase() !== witnessAddress) {
+      if (evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
         throw new Error(
-          `evidence signed by witness ${evidence.attestorAddress}, not this attestor's witness ${witnessAddress}`,
+          `evidence signed by witness ${evidence.attestorAddress}, not this attestor's witness ${trustedWitnessAddress}`,
         );
       }
       // Claim derivation only needs the pure parsed view.
@@ -207,12 +249,14 @@ export function zkFetchAttestor<PK, S>(parts: {
         verified,
         policy,
         appId: proposed.appId,
+        holder: proposed.holder,
         valueSlots: proposed.values.length,
-        timestamp: proposed.timestamp,
+        windowStart: proposed.windowStart,
+        windowEnd: proposed.windowEnd,
       });
       const message = claimToMessage(claim);
       const signature = await signer.sign(message);
-      return { kind: definition.kind, claim, message, publicKey, signature };
+      return { claim, message, publicKey, signature };
     },
   });
 }

@@ -18,9 +18,9 @@ export type FlatMessage = readonly bigint[];
  * The fixed claim shape every kind is expected to sign.
  *
  * Mirror of `attestation.compact`'s `Claim` struct: a header (version, appId,
- * policyHash, timestamp, nonce, evidenceHash), a per-position `present` mask,
- * and `V` numeric `values`. There is no kind code: the policy hash is the
- * on-chain binding, and the kind stays an off-chain concept.
+ * policyHash, windowStart, windowEnd, subjectHash, holder), a per-position
+ * `present` mask, and `V` numeric `values`. There is no kind code: the policy
+ * hash is the on-chain binding, and the kind stays an off-chain concept.
  *
  * This is the canonical shape kinds adopt unless they deviate.
  *
@@ -39,12 +39,21 @@ export interface Claim<V extends number> {
    * 32 bytes.
    */
   policyHash: Uint8Array;
-  /** Unix seconds at which the attestation was produced. */
-  timestamp: bigint;
-  /** Per-claim randomness; prevents signature/claim replay on-chain. */
-  nonce: Uint8Array;
-  /** Hash of the evidence artifacts; binds the claim to its evidence. */
-  evidenceHash: Uint8Array;
+  /**
+   * Unix seconds at which the attestor's observation began. The window is when
+   * the attestor observed, not when the underlying fact happened.
+   */
+  windowStart: bigint;
+  /** Unix seconds at which the attestor's observation ended. */
+  windowEnd: bigint;
+  /**
+   * Circuit hash of what the claim is about (see `@thoth/core/claim-context`'s
+   * `subjectHashOf`); an app recomputes it in-circuit to bind the source.
+   * 32 bytes.
+   */
+  subjectHash: Uint8Array;
+  /** Per-claim commitment of the caller secret. 32 bytes, derived by holderCommitmentOf. */
+  holder: Uint8Array;
   /** Per-position present mask; `present[i]` true means `values[i]` was populated. */
   present: readonly boolean[];
   /** Positional numeric claim values, exactly `V` of them. */
@@ -69,12 +78,14 @@ export interface ClaimInput<V extends number> {
   appId: Uint8Array;
   /** Hash of the policy the attestors enforced. 32 bytes. */
   policyHash: Uint8Array;
-  /** Unix seconds at which the attestation was produced. */
-  timestamp: number | bigint;
-  /** Per-claim randomness, replay protection. */
-  nonce: Uint8Array;
-  /** Hash of the evidence artifacts. */
-  evidenceHash: Uint8Array;
+  /** Unix seconds at which the attestor's observation began. */
+  windowStart: number | bigint;
+  /** Unix seconds at which the attestor's observation ended. */
+  windowEnd: number | bigint;
+  /** Circuit hash of what the claim is about. 32 bytes. */
+  subjectHash: Uint8Array;
+  /** Per-claim commitment of the caller secret. 32 bytes, derived by holderCommitmentOf. */
+  holder: Uint8Array;
   /** Per-position present mask; length constrained to `V` by the schema. */
   present: readonly boolean[];
   /** Positional claim values; length constrained to `V` by the schema. */
@@ -88,8 +99,8 @@ export interface ClaimInput<V extends number> {
 export const CLAIM_VERSION = 1n;
 
 /**
- * Zod schema for a claim's 32-byte fields that carry an identity
- * (`appId`, `policyHash`).
+ * Zod schema for a claim's 32-byte identity and hash fields
+ * (`appId`, `policyHash`, `subjectHash`, `holder`).
  */
 export const bytes32Schema = z
   .instanceof(Uint8Array)
@@ -115,9 +126,10 @@ export function claimSchema<V extends number>(
       version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
       appId: bytes32Schema,
       policyHash: bytes32Schema,
-      timestamp: z.union([z.number(), z.bigint()]),
-      nonce: z.instanceof(Uint8Array),
-      evidenceHash: z.instanceof(Uint8Array),
+      windowStart: z.union([z.number(), z.bigint()]),
+      windowEnd: z.union([z.number(), z.bigint()]),
+      subjectHash: bytes32Schema,
+      holder: bytes32Schema,
       present: z.array(z.boolean()).length(v),
       values: z.array(z.union([z.number(), z.bigint()])).length(v),
     })
@@ -125,9 +137,10 @@ export function claimSchema<V extends number>(
       version: BigInt(input.version),
       appId: input.appId,
       policyHash: input.policyHash,
-      timestamp: BigInt(input.timestamp),
-      nonce: input.nonce,
-      evidenceHash: input.evidenceHash,
+      windowStart: BigInt(input.windowStart),
+      windowEnd: BigInt(input.windowEnd),
+      subjectHash: input.subjectHash,
+      holder: input.holder,
       present: input.present,
       values: input.values.map((value) => BigInt(value)),
     }));
@@ -155,11 +168,11 @@ function splitBytes(bytes: Uint8Array): [bigint, bigint] {
  * Encode a parsed {@link Claim} into the flat signed-message field vector.
  *
  * The canonical default for kinds whose `message` is exactly the canonical
- * `Claim` shape: a 10-field header (version, then `appId` and `policyHash`
- * each split into two 16-byte halves, timestamp, then `nonce` and
- * `evidenceHash` split the same way, exactly as `attestation.compact`'s
+ * `Claim` shape: an 11-field header (version, then `appId` and `policyHash`
+ * each split into two 16-byte halves, `windowStart`, `windowEnd`, then
+ * `subjectHash`, and `holder` split the same way, exactly as `attestation.compact`'s
  * `buildMessage` does), followed by the `present` flags (`1`/`0`) and the
- * `values`. The result has length `2*V + 10`, which is
+ * `values`. The result has length `2*V + 11`, which is
  * the signed-message length `K` the target contract is specialized with.
  *
  * Kinds that extend the claim or use a different layout keep their own
@@ -168,17 +181,18 @@ function splitBytes(bytes: Uint8Array): [bigint, bigint] {
  *
  * @param claim — a parsed {@link Claim}.
  * @returns the flat message the signer commits to and the contract verifies.
- * @throws if `claim.appId`, `claim.policyHash`, `claim.nonce` or
- *   `claim.evidenceHash` is not exactly 32 bytes.
+ * @throws if `claim.appId`, `claim.policyHash`,
+ *   `claim.subjectHash` or `claim.holder` is not exactly 32 bytes.
  */
 export function claimToMessage<V extends number>(claim: Claim<V>): FlatMessage {
   return [
     claim.version,
     ...splitBytes(claim.appId),
     ...splitBytes(claim.policyHash),
-    claim.timestamp,
-    ...splitBytes(claim.nonce),
-    ...splitBytes(claim.evidenceHash),
+    claim.windowStart,
+    claim.windowEnd,
+    ...splitBytes(claim.subjectHash),
+    ...splitBytes(claim.holder),
     ...claim.present.map((p) => (p ? 1n : 0n)),
     ...claim.values,
   ];

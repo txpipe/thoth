@@ -1,7 +1,7 @@
 // Thoth Attestation module.
 //
 // Verifies an off-chain attested `Claim` against an N-of-M attestor
-// signature threshold, controls replay and (optionally) freshness, and stores
+// signature threshold, controls replay and the observation window, and stores
 // a claimsVault entry keyed by `persistentCommit(claim, rand)`.
 //
 // Responsibilities:
@@ -10,30 +10,39 @@
 //   - reject a claim whose `policyHash` is not in the sealed `policyHashes`
 //     set. The policy hash is the on-chain binding: there is no kind code, and
 //     a contract serves several policies (kinds) by sealing several hashes;
-//   - reject nonce replay via the nullifiers set;
-//   - reject stale/future timestamps when the sealed `freshnessWindow` is set
-//     (0 disables the check);
-//   - store { holder, timestamp } in the claimsVault. Nothing is returned:
-//     the app composes its own predicates over the claim via `openClaim`.
+//   - sign `subjectHash` into the message but not check it: an app that binds
+//     the source recomputes it in-circuit from private subject fields and
+//     compares it to `claim.subjectHash` (ADR 0001);
+//   - require the caller secret to match the signed per-claim holder commitment;
+//   - require every absent value slot to carry zero;
+//   - reject observation replay via the nullifiers set;
+//   - check the observation window (ADR 0005), unconditionally: it must not be
+//     inverted nor longer than the sealed `maxWindow`, the block time must be
+//     at or after `windowStart`, and before `windowEnd + freshnessWindow`.
+//     A zero `freshnessWindow` does not disable the check: the block time must
+//     then fall inside the window itself;
+//   - store { holder, windowStart, windowEnd } in the claimsVault. Nothing is
+//     returned: the app composes its own predicates over the claim via
+//     `openClaim`.
 //
 // Signature counting is delegated to the registry; the threshold decision
 // (#N) lives here. The message shape (order+sizes) is the single thing the
 // attestor must mirror, per the documented wire layout below.
 //
-// Wire layout (buildMessage), K = 2*V + 10 fields:
+// Wire layout (buildMessage), K = 2*V + 11 fields:
 //   [ version,
 //     appId[0..16] as Uint<128>, appId[16..32] as Uint<128>,
 //     policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
-//     timestamp,
-//     nonce[0..16] as Uint<128>, nonce[16..32] as Uint<128>,
-//     evidenceHash[0..16] as Uint<128>, evidenceHash[16..32] as Uint<128>,
+//     windowStart, windowEnd,
+//     subjectHash[0..16] as Uint<128>, subjectHash[16..32] as Uint<128>,
+//     holder[0..16] as Uint<128>, holder[16..32] as Uint<128>,
 //     present[0] as Field, ..., present[V-1] as Field,
 //     values[0] as Field, ..., values[V-1] as Field ]
-// Byte ranges are half-open (nonce[0..16] is bytes 0-15). Each 32-byte field
+// Byte ranges are half-open (appId[0..16] is bytes 0-15). Each 32-byte field
 // is split in two halves so every byte is signed.
 //
 // Module parameters (import "attestation"<K, V, N, M>):
-//   #K — signed-message length in fields. Must equal 2*V + 10 (the 10-field
+//   #K — signed-message length in fields. Must equal 2*V + 11 (the 11-field
 //        header in buildMessage, the V `present` fields, and the V value
 //        fields). This is what the registry's countValidSignatures verifies
 //        over.
@@ -50,23 +59,40 @@ module attestation<#K, #V, #N, #M> {
 
   export struct ClaimEntry {
     holder: Field;
-    timestamp: Uint<32>;
+    windowStart: Uint<32>;
+    windowEnd: Uint<32>;
   }
 
   export struct Claim {
     version: Uint<8>; // schema version (1)
     appId: Bytes<32>; // the app the claim is for
     policyHash: Bytes<32>; // hash of the policy the attestors enforced
-    timestamp: Uint<32>; // Unix seconds of the attestation
-    nonce: Bytes<32>; // per-claim randomness (replay protection)
-    evidenceHash: Bytes<32>; // kind-defined hash binding the claim to its evidence
+    windowStart: Uint<32>; // Unix seconds the attestor's observation began (ADR 0005)
+    windowEnd: Uint<32>; // Unix seconds the attestor's observation ended
+    subjectHash: Bytes<32>; // circuit hash of what the claim is about (ADR 0001)
+    holder: Bytes<32>; // per-claim commitment of the caller secret (ADR 0004)
     present: Vector<V, Boolean>; // present[i] = values[i] was populated (measured), even if 0
     values: Vector<V, Uint<64>>; // positional numeric claim values last; 0 IS a valid value
   }
 
+  // Observation identity (ADR 0006). Holder and version do not distinguish facts.
+  struct Observation {
+    appId: Bytes<32>;
+    policyHash: Bytes<32>;
+    subjectHash: Bytes<32>;
+    windowStart: Uint<32>;
+    windowEnd: Uint<32>;
+    values: Vector<V, Uint<64>>;
+    present: Vector<V, Boolean>;
+  }
+
   /// Freshness window (seconds), sealed at deploy by the top-level
-  /// constructor. 0 disables the freshness check.
+  /// constructor: how long after `windowEnd` a claim stays submittable.
+  /// 0 does not disable the check; the claim must then land inside its window.
   export sealed ledger freshnessWindow: Uint<64>;
+  /// Longest accepted observation window (seconds), sealed at deploy by the
+  /// top-level constructor.
+  export sealed ledger maxWindow: Uint<64>;
   /// Accepted policy hashes, sealed at deploy by the top-level constructor.
   /// A claim is accepted only under one of these policies.
   export sealed ledger policyHashes: Set<Bytes<32>>;
@@ -88,30 +114,32 @@ module attestation<#K, #V, #N, #M> {
     return [(slice<16>(b, 0) as Uint<128>) as Field, (slice<16>(b, 16) as Uint<128>) as Field];
   }
 
-  /// Reconstruct the flat signed message: a 10-field fixed header (version,
-  /// appId and policyHash each as two 16-byte halves, timestamp, then nonce
-  /// and evidenceHash each as two 16-byte halves) followed by the `present`
+  /// Reconstruct the flat signed message: an 11-field fixed header (version,
+  /// appId and policyHash each as two 16-byte halves, windowStart, windowEnd,
+  /// then subjectHash as two 16-byte halves, then the holder commitment
+  /// as two halves) followed by the `present`
   /// flags and the values mapped to `Field`. Tuple/vector spread
   /// (`...`) appends the flags and values, so at specialization
-  /// `[header..., present..., values...]` has length 10 + 2*V, which must equal
+  /// `[header..., present..., values...]` has length 11 + 2*V, which must equal
   /// K (enforced by the embedder). This is the single wire shape the attestor
   /// must mirror.
   export pure circuit buildMessage(c: Claim): Vector<K, Field> {
     const appId = splitBytes(c.appId);
     const policyHash = splitBytes(c.policyHash);
-    const nonce = splitBytes(c.nonce);
-    const evidenceHash = splitBytes(c.evidenceHash);
-    const header: Vector<10, Field> =
+    const subjectHash = splitBytes(c.subjectHash);
+    const holder = splitBytes(c.holder);
+    const header: Vector<11, Field> =
             [c.version as Field,
              appId[0],
              appId[1],
              policyHash[0],
              policyHash[1],
-             c.timestamp as Field,
-             nonce[0],
-             nonce[1],
-             evidenceHash[0],
-             evidenceHash[1],];
+             c.windowStart as Field,
+             c.windowEnd as Field,
+             subjectHash[0],
+             subjectHash[1],
+             holder[0],
+             holder[1],];
     const presentFields: Vector<V, Field> = map((p: Boolean) => p as Field, c.present);
     const valuesFields: Vector<V, Field> = map((v: Uint<64>) => v as Field, c.values);
     return [...header, ...presentFields, ...valuesFields];
@@ -137,7 +165,8 @@ module attestation<#K, #V, #N, #M> {
     return persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:holder-commitment:v1"), secret]);
   }
 
-  /// Verify an attested claim, on replay + freshness gates, then store it.
+  /// Verify an attested claim, on replay + observation-window gates, then
+  /// store it.
   export circuit verifyAttestation(): [] {
     const [claim, sigs, rand] = getAttestationWitness();
     assert(claim.version == 1, "Unsupported claim version");
@@ -148,23 +177,42 @@ module attestation<#K, #V, #N, #M> {
            "Insufficient valid signatures"
            );
 
-    if (disclose(freshnessWindow != 0)) {
-      assert(blockTimeGte(disclose(claim.timestamp as Uint<64>)), "Timestamp in the future");
-      assert(blockTimeLt(disclose((claim.timestamp + freshnessWindow) as Uint<64>)),
-             "Timestamp too old"
-             );
-    }
+    const validSlots =
+            map((present: Boolean, value: Uint<64>) => present || value == 0,
+                claim.present,
+                claim.values);
+    assert(fold((valid: Boolean, slot: Boolean) => valid && slot, true, validSlots),
+           "Absent slot has nonzero value"
+           );
 
-    const nullifier = persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:nonce:"), claim.nonce]);
-    assert(!nullifiers.member(disclose(nullifier)), "Nonce replay");
+    assert(claim.windowStart <= claim.windowEnd, "Window inverted");
+    assert(claim.windowEnd - claim.windowStart <= maxWindow, "Window too long");
+    assert(blockTimeGte(disclose(claim.windowStart as Uint<64>)), "Window in the future");
+    assert(blockTimeLt(disclose((claim.windowEnd + freshnessWindow) as Uint<64>)), "Window too old");
+
+    const secret = getHolderSecret();
+    assert(claim.holder == holderCommitment(secret), "Holder mismatch");
+
+    const nullifier =
+            persistentHash<Observation>(
+              Observation { appId: claim.appId,
+                            policyHash: claim.policyHash,
+                            subjectHash: claim.subjectHash,
+                            windowStart: claim.windowStart,
+                            windowEnd: claim.windowEnd,
+                            values: claim.values,
+                            present: claim.present }
+              );
+    assert(!nullifiers.member(disclose(nullifier)), "Observation replay");
     nullifiers.insert(disclose(nullifier));
 
     const id = persistentCommit<Claim>(claim, rand);
     assert(!claimsVault.member(id), "Claim already accepted");
     claimsVault.insert(
       id,
-      ClaimEntry { holder: disclose(deriveHolder(getHolderSecret())),
-                   timestamp: disclose(claim.timestamp) }
+      ClaimEntry { holder: disclose(deriveHolder(secret)),
+                   windowStart: disclose(claim.windowStart),
+                   windowEnd: disclose(claim.windowEnd) }
       );
   }
 

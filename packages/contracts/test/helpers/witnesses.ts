@@ -4,15 +4,25 @@ import type {
   Ledger,
   Witnesses,
 } from '../../artifacts/mock_attestation/contract/index.js';
-import { ACCEPTED_POLICIES } from './fixtures.js';
+import { ACCEPTED_POLICIES, DEFAULT_FRESHNESS_WINDOW, DEFAULT_MAX_WINDOW } from './fixtures.js';
 import type { PrivateState } from './private-state.js';
 
 export type WitnessBase = WitnessContext<Ledger, PrivateState>;
 
+/** Deploy-time values sealed by the mock constructor. Omitted values use fixture defaults. */
+export type DeploySeals = {
+  freshnessWindow?: bigint;
+  maxWindow?: bigint;
+  policyHashes?: readonly Uint8Array[];
+};
+
 export const makeWitnesses = (
   registryKeys: JubjubPoint[],
-  freshnessWindow = 0n,
-  policyHashes: readonly Uint8Array[] = ACCEPTED_POLICIES,
+  {
+    freshnessWindow = DEFAULT_FRESHNESS_WINDOW,
+    maxWindow = DEFAULT_MAX_WINDOW,
+    policyHashes = ACCEPTED_POLICIES,
+  }: DeploySeals = {},
 ): Witnesses<PrivateState> => ({
   getAttestationWitness: ({
     privateState,
@@ -37,6 +47,8 @@ export const makeWitnesses = (
     privateState,
     freshnessWindow,
   ],
+
+  maxWin: ({ privateState }: WitnessBase): [PrivateState, bigint] => [privateState, maxWindow],
 
   seedPolicies: ({ privateState }: WitnessBase): [PrivateState, Uint8Array[]] => [
     privateState,

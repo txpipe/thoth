@@ -38,6 +38,10 @@
     "./errors": {
       "types": "./dist/errors.d.ts",
       "import": "./dist/errors.js"
+    },
+    "./jubjub": {
+      "types": "./dist/jubjub.d.ts",
+      "import": "./dist/jubjub.js"
     }
   },
   "scripts": {
@@ -45,6 +49,7 @@
     "types": "tsc --noEmit"
   },
   "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.19.0",
     "@thoth/core": "*",
     "zod": "^4.5.4"
   }

@@ -22,18 +22,23 @@ The package exposes three entry points:
   - `AttestationInput<P, E, C>` — the raw policy / evidence / claim submitted to an attestor
   - `AttestorDefinition<K, P, E, C>` — the shareable, keyless law a kind of attestor implements: zod schemas for `policy`/`evidence`/`claim`, plus `verify` (decide whether to attest) and `message` (encode a claim into the message type)
   - `AttestorDescriptor<D, PK>` — the client-facing face of an attestor: everything a client needs to address it
-  - `Attestation<K, C, PK, S>` — the signed artifact an attestor produces and a client collects
+  - `Attestation<C, PK, S>` — the signed artifact an attestor produces and a client collects
 - **`@thoth/core/claim`**:
-  - `Claim<V>` / `ClaimInput<V>` — the canonical claim: header (version, appId, policyHash, timestamp, nonce, evidenceHash), a `present` mask, and `V` numeric `values`
+  - `Claim<V>` / `ClaimInput<V>` — the canonical claim: header (version, appId, policyHash, windowStart, windowEnd, subjectHash, holder), a `present` mask, and `V` numeric `values`
   - `claimSchema<V>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape
-  - `bytes32Schema` — a zod schema for the claim's 32-byte `appId` and `policyHash`
+  - `bytes32Schema` — a zod schema for the claim's 32-byte `appId`, `policyHash` and `subjectHash`
   - `claimToMessage` — encode a parsed `Claim` into the exact `FlatMessage` the contract's `buildMessage` verifies
   - `FlatMessage` — a Compact `Vector<K, Field>` as a `readonly bigint[]`
 - **`@thoth/core/claim-context`**:
   - `policyHashOf(law, policy, version?)` — hash a kind's policy, tagged with its law and the wire version
   - `subjectHashOf(fields)` — hash a kind's subject struct; equals the circuit's `persistentHash` of that struct
   - `holderCommitmentOf(secret)` — the per-claim holder commitment of a holder secret; equals the circuit's `holderCommitment`
-  - `claimContextDigestOf(context)` — the digest of a `ClaimContext` that every witness signs into its context
+  - `claimContextDigestOf(context)` — the hash of a `ClaimContext` that every witness signs into its context
+
+Kind identity belongs to `AttestorDefinition`. An attestation carries the
+claim, message, public key, and signature; callers already have the definition
+of the attestor they queried. For standard claims, `policyHashOf` commits to
+the law tag, policy, and wire version inside the signed claim.
 
 ### The flat message type
 
@@ -48,12 +53,11 @@ test in the contracts suite.
 
 ```ts
 import { claimSchema, claimToMessage } from '@thoth/core/claim';
-import type { Claim } from '@thoth/core/claim';
 import type { AttestorDefinition } from '@thoth/core';
 
 // A kind's definition uses the claim schema as its claim law.
-const def: AttestorDefinition<'zkfetch', z.ZodType, z.ZodType, z.ZodType> = {
-  kind: 'zkTLS',
+const def: AttestorDefinition<'my-kind@1', z.ZodType, z.ZodType, z.ZodType> = {
+  kind: 'my-kind@1', // the kind's versioned law tag
   policy: /* … */,
   evidence: /* … */,
   claim: claimSchema<8>(8),
@@ -75,11 +79,15 @@ recomputes the subject hash in-circuit from private fields. It requires a
 subject struct whose fields are all `Bytes<32>`. `holderCommitmentOf` is a
 circuit hash for the same reason: the contract re-derives the holder from the
 caller's secret. Its tag keeps it apart from the vault pseudonym the contract
-derives from the same secret.
+derives from the same secret. A claim carries this commitment as `holder`;
+the contract requires the caller to know its secret. Use a fresh high-entropy
+secret per claim. Secret reuse links claims; the layer makes no cross-claim
+identity or unlinkability promise.
 
 ## Links
 
 - [Thoth (repo root)](https://github.com/txpipe-shop/thoth) — overall architecture and docs
-- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — design overview
+- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — design overview, the claim and its wire order
+- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md) — how to add an attestor kind on top of this package
 - [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor) — the host (key boundary, instances)
 - [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts) — the on-chain Compact modules the claim shape mirrors

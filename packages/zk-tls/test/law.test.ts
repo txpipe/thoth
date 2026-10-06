@@ -8,6 +8,7 @@
 
 import {
   assertEvidenceMatchesPolicy,
+  claimRequestOf,
   deriveClaimFromEvidence,
   type ProviderClaimData,
   parsedEvidenceView,
@@ -15,12 +16,17 @@ import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
   zkFetchPolicyHashOf,
+  zkFetchPolicySchema,
+  zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
-import { assertClaimMatchesDisclosures } from '@thoth/zk-tls/attestor';
+import { assertClaimMatchesDisclosures, assertClaimMatchesSubject } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
 
 /** The app id every claim in this suite is for. */
 const APP_ID = new Uint8Array(32).fill(0xa1);
+
+/** The signed request parameters of a claim that only needs a subject. */
+const REQUEST = { url: 'https://api.github.com/repos/x', method: 'GET', body: '' };
 
 /** A signed-shape claim whose parameters/context are JSON I control. */
 const claimWith = (parameters: unknown, context: unknown): ProviderClaimData => ({
@@ -57,14 +63,16 @@ const verifiedOf = (
 describe('parse law (through deriveClaimFromEvidence)', () => {
   const derived = (value: string, parse: 'int' | 'float'): { present: boolean; value: bigint } => {
     const claim = deriveClaimFromEvidence({
-      verified: verifiedOf(claimWith({}, {}), { v: value }),
+      verified: verifiedOf(claimWith(REQUEST, {}), { v: value }),
       policy: {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 0, name: 'v', parse }],
       },
       appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 1,
-      timestamp: 1_786_122_944n,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
     });
     return { present: claim.present[0] ?? false, value: claim.values[0] ?? 0n };
   };
@@ -93,12 +101,44 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
     expect(derived('2.5e2', 'float')).toEqual({ present: true, value: 250n });
   });
 
+  it.each(['12abc', '1,000', ' 12', '12 ', '12\n', '0x10', '+12', '.5', '1.'])(
+    'rejects a float outside the decimal grammar: %s',
+    (value) => {
+      expect(derived(value, 'float')).toEqual({ present: false, value: 0n });
+    },
+  );
+
+  it('preserves float integers above the double precision limit', () => {
+    expect(derived('9007199254740993', 'float')).toEqual({
+      present: true,
+      value: 9007199254740993n,
+    });
+  });
+
+  it.each([
+    ['9007199254740993.0', 9007199254740993n],
+    ['9.007199254740993e15', 9007199254740993n],
+    ['0.49999999999999999999', 0n],
+    ['9007199254740993.5', 9007199254740994n],
+    ['18446744073709551615.4', 18446744073709551615n],
+    ['000.005e2', 1n],
+    ['5e-1', 1n],
+    ['5e-2', 0n],
+    ['1e-999999999999999999999', 0n],
+    ['0e999999999999999999999', 0n],
+  ])('rounds decimal %s exactly', (value, expected) => {
+    expect(derived(value, 'float')).toEqual({ present: true, value: expected });
+  });
+
   it('rejects non-numeric or unbounded floats as unpresent', () => {
     expect(derived('abc', 'float').present).toBe(false);
     expect(derived('NaN', 'float').present).toBe(false);
     expect(derived('Infinity', 'float').present).toBe(false);
     expect(derived('-0.5', 'float').present).toBe(false);
     expect(derived('1e30', 'float').present).toBe(false);
+    expect(derived('1e999999999999999999999', 'float').present).toBe(false);
+    expect(derived('18446744073709551615.5', 'float').present).toBe(false);
+    expect(derived('18446744073709551616', 'float').present).toBe(false);
   });
 });
 
@@ -145,15 +185,17 @@ describe('deriveClaimFromEvidence', () => {
 
   it('maps disclosed values into the declared slots', () => {
     const verified = verifiedOf(
-      claimWith({}, { extractedParameters: { distance: '12.4', time: '300' } }),
+      claimWith(REQUEST, { extractedParameters: { distance: '12.4', time: '300' } }),
       { distance: '12.4', time: '300' },
     );
     const claim = deriveClaimFromEvidence({
       verified,
       policy: policy([{ slot: 0, name: 'distance', parse: 'float' }]),
       appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 2,
-      timestamp: 1_786_122_944n,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
     });
     expect(claim.values).toEqual([12n, 0n]);
     expect(claim.present).toEqual([true, false]);
@@ -161,46 +203,115 @@ describe('deriveClaimFromEvidence', () => {
 
   it('signs absent or unparseable disclosures as unpresent', () => {
     const verified = verifiedOf(
-      claimWith({}, { extractedParameters: { distance: 'n/a', time: '300' } }),
+      claimWith(REQUEST, { extractedParameters: { distance: 'n/a', time: '300' } }),
       { distance: 'n/a', time: '300' },
     );
     const claim = deriveClaimFromEvidence({
       verified,
       policy: policy([{ slot: 0, name: 'time', parse: 'int' }]),
       appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 2,
-      timestamp: 1_786_122_944n,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
     });
     expect(claim.values).toEqual([300n, 0n]);
     expect(claim.present).toEqual([true, false]);
   });
 
   it('carries the given appId and the hash of the policy it was derived under', () => {
-    const verified = verifiedOf(claimWith({}, { extractedParameters: { a: '1' } }), { a: '1' });
+    const verified = verifiedOf(claimWith(REQUEST, { extractedParameters: { a: '1' } }), {
+      a: '1',
+    });
     const activePolicy = policy([{ slot: 0, name: 'a', parse: 'int' }]);
     const claim = deriveClaimFromEvidence({
       verified,
       policy: activePolicy,
       appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 1,
-      timestamp: 1_786_122_944n,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
     });
     expect(claim.appId).toEqual(APP_ID);
     expect(claim.policyHash).toEqual(zkFetchPolicyHashOf(activePolicy));
-    expect(claim).not.toHaveProperty('kind');
+  });
+
+  it('carries the subject hash of the signed request', () => {
+    const request = { url: 'https://api.github.com/repos/x?y=1', method: 'POST', body: '{"a":1}' };
+    const verified = verifiedOf(claimWith(request, { extractedParameters: { a: '1' } }), {
+      a: '1',
+    });
+    const claim = deriveClaimFromEvidence({
+      verified,
+      policy: policy([{ slot: 0, name: 'a', parse: 'int' }]),
+      appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
+      valueSlots: 1,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
+    });
+    expect(claim.subjectHash).toEqual(zkFetchSubjectHashOf(request));
   });
 
   it('throws when a policy slot exceeds the claim value count', () => {
-    const verified = verifiedOf(claimWith({}, { extractedParameters: { a: '1' } }), { a: '1' });
+    const verified = verifiedOf(claimWith(REQUEST, { extractedParameters: { a: '1' } }), {
+      a: '1',
+    });
     expect(() =>
       deriveClaimFromEvidence({
         verified,
         policy: policy([{ slot: 1, name: 'a', parse: 'int' }]),
         appId: APP_ID,
+        holder: new Uint8Array(32).fill(0xc1),
         valueSlots: 1,
-        timestamp: 1_786_122_944n,
+        windowStart: 1_786_122_944n,
+        windowEnd: 1_786_122_944n,
       }),
     ).toThrow(/out of the claim's 1 value slots/);
+  });
+});
+
+describe('claimRequestOf', () => {
+  it('reads the method, url and body the witness signed', () => {
+    expect(claimRequestOf(claimWith({ ...REQUEST, body: 'b', headers: { a: '1' } }, {}))).toEqual({
+      ...REQUEST,
+      body: 'b',
+    });
+  });
+
+  it('treats a missing body as empty', () => {
+    const { body: _, ...noBody } = REQUEST;
+    expect(zkFetchSubjectHashOf(claimRequestOf(claimWith(noBody, {})))).toEqual(
+      zkFetchSubjectHashOf(REQUEST),
+    );
+  });
+
+  it('rejects parameters without a method or url', () => {
+    expect(() => claimRequestOf(claimWith({ url: REQUEST.url }, {}))).toThrow(/method/);
+    expect(() => claimRequestOf(claimWith({ method: 'GET' }, {}))).toThrow(/url/);
+    expect(() => claimRequestOf(claimWith({ ...REQUEST, body: 1 }, {}))).toThrow(/body/);
+  });
+});
+
+describe('assertClaimMatchesSubject', () => {
+  const verified = verifiedOf(claimWith(REQUEST, {}), {});
+
+  it('accepts a claim about the signed request', () => {
+    assertClaimMatchesSubject({
+      claim: { subjectHash: zkFetchSubjectHashOf(REQUEST) } as never,
+      verified,
+    });
+  });
+
+  it('rejects a claim about another request', () => {
+    const other = { ...REQUEST, url: 'https://api.github.com/repos/y' };
+    expect(() =>
+      assertClaimMatchesSubject({
+        claim: { subjectHash: zkFetchSubjectHashOf(other) } as never,
+        verified,
+      }),
+    ).toThrow(/subjectHash does not match/);
   });
 });
 
@@ -249,6 +360,16 @@ describe('assertEvidenceMatchesPolicy', () => {
     verifiedOf(claimWith({ url }, { extractedParameters: { distance: '12.4' } }), {
       distance: '12.4',
     });
+
+  it('drops the removed unsigned response-size policy', () => {
+    const parsed = zkFetchPolicySchema.parse({ ...policy, maxResponseBytes: 4 });
+    expect(parsed).not.toHaveProperty('maxResponseBytes');
+    expect(zkFetchPolicyHashOf(parsed)).toEqual(zkFetchPolicyHashOf(policy));
+    for (const responseText of [undefined, '', 'x'.repeat(100)]) {
+      const evidence = { ...verified('https://api.github.com/x'), responseText };
+      expect(assertEvidenceMatchesPolicy(evidence, parsed)).toBe('api.github.com');
+    }
+  });
 
   it('accepts an https claim against an allowlisted host', () => {
     expect(assertEvidenceMatchesPolicy(verified('https://api.github.com/repos/x'), policy)).toBe(
@@ -311,15 +432,5 @@ describe('assertEvidenceMatchesPolicy', () => {
       {},
     );
     expect(assertEvidenceMatchesPolicy(missing, optional)).toBe('api.github.com');
-  });
-
-  it('enforces the response size bound', () => {
-    const large = verifiedOf(
-      claimWith({ url: 'https://api.github.com/x' }, { extractedParameters: { distance: '1' } }),
-      { distance: '1' },
-    );
-    const withSize = { ...policy, maxResponseBytes: 4 };
-    large.responseText = 'x'.repeat(100);
-    expect(() => assertEvidenceMatchesPolicy(large, withSize)).toThrow(/exceeds maxResponseBytes/);
   });
 });

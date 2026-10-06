@@ -7,15 +7,19 @@ See the [package README](../README.md) for what the package exports and
 
 ## Client setup
 
-Six things go into `zkFetchClient.init`:
+Seven things go into `zkFetchClient.init`:
 
 - **`trusted`.** The attestors your app pins, assembled with `@thoth/client`'s
-  `buildTrustedSet(descriptors)`. A descriptor is `{ id, definition, publicKey,
-  registryIndex }`, from your deploy config and the attestor network; see
-  `@thoth/client` for the trusted-set rules.
+  `buildTrustedSet({ registrySize, attestors })`. `registrySize` is your
+  registry's `#M`; each member pairs a descriptor `{ id, definition, publicKey }`
+  from the attestor network with the `registryIndex` of its key in **your**
+  deployed registry. The attestor does not choose its slot; see `@thoth/client`
+  for the trusted-set rules.
 - **`transport`.** How the client reaches each attestor. App-supplied; the
   host-side mirror is `Attestor.attest`, and `@thoth/client` has a minimal HTTP
   example.
+- **`verifier`.** The attestor signature verifier. For Jubjub Schnorr, use
+  `jubjubVerifier` from `@thoth/client/jubjub`.
 - **`policy`.** The law every attestor in the set will check against; see below.
   Every claim carries `zkFetchPolicyHashOf(policy)` as its `policyHash`, and
   the consuming contract must seal that hash in its `policyHashes` set at
@@ -32,11 +36,19 @@ A complete setup:
 
 ```ts
 import { buildTrustedSet, type AttestorTransport } from '@thoth/client';
+import { jubjubVerifier } from '@thoth/client/jubjub';
 import type { ZkFetchDefinition } from '@thoth/zk-tls';
 import { zkFetchClient } from '@thoth/zk-tls/client';
 import { zkFetchProver } from '@thoth/zk-tls/prover';
 
-const trusted = buildTrustedSet(descriptors);
+const trusted = buildTrustedSet({
+  registrySize: 3, // the registry's #M
+  attestors: [
+    { attestor: txpipeDescriptor, registryIndex: 0 },
+    { attestor: eryxDescriptor, registryIndex: 1 },
+    { attestor: foundationDescriptor, registryIndex: 2 },
+  ],
+});
 
 const transport: AttestorTransport<ZkFetchDefinition, PublicKey, Signature> = {
   async request(attestor, input) {
@@ -61,6 +73,7 @@ const policy = zkFetchPolicySchema.parse({
 const client = zkFetchClient.init({
   trusted,
   transport,
+  verifier: jubjubVerifier,
   policy,
   appId, // 32 bytes
   valueSlots: 2, // the contract's #V
@@ -70,6 +83,9 @@ const client = zkFetchClient.init({
   },
 });
 
+// import { holderCommitmentOf } from '@thoth/core/claim-context';
+// Generate holderSecret as 32 cryptographically random bytes and retain it locally.
+const holder = holderCommitmentOf(holderSecret);
 const proof = await client.proveReq({
   url: 'https://www.strava.com/api/v3/athlete/activities?per_page=1',
   method: 'GET',
@@ -84,14 +100,41 @@ const proof = await client.proveReq({
     { regex: '"moving_time":\\s*\\d+' },
   ],
   context: { label: 'strava-activity' },
-});
+}, holder);
 
 const attestment = await proof.attest(); // or .attest('attestor-0')
 ```
 
+## Collecting a threshold
+
+For a resilient one-call flow, use `collect` instead of the proof-handle flow:
+
+```ts
+const start = Math.floor(Date.now() / 1000);
+const attestment = await client.collect(request, {
+  holder,
+  windowStart: BigInt(start),
+  windowEnd: BigInt(start + 60),
+  expiresAt: Date.now() + 60_000,
+  threshold: 2,
+  attestorTimeoutMs: 20_000,
+});
+```
+
+Set the window to the consuming contract's permitted freshness and width, and
+`threshold` to its on-chain N. Pass an ordered `attestorIds` list to limit which
+witnesses use your secret headers. The result is one agreeing group,
+submitted with the registry placement described below; see the
+[README](../README.md#collecting-a-threshold) for the failure semantics.
+
 ## Building the request
 
-`proveReq` takes a `ZkFetchRequest`; the witness signs these parameters into
+`proveReq(request, holder)` takes a `ZkFetchRequest` and the per-claim commitment
+from `holderCommitmentOf`, imported from `@thoth/core/claim-context`. Keep the
+secret for the contract witness and use a fresh high-entropy secret per claim.
+Reusing it links claims; Thoth makes no cross-claim unlinkability promise.
+
+The request describes the fetch; the witness signs these parameters into
 the claim, so the policy can rely on them. Field-by-field docs live in
 `ZkFetchRequest`'s JSDoc in `src/client/index.ts`. The two that carry protocol
 semantics:
@@ -116,31 +159,61 @@ identifiers and `proveReq` rejects the set with `witnesses disagree`. Reveal
 only the field the policy binds, and prefer values the origin returns
 deterministically.
 
+## Witness agreement and upgrades
+
+Every operator in one trusted set must run the same witness version and behavior.
+Two witnesses agree only when they add identical context fields to the Reclaim
+claim identifier for the same request and disclosures. Thoth does not pin witness
+behavior. An upstream witness change can silently split every affected trusted
+set; `proveReq` fails closed with `witnesses disagree`, causing an availability
+failure before any attestor is contacted.
+
+When a witness version or behavior changes, coordinate all operators and re-run
+the [live check](../README.md#live-check) with `WITNESS_URLS` pointing to the
+candidate witnesses before rotating the trusted set. Rotate only after the
+check confirms that they derive the same identifier and message.
+
 ## Building the policy
 
 Every attestor in a trusted set will enforce the same policy. Field docs live in
 `zkFetchPolicySchema`'s JSDoc in `src/index.ts`:
 
-`int` accepts digits below `2^64`; `float` is rounded to the nearest integer and
-must be finite, non-negative, and below `2^64`. A required slot whose value is
-missing or unparseable rejects the evidence; an `optional` slot is signed
-unpresent.
+`int` accepts only decimal digits and requires a value below `2^64`.
+`float` accepts a whole string matching
+`[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?`: digits, an optional decimal point
+followed by digits, and an optional base-10 exponent. Leading zeros are allowed.
+Whitespace, leading signs, grouping separators, trailing junk, `NaN`, and
+`Infinity` are rejected. For example, `12abc`, `1,000`, `.5`, and `1.` are invalid;
+`0.5` and `2.5e2` are valid.
+
+`float` rounds exactly to the nearest integer, with halves rounded up, and
+requires the rounded result to be below `2^64`. It never converts the numeric
+value to a JavaScript double: `9007199254740993` stays `9007199254740993`, and
+`0.49999999999999999999` rounds to zero. A required slot whose value is missing
+or unparseable rejects the evidence; an `optional` slot is signed unpresent.
+
+`responseText`, when present in evidence or prover output, is untrusted,
+client-supplied transport output. The witness signature does not authenticate
+it. The policy therefore has no response-size bound; `maxResponseBytes` has
+been removed. Recompute any policy hash that included that field. Apply
+transport size limits separately from attestation policy checks.
 
 ## Handing it to the contract
 
 `attestment.claim` is the claim every attestor signed and `attestment.message`
 is its flat encoding; each `attestment.collected[i]` carries the `registryIndex`
-slot its attestor answered from. Place each signature at its slot in the
-contract's fixed signature vector and call `verifyAttestation` with the claim.
+your trusted set assigned to the attestor that signed it. Place each signature
+at its slot in the contract's fixed signature vector and call
+`verifyAttestation` with the claim.
 See `@thoth/contracts` for the circuit and the registry wiring.
 
 Each attestor operator runs their own Reclaim witness and builds the attestor
-with that witness's key. The dApp points each attestor's prover at the matching
-witness URL, so the evidence an attestor receives comes from the one witness it
+with that witness's public address. The dApp points each attestor's prover at
+the matching witness URL, so the evidence an attestor receives comes from the one witness it
 trusts. See [attestor-guide.md](attestor-guide.md) for running one.
 
-`proveReq` also signs a fresh random nonce (`thothNonce`) into every witness's
-context, so one observation cannot be replayed as another. If the witnesses
+Replay protection uses the signed observation fields, including the window and
+disclosed values. Changing caller context or holder does not create a new observation. If the witnesses
 disagree on the request, context, or disclosed values, `proveReq` throws before
 contacting any attestor.
 
@@ -185,7 +258,7 @@ const hostedProver = (client: ReclaimClient): ZkFetchProver => ({
 on it.
 
 This path lets Reclaim choose the witness per call, so it only fits a trusted
-set whose attestors all pin that witness key. A set of operators running their
+set whose attestors all pin that witness address. A set of operators running their
 own witnesses needs one direct `zkFetchProver` per attestor instead.
 
 References:

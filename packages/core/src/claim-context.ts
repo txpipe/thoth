@@ -37,8 +37,6 @@ export interface ClaimContext {
   subjectHash: Uint8Array;
   /** The per-claim holder commitment. 32 bytes. */
   holder: Uint8Array;
-  /** Random per-claim bytes. 32 bytes. */
-  nonce: Uint8Array;
   /** Start of the observation window, Unix seconds. */
   windowStart: bigint;
   /** End of the observation window, Unix seconds. */
@@ -198,11 +196,10 @@ export function holderCommitmentOf(secret: Uint8Array): Uint8Array {
  * @throws if a byte field is not 32 bytes or a window bound is negative.
  */
 export function claimContextDigestOf(context: ClaimContext): Uint8Array {
-  const { policyHash, subjectHash, holder, nonce, windowStart, windowEnd } = context;
+  const { policyHash, subjectHash, holder, windowStart, windowEnd } = context;
   assertHashBytes('policyHash', policyHash);
   assertHashBytes('subjectHash', subjectHash);
   assertHashBytes('holder', holder);
-  assertHashBytes('nonce', nonce);
   if (windowStart < 0n) {
     throw new Error(`windowStart must be non-negative, got ${windowStart}`);
   }
@@ -211,6 +208,6 @@ export function claimContextDigestOf(context: ClaimContext): Uint8Array {
   }
   return canonicalSha256([
     CLAIM_CONTEXT_TAG,
-    { policyHash, subjectHash, holder, nonce, windowStart, windowEnd },
+    { policyHash, subjectHash, holder, windowStart, windowEnd },
   ]);
 }

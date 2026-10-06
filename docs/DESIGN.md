@@ -54,10 +54,11 @@ attested value can feed different predicates in different applications.
 
 What makes a claim meaningful is the consuming contract. The app pins its trusted
 attestor set and threshold at deploy time, and its predicate decides which claims it
-accepts. A claim does not carry the host, request, or policy that produced it as a
-field the contract can compare, only an opaque `evidenceHash`, so matching values do
-not by themselves prove where they came from. An app that needs source binding has to
-put the commitment it needs into the claim layout and check it on-chain.
+accepts. A claim carries `policyHash`, which the contract checks against its sealed
+set, and `subjectHash`, a circuit hash of what the claim is about. Matching values do
+not by themselves prove where they came from: an app that needs source binding supplies
+the subject privately, recomputes `subjectHash` in-circuit, and pins only the fields
+its policy needs, such as the host.
 
 On the other side is the *client* — the component that runs on the user's machine,
 inside the dApp. It first obtains evidence of a fact. In the zkFetch kind that means
@@ -74,9 +75,52 @@ pinged by any dApp that needs to use external data in-contract. Each dApp choose
 own threshold at deployment time, meaning how many attestors'
 signatures are needed for a claim to be valid.
 
-A claim can be *portable* — reusable to feed different predicates in different apps —
-or *scoped*: binding a claim to an app id forbids it from being used by any other app.
-Scoping is a claim-layout and contract concern; the base `Claim` carries no app id.
+Every claim is signed for one app: it carries the app's `appId`. Within one
+app, the same claim can feed any number of predicates.
+
+To add a kind, see [kind-author-guide.md](kind-author-guide.md).
+
+## The claim
+
+The claim is the same object everywhere — client, attestors, and contract —
+and it is the whole signed message: anything the contract checks is a field of
+it. The terms are defined in [`CONTEXT.md`](../CONTEXT.md); the decisions
+behind them are the ADRs in [`adr/`](adr/).
+
+| Field | What it is |
+|-------|------------|
+| `version` | Wire version, `1` until a layout is deployed |
+| `appId` | The app the claim is for |
+| `policyHash` | Hash of the policy the attestors enforced; stands in for the kind (ADR 0002) |
+| `windowStart`, `windowEnd` | When the attestor observed, in Unix seconds (ADR 0005) |
+| `subjectHash` | Circuit hash of what the claim is about (ADR 0001) |
+| `holder` | Per-claim commitment of the caller's secret (ADR 0004) |
+| `present` | One flag per value slot: was it measured |
+| `values` | `V` positional `Uint<64>` measurements |
+
+There is no nonce and no kind code. The contract derives replay protection from
+the observation identity (ADR 0006), and the policy hash binds the kind.
+
+### Wire order
+
+Attestors sign, and the contract rebuilds, a flat vector of `K = 2*V + 11`
+fields. `buildMessage` in
+[`attestation.compact`](../packages/contracts/attestation.compact) defines it;
+`claimToMessage` in `@thoth/core/claim` mirrors it, and a parity test keeps the
+two equal. Each 32-byte field is split into two 16-byte halves, each read as a
+`Uint<128>`, so every byte is signed.
+
+| Index | Field | Encoding |
+|-------|-------|----------|
+| 0 | `version` | `1` |
+| 1, 2 | `appId` | bytes 0–15, then bytes 16–31 |
+| 3, 4 | `policyHash` | two halves |
+| 5 | `windowStart` | Unix seconds |
+| 6 | `windowEnd` | Unix seconds |
+| 7, 8 | `subjectHash` | two halves |
+| 9, 10 | `holder` | two halves |
+| 11 … 10+V | `present[0]` … `present[V-1]` | `1` measured, `0` absent |
+| 11+V … 10+2V | `values[0]` … `values[V-1]` | the value; `0` when absent |
 
 ## The contract
 
@@ -87,19 +131,28 @@ pinned trusted set — and with the app's N-of-M threshold fixed at deployment t
 When the client submits a claim with N attestor signatures, the contract verifies,
 in zero knowledge, that:
 
+- the claim's `version` is `1`;
+- the claim's `policyHash` is in the app's sealed set of accepted policies;
 - each signature is valid and comes from a **distinct** attestor in the registry —
   so the N-of-M threshold holds against exactly the attestors the app pinned;
-- the claim's nonce has not been used before — no replay;
-- optionally, that the claim is **fresh**, within the app's configured time window,
-  checked against block time.
+- every slot not marked `present` carries zero;
+- the caller knows the secret behind the claim's `holder`;
+- the attestors' observation window is not inverted and does not exceed the
+  app's sealed maximum, and the block time falls between its start and its end
+  plus the sealed freshness window. This check also applies when the freshness
+  window is zero;
+- the observation identity has not been submitted before — no replay;
+- the same claim, under the same commitment randomness, is not already in the
+  vault.
 
 Only if those checks pass does the app's predicate run over the claim values, as
 private witness data. The claim values are never stored on-chain — only their
 commitments and the predicate outcome are — and, depending on the app's
 configuration, which attestors vouched may be hidden too.
 
-The claim and the signature scheme are the same object everywhere — client,
-attestors, and contract — so a signature produced off-chain verifies on-chain.
+A signature produced off-chain verifies on-chain, because the claim and the
+signature scheme are shared. Signatures are checked positionally: the client places each one at the
+registry slot its trusted set assigned the attestor.
 
 ## Flow
 
@@ -130,6 +183,9 @@ sequenceDiagram
 
 ## Out of scope
 
+- **Colluding attestors**: N or more pinned attestors can sign a claim under a
+  policy they do not enforce, and nothing on-chain can stop it. The threshold
+  assumes the pinned operators are honest and independent (ADR 0003).
 - **Org / 1-of-1 attestation**: a single authority makes the registry, N-of-M, and
   verifier redundant; a plain signature checked by a witness function does the whole
   job.

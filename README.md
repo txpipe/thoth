@@ -12,8 +12,8 @@ Three pieces:
 
 - **Contract module**: An embeddable Compact module set: each app
   carries its own pinned attestor registry, verifies a fixed threshold of
-  independent signatures over a canonical claim, and composes optional policy
-  circuits (freshness) per contract.
+  independent signatures over a canonical claim, checks when it was observed,
+  and composes optional policy circuits per contract.
 - **Attestor SDK**: A library that provides the types and functions that
   attestors need to provide the service. Includes different packages to adapt
   for different sources and types of attestation (zkFetch, price band, …)
@@ -32,8 +32,11 @@ Three pieces:
 3. The client submits the claim with N signatures to the Midnight contract as
    **private witness data**. The contract verifies, in zero knowledge: each
    signature is valid and from a **distinct** attestor in the app's pinned
-   registry; the nonce hasn't been reused (no replay); and optionally that the
-   claim is fresh within the app's configured time window.
+   registry; the claim is under a policy the app accepts; absent slots carry
+   zero; the caller knows the secret behind the claim's holder; the observation
+   hasn't been submitted before (no replay); and the claim satisfies the app's
+   observation and freshness windows. The full list is in
+   [`docs/DESIGN.md`](docs/DESIGN.md#the-contract).
 4. Only if those checks pass does the app's **predicate** run over the claim
    values. Claim values are never stored on-chain — only their commitments and
    the predicate outcome — and, depending on the app's configuration, which
@@ -50,14 +53,19 @@ thoth/
 │   ├── attestor/              # @thoth/attestor — host: key boundary, instances, helpers
 │   ├── client/                # @thoth/client — dApp-side seam: TrustedSet, transport, primitives
 │   ├── contracts/             # @thoth/contracts — Compact on-chain modules
-│   │   ├── attestation.compact     # N-of-M verification, replay/freshness control, claims vault
+│   │   ├── attestation.compact     # N-of-M verification, replay/window control, claims vault
 │   │   ├── attestor_registry.compact  # pinned attestor keys + signature counting
 │   │   ├── examples/example_app.compact  # 2-of-3 example embedding
 │   │   ├── test/                   # simulator tests + helpers
 │   │   └── README.md               # how to embed the modules in your own contract
 │   ├── core/                  # @thoth/core — keyless claim/envelope types
 │   └── zk-tls/                # @thoth/zk-tls — zkFetch kind: shared logic + attestor + client
-├── docs/DESIGN.md              # design overview & decisions
+├── docs/
+│   ├── DESIGN.md               # design overview, the claim and its wire order
+│   ├── kind-author-guide.md    # how to add a new attestor kind
+│   └── adr/                    # architecture decision records
+├── examples/demo-attestation/  # recorded zkFetch evidence fixture
+├── CONTEXT.md                  # domain glossary
 ├── tsconfig.base.json          # shared TypeScript compiler options for all packages
 └── package.json                # repo root: npm workspace + shared scripts, CI
 ```
@@ -72,9 +80,9 @@ Two embeddable Compact modules plus a top-level example (`packages/contracts/REA
 
 | File | Module | Role |
 |------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and freshness (`freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)` |
+| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and the observation window (`maxWindow`, `freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)` |
 | `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` via the stdlib `jubjubSchnorrVerify` — counts only, no threshold |
-| `examples/example_app.compact` | top-level | Example app embedding `Attestation<13, 3, 2, 3>` (2-of-3) |
+| `examples/example_app.compact` | top-level | Example app embedding `Attestation<17, 3, 2, 3>` (2-of-3) |
 
 ## Development
 
@@ -91,7 +99,10 @@ vitest, and biome on every push/PR.
 
 ## Docs
 
-- `docs/DESIGN.md` — design overview
+- `docs/DESIGN.md` — design overview, the claim, and its wire order
+- `docs/kind-author-guide.md` — how to add a new attestor kind
+- `CONTEXT.md` — the domain glossary
+- `docs/adr/` — the design decisions and their reasons
 - `AGENTS.md` — guide for AI coding agents working in this repo
 - `packages/core/README.md` — the keyless internal law (`@thoth/core/claim`)
 - `packages/attestor/README.md` — the host: key boundary, instances, helpers

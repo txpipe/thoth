@@ -1,5 +1,5 @@
 // Test mock: a thin deployable wrapper around the attestation + registry
-// modules, specialized to V=3 values, K=16 message fields, M=3 signatures,
+// modules, specialized to V=3 values, K=17 message fields, M=3 signatures,
 // N=2 threshold (2-of-3). Exists only to give the modules a top-level shell to
 // compile against and to re-export the pure parity surface (`message`,
 // `computeId`, `holderOf`, `holderCommitment`, `subjectHash`) plus types and
@@ -8,14 +8,14 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=16 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "../../attestation"<16, 3, 2, 3> prefix A_;
+//           K=17 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "../../attestation"<17, 3, 2, 3> prefix A_;
 
-import "../../attestor_registry"<3, 16> prefix R_;
+import "../../attestor_registry"<3, 17> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
-export { A_freshnessWindow, A_policyHashes, A_claimsVault, A_nullifiers };
+export { A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
 
 // Parity surface for the claim context: a struct of four Bytes<32> fields, so
 // a test can check the compiled `persistentHash<Subject>` against the
@@ -35,7 +35,7 @@ export circuit verifyAttestation(): [] {
   A_verifyAttestation();
 }
 
-export pure circuit message(a: A_Claim): Vector<16, Field> {
+export pure circuit message(a: A_Claim): Vector<17, Field> {
   return A_buildMessage(a);
 }
 
@@ -78,14 +78,26 @@ export circuit openAndRequireMetric0(id: Bytes<32>, expected: Uint<64>): [] {
   assert(c.values[0] == expected, "value[0] mismatch");
 }
 
+// App-predicate demo: source binding (ADR 0001). The caller supplies the
+// subject privately; the circuit recomputes its hash against the vaulted
+// claim's `subjectHash` and pins only the host, so the path stays private.
+export circuit openAndBindHost(id: Bytes<32>, s: Subject, host: Bytes<32>): [] {
+  const c = A_openClaim(id);
+  assert(persistentHash<Subject>(s) == c.subjectHash, "Subject mismatch");
+  assert(s.host == host, "Host not accepted");
+}
+
 witness seedKeys(): Vector<3, JubjubPoint>;
 
 witness freshWindow(): Uint<64>;
+
+witness maxWin(): Uint<64>;
 
 witness seedPolicies(): Vector<2, Bytes<32>>;
 
 constructor() {
   A_freshnessWindow = disclose(freshWindow());
+  A_maxWindow = disclose(maxWin());
   for (const h of seedPolicies()) {
     A_policyHashes.insert(disclose(h));
   }

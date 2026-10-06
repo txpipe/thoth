@@ -20,13 +20,15 @@ npm install @thoth/attestor
 - `KeyPair<PK, S>` — the public key paired with its signing boundary, produced
   together from the same private key so they can't be cross-wired.
 - `Attestor<D, PK, S>` — a deployable, identifiable instance: `id`, the kind's
-  shareable `definition`, its `signer`, its `publicKey`, its `registryIndex`
-  (registry slot), and the `attest` lifecycle that verifies then signs.
+  shareable `definition`, its `signer`, its `publicKey`, and the `attest`
+  lifecycle that verifies then signs. It has no registry slot: the signed
+  message binds none, so one instance can serve any number of registries. Each
+  app assigns placement in its client-side `TrustedSet` (`@thoth/client`).
 - `defineAttestor` — keeps `kind` and the schema types as precise literals
   inferred from the object literal.
 - `buildAttestor` — a consistency-preserving constructor: takes an `id`, a
-  definition, a `KeyPair`, a `registryIndex`, and the kind's `attest` lifecycle,
-  and returns the `Attestor`.
+  definition, a `KeyPair`, and the kind's `attest` lifecycle, and returns the
+  `Attestor`.
 - `descriptorOf` — projects an `Attestor` to its client-facing
   [`AttestorDescriptor`](https://github.com/txpipe-shop/thoth/tree/main/packages/core)
   (drops `signer`/`attest`).
@@ -37,10 +39,10 @@ Concrete attestor kinds are built with `buildAttestor`:
 
 ```ts
 import { buildAttestor, defineAttestor, descriptorOf } from '@thoth/attestor';
-import { claimSchema } from '@thoth/core/claim';
+import { claimSchema, claimToMessage } from '@thoth/core/claim';
 
 const kindLaw = defineAttestor({
-  kind: 'zkTLS',
+  kind: 'my-kind@1', // the kind's versioned law tag
   policy: /* … */,
   evidence: /* … */,
   claim: claimSchema<8>(8),
@@ -49,10 +51,9 @@ const kindLaw = defineAttestor({
 });
 
 const attestor = buildAttestor({
-  id: 'zkTLS',
+  id: 'my-kind-operator-1',
   definition: kindLaw,
   keyPair,                        // produced by the kind's key package
-  registryIndex: 0,
   attest: async (definition, signer, input) => {
     const parsed = {
       policy: definition.policy.parse(input.policy),
@@ -63,7 +64,6 @@ const attestor = buildAttestor({
     const message = definition.message(parsed.claim);
     const signature = await signer.sign(message);
     return {
-      kind: definition.kind,
       claim: parsed.claim,
       message,
       publicKey: /* the key pair's public key */,
@@ -105,5 +105,6 @@ owned by each kind's package: core and host declare only the interface contract
 
 - [Thoth (repo root)](https://github.com/txpipe-shop/thoth) — overall architecture and docs
 - [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — architecture overview, flow, and out-of-scope
+- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md) — how to add an attestor kind on top of this package
 - [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core) — the keyless law this package instantiates alongside keys
 - [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts) — the on-chain registry that verifies the signatures positionally

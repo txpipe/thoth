@@ -4,14 +4,6 @@ import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema, CLAIM_VERSION } from '@thoth/core/claim';
 import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
-import { hexToBytes } from './hex.js';
-
-/**
- * Default maximum seconds between a client-proposed claim timestamp and the
- * witness's own observation; a policy may override it with
- * {@link ZkFetchPolicy.maxSkewS}.
- */
-export const DEFAULT_MAX_SKEW_S = 60;
 
 /** The zkFetch kind's law tag, also its kind identifier. */
 export const ZK_FETCH_LAW = 'zk-fetch@1';
@@ -54,7 +46,7 @@ export interface ZkFetchEvidence {
   signatureHex: string;
   /** The attestor address whose key produced the signature; `0x` + 40 hex. */
   attestorAddress: string;
-  /** The captured HTTP transcript (headers + body) the claim was extracted from. */
+  /** Untrusted, client-supplied HTTP transcript (headers + body); not witness-signed. */
   responseText?: string;
 }
 
@@ -86,7 +78,8 @@ export const zkFetchEvidenceSchema = z.object({
  * The zkFetch kind's claim schema.
  *
  * Mirror of `@thoth/core/claim`'s `claimSchema` minus the exact-length
- * constraints (see issue #26).
+ * constraints (see issue #26). The value count is requested implicitly by
+ * `values.length`; `present` must have the same length.
  */
 export const zkFetchClaimSchema: z.ZodType<
   Claim<number>,
@@ -96,19 +89,25 @@ export const zkFetchClaimSchema: z.ZodType<
     version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
     appId: bytes32Schema,
     policyHash: bytes32Schema,
-    timestamp: z.union([z.number(), z.bigint()]),
-    nonce: z.instanceof(Uint8Array),
-    evidenceHash: z.instanceof(Uint8Array),
+    windowStart: z.union([z.number(), z.bigint()]),
+    windowEnd: z.union([z.number(), z.bigint()]),
+    subjectHash: bytes32Schema,
+    holder: bytes32Schema,
     present: z.array(z.boolean()),
     values: z.array(z.union([z.number(), z.bigint()])),
+  })
+  .refine((input) => input.present.length === input.values.length, {
+    message: 'present and values must have the same length',
+    path: ['present'],
   })
   .transform((input) => ({
     version: BigInt(input.version),
     appId: input.appId,
     policyHash: input.policyHash,
-    timestamp: BigInt(input.timestamp),
-    nonce: input.nonce,
-    evidenceHash: input.evidenceHash,
+    windowStart: BigInt(input.windowStart),
+    windowEnd: BigInt(input.windowEnd),
+    subjectHash: input.subjectHash,
+    holder: input.holder,
     present: input.present,
     values: input.values.map((value) => BigInt(value)),
   })) as unknown as z.ZodType<
@@ -157,7 +156,7 @@ export interface VerifiedEvidence {
   claim: ProviderClaimData;
   /** The address that signed the claim (lowercased). */
   attestorAddress: string;
-  /** The captured HTTP transcript, when the evidence carried one. */
+  /** Untrusted, client-supplied HTTP transcript; not authenticated by proof verification. */
   responseText?: string;
   /**
    * The values the witness extracted from the response it saw, keyed by named
@@ -171,7 +170,11 @@ export interface VerifiedEvidence {
   canonicalHash: string;
 }
 
-/** How a disclosed string value is interpreted for a claim slot. */
+/**
+ * How a disclosed string is interpreted: `int` accepts digits only; `float`
+ * accepts unsigned decimals with optional signed base-10 exponents and rounds
+ * exactly to the nearest integer, with halves rounded up. Both require Uint<64>.
+ */
 export type ZkFetchParseRule = 'int' | 'float';
 
 /**
@@ -201,21 +204,13 @@ export interface ZkFetchSlot {
  * The policy under which a zkFetch attestor attests.
  *
  * The rule for "this evidence may be attested": only evidence whose host is
- * allowlisted and whose disclosures cover every declared slot, within any size
- * bound.
+ * allowlisted and whose signed disclosures cover every required slot.
  */
 export interface ZkFetchPolicy {
   /** Hosts the attested URL may target; exact or any subdomain suffix. */
   allowedHosts: readonly string[];
   /** Map extracted (disclosed) values onto claim slots. */
   slots: readonly ZkFetchSlot[];
-  /**
-   * Maximum seconds between the proposed claim timestamp and this attestor's
-   * own witness observation. Defaults to {@link DEFAULT_MAX_SKEW_S}.
-   */
-  maxSkewS?: number;
-  /** Upper bound on the captured response size in bytes. */
-  maxResponseBytes?: number;
   /** Claim schema version the attestor signs; must match the contract's.
    * Defaults to 1. */
   claimVersion?: bigint;
@@ -239,8 +234,6 @@ export const zkFetchPolicySchema = z.object({
       }),
     )
     .min(1),
-  maxSkewS: z.number().int().nonnegative().optional(),
-  maxResponseBytes: z.number().int().nonnegative().optional(),
   claimVersion: z.bigint().optional(),
 });
 
@@ -263,8 +256,6 @@ export const normalizePolicy = (policy: ZkFetchPolicy) => {
     slots: parsed.slots
       .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
       .sort((a, b) => a.slot - b.slot),
-    maxSkewS: parsed.maxSkewS ?? DEFAULT_MAX_SKEW_S,
-    maxResponseBytes: parsed.maxResponseBytes,
     claimVersion: parsed.claimVersion ?? CLAIM_VERSION,
   };
 };
@@ -360,23 +351,62 @@ const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => 
 };
 
 /**
- * Decode the URL a claim attests from its signed parameters.
+ * Parse a claim's signed parameters and validate the field both callers need.
+ *
+ * The witness signs the `method`, `url` and `body` it fetched; this is the one
+ * place that parses them, so the JSON handling and the `url` check stay
+ * consistent. `method` and `body` come back raw — each caller validates the
+ * ones it uses, so {@link claimUrl} keeps its url-only contract.
  *
  * @param claim — the signed claim data.
- * @returns the attested URL.
- * @throws if the parameters do not carry a non-empty `url`.
+ * @returns the parsed parameters, with a non-empty `url` guaranteed.
+ * @throws if the parameters are not JSON, or carry no non-empty `url`.
  */
-export const claimUrl = (claim: ProviderClaimData): string => {
-  let parameters: Readonly<{ url?: string }>;
+const claimParametersOf = (
+  claim: ProviderClaimData,
+): Readonly<{ url: string; method?: unknown; body?: unknown }> => {
+  let parameters: Readonly<{ url?: unknown; method?: unknown; body?: unknown }>;
   try {
-    parameters = JSON.parse(claim.parameters) as Readonly<{ url?: string }>;
+    parameters = JSON.parse(claim.parameters) as typeof parameters;
   } catch {
     throw new Error('claim parameters are not valid JSON');
   }
   if (typeof parameters.url !== 'string' || parameters.url === '') {
     throw new Error('claim parameters carry no url');
   }
-  return parameters.url;
+  return { url: parameters.url, method: parameters.method, body: parameters.body };
+};
+
+/**
+ * Decode the URL a claim attests from its signed parameters.
+ *
+ * @param claim — the signed claim data.
+ * @returns the attested URL.
+ * @throws if the parameters are not JSON, or carry no non-empty `url`.
+ */
+export const claimUrl = (claim: ProviderClaimData): string => claimParametersOf(claim).url;
+
+/**
+ * Read the request a claim attests from its signed parameters.
+ *
+ * The witness signs the `method`, `url` and `body` it fetched; this is the
+ * request the claim's subject hash is taken over (see
+ * {@link zkFetchSubjectHashOf}).
+ *
+ * @param claim — the signed claim data.
+ * @returns the attested request; an absent body is left out.
+ * @throws if the parameters are not JSON, or do not carry a non-empty `url`
+ *   and `method`, or carry a `body` that is not a string.
+ */
+export const claimRequestOf = (claim: ProviderClaimData): ZkFetchSubjectRequest => {
+  const { url, method, body } = claimParametersOf(claim);
+  if (typeof method !== 'string' || method === '') {
+    throw new Error('claim parameters carry no method');
+  }
+  if (body !== undefined && typeof body !== 'string') {
+    throw new Error('claim parameters carry a body that is not a string');
+  }
+  return body === undefined ? { method, url } : { method, url, body };
 };
 
 /**
@@ -439,6 +469,37 @@ const sha256Hex = (data: string): string => Buffer.from(sha256(data)).toString('
 /** The contract's value type is `Uint<64>`; only non-negative values below 2^64 are certifiable. */
 const UINT64_MAX = 1n << 64n;
 
+/** Parse an unsigned decimal, round halves up, and require a Uint<64> result. */
+const parseDecimalUint64 = (value: string): bigint | null => {
+  const match = /^([0-9]+)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/.exec(value);
+  if (match?.[1] === undefined || match[0] !== value) {
+    return null;
+  }
+  const whole = match[1];
+  const fraction = match[2] ?? '';
+  const exponent = BigInt(match[3] ?? '0');
+  const digits = (whole + fraction).replace(/^0+/, '');
+  if (digits.length === 0) {
+    return 0n;
+  }
+
+  // Removing leading zeros preserves the number of digits after the decimal point.
+  const integerDigitCount = BigInt(digits.length) - BigInt(fraction.length) + exponent;
+  if (integerDigitCount < 0n) {
+    return 0n;
+  }
+  // Uint<64> has at most 20 digits; reject before padding enormous exponents.
+  if (integerDigitCount > 20n) {
+    return null;
+  }
+
+  const position = Number(integerDigitCount);
+  const integerDigits = digits.slice(0, position).padEnd(position, '0') || '0';
+  const roundUp = (digits[position] ?? '0') >= '5';
+  const rounded = BigInt(integerDigits) + (roundUp ? 1n : 0n);
+  return rounded < UINT64_MAX ? rounded : null;
+};
+
 /**
  * Parse a disclosed string value into the claim's numeric slot value.
  *
@@ -446,6 +507,10 @@ const UINT64_MAX = 1n << 64n;
  * outside the wire's `Uint<64>` range `[0, 2^64)` — such a disclosure is not
  * certifiable and its slot stays unpresent, rather than the attestor guessing
  * a numeric reading or signing a value the contract can never verify.
+ *
+ * `float` accepts `[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?` as a whole
+ * string. It rounds in decimal arithmetic, with halves rounded up. Neither
+ * rule accepts whitespace, grouping separators, or a leading sign.
  *
  * Exported for the attestor side's disclosure cross-check
  * (`assertClaimMatchesDisclosures`); claim derivation uses it internally.
@@ -463,17 +528,8 @@ export const parseDisclosedValue = (value: string, rule: ZkFetchParseRule): bigi
       const big = BigInt(value);
       return big < UINT64_MAX ? big : null;
     }
-    case 'float': {
-      const parsed = Number.parseFloat(value);
-      if (!Number.isFinite(parsed) || parsed < 0) {
-        return null;
-      }
-      const rounded = Math.round(parsed);
-      if (rounded < 0 || rounded >= UINT64_MAX) {
-        return null;
-      }
-      return BigInt(rounded);
-    }
+    case 'float':
+      return parseDecimalUint64(value);
   }
 };
 
@@ -508,27 +564,42 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
 };
 
 /**
+ * Require every policy slot index to fit within a requested claim size.
+ *
+ * @param policy — a parsed policy whose slot indices are nonnegative integers.
+ * @param valueSlots — the requested number of value slots.
+ * @throws if a policy slot is outside the requested count.
+ */
+export function assertPolicySlotsInRange(policy: ZkFetchPolicy, valueSlots: number): void {
+  const outOfRange = policy.slots.find((slot) => slot.slot >= valueSlots);
+  if (outOfRange !== undefined) {
+    throw new Error(
+      `policy slot ${outOfRange.slot} is out of the claim's ${valueSlots} value slots`,
+    );
+  }
+}
+
+/**
  * Derive the canonical {@link Claim} the attestor signs from parsed evidence.
  *
  * The claim reflects the evidence, not the client's proposal. `values`/`present`
- * come from the policy-declared disclosures, and `evidenceHash` is the Reclaim
- * identifier, which depends only on provider, parameters, and context, so every
- * witness derives the same identifier for the same observation. `version`
- * comes from the policy's `claimVersion` (default 1) and `policyHash` is
- * {@link zkFetchPolicyHashOf} the policy; `appId` is the caller's. The
- * timestamp is the caller's `timestamp`, which the client proposes and the law
- * bounds against the witness's own observation. The nonce is a domain-separated
- * SHA-256 of that identifier, so one observation with one context yields the
- * same nonce from every witness, and a fresh context yields a fresh nonce. A
- * slot whose disclosure is absent stays unpresent. The evidence carries only
- * what the witness saw.
+ * come from the policy-declared disclosures, and `subjectHash` is
+ * {@link zkFetchSubjectHashOf} the signed request ({@link claimRequestOf}), so
+ * every witness that fetched the same request derives the same subject.
+ * `version` comes from the policy's `claimVersion` (default 1) and
+ * `policyHash` is {@link zkFetchPolicyHashOf} the policy; `appId` is the
+ * caller's, as is the per-claim `holder` commitment (ADR 0004). The observation
+ * window is the caller's `windowStart` and `windowEnd`, which the client proposes and the law requires to contain the
+ * witness's own observation (ADR 0005). A slot whose disclosure is absent stays unpresent. The
+ * evidence carries only what the witness saw.
  *
  * @typeParam V — the claim's value-slot count.
- * @param options — the parsed evidence view, the policy, the app id, the slot
- *   count, and the timestamp to sign.
+ * @param options — the parsed evidence view, the policy, the app id, the holder
+ *   commitment, the slot count, and the observation window to sign.
  * @returns the derived claim.
- * @throws if a policy slot is out of the claim's value range, or the policy
- *   fails {@link zkFetchPolicySchema}.
+ * @throws if a policy slot is out of the claim's value range, the policy
+ *   fails {@link zkFetchPolicySchema}, or the signed parameters carry no
+ *   request (see {@link claimRequestOf}).
  */
 export const deriveClaimFromEvidence = <V extends number>(options: {
   /** The evidence view (see {@link parsedEvidenceView}). */
@@ -537,18 +608,17 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   policy: ZkFetchPolicy;
   /** The app the claim is for, proposed by the client. 32 bytes. */
   appId: Uint8Array;
+  /** Per-claim commitment of the caller secret, proposed by the client. 32 bytes. */
+  holder: Uint8Array;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
-  /** The claim timestamp to sign, proposed by the client. */
-  timestamp: bigint;
+  /** Start of the observation window to sign, proposed by the client. Unix seconds. */
+  windowStart: bigint;
+  /** End of the observation window to sign, proposed by the client. Unix seconds. */
+  windowEnd: bigint;
 }): Claim<V> => {
-  const { verified, policy, appId, valueSlots, timestamp } = options;
-  const outOfRange = policy.slots.find((slot) => slot.slot >= valueSlots);
-  if (outOfRange !== undefined) {
-    throw new Error(
-      `policy slot ${outOfRange.slot} is out of the claim's ${valueSlots} value slots`,
-    );
-  }
+  const { verified, policy, appId, holder, valueSlots, windowStart, windowEnd } = options;
+  assertPolicySlotsInRange(policy, valueSlots);
   const present = Array.from({ length: valueSlots }, () => false);
   const values = Array.from({ length: valueSlots }, () => 0n);
   for (const slot of policy.slots) {
@@ -567,10 +637,11 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   return {
     version: claimVersion,
     appId,
+    holder,
     policyHash: zkFetchPolicyHashOf(policy),
-    timestamp,
-    nonce: hexToBytes(sha256Hex(`thoth:nonce:${verified.identifier}`)),
-    evidenceHash: hexToBytes(verified.identifier),
+    windowStart,
+    windowEnd,
+    subjectHash: zkFetchSubjectHashOf(claimRequestOf(verified.claim)),
     present,
     values,
   } as Claim<V>;
@@ -582,7 +653,8 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
  * Fails fast so the attestor does not waste work: the attested URL must be
  * HTTPS against an allowlisted host, every *required* policy slot's disclosure
  * must be certifiable (present and parseable — optional slots may be absent and
- * are signed unpresent), and the captured response must fit any size bound.
+ * are signed unpresent). Captured response text is untrusted client output and
+ * does not participate in policy checks.
  *
  * @param verified — the evidence view (see {@link parsedEvidenceView}).
  * @param policy — the policy.
@@ -611,13 +683,6 @@ export const assertEvidenceMatchesPolicy = (
         `policy requires a certifiable value for "${slot.name}" but the proof did not disclose a parseable value`,
       );
     }
-  }
-  if (
-    policy.maxResponseBytes !== undefined &&
-    verified.responseText !== undefined &&
-    Buffer.byteLength(verified.responseText, 'utf-8') > policy.maxResponseBytes
-  ) {
-    throw new Error(`captured response exceeds maxResponseBytes (${policy.maxResponseBytes})`);
   }
   return host;
 };

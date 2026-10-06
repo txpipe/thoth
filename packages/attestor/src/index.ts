@@ -88,14 +88,6 @@ export interface Attestor<
   signer: AttestorSigner<S, MessageOf<D>>;
   /** The public key under which this instance attests. */
   publicKey: PK;
-  /**
-   * Slot index of this attestor's public key in the on-chain registry's key
-   * vector, and therefore the position at which its signature must be
-   * submitted in the N-of-M signatures vector: `attestor_registry.compact`
-   * verifies `signatures[i]` against `keys[i]` positionally, never by key
-   * matching.
-   */
-  registryIndex: number;
 
   /**
    * Run the attestation lifecycle for this instance: parse the raw input with
@@ -111,7 +103,7 @@ export interface Attestor<
    */
   attest(
     input: AttestationInput<z.input<D['policy']>, z.input<D['evidence']>, z.input<D['claim']>>,
-  ): Promise<Attestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>>;
+  ): Promise<Attestation<z.output<D['claim']>, PK, S, MessageOf<D>>>;
 }
 
 /**
@@ -132,7 +124,6 @@ export function descriptorOf<
     id: attestor.id,
     definition: attestor.definition,
     publicKey: attestor.publicKey,
-    registryIndex: attestor.registryIndex,
   };
 }
 
@@ -145,8 +136,8 @@ export function descriptorOf<
  * kind's package supplies its own implementation, and the returned instance
  * merely ties it to the instance fields.
  *
- * @param parts — the id, shareable definition, key pair, registry slot, and
- *   the kind's `attest` lifecycle implementation.
+ * @param parts — the id, shareable definition, key pair, and the kind's
+ *   `attest` lifecycle implementation.
  * @returns an `Attestor` whose `attest` delegates to the supplied lifecycle.
  */
 export function buildAttestor<
@@ -160,8 +151,6 @@ export function buildAttestor<
   definition: D;
   /** The key material: public key plus the matching signing boundary. */
   keyPair: KeyPair<PK, S, MessageOf<D>>;
-  /** Slot index of this attestor's key in the on-chain registry. */
-  registryIndex: number;
   /**
    * The kind's lifecycle: parse `input` with `definition`'s schemas,
    * authorize via `verify`, then sign `definition.message(claim)`.
@@ -170,15 +159,14 @@ export function buildAttestor<
     definition: D,
     signer: AttestorSigner<S, MessageOf<D>>,
     input: AttestationInput<z.input<D['policy']>, z.input<D['evidence']>, z.input<D['claim']>>,
-  ) => Promise<Attestation<D['kind'], z.output<D['claim']>, PK, S, MessageOf<D>>>;
+  ) => Promise<Attestation<z.output<D['claim']>, PK, S, MessageOf<D>>>;
 }): Attestor<D, PK, S> {
-  const { id, definition, keyPair, registryIndex, attest } = parts;
+  const { id, definition, keyPair, attest } = parts;
   return {
     id,
     definition,
     signer: keyPair.signer,
     publicKey: keyPair.publicKey,
-    registryIndex,
     attest: (input) => attest(definition, keyPair.signer, input),
   };
 }

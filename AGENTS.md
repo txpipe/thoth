@@ -20,6 +20,10 @@ Thoth is a private N-of-M attestation system for Midnight. Three layers:
 Attestors certify facts, not decisions: a claim is a canonical statement of
 what was observed; the application defines the predicate over it.
 
+Use the glossary in [`CONTEXT.md`](CONTEXT.md) for domain terms. The claim's
+fields and wire order are in [`docs/DESIGN.md`](docs/DESIGN.md#the-claim). To
+add an attestor kind, follow [`docs/kind-author-guide.md`](docs/kind-author-guide.md).
+
 ## Commands
 
 Run everything from the repo root (npm workspace):
@@ -45,8 +49,9 @@ biome on every push/PR.
 - **Stale `dist/` footgun** — workspaces resolve each other through
   `node_modules/@thoth/*` ⇒ `exports` ⇒ `dist/`. The root `build`/`types`
   scripts rebuild the dependency-producing packages first (`core`, `attestor`,
-  `client`), so consumers — e.g. `zk-tls`, which depends on all three — see
-  fresh types; if a *new* workspace dependency appears, add its package to the
+  `client`, `zk-tls`), so consumers — e.g. `zk-tls`, which depends on the first
+  three, and the `contracts` tests, which depend on all four — see fresh
+  types; if a *new* workspace dependency appears, add its package to the
   build-first chain. A stale `dist/index.d.ts` still produces confusing errors
   like "Generic type requires N type argument(s)".
 
@@ -62,7 +67,13 @@ thoth/
 │   │   ├── src/claim.ts                   — claim types served at @thoth/core/claim
 │   │   └── src/claim-context.ts           — claim-context hashes at @thoth/core/claim-context
 │   └── zk-tls/         # @thoth/zk-tls    — zkFetch kind: attestor law + client (fixture-backed tests)
-├── docs/DESIGN.md      # design overview & decisions
+├── docs/
+│   ├── DESIGN.md       # design overview, the claim and its wire order
+│   ├── kind-author-guide.md  # how to add an attestor kind
+│   ├── adr/            # architecture decision records
+│   └── agents/         # agent skill configuration
+├── examples/demo-attestation/  # recorded zkFetch evidence fixture
+├── CONTEXT.md          # domain glossary
 ├── README.md           # human-oriented overview
 └── AGENTS.md           # this file
 ```
@@ -81,9 +92,11 @@ thoth/
 - **Claim types are keyless.** `@thoth/core` carries no signing key; anything
   that commits to a message delegates to the kind's `message()`. Keep it that
   way.
-- **`registryIndex` is positional.** `attestor_registry.compact` verifies
-  signatures positionally (`signatures[i]` against `keys[i]`). Never reorder
-  descriptors by anything other than registry slot.
+- **`registryIndex` is positional and app-owned.** `attestor_registry.compact`
+  verifies signatures positionally (`signatures[i]` against `keys[i]`). The slot
+  lives only on the client's `TrustedSet` member (`{ attestor, registryIndex }`,
+  bounded by the registry's `registrySize`), never on `Attestor` or
+  `AttestorDescriptor`. Never order signatures by anything other than that slot.
 
 ## Code conventions
 
@@ -100,7 +113,10 @@ thoth/
 - **Compact**: `pragma language_version >= 0.22`; follow the style in
   `packages/contracts/*.compact`; module params are uppercase (`<#K, #V, #N, #M>`).
   Metadata in `attestation.compact`'s header comment is load-bearing — keep the
-  wire-layout doc synchronized with `buildMessage`. The claim’s `version` stays `1` until a layout is deployed; pre-launch, change the wire layout freely and keep `version = 1`.
+  wire-layout doc synchronized with `buildMessage`, `claimToMessage`, and the
+  wire-order table in `docs/DESIGN.md`.
+  The claim's `version` stays `1` until a layout is deployed; pre-launch,
+  change the wire layout freely and keep `version = 1`.
 - **Public API style**: every export is documented with JSDoc (block-comment
   `/** … */`) — `@param`, `@returns`, `@typeParam`, `@see` where relevant.
   The file header line uses `//` for file-level notes.
@@ -117,7 +133,14 @@ thoth/
 - Design decisions and their rationale live in the **package README that owns
   them** (e.g. `packages/attestor/README.md` "Design rationale"). If a decision
   changes the public surface, update the affected package READMEs together.
-  `docs/DESIGN.md` keeps only the architecture overview, flow, and out-of-scope.
+  `docs/DESIGN.md` keeps only the architecture overview, the claim and its wire
+  order, flow, and out-of-scope. Cross-package decisions are ADRs in
+  `docs/adr/`; code comments cite them as `ADR 000N`.
+- Domain terms come from `CONTEXT.md`; do not use a synonym it lists under
+  _Avoid_. Add a term there when a new concept appears.
+- `docs/kind-author-guide.md` is the one guide that spans packages. Update it
+  when a seam a kind implements changes (`@thoth/core`, `@thoth/attestor`,
+  `@thoth/client`, or the claim).
 - JSDoc lives inline in source; there is no generated API doc site (TypeDoc
   intentionally deferred — packages are small).
 
@@ -126,12 +149,14 @@ thoth/
 - Contract logic is tested with the **simulator** via vitest in
   `packages/contracts/test/`. The mock top-level shell
   (`packages/contracts/test/mocks/MockAttestation.compact`) specializes the
-  modules (V=3, K=16, M=3, N=2) so tests run against real artifacts.
+  modules (V=3, K=17, M=3, N=2) so tests run against real artifacts.
 - `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
   compiled pure circuits — never hand-roll the message encoding; use
   `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.
 - After changing Compact sources, recompile before running tests:
   `npm run compact:no-zk` (the `pretest` hook does this automatically).
+- `packages/contracts/test/acceptance.test.ts` is the cross-seam check (zk-tls
+  witnesses → attestors → client → simulator); its header explains the setup.
 - `packages/zk-tls/test/live.test.ts` is an opt-in live check against two real
   witnesses; it skips unless `WITNESS_URLS` names them, so `npm test` and CI
   stay offline. See the package README's "Live check".

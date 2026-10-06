@@ -14,9 +14,16 @@ import { signClaim as signSingle } from './sign.js';
 
 export const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
 
+/** Default mock freshness window: one day after the observation ends. */
+export const DEFAULT_FRESHNESS_WINDOW = 86400n;
+/** Default mock maximum observation window: five minutes. */
+export const DEFAULT_MAX_WINDOW = 300n;
+
 // A fixed app id and the two policy hashes the mock seals at deploy. A third,
 // unsealed hash stands in for a laxer policy a requester might substitute.
 const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
+/** Fixed test secret; claim fixtures bind to this caller unless overridden. */
+export const DEFAULT_HOLDER_SECRET = new Uint8Array(32).fill(0xc1);
 export const APP_ID = filled(0xa1);
 export const POLICY_A = filled(0xb1);
 export const POLICY_B = filled(0xb2);
@@ -46,9 +53,10 @@ export const makeClaim = (
     version: 1n,
     appId: APP_ID,
     policyHash: POLICY_A,
-    timestamp: nowSeconds(),
-    nonce: randomBytes(32),
-    evidenceHash: randomBytes(32),
+    windowStart: nowSeconds() - 10n,
+    windowEnd: nowSeconds(),
+    subjectHash: randomBytes(32),
+    holder: pureCircuits.holderCommitment(DEFAULT_HOLDER_SECRET),
     values,
     present,
     ...overrides,

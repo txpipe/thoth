@@ -102,7 +102,6 @@ describe('claimContextDigestOf', () => {
     policyHash: filled(0xaa),
     subjectHash: filled(0xbb),
     holder: filled(0xcc),
-    nonce: filled(0xdd),
     windowStart: 1_700_000_000n,
     windowEnd: 1_700_000_300n,
   };
@@ -110,7 +109,7 @@ describe('claimContextDigestOf', () => {
   it('hashes the tagged canonical context', () => {
     expect(hex(claimContextDigestOf(context))).toBe(
       sha256(
-        `["thoth:claim-context",{"holder":"${'cc'.repeat(32)}","nonce":"${'dd'.repeat(32)}",` +
+        `["thoth:claim-context",{"holder":"${'cc'.repeat(32)}",` +
           `"policyHash":"${'aa'.repeat(32)}","subjectHash":"${'bb'.repeat(32)}",` +
           '"windowEnd":"1700000300","windowStart":"1700000000"}]',
       ),
@@ -123,7 +122,6 @@ describe('claimContextDigestOf', () => {
       { ...context, policyHash: filled(1) },
       { ...context, subjectHash: filled(1) },
       { ...context, holder: filled(1) },
-      { ...context, nonce: filled(1) },
       { ...context, windowStart: context.windowStart + 1n },
       { ...context, windowEnd: context.windowEnd + 1n },
     ];
@@ -134,7 +132,9 @@ describe('claimContextDigestOf', () => {
   });
 
   it('rejects a byte field that is not 32 bytes and a negative window bound', () => {
-    expect(() => claimContextDigestOf({ ...context, nonce: new Uint8Array(16) })).toThrow(/nonce/);
+    expect(() => claimContextDigestOf({ ...context, holder: new Uint8Array(16) })).toThrow(
+      /holder/,
+    );
     expect(() => claimContextDigestOf({ ...context, windowStart: -1n })).toThrow(/windowStart/);
   });
 });

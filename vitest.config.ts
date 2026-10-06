@@ -7,6 +7,7 @@ export default defineConfig({
     include: [
       'packages/contracts/**/*.test.ts',
       'packages/core/**/*.test.ts',
+      'packages/client/**/*.test.ts',
       'packages/zk-tls/**/*.test.ts',
     ],
     exclude: [...configDefaults.exclude],
