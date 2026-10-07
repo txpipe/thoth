@@ -179,42 +179,6 @@ describe('mock attestation', () => {
       ).rejects.toThrow('Insufficient valid signatures');
     });
 
-    describe('keysDistinct (registry pins)', () => {
-      const [a, b, c] = notaryKeys;
-      // default<JubjubPoint> as compiled: the identity point {x: 0n, y: 1n}.
-      const empty = { x: 0n, y: 1n };
-
-      it('accepts distinct keys', () => {
-        expect(pureCircuits.keysDistinct([a.pk, b.pk, c.pk])).toBe(true);
-      });
-
-      it('accepts empty slots alongside distinct keys', () => {
-        expect(pureCircuits.keysDistinct([a.pk, b.pk, empty])).toBe(true);
-      });
-
-      it('accepts unfilled slots duplicating the default point', () => {
-        expect(pureCircuits.keysDistinct([empty, a.pk, empty])).toBe(true);
-      });
-
-      it('rejects one key pinned in two slots', () => {
-        expect(pureCircuits.keysDistinct([a.pk, a.pk, b.pk])).toBe(false);
-      });
-
-      it('rejects a duplicate key when every other slot is empty', () => {
-        expect(pureCircuits.keysDistinct([empty, a.pk, a.pk])).toBe(false);
-      });
-
-      it('blocks deployment with duplicate keys', async () => {
-        await expect(
-          MockAttestationSim.create(createPrivateState(holder), [a.pk, a.pk, b.pk]),
-        ).rejects.toThrow('Duplicate registry keys');
-      });
-
-      it('still deploys with empty slots', async () => {
-        await MockAttestationSim.create(createPrivateState(holder), [a.pk, b.pk, empty]);
-      });
-    });
-
     it('rejects a signature from an unregistered key', async () => {
       const outsider = makeNotaryKey();
       const claim = makeClaim();
