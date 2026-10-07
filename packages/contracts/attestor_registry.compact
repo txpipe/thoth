@@ -9,7 +9,11 @@
 //
 // Registry keys are a *sealed* ledger: `initRegistry` sets them exactly once
 // at deploy time and they cannot change afterwards. The ledger is deliberately
-// NOT exported: `initRegistry` is the only writer.
+// NOT exported, and embedders must not re-export `initRegistry`: a sealed field
+// cannot be written by code reachable from an exported circuit, so exposing the
+// init circuit is a compile error.
+// The `initialized` flag backs this at runtime: a second `initRegistry` call
+// fails even from within the constructor.
 pragma language_version >= 0.22;
 
 module attestor_registry<#M, #K> {
@@ -19,14 +23,20 @@ module attestor_registry<#M, #K> {
   /// Not exported: the module's own init circuit is the only writer.
   sealed ledger keys: Vector<M, JubjubPoint>;
 
+  /// Whether `initRegistry` has run. Unexported and unsealed, written only by
+  /// `initRegistry`, which refuses a second call.
+  ledger initialized: Boolean;
+
   /// Deploy-time witness providing the M attestor public keys.
   witness seedKeys(): Vector<M, JubjubPoint>;
 
   /// Initialize the registry from the `seedKeys` witness and seal the keys.
-  /// The sole registry constructor: asserts the pinned keys are pairwise
-  /// distinct (empty slots exempt), so the N-of-M threshold holds against
-  /// exactly the attestors the app pinned.
+  /// The sole registry constructor: refuses a second call, then asserts the
+  /// pinned keys are pairwise distinct (empty slots exempt), so the N-of-M
+  /// threshold holds against exactly the keys the app pinned.
   export circuit initRegistry(): [] {
+    assert(!initialized, "Registry already initialized");
+    initialized = true;
     const ks: Vector<M, JubjubPoint> = seedKeys();
     keys = disclose(ks);
     assert(keysDistinct(ks), "Duplicate registry keys");
