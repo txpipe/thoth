@@ -44,9 +44,6 @@ export pure circuit message(a: A_Claim): Vector<17, Field> {
 // even if the value itself is 0). Compose this inside your own circuits over
 // `A_openClaim` — see test/mocks/MockAttestation.compact for a demo.
 
-// Deploy-time witness providing the 3 attestor public keys.
-witness seedKeys(): Vector<3, JubjubPoint>;
-
 // Deploy-time witness providing the policy hashes the app accepts, one per
 // policy (kind) it serves. Size the vector to the number of policies.
 witness seedPolicies(): Vector<1, Bytes<32>>;
@@ -57,5 +54,5 @@ constructor() {
   for (const h of seedPolicies()) {
     A_policyHashes.insert(disclose(h));
   }
-  R_keys = disclose(seedKeys());
+  R_initRegistry();
 }

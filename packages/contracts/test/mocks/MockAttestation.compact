@@ -91,8 +91,6 @@ export circuit openAndBindHost(id: Bytes<32>, s: Subject, host: Bytes<32>): [] {
   assert(s.host == host, "Host not accepted");
 }
 
-witness seedKeys(): Vector<3, JubjubPoint>;
-
 witness freshWindow(): Uint<64>;
 
 witness maxWin(): Uint<64>;
@@ -105,5 +103,5 @@ constructor() {
   for (const h of seedPolicies()) {
     A_policyHashes.insert(disclose(h));
   }
-  R_keys = disclose(seedKeys());
+  R_initRegistry();
 }
