@@ -51,6 +51,10 @@ export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
   return A_holderCommitment(secret);
 }
 
+export pure circuit keysDistinct(ks: Vector<3, JubjubPoint>): Boolean {
+  return R_keysDistinct(ks);
+}
+
 // App-predicate demo: open a vaulted claim in-circuit and read several value
 // slots in one shot. `openClaim` is intentionally NOT re-exported at the top
 // level (its tainted return would force a disclosing reveal); apps compose
