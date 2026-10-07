@@ -93,7 +93,10 @@ constructor() {
   deliberately unexported. `R_initRegistry()` is the only writer: it fetches
   the keys from the module's own `seedKeys` witness, seals them, and asserts
   they are pairwise distinct (empty slots exempt). A duplicate-key deployment
-  fails here at deploy time with `"Duplicate registry keys"`.
+  fails here at deploy time with `"Duplicate registry keys"`, and a second
+  `R_initRegistry()` fails with `"Registry already initialized"`.
+- Empty slots never count toward the threshold, and the registry cannot see
+  `N`: pin at least `N` distinct keys, or no claim can ever be accepted.
 
 ## Module parameters
 
@@ -183,10 +186,10 @@ zero remains valid with `present[i] = true`.
   set records each attestor's slot in this registry, and each collected
   signature goes at that slot.
 - **The registry rejects duplicate keys at deploy.** `initRegistry` asserts
-  the pinned keys are pairwise distinct (empty slots exempt), so one attestor
-  can never fill two slots of the threshold — the N-of-M count is over distinct
-  attestors. `keys` is sealed and unexported, so this check cannot be skipped
-  by an embedder.
+  the pinned keys are pairwise distinct (empty slots exempt), so one key can
+  never fill two slots of the threshold — the N-of-M count is over distinct
+  keys. Distinctness is the only property checked: key provenance and validity
+  are the app's trust decision. `keys` is sealed and unexported, so this check cannot be skipped by an embedder.
 - **A new kind needs no change here** as long as it signs the standard claim:
   an app accepts it by sealing its policy hash. See
   [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md).

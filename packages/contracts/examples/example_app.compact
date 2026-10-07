@@ -4,9 +4,10 @@
 //   #V = 3 value slots, #K = 17 signed-message fields (must equal 2*V + 11),
 //   #M = 3 attestor signature slots, #N = 2 (2-of-3 threshold).
 //
-// The top-level constructor pins the registry keys (sealed), the accepted
-// policy hashes (sealed), the freshness window and the maximum observation
-// window (both sealed) exactly once at deploy.
+// The top-level constructor initializes the registry through the module's
+// `initRegistry` (which seals and de-duplicates the keys), and seals the
+// accepted policy hashes, the freshness window and the maximum observation
+// window exactly once at deploy.
 //
 // To expose the module's types, ledgers, and pure circuits to the app's
 // TypeScript driver, re-export them at the top level (see the `export { ... }`
