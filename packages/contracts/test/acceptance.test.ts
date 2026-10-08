@@ -42,12 +42,17 @@ const WINDOW_END = BigInt(OBSERVED_AT + 60);
 
 // Slot 0 is measured; slot 1 is optional and never disclosed, so it is signed
 // unpresent; slot 2 is outside the policy.
+const DISCLOSURE_RULES: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'> = {
+  responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+  responseRedactions: [],
+};
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.github.com'],
   slots: [
     { slot: 0, name: 'stars', parse: 'int' },
     { slot: 1, name: 'forks', parse: 'int', optional: true },
   ],
+  ...DISCLOSURE_RULES,
 };
 const request: ZkFetchRequest = { url: 'https://api.github.com/repos/x', method: 'GET' };
 
@@ -101,7 +106,12 @@ const collectSubmission = async (): Promise<Submission> => {
             witness.sign({
               values: { stars: '42' },
               timestampS: OBSERVED_AT,
-              parameters: { url: proved.url, method: proved.method ?? 'GET', body: '' },
+              parameters: {
+                url: proved.url,
+                method: proved.method ?? 'GET',
+                body: '',
+                ...DISCLOSURE_RULES,
+              },
               context: proved.context,
             }),
         },

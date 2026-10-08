@@ -9,6 +9,7 @@ import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
   zkFetchPolicyHashOf,
+  zkFetchPolicySchema,
   zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
@@ -21,12 +22,19 @@ const APP_ID = new Uint8Array(32).fill(0xa1);
 const alice = testWitness(`0x${'11'.repeat(32)}`);
 const bob = testWitness(`0x${'22'.repeat(32)}`);
 
+/** The disclosure rules every policy and witness observation in this suite shares. */
+const DISCLOSURE_RULES: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'> = {
+  responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+  responseRedactions: [],
+};
+
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.example.com'],
   slots: [
     { slot: 0, name: 'balance', parse: 'int' },
     { slot: 1, name: 'score', parse: 'float', optional: true },
   ],
+  ...DISCLOSURE_RULES,
 };
 
 const observe = (
@@ -36,7 +44,12 @@ const observe = (
   witness.sign({
     values: { balance: '0', score: '7.6' },
     timestampS: 1_786_000_000,
-    parameters: { url: 'https://api.example.com/v1/account', method: 'GET', body: '' },
+    parameters: {
+      url: 'https://api.example.com/v1/account',
+      method: 'GET',
+      body: '',
+      ...DISCLOSURE_RULES,
+    },
     context: { intent: 'ab'.repeat(32) },
     ...overrides,
   });
@@ -62,17 +75,18 @@ const attestWith = (
   evidence: ZkFetchEvidence,
   window: { windowStart: bigint; windowEnd: bigint } = WINDOW,
   claimOverrides: Partial<Claim<number>> = {},
+  activePolicy: ZkFetchPolicy = policy,
 ) => {
   const derived = deriveClaimFromEvidence({
     verified: parsedEvidenceView(evidence),
-    policy,
+    policy: activePolicy,
     appId: APP_ID,
     holder: new Uint8Array(32).fill(0xc1),
     valueSlots: 3,
     ...window,
   });
   const claim = { ...derived, ...claimOverrides };
-  return attestor.attest({ policy, evidence, claim } as unknown as Parameters<
+  return attestor.attest({ policy: activePolicy, evidence, claim } as unknown as Parameters<
     typeof attestor.attest
   >[0]);
 };
@@ -164,7 +178,7 @@ describe('test-key witness', () => {
   it('is deterministic across runs', async () => {
     // RFC 6979 signing: the same observation always yields this signature.
     expect((await observe(alice)).signatureHex).toBe(
-      '0xc8f99f97782ae3983f0236964238b2dc2f84944f9da2d4fc20e25ead54cd188652fe9ef0d2201e4c73c90e64e72e5f4c1737978c59b95e46c7a5f0fec7385e3a1b',
+      '0x79cff7aef768dd40ad4e61a20a084a35ed3bb2deae1c8443592500701280da9b7536aa09f930244d461c96daefa815f838f97c77f4119d2dfd00bd521d7c6fed1b',
     );
   });
 

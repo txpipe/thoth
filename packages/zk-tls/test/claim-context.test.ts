@@ -14,9 +14,15 @@ import { describe, expect, it } from 'vitest';
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 const sha256 = (text: string): string => createHash('sha256').update(text, 'utf-8').digest('hex');
 
+const DISCLOSURE_RULES: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'> = {
+  responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+  responseRedactions: [],
+};
+
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.example.com'],
   slots: [{ slot: 0, name: 'price', parse: 'int' }],
+  ...DISCLOSURE_RULES,
 };
 
 describe('zkFetchPolicyHashOf', () => {
@@ -24,6 +30,8 @@ describe('zkFetchPolicyHashOf', () => {
     const normalized = {
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'price', parse: 'int', optional: false }],
+      responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+      responseRedactions: [],
       claimVersion: 1n,
     };
 
@@ -43,6 +51,7 @@ describe('zkFetchPolicyHashOf', () => {
         { slot: 1, name: 'volume', parse: 'float' },
         { slot: 0, name: 'price', parse: 'int' },
       ],
+      ...DISCLOSURE_RULES,
     };
     const spelledOut: ZkFetchPolicy = {
       allowedHosts: ['A.example', 'b.example', 'a.example'],
@@ -51,6 +60,7 @@ describe('zkFetchPolicyHashOf', () => {
         { slot: 1, name: 'volume', parse: 'float', optional: false },
       ],
       claimVersion: 1n,
+      ...DISCLOSURE_RULES,
     };
 
     expect(hex(zkFetchPolicyHashOf(spelledOut))).toBe(hex(zkFetchPolicyHashOf(twoSlots)));
@@ -78,6 +88,7 @@ describe('zkFetchPolicyHashOf', () => {
     expect(hex(zkFetchPolicyHashOf(policy))).toBe(
       sha256(
         '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"claimVersion":"1",' +
+          '"responseMatches":[{"type":"regex","value":"(?<data>.*)"}],"responseRedactions":[],' +
           '"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
       ),
     );

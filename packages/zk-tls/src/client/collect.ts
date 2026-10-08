@@ -15,8 +15,8 @@ import type {
 } from './index.js';
 import {
   attestWith,
+  bindRequestToPolicy,
   buildClaimProposal,
-  copyRequest,
   proveWith,
   SecretHeaderError,
 } from './proposal.js';
@@ -221,8 +221,9 @@ export const collectThreshold = async <V extends number, PK, S>(
   supplied: ZkFetchThresholdOptions,
 ): Promise<ZkFetchThresholdAttestment<V, PK, S>> => {
   const { options, candidates } = parseOptions(config.trusted, supplied);
-  // A snapshot, so the caller cannot change the secret headers mid-call.
-  const snapshot = copyRequest(request);
+  // A snapshot bound to the policy's disclosure rules, so the caller cannot
+  // change the secret headers mid-call or drive witnesses with other rules.
+  const snapshot = bindRequestToPolicy(request, config.policy);
   const failures: ZkFetchAttestorFailure[] = [];
   const assertUnexpired = () => {
     if (Date.now() >= options.expiresAt) {

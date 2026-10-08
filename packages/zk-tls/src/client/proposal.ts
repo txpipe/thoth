@@ -1,5 +1,6 @@
 // Per-attestor steps shared by `proveReq` and `collect`.
 
+import { isDeepStrictEqual } from 'node:util';
 import type { TrustedAttestor } from '@thoth/client';
 import { resolveAttestation } from '@thoth/client';
 import type { AttestorDescriptor } from '@thoth/core';
@@ -101,6 +102,42 @@ export const copyRequest = (request: ZkFetchRequest): ZkFetchRequest => ({
   ...request,
   secretHeaders: { ...request.secretHeaders },
 });
+
+/**
+ * Bind a request to the policy's disclosure rules.
+ *
+ * The policy is the single source of the rules: a request that supplies its
+ * own `responseMatches`/`responseRedactions` must carry exactly the policy's,
+ * and the returned request always does — so every witness signs the policy's
+ * rules verbatim and the attestor's equality check always passes honestly.
+ *
+ * @param request — the request to bind.
+ * @param policy — the policy whose disclosure rules drive the fetch.
+ * @returns the request with the policy's rules injected.
+ * @throws if the request carries disclosure rules that differ from the policy's.
+ */
+export const bindRequestToPolicy = (
+  request: ZkFetchRequest,
+  policy: ZkFetchPolicy,
+): ZkFetchRequest => {
+  if (
+    request.responseMatches !== undefined &&
+    !isDeepStrictEqual(request.responseMatches, policy.responseMatches)
+  ) {
+    throw new Error('request responseMatches do not match the policy');
+  }
+  if (
+    request.responseRedactions !== undefined &&
+    !isDeepStrictEqual(request.responseRedactions, policy.responseRedactions)
+  ) {
+    throw new Error('request responseRedactions do not match the policy');
+  }
+  return {
+    ...copyRequest(request),
+    responseMatches: [...policy.responseMatches],
+    responseRedactions: [...policy.responseRedactions],
+  };
+};
 
 /**
  * Prove `request` with the attestor's own witness and check the evidence.

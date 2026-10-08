@@ -50,11 +50,18 @@ const FIXTURE_PATH = join(
 );
 const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Record<string, unknown>;
 
+/** The disclosure rules every policy and witnessed parameter pair in this suite shares. */
+const DISCLOSURE_RULES: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'> = {
+  responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+  responseRedactions: [],
+};
+
 const policy = (
   slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'data', parse: 'float', optional: true }],
 ): ZkFetchPolicy => ({
   allowedHosts: ['api.github.com'],
   slots,
+  ...DISCLOSURE_RULES,
 });
 
 type FakePublicKey = { id: string };
@@ -244,7 +251,12 @@ describe('zkFetch attestor + client', () => {
     witness.sign({
       values: overrides.values ?? { data: 'HTTP/1.1 200 OK' },
       timestampS: overrides.timestampS ?? BASE_TIMESTAMP_S,
-      parameters: { url: overrides.url ?? request.url, method: request.method ?? 'GET', body: '' },
+      parameters: {
+        url: overrides.url ?? request.url,
+        method: request.method ?? 'GET',
+        body: '',
+        ...DISCLOSURE_RULES,
+      },
       context: request.context,
     });
 
