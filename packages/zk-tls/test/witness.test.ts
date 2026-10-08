@@ -214,6 +214,30 @@ describe('test-key witness', () => {
     );
   });
 
+  it('rejects evidence whose disclosure rules differ from the policy', async () => {
+    const distancePolicy = zkFetchPolicySchema.parse({
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+      responseMatches: [{ type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' }],
+      responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }],
+    }) as ZkFetchPolicy;
+    // The witness signs a plan that captures another numeric field under the
+    // policy's group name — the wrong-field substitution attack.
+    const attack = await observe(alice, {
+      values: { distance: '999' },
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        responseMatches: [{ type: 'regex', value: '"moving_time":\\s*(?<distance>[\\d.]+)' }],
+        responseRedactions: [{ regex: '"moving_time":\\s*[\\d.]+' }],
+      },
+    });
+    await expect(attestWith(aliceAttestor, attack, WINDOW, {}, distancePolicy)).rejects.toThrow(
+      /disclosure rules/,
+    );
+  });
+
   it('is rejected when the claim identifier does not match its signed content', async () => {
     const evidence = await observe(alice);
     const forged = {

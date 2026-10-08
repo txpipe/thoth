@@ -78,6 +78,14 @@ describe('zkFetchPolicyHashOf', () => {
     );
   });
 
+  it('binds the disclosure rules', () => {
+    const substituted = zkFetchPolicyHashOf({
+      ...policy,
+      responseMatches: [{ type: 'regex', value: '"moving_time":\\s*(?<price>[\\d.]+)' }],
+    });
+    expect(hex(substituted)).not.toBe(hex(zkFetchPolicyHashOf(policy)));
+  });
+
   it('rejects a malformed policy', () => {
     expect(() => zkFetchPolicyHashOf({ ...policy, allowedHosts: [] })).toThrow();
   });
