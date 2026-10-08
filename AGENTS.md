@@ -72,8 +72,10 @@ thoth/
 │   ├── kind-author-guide.md  # how to add an attestor kind
 │   ├── adr/            # architecture decision records
 │   └── agents/         # agent skill configuration
+├── apps/midnight-city/ # Bounties for Midnight City agents (own context; placeholder, not a workspace)
 ├── examples/demo-attestation/  # recorded zkFetch evidence fixture
-├── CONTEXT.md          # domain glossary
+├── CONTEXT-MAP.md      # lists the domain contexts
+├── CONTEXT.md          # Thoth domain glossary
 ├── README.md           # human-oriented overview
 └── AGENTS.md           # this file
 ```
@@ -136,8 +138,9 @@ thoth/
   `docs/DESIGN.md` keeps only the architecture overview, the claim and its wire
   order, flow, and out-of-scope. Cross-package decisions are ADRs in
   `docs/adr/`; code comments cite them as `ADR 000N`.
-- Domain terms come from `CONTEXT.md`; do not use a synonym it lists under
-  _Avoid_. Add a term there when a new concept appears.
+- Domain terms come from the context's `CONTEXT.md` (see `CONTEXT-MAP.md`); do
+  not use a synonym it lists under _Avoid_. Add a term there when a new concept
+  appears.
 - `docs/kind-author-guide.md` is the one guide that spans packages. Update it
   when a seam a kind implements changes (`@thoth/core`, `@thoth/attestor`,
   `@thoth/client`, or the claim).
@@ -177,5 +180,6 @@ Default label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`,
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See
-`docs/agents/domain.md`.
+Multi-context: `CONTEXT-MAP.md` lists the contexts; Thoth is `CONTEXT.md` +
+`docs/adr/` at the repo root, Midnight City is `apps/midnight-city/CONTEXT.md` +
+`apps/midnight-city/docs/adr/`. See `docs/agents/domain.md`.
