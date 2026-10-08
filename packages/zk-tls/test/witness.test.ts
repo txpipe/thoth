@@ -14,6 +14,7 @@ import {
 } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
+import { DISCLOSURE_RULES } from './helpers/helper.js';
 import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
@@ -21,12 +22,6 @@ const APP_ID = new Uint8Array(32).fill(0xa1);
 
 const alice = testWitness(`0x${'11'.repeat(32)}`);
 const bob = testWitness(`0x${'22'.repeat(32)}`);
-
-/** The disclosure rules every policy and witness observation in this suite shares. */
-const DISCLOSURE_RULES: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'> = {
-  responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
-  responseRedactions: [],
-};
 
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.example.com'],

@@ -10,14 +10,10 @@ import {
   zkFetchSubjectOf,
 } from '@thoth/zk-tls';
 import { describe, expect, it } from 'vitest';
+import { DISCLOSURE_RULES } from './helpers/helper.js';
 
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 const sha256 = (text: string): string => createHash('sha256').update(text, 'utf-8').digest('hex');
-
-const DISCLOSURE_RULES: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'> = {
-  responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
-  responseRedactions: [],
-};
 
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.example.com'],

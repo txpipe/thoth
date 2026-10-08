@@ -32,6 +32,7 @@ import {
   zkFetchClient,
 } from '@thoth/zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
+import { DISCLOSURE_RULES } from './helpers/helper.js';
 import { type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
@@ -49,12 +50,6 @@ const FIXTURE_PATH = join(
   'fixture-github-attestor-core-x-0m.json',
 );
 const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Record<string, unknown>;
-
-/** The disclosure rules every policy and witnessed parameter pair in this suite shares. */
-const DISCLOSURE_RULES: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'> = {
-  responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
-  responseRedactions: [],
-};
 
 const policy = (
   slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'data', parse: 'float', optional: true }],

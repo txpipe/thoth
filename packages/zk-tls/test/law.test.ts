@@ -21,18 +21,13 @@ import {
 } from '@thoth/zk-tls';
 import { assertClaimMatchesDisclosures, assertClaimMatchesSubject } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
+import { DISCLOSURE_RULES } from './helpers/helper.js';
 
 /** The app id every claim in this suite is for. */
 const APP_ID = new Uint8Array(32).fill(0xa1);
 
 /** The signed request parameters of a claim that only needs a subject. */
 const REQUEST = { url: 'https://api.github.com/repos/x', method: 'GET', body: '' };
-
-/** The disclosure rules every policy and witnessed parameter pair in this suite shares. */
-const DISCLOSURE_RULES: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'> = {
-  responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
-  responseRedactions: [],
-};
 
 /** A signed-shape claim whose parameters/context are JSON I control. */
 const claimWith = (parameters: unknown, context: unknown): ProviderClaimData => ({

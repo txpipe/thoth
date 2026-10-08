@@ -15,6 +15,7 @@ import { type ZkFetchPolicy, zkFetchPolicyHashOf, zkFetchSubjectHashOf } from '@
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { type ZkFetchRequest, zkFetchClient } from '@thoth/zk-tls/client';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { DISCLOSURE_RULES } from '../../zk-tls/test/helpers/helper.js';
 import { testWitness } from '../../zk-tls/test/helpers/witness.js';
 import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
@@ -42,10 +43,6 @@ const WINDOW_END = BigInt(OBSERVED_AT + 60);
 
 // Slot 0 is measured; slot 1 is optional and never disclosed, so it is signed
 // unpresent; slot 2 is outside the policy.
-const DISCLOSURE_RULES: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'> = {
-  responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
-  responseRedactions: [],
-};
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.github.com'],
   slots: [
