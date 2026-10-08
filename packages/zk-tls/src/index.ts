@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema, CLAIM_VERSION } from '@thoth/core/claim';
+import type { CanonicalValue } from '@thoth/core/claim-context';
 import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
 
@@ -283,14 +284,66 @@ export const zkFetchPolicySchema = z.object({
 });
 
 /**
+ * Sort an array of disclosure-rule entries by their canonical serialization.
+ *
+ * Plain JSON entries with an order-independent meaning sort stably; two plans
+ * whose arrays differ only in order then compare and hash the same.
+ */
+const sortCanonical = <T>(entries: readonly T[]): T[] =>
+  [...entries].sort((a, b) => {
+    const left = canonicalJson(a);
+    const right = canonicalJson(b);
+    return left < right ? -1 : left > right ? 1 : 0;
+  });
+
+/**
+ * The one canonical form every disclosure-rules comparison and hash reads.
+ *
+ * Folds what Reclaim itself folds: an absent rules array is empty, a
+ * redaction's absent `regex`/`jsonPath`/`xPath` are empty strings, and the
+ * entries are sorted (see {@link sortCanonical}) — so plans spelled
+ * differently (array order, empty redaction keys, absent-vs-`[]`) compare and
+ * hash the same. Every other field is preserved exactly as present, so a plan
+ * carrying fields the policy cannot declare (Reclaim's `invert`, `hash`)
+ * still mismatches and rejects.
+ *
+ * @param rules — the signed plan's or policy's disclosure rules.
+ * @returns the canonical form, with both arrays always present.
+ */
+const normalizedRulesOf = (rules: {
+  responseMatches?: unknown;
+  responseRedactions?: unknown;
+}): { responseMatches: CanonicalValue[]; responseRedactions: CanonicalValue[] } => {
+  const matches = (rules.responseMatches ?? []) as readonly CanonicalValue[];
+  const redactions = (rules.responseRedactions ?? []) as readonly CanonicalValue[];
+  return {
+    responseMatches: sortCanonical(matches),
+    responseRedactions: sortCanonical(
+      redactions.map((entry) => {
+        if (entry === null || typeof entry !== 'object') {
+          return entry;
+        }
+        const record = entry as Record<string, CanonicalValue | undefined>;
+        return {
+          ...record,
+          regex: record.regex ?? '',
+          jsonPath: record.jsonPath ?? '',
+          xPath: record.xPath ?? '',
+        };
+      }),
+    ),
+  };
+};
+
+/**
  * Parse and normalize a zkFetch policy into the form every hash and check
  * reads.
  *
  * So that policies that mean the same thing agree: unknown keys are dropped,
- * defaults are filled in, hosts are lowercased, deduplicated and sorted, and
- * slots are sorted by index and have `optional` filled. The disclosure rules
- * pass through as parsed: their spelling is the law, so the policy hash
- * commits to it exactly.
+ * defaults are filled in, hosts are lowercased, deduplicated and sorted,
+ * slots are sorted by index and have `optional` filled, and the disclosure
+ * rules are canonicalized (see {@link normalizedRulesOf}) — array order,
+ * empty redaction keys and absent-vs-`[]` rules never change the hash.
  *
  * @param policy — the policy to normalize.
  * @returns the parsed, normalized policy.
@@ -298,13 +351,14 @@ export const zkFetchPolicySchema = z.object({
  */
 export const normalizePolicy = (policy: ZkFetchPolicy) => {
   const parsed = zkFetchPolicySchema.parse(policy);
+  const rules = normalizedRulesOf(parsed);
   return {
     allowedHosts: [...new Set(parsed.allowedHosts.map((host) => host.toLowerCase()))].sort(),
     slots: parsed.slots
       .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
       .sort((a, b) => a.slot - b.slot),
-    responseMatches: [...parsed.responseMatches],
-    responseRedactions: [...parsed.responseRedactions],
+    responseMatches: rules.responseMatches,
+    responseRedactions: rules.responseRedactions,
     claimVersion: parsed.claimVersion ?? CLAIM_VERSION,
   };
 };
@@ -719,8 +773,10 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
  *
  * Fails fast so the attestor does not waste work: the attested URL must be
  * HTTPS against an allowlisted host, the witness-signed disclosure rules must
- * be exactly the policy's rules (so a slot's group name cannot be pointed at a
- * different field), and every *required* policy slot's disclosure must be
+ * equal the policy's canonical form (see {@link normalizedRulesOf} — array
+ * order, empty redaction keys and absent-vs-`[]` rules are inert, every other
+ * field must match, so a slot's group name cannot be pointed at a different
+ * field), and every *required* policy slot's disclosure must be
  * certifiable (present and parseable — optional slots may be absent and are
  * signed unpresent). Captured response text is untrusted client output and
  * does not participate in policy checks.
@@ -743,10 +799,15 @@ export const assertEvidenceMatchesPolicy = (
   if (!hostAllowed(host, policy.allowedHosts)) {
     throw new Error(`attested host ${host} not in allowlist [${policy.allowedHosts.join(', ')}]`);
   }
-  if (
-    !isDeepStrictEqual(parameters.responseMatches, policy.responseMatches) ||
-    !isDeepStrictEqual(parameters.responseRedactions, policy.responseRedactions)
-  ) {
+  const signedRules = normalizedRulesOf({
+    responseMatches: parameters.responseMatches,
+    responseRedactions: parameters.responseRedactions,
+  });
+  const policyRules = normalizedRulesOf({
+    responseMatches: policy.responseMatches,
+    responseRedactions: policy.responseRedactions,
+  });
+  if (!isDeepStrictEqual(signedRules, policyRules)) {
     throw new Error('evidence disclosure rules do not match the policy');
   }
   for (const slot of policy.slots) {

@@ -82,6 +82,27 @@ describe('zkFetchPolicyHashOf', () => {
     expect(hex(substituted)).not.toBe(hex(zkFetchPolicyHashOf(policy)));
   });
 
+  it('hashes disclosure rules spelled differently the same', () => {
+    const plan = (
+      responseMatches: readonly unknown[],
+      responseRedactions: readonly unknown[],
+    ): ZkFetchPolicy => ({
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'price', parse: 'int' }],
+      responseMatches: responseMatches as ZkFetchPolicy['responseMatches'],
+      responseRedactions: responseRedactions as ZkFetchPolicy['responseRedactions'],
+    });
+    const price = { type: 'regex', value: '"price":\\s*(?<price>\\d+)' };
+    const volume = { type: 'regex', value: '"volume":\\s*(?<volume>\\d+)' };
+    const hash = (active: ZkFetchPolicy): string => hex(zkFetchPolicyHashOf(active));
+    expect(
+      hash(plan([volume, price], [{ xPath: '', jsonPath: '', regex: '"price":\\s*\\d+' }])),
+    ).toBe(hash(plan([price, volume], [{ regex: '"price":\\s*\\d+' }])));
+    expect(hash(plan([{ ...price, value: '"fee":\\s*(?<price>\\d+)' }], []))).not.toBe(
+      hash(plan([price], [])),
+    );
+  });
+
   it('rejects a malformed policy', () => {
     expect(() => zkFetchPolicyHashOf({ ...policy, allowedHosts: [] })).toThrow();
   });

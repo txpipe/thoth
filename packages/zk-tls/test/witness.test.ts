@@ -233,6 +233,71 @@ describe('test-key witness', () => {
     );
   });
 
+  it('accepts evidence whose disclosure rules are spelled differently', async () => {
+    const distance = { type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' };
+    const movingTime = { type: 'regex', value: '"moving_time":\\s*(?<movingTime>\\d+)' };
+    const activePolicy: ZkFetchPolicy = {
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+      responseMatches: [distance, movingTime],
+      responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }],
+    };
+    const evidence = await observe(alice, {
+      values: { distance: '12.4' },
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        responseMatches: [movingTime, distance],
+        responseRedactions: [{ jsonPath: '', xPath: '', regex: '"distance":\\s*[\\d.]+' }],
+      },
+    });
+    const attestation = await attestWith(aliceAttestor, evidence, WINDOW, {}, activePolicy);
+    expect(attestation.claim.values[0]).toBe(12n);
+  });
+
+  it('accepts evidence that omits responseRedactions under a policy with none', async () => {
+    const activePolicy: ZkFetchPolicy = {
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'balance', parse: 'int' }],
+      responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+      responseRedactions: [],
+    };
+    const evidence = await observe(alice, {
+      values: { balance: '7' },
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+      },
+    });
+    const attestation = await attestWith(aliceAttestor, evidence, WINDOW, {}, activePolicy);
+    expect(attestation.claim.values[0]).toBe(7n);
+  });
+
+  it('rejects evidence whose rules carry a field the policy cannot declare', async () => {
+    const activePolicy: ZkFetchPolicy = {
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'balance', parse: 'int' }],
+      responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+      responseRedactions: [],
+    };
+    const inverted = await observe(alice, {
+      values: { balance: '7' },
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        responseMatches: [{ type: 'regex', value: '(?<data>.*)', invert: true }],
+        responseRedactions: [],
+      },
+    });
+    await expect(attestWith(aliceAttestor, inverted, WINDOW, {}, activePolicy)).rejects.toThrow(
+      /disclosure rules/,
+    );
+  });
+
   it('is rejected when the claim identifier does not match its signed content', async () => {
     const evidence = await observe(alice);
     const forged = {

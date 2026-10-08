@@ -175,9 +175,9 @@ for an example.
   `responseRedactions` selects the slices revealed to the witness, and the rest
   of the response never reaches it. The disclosure rules — `responseMatches`
   and `responseRedactions` — are part of the policy: the witness signs the
-  rules it executed, the attestor requires them to equal the policy's exactly,
-  and the policy hash commits to them, so a slot's group name cannot be pointed
-  at a different field. Hidden fields cannot be certified.
+  rules it executed, the attestor requires them to equal the policy's
+  canonical form, and the policy hash commits to them, so a slot's group name
+  cannot be pointed at a different field. Hidden fields cannot be certified.
 - **The attestor certifies facts, not decisions.** Values place exactly what the
   evidence disclosed; the app's predicate over the claim slots is the decision.
   A slot whose disclosure is absent, or unparseable under the policy rule, is

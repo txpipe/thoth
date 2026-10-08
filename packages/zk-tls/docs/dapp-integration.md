@@ -68,6 +68,18 @@ const policy = zkFetchPolicySchema.parse({
     { slot: 0, name: 'distance', parse: 'float' },
     { slot: 1, name: 'movingTime', parse: 'int' },
   ],
+  // The disclosure rules the witness must execute: the same patterns the
+  // request below uses. The policy is their single source — a request that
+  // supplies its own rules must carry exactly these, and the client always
+  // proves with them.
+  responseMatches: [
+    { type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' },
+    { type: 'regex', value: '"moving_time":\\s*(?<movingTime>\\d+)' },
+  ],
+  responseRedactions: [
+    { regex: '"distance":\\s*[\\d.]+' },
+    { regex: '"moving_time":\\s*\\d+' },
+  ],
 });
 
 const client = zkFetchClient.init({
@@ -141,12 +153,20 @@ semantics:
 
 - `responseMatches` selects patterns that get certified. A named group
   (`(?<distance>…)`) becomes a disclosed value keyed by the group name;
-  `contains` matches only guard the response. It defaults to `(?<data>.*)`, the
-  whole response.
+  `contains` matches only guard the response. The prover defaults to
+  `(?<data>.*)`, the whole response, when the policy's rules leave it out.
 - `responseRedactions` is Reclaim's reveal whitelist. The selected slices are
   the only parts of the response the witness, and therefore the proof, ever
   sees. Everything else stays hidden. Select with `regex`, `jsonPath`, or
   `xPath`.
+
+The disclosure rules live in the **policy**: the attestor requires the
+witness-signed `responseMatches`/`responseRedactions` to equal the policy's
+canonical form, and the policy hash commits to them — so a slot's group name
+cannot be pointed at a different field. The client always proves with the
+policy's own rule arrays: a request that supplies its own rules must carry
+rules equivalent to the policy's, or the client refuses before any witness is
+contacted; a request that omits them gets the policy's injected.
 
 A policy slot is certifiable only when a `responseMatches` group extracted the
 value from a revealed slice; name the slot exactly like the regex group.
@@ -197,6 +217,15 @@ client-supplied transport output. The witness signature does not authenticate
 it. The policy therefore has no response-size bound; `maxResponseBytes` has
 been removed. Recompute any policy hash that included that field. Apply
 transport size limits separately from attestation policy checks.
+
+`responseMatches` and `responseRedactions` are required policy fields and part
+of the policy hash. Recompute every policy hash your contract seals: a policy
+without them is rejected by the schema. The same disclosure rules under a
+different spelling hash the same — array order, empty redaction keys, and
+absent-vs-`[]` redactions are inert; the content of the rules and any extra
+fields (e.g. Reclaim's `invert`/`hash`) are the law. Administrate one policy
+object per trusted set, and the client propagates it to every request and
+witness.
 
 ## Handing it to the contract
 
