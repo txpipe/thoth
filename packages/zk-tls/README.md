@@ -168,11 +168,16 @@ for an example.
   `maxResponseBytes` has been removed from the policy, schema, and policy hash.
   Existing policy hashes that included it must be recomputed. Applications may
   limit transport payloads separately, but those limits certify no response size.
+  The disclosure rules are required policy fields and part of the policy hash:
+  a policy without them is rejected by the schema, and every existing policy
+  hash changes — recompute the hashes your contract seals.
 - **Redaction is a law, not a hint.** Reclaim redacts client-side:
   `responseRedactions` selects the slices revealed to the witness, and the rest
-  of the response never reaches it. The reveal plan is part of the signed
-  parameters, so an app holding the evidence can recompute exactly what was
-  disclosed. Hidden fields cannot be certified.
+  of the response never reaches it. The disclosure rules — `responseMatches`
+  and `responseRedactions` — are part of the policy: the witness signs the
+  rules it executed, the attestor requires them to equal the policy's exactly,
+  and the policy hash commits to them, so a slot's group name cannot be pointed
+  at a different field. Hidden fields cannot be certified.
 - **The attestor certifies facts, not decisions.** Values place exactly what the
   evidence disclosed; the app's predicate over the claim slots is the decision.
   A slot whose disclosure is absent, or unparseable under the policy rule, is
@@ -180,11 +185,14 @@ for an example.
 - **One policy per trusted set.** N-of-M only means "N independent attestors
   agree on the same signed message". The contract cannot see what a slot means,
   so every attestor answering a request must enforce the exact same law: same
-  `V`, slot map, parse rules, and encoding. Message equality then enforces
-  semantic agreement in practice: different interpretations of the same evidence
-  produce different messages, and the registry refuses to count them together.
-  The policy constrains hosts and slot semantics; which witness an attestor
-  trusts is per instance, via its `witnessAddress`, not part of the shared law.
+  `V`, slot map, parse rules, disclosure rules, and encoding. Message equality
+  then enforces semantic agreement in practice: different interpretations of the
+  same evidence produce different messages, and the registry refuses to count
+  them together. The policy constrains hosts, slot semantics, and the disclosure
+  rules; which witness an attestor trusts is per instance, via its
+  `witnessAddress`, not part of the shared law. The client proves with the
+  policy's own rule arrays, so one policy object holds every request and every
+  attestor to the same spelling.
   The policy is the dApp's law, carried with each request and enforced by the
   attestor for that request; an attestor holds no app-specific policy or slot count.
   Keeping a claim meaningful is the consuming contract's job: it pins the trusted set

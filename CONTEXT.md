@@ -46,6 +46,10 @@ _Avoid_: Scope, contract id.
 The rules an attestor enforced to produce an attestation, for example which hosts it accepts. The claim commits to it by hash.
 _Avoid_: Rules, config.
 
+**Disclosure rules**:
+The zkFetch policy's response patterns and reveal whitelist (`responseMatches` and `responseRedactions`): the exact extraction the witness executed and signed into the claim. The attestor requires the signed rules to equal the policy's, and the policy hash commits to them, so a claim slot cannot be pointed at a different field than the policy intends.
+_Avoid_: Extraction plan, reveal plan.
+
 **policyHash**:
 A hash of the policy the attestors enforced, tagged with the kind's law and the wire version. The contract seals the set of hashes it accepts and rejects any other, so a requester cannot substitute a laxer policy.
 _Avoid_: policyDigest, rulesHash.
