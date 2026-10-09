@@ -13,7 +13,7 @@ import {
   zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DISCLOSURE_RULES } from './helpers/helper.js';
 import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
 
@@ -228,9 +228,12 @@ describe('test-key witness', () => {
         responseRedactions: [{ regex: '"moving_time":\\s*[\\d.]+' }],
       },
     });
+    const sign = vi.spyOn(aliceAttestor.signer, 'sign');
     await expect(attestWith(aliceAttestor, attack, WINDOW, {}, distancePolicy)).rejects.toThrow(
       /disclosure rules/,
     );
+    expect(sign).not.toHaveBeenCalled();
+    sign.mockRestore();
   });
 
   it('rejects evidence whose responseRedactions differ from the policy', async () => {

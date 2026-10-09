@@ -14,6 +14,7 @@ import { buildTrustedSet } from '@thoth/client';
 import type { FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
 import {
+  assertEvidenceMatchesPolicy,
   parsedEvidenceView,
   type ZkFetchDefinition,
   type ZkFetchEvidence,
@@ -141,6 +142,15 @@ describe('verifyZkFetchProof', () => {
     const evidence = zkFetchEvidenceSchema.parse(fixture);
     const tampered = { ...evidence, signatureHex: `0x${'00'.repeat(65)}` };
     await expect(verifyZkFetchProof(tampered)).rejects.toThrow();
+  });
+});
+
+describe('assertEvidenceMatchesPolicy over the recorded fixture', () => {
+  it('accepts the genuine Reclaim evidence under the policy disclosure rules', () => {
+    const evidence = zkFetchEvidenceSchema.parse(fixture);
+    expect(assertEvidenceMatchesPolicy(parsedEvidenceView(evidence), policy())).toBe(
+      'api.github.com',
+    );
   });
 });
 
