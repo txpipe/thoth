@@ -71,12 +71,16 @@ When the attestor observed the claim, not when the underlying fact happened. The
 _Avoid_: Timestamp, event time.
 
 **present**:
-The mask marking which value slots were measured. `present[i]` true means slot i was measured, even when its value is zero. An absent slot must carry zero.
+The mask marking which value slots were measured, one flag per slot, numeric slots first and byte slots after. `present[i]` true means slot i was measured, even when its value is zero. An absent slot must carry zero.
 _Avoid_: Valid, filled.
 
 **Values**:
-The measured numbers of a claim, one per value slot. Zero is a valid measured value; read `present` to know whether a slot was measured. What each slot means is the policy's slot map, not the claim's.
+The measured values of a claim, one per value slot: numbers in the numeric slots, fixed-width byte strings in the byte slots. Zero is a valid measured value; read `present` to know whether a slot was measured. What each slot means is the policy's slot map, not the claim's.
 _Avoid_: Data, payload.
+
+**Byte slot**:
+A value slot carrying a fixed-width byte string, for facts that are not numbers, such as identifiers. A policy's parse rule canonicalizes a source's string into the slot, zero-padding shorter values. The slot is exactly its bytes; equality is byte equality.
+_Avoid_: Blob, string slot.
 
 **Claim proposal**:
 The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder, window and requested value-slot count from the proposal.
@@ -105,7 +109,7 @@ The flat list of field values the attestors sign and the contract rebuilds.
 _Avoid_: Payload, digest.
 
 **Wire layout**:
-The order and encoding of the message's fields, `K = 2*V + 11` of them. `buildMessage` in `attestation.compact` defines it and `claimToMessage` mirrors it.
+The order and encoding of the message's fields, `K = 11 + 2V + 3W` of them: a byte value takes two fields. `buildMessage` in `attestation.compact` defines it and `claimToMessage` mirrors it.
 _Avoid_: Format, serialization.
 
 **Attestation**:
