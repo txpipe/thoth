@@ -31,7 +31,9 @@ prover that the client can use to obtain evidence:
   - Schemas: `zkFetchEvidenceSchema`, `zkFetchPolicySchema`,
     `zkFetchClaimSchema`.
   - `assertEvidenceMatchesPolicy(verified, policy)` checks HTTPS against the host
-    allowlist. Required slots must be certifiable, meaning disclosed and parseable; optional slots may be absent
+    allowlist and requires the witness-signed `responseMatches`/`responseRedactions`
+    to equal the policy's canonical disclosure rules. Required slots must be
+    certifiable, meaning disclosed and parseable; optional slots may be absent
     and are signed unpresent.
   - `deriveClaimFromEvidence({ verified, policy, appId, holder, valueSlots, windowStart, windowEnd })`
     derives the canonical `Claim` the attestor signs: values/present from the
@@ -48,9 +50,10 @@ prover that the client can use to obtain evidence:
   - `claimUrl(claim)` returns the URL a signed claim attests, decoded from its
     parameters.
   - `normalizePolicy(policy)` parses a policy, fills its defaults, lowercases,
-    deduplicates and sorts its hosts, and sorts its slots by index, so policies
-    that mean the same thing normalize the same. The hash and the checks read
-    it.
+    deduplicates and sorts its hosts, sorts its slots by index, and canonicalizes
+    the disclosure rules (array order, empty redaction keys, and absent-vs-`[]`
+    are inert), so policies that mean the same thing normalize the same. The
+    hash and the checks read it.
   - `zkFetchPolicyHashOf(policy)` hashes a normalized policy under the
     `zk-fetch@1` law (`ZK_FETCH_LAW`) and the policy's claim version, so
     policies that differ only in defaults, host order or slot order hash the
@@ -60,8 +63,8 @@ prover that the client can use to obtain evidence:
     `zkFetchSubjectHashOf(request)` hashes it. The host is its own field so an
     app can compare the host hash in-circuit and keep the path private.
   - Types: `ZkFetchDefinition`, `ProviderClaimData`, `ZkFetchEvidence`,
-    `VerifiedEvidence`, `ZkFetchPolicy`, `ZkFetchSlot`, `ZkFetchSubjectRequest`,
-    `ZkFetchSubject`.
+    `VerifiedEvidence`, `ZkFetchPolicy`, `ZkFetchSlot`, `ZkFetchResponseMatch`,
+    `ZkFetchResponseRedaction`, `ZkFetchSubjectRequest`, `ZkFetchSubject`.
 - **`@thoth/zk-tls/attestor`.** The attestor, or host, side:
   - `verifyZkFetchProof(evidence)` verifies the witness's ECDSA signature
     with the Reclaim SDK and extracts the values it disclosed, returned as

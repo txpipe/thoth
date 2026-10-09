@@ -153,8 +153,9 @@ semantics:
 
 - `responseMatches` selects patterns that get certified. A named group
   (`(?<distance>…)`) becomes a disclosed value keyed by the group name;
-  `contains` matches only guard the response. The prover defaults to
-  `(?<data>.*)`, the whole response, when the policy's rules leave it out.
+  `contains` matches only guard the response. Every request the client proves
+  carries the policy's rules; a direct prover call that omits `responseMatches`
+  falls back to `(?<data>.*)`, the whole response.
 - `responseRedactions` is Reclaim's reveal whitelist. The selected slices are
   the only parts of the response the witness, and therefore the proof, ever
   sees. Everything else stays hidden. Select with `regex`, `jsonPath`, or
@@ -165,8 +166,8 @@ witness-signed `responseMatches`/`responseRedactions` to equal the policy's
 canonical form, and the policy hash commits to them — so a slot's group name
 cannot be pointed at a different field. The client always proves with the
 policy's own rule arrays: a request that supplies its own rules must carry
-rules equivalent to the policy's, or the client refuses before any witness is
-contacted; a request that omits them gets the policy's injected.
+exactly the policy's, or the client refuses before any witness is contacted; a
+request that omits them gets the policy's injected.
 
 A policy slot is certifiable only when a `responseMatches` group extracted the
 value from a revealed slice; name the slot exactly like the regex group.
