@@ -195,6 +195,8 @@ export const walletProviders = ({
     currentEra: async (tx) =>
       wallet.submitTransaction(WalletTransaction.adopt('Finalized', tx, await active())),
   });
+  // One object for both seams; each method forwards to its own provider so
+  // neither depends on how the other binds `this`.
   return {
     supportedEras: walletProvider.supportedEras,
     balanceTx: (tx, ttl) => walletProvider.balanceTx(tx, ttl),

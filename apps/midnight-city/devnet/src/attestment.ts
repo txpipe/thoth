@@ -1,4 +1,4 @@
-// One honest 2-of-3 attestation, built the way
+// One honest 2-of-3 attestment, built the way
 // `packages/contracts/test/acceptance.test.ts` builds it: two test-key
 // witnesses observe one request, two zkFetch attestors sign the derived claim
 // with Jubjub keys, and the client collects the threshold set. Registry slot 2
@@ -33,8 +33,8 @@ export interface Submission {
   readonly holderSecret: Uint8Array;
 }
 
-/** What the contract seals at deploy and the submission that satisfies it. */
-export interface Attestation {
+/** What the contract seals at deploy, and the attestment's submission that satisfies it. */
+export interface SealedAttestment {
   readonly registryKeys: JubjubPoint[];
   readonly policyHashes: Uint8Array[];
   readonly submission: Submission;
@@ -58,16 +58,16 @@ const jubjubKeyPair = (): KeyPair<JubjubPoint, JubjubSchnorrSignature> => {
 };
 
 /**
- * Collect one honest attestation observed `observedAt` seconds since the epoch.
+ * Collect one honest attestment over an observation made `observedAt` seconds since the epoch.
  *
  * @param observedAt - observation time, Unix seconds; the window opens there.
  * @param holderCommitment - the deployed contract's holder-commitment circuit.
  * @returns the deploy-time seals and the submission.
  */
-export const collectAttestation = async (
+export const collectAttestment = async (
   observedAt: number,
   holderCommitment: (secret: Uint8Array) => Uint8Array,
-): Promise<Attestation> => {
+): Promise<SealedAttestment> => {
   const operators = ['33', '44'].map((byte, i) => {
     const witness = testWitness(`0x${byte.repeat(32)}`);
     const attestor = zkFetchAttestor({

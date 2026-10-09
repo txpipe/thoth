@@ -3,13 +3,15 @@
 A spike for [#127](https://github.com/txpipe-shop/thoth/issues/127), part of the
 Midnight City map ([#117](https://github.com/txpipe-shop/thoth/issues/117)). It
 answers one question: does Thoth, as pinned today, deploy and record an
-attestation on a local ledger-9 devnet, and with which versions?
+attestment on a local ledger-9 devnet, and with which versions?
 
-**Answer:** yes, with one change to the build. The Compact source compiles
-unchanged with compiler **0.35.0** (runtime 0.20.0), and the contract it
-produces accepts signatures from Thoth's runtime-0.19 packages on-chain. The
-repo's own **0.34.0** build (runtime 0.19.0) does not run under midnight-js 5
-(see [Runtime 0.19 versus 0.20](#runtime-019-versus-020)).
+**Answer: not as pinned; yes after recompiling with 0.35.0.**
+
+- The repo's **0.34.0** build (runtime 0.19.0) does not run under midnight-js 5
+  (see [Runtime 0.19 versus 0.20](#runtime-019-versus-020)).
+- The unchanged Compact source compiled with **0.35.0** (runtime 0.20.0) does
+  run. Its contract accepts on-chain an attestment signed by Thoth's
+  runtime-0.19 packages.
 
 This directory is not an npm workspace and does not touch `packages/`. It
 reuses the `MockAttestation` source and the contract test helpers in place.
@@ -28,21 +30,21 @@ cd apps/midnight-city/devnet
 npm install
 npm run compact
 
-docker compose up -d --wait   # the first run builds the indexer (~11 min)
-npm start                     # deploys and records one attestation (~1 min)
+docker compose up -d --wait   # the first run builds the indexer (~13 min)
+npm start                     # deploys and records one attestment (~1 min)
 ```
 
 `npm start` builds and syncs the deployer's wallet from the dev preset's
-genesis seed, deploys `MockAttestation`, submits one 2-of-3 attestation, then
-reads the claims vault back. It ends with `✓ attestation accepted on-chain`.
+genesis seed, deploys `MockAttestation`, submits one 2-of-3 attestment, then
+reads the claims vault back. It ends with `✓ attestment accepted on-chain`.
 Reset the chain with `docker compose down -v` and `rm -rf .state`.
 
 The root step compiles the 0.34.0 contract only for its type declarations,
 which the reused test helpers import. The run itself uses the 0.35.0 build in
 `artifacts/`; set `ARTIFACTS` to try another.
 
-The claim is built the way `packages/contracts/test/acceptance.test.ts` builds
-it: two test-key witnesses, two zkFetch attestors with Jubjub keys, and the
+The attestment is built the way `packages/contracts/test/acceptance.test.ts`
+builds it: two test-key witnesses, two zkFetch attestors with Jubjub keys, and the
 zkFetch client collecting the threshold. Registry slot 2 holds an unqueried key
 and a dummy signature. The observation window follows the wall clock, because
 the chain checks it against block time.
@@ -119,15 +121,16 @@ runtime 0.19, and the 0.20 circuit accepted what it produced:
   `jubjubSchnorrSign`;
 - the message encoding behind those signatures (`@thoth/core`).
 
-That covers one claim shape, not the parity tests. AGENTS.md's rule still
-applies: the on-chain prototype should move the runtime pin and the compiler
-together, to 0.20.0 and 0.35.0, and rerun the parity suites. This is the input
-#132 needs.
+That covers one claim shape, not the parity tests. The run also mixes runtimes
+in one process, which AGENTS.md's pin rule forbids for anything kept: 0.20 for
+the contract and midnight-js, 0.19 for `@thoth/*` and the test helpers. The
+on-chain prototype should move the runtime pin and the compiler together, to
+0.20.0 and 0.35.0, and rerun the parity suites. This is the input #132 needs.
 
 ## Workarounds
 
 - **Indexer built from source**, for the reasons above. The first
-  `docker compose up` compiles Rust for about 11 minutes on 16 cores. Cargo
+  `docker compose up` compiles Rust for about 13 minutes on 16 cores. Cargo
   uses every core, so on a machine with little free RAM, build once with
   `CARGO_BUILD_JOBS` capped through a local Dockerfile copy.
 - **Contract compiled with 0.35.0** into this directory's `artifacts/`. The
