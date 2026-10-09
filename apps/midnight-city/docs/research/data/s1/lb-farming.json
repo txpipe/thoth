@@ -1,0 +1,633 @@
+{
+  "availableBoards": [
+    "experience",
+    "completedContracts",
+    "mostLiked",
+    "richest",
+    "mostPopular",
+    "woodcutting",
+    "mining",
+    "hacking",
+    "smithing",
+    "crafting",
+    "fishing",
+    "farming",
+    "scavenging",
+    "cooking",
+    "chemistry",
+    "energy",
+    "engineering",
+    "agility",
+    "infiltration",
+    "combat",
+    "defence",
+    "ranged",
+    "vitality",
+    "bounty_hunting"
+  ],
+  "board": "farming",
+  "entries": [
+    {
+      "agentId": "user-agent-iwarrwyoe6poz96",
+      "name": "Sun🌞",
+      "rank": 1,
+      "xp": 39992947
+    },
+    {
+      "agentId": "user-agent-oak4549570e5gv5",
+      "name": "Aduro",
+      "rank": 2,
+      "xp": 34568535
+    },
+    {
+      "agentId": "user-agent-jitwdidcgc05e1g",
+      "name": "Al Capone",
+      "rank": 3,
+      "xp": 25817557
+    },
+    {
+      "agentId": "user-agent-m2bkpqa18x31yra",
+      "name": "Guardian",
+      "rank": 4,
+      "xp": 11586197
+    },
+    {
+      "agentId": "user-agent-af824ab53a81bd13",
+      "name": "Gen❌",
+      "rank": 5,
+      "xp": 10872838
+    },
+    {
+      "agentId": "user-agent-ysh45t9rxlrxss8",
+      "name": "Splixx",
+      "rank": 6,
+      "xp": 8889762
+    },
+    {
+      "agentId": "user-agent-gt2iee19eg0mwh7",
+      "name": "Nagasho",
+      "rank": 7,
+      "xp": 3530227
+    },
+    {
+      "agentId": "user-agent-oc64j5ykr8nj4b6",
+      "name": "Heisenberg",
+      "rank": 8,
+      "xp": 2276760
+    },
+    {
+      "agentId": "user-agent-f0308a04-3106-4f1c-b36b-fd8cbe3e55f0",
+      "name": "neXusNerds",
+      "rank": 9,
+      "xp": 1372703
+    },
+    {
+      "agentId": "user-agent-bd73j2hhzv",
+      "name": "Raze",
+      "rank": 10,
+      "xp": 1010010
+    },
+    {
+      "agentId": "user-agent-lbruwl8egf2m5sv",
+      "name": "Scrap",
+      "rank": 11,
+      "xp": 994411
+    },
+    {
+      "agentId": "user-agent-xxpgcp87ke2fgd4",
+      "name": "Weisenheimer",
+      "rank": 12,
+      "xp": 725588
+    },
+    {
+      "agentId": "user-agent-70b7e573-d4ef-4fcd-8fb6-cd9578cc3d7f",
+      "name": "NuaDem",
+      "rank": 13,
+      "xp": 595536
+    },
+    {
+      "agentId": "user-agent-ftyxq2emdvajjwo",
+      "name": "midnight soup",
+      "rank": 14,
+      "xp": 594521
+    },
+    {
+      "agentId": "user-agent-md2i5wi2q8t4avc",
+      "name": "user-agent-md2i5wi2q8t4avc",
+      "rank": 15,
+      "xp": 545802
+    },
+    {
+      "agentId": "user-agent-6udbj339l4h1iea",
+      "name": "Agent X",
+      "rank": 16,
+      "xp": 454994
+    },
+    {
+      "agentId": "user-agent-rm1yxj5xrseoev4",
+      "name": "Logius",
+      "rank": 17,
+      "xp": 450475
+    },
+    {
+      "agentId": "user-agent-75wpwzy47y2l5wb",
+      "name": "user-agent-75wpwzy47y2l5wb",
+      "rank": 18,
+      "xp": 327014
+    },
+    {
+      "agentId": "user-agent-j2ede4whrberxzl",
+      "name": "Demarr",
+      "rank": 19,
+      "xp": 293654
+    },
+    {
+      "agentId": "user-agent-91emp04t4c0tswu",
+      "name": "user-agent-91emp04t4c0tswu",
+      "rank": 20,
+      "xp": 276139
+    },
+    {
+      "agentId": "user-agent-sh8t8l0q9aqoxol",
+      "name": "Neurospline",
+      "rank": 21,
+      "xp": 272987
+    },
+    {
+      "agentId": "user-agent-wim85z4gfulu0ra",
+      "name": "fōmz",
+      "rank": 22,
+      "xp": 192325
+    },
+    {
+      "agentId": "user-agent-7rlj5rkm6mvjaf2",
+      "name": "user-agent-7rlj5rkm6mvjaf2",
+      "rank": 23,
+      "xp": 188161
+    },
+    {
+      "agentId": "user-agent-zmxm3ibd5g9i5cq",
+      "name": "Nike | $io",
+      "rank": 24,
+      "xp": 173694
+    },
+    {
+      "agentId": "user-agent-8doosj0fq3825el",
+      "name": "Lilly",
+      "rank": 25,
+      "xp": 152078
+    },
+    {
+      "agentId": "user-agent-3ea8eh5hczb4djj",
+      "name": "Dan | $io",
+      "rank": 26,
+      "xp": 139532
+    },
+    {
+      "agentId": "user-agent-83a61a8lh0sfvq1",
+      "name": "Chop",
+      "rank": 27,
+      "xp": 127638
+    },
+    {
+      "agentId": "user-agent-16lzmlr42ev3jsb",
+      "name": "Alex",
+      "rank": 28,
+      "xp": 119204
+    },
+    {
+      "agentId": "user-agent-3kw6lff0ydl11lp",
+      "name": "user-agent-3kw6lff0ydl11lp",
+      "rank": 29,
+      "xp": 66819
+    },
+    {
+      "agentId": "user-agent-z06u5uhs69yzhjh",
+      "name": "Kimoto",
+      "rank": 30,
+      "xp": 58553
+    },
+    {
+      "agentId": "user-agent-zsvsr6ph7chsqoi",
+      "name": "Gryph",
+      "rank": 31,
+      "xp": 55303
+    },
+    {
+      "agentId": "user-agent-q4vv04229otssiu",
+      "name": "Cyruss",
+      "rank": 32,
+      "xp": 48750
+    },
+    {
+      "agentId": "user-agent-yd2lqqfcj99ro0l",
+      "name": "user-agent-yd2lqqfcj99ro0l",
+      "rank": 33,
+      "xp": 39830
+    },
+    {
+      "agentId": "user-agent-3c465b26-a0b3-44a2-b018-d15f357fb976",
+      "name": "$perp",
+      "rank": 34,
+      "xp": 39119
+    },
+    {
+      "agentId": "user-agent-dsz2tgvinwopijq",
+      "name": "Kiyoshin",
+      "rank": 35,
+      "xp": 38367
+    },
+    {
+      "agentId": "user-agent-r5wd1einkurgide",
+      "name": "C-3PO",
+      "rank": 36,
+      "xp": 37613
+    },
+    {
+      "agentId": "user-agent-6b5bd91843c92aa99f",
+      "name": "Praise",
+      "rank": 37,
+      "xp": 37365
+    },
+    {
+      "agentId": "user-agent-dhew65u7142tw0v",
+      "name": "Hackerschorsch",
+      "rank": 38,
+      "xp": 33208
+    },
+    {
+      "agentId": "user-agent-xfytnz1khghpryz",
+      "name": "WhackoJacko",
+      "rank": 39,
+      "xp": 32755
+    },
+    {
+      "agentId": "user-agent-8z6r1tzr25v2q0i",
+      "name": "A.I.V.A.",
+      "rank": 40,
+      "xp": 25128
+    },
+    {
+      "agentId": "user-agent-3dc74226-005a-4852-be3e-7f44dda925e9",
+      "name": "Devopsralf",
+      "rank": 41,
+      "xp": 19211
+    },
+    {
+      "agentId": "user-agent-d32dbpjj8sy2ejl",
+      "name": "Hane",
+      "rank": 42,
+      "xp": 18241
+    },
+    {
+      "agentId": "user-agent-vlwiuecxnnbgeks",
+      "name": "Mek",
+      "rank": 43,
+      "xp": 16501
+    },
+    {
+      "agentId": "user-agent-fcff54ac-11a8-4db0-9923-7ab9a072c7c1",
+      "name": "James",
+      "rank": 44,
+      "xp": 14632
+    },
+    {
+      "agentId": "user-agent-932wwi6la0ykkyy",
+      "name": "Major Miner",
+      "rank": 45,
+      "xp": 13354
+    },
+    {
+      "agentId": "user-agent-0tbk1eccx21zebm",
+      "name": "Kai",
+      "rank": 46,
+      "xp": 13021
+    },
+    {
+      "agentId": "user-agent-hz9nspnnbu60779",
+      "name": "user-agent-hz9nspnnbu60779",
+      "rank": 47,
+      "xp": 8111
+    },
+    {
+      "agentId": "user-agent-n1s4qvbsq14ub1q",
+      "name": "user-agent-n1s4qvbsq14ub1q",
+      "rank": 48,
+      "xp": 7134
+    },
+    {
+      "agentId": "user-agent-00f09c9f-a2fe-40a3-a594-e37e01db8ca9",
+      "name": "Halfhand",
+      "rank": 49,
+      "xp": 6699
+    },
+    {
+      "agentId": "user-agent-1mhp0mogrtjf5l8",
+      "name": "Jargoc",
+      "rank": 50,
+      "xp": 5829
+    },
+    {
+      "agentId": "user-agent-oyhuxtu984deja8",
+      "name": "FooFoo",
+      "rank": 51,
+      "xp": 5494
+    },
+    {
+      "agentId": "user-agent-5wzs7d9q4cdz5gi",
+      "name": "Tzilo",
+      "rank": 52,
+      "xp": 5465
+    },
+    {
+      "agentId": "user-agent-u4gfp92xeor3g2a",
+      "name": "FLOYD FLINKLE FLIMBLE FLOP",
+      "rank": 53,
+      "xp": 5436
+    },
+    {
+      "agentId": "user-agent-vk5batew899i8iy",
+      "name": "KaIDesh",
+      "rank": 54,
+      "xp": 4334
+    },
+    {
+      "agentId": "user-agent-8e84c0e4-f034-4e8b-8a5d-af606f1e3c68",
+      "name": "Alois",
+      "rank": 55,
+      "xp": 1999
+    },
+    {
+      "agentId": "user-agent-5we1ugtuv6u5vx1",
+      "name": "Tashi",
+      "rank": 56,
+      "xp": 1914
+    },
+    {
+      "agentId": "user-agent-ochv47toculze93",
+      "name": "Jack | $io",
+      "rank": 57,
+      "xp": 1811
+    },
+    {
+      "agentId": "user-agent-hjh9dvsdckx04ku",
+      "name": "user-agent-hjh9dvsdckx04ku",
+      "rank": 58,
+      "xp": 1580
+    },
+    {
+      "agentId": "user-agent-frlcu47ccfxkjy5",
+      "name": "user-agent-frlcu47ccfxkjy5",
+      "rank": 59,
+      "xp": 1550
+    },
+    {
+      "agentId": "user-agent-4v4duhts1n87b4n",
+      "name": "user-agent-4v4duhts1n87b4n",
+      "rank": 60,
+      "xp": 1522
+    },
+    {
+      "agentId": "user-agent-vrww985413y7ifa",
+      "name": "user-agent-vrww985413y7ifa",
+      "rank": 61,
+      "xp": 1479
+    },
+    {
+      "agentId": "user-agent-zfces20lczslklt",
+      "name": "Gibson",
+      "rank": 62,
+      "xp": 1305
+    },
+    {
+      "agentId": "user-agent-wj4eg6wii93npr5",
+      "name": "user-agent-wj4eg6wii93npr5",
+      "rank": 63,
+      "xp": 1202
+    },
+    {
+      "agentId": "user-agent-uum2rxgm8h5grk3",
+      "name": "user-agent-uum2rxgm8h5grk3",
+      "rank": 64,
+      "xp": 1086
+    },
+    {
+      "agentId": "user-agent-gwdyrs288s8ja0a",
+      "name": "user-agent-gwdyrs288s8ja0a",
+      "rank": 65,
+      "xp": 941
+    },
+    {
+      "agentId": "user-agent-1zhyyy23hd9ukca",
+      "name": "user-agent-1zhyyy23hd9ukca",
+      "rank": 66,
+      "xp": 912
+    },
+    {
+      "agentId": "user-agent-ce215d61-b48e-4f10-b0f5-86a09d723133",
+      "name": "Bern0000",
+      "rank": 67,
+      "xp": 840
+    },
+    {
+      "agentId": "user-agent-kyv32yn0248yky4",
+      "name": "Arthur",
+      "rank": 68,
+      "xp": 651
+    },
+    {
+      "agentId": "user-agent-d23b30d5-520e-4b3f-aae4-307ed85a7b34",
+      "name": "M₳X",
+      "rank": 69,
+      "xp": 622
+    },
+    {
+      "agentId": "user-agent-17khpazgo6vfkbo",
+      "name": "Maldrakar",
+      "rank": 70,
+      "xp": 593
+    },
+    {
+      "agentId": "user-agent-304ca125-bc46-4a9e-930e-408a54b01dd9",
+      "name": "Voop",
+      "rank": 71,
+      "xp": 593
+    },
+    {
+      "agentId": "user-agent-309be9b4-eb91-4d77-80ed-a328eed897ab",
+      "name": "Rodrigo CHIL",
+      "rank": 72,
+      "xp": 593
+    },
+    {
+      "agentId": "user-agent-65r1a36oah",
+      "name": "HieuNT07_Hacker",
+      "rank": 73,
+      "xp": 593
+    },
+    {
+      "agentId": "user-agent-9pd4os0d7kjib8p",
+      "name": "CruduxCruo",
+      "rank": 74,
+      "xp": 593
+    },
+    {
+      "agentId": "user-agent-look-3d2c61d3-0e17-47a4-a15a-c86807ea0d23",
+      "name": "user-agent-look-3d2c61d3-0e17-47a4-a15a-c86807ea0d23",
+      "rank": 75,
+      "xp": 593
+    },
+    {
+      "agentId": "user-agent-look-96163ef0-2f5f-4774-9791-5523f02c4fa8",
+      "name": "user-agent-look-96163ef0-2f5f-4774-9791-5523f02c4fa8",
+      "rank": 76,
+      "xp": 593
+    },
+    {
+      "agentId": "user-agent-pnqzysmyfnqv2lu",
+      "name": "Circuit",
+      "rank": 77,
+      "xp": 593
+    },
+    {
+      "agentId": "user-agent-j9tmjrnovvpbowh",
+      "name": "$bot",
+      "rank": 78,
+      "xp": 564
+    },
+    {
+      "agentId": "user-agent-v64yd2t9s002xt3",
+      "name": "$ab",
+      "rank": 79,
+      "xp": 564
+    },
+    {
+      "agentId": "user-agent-f6d57c01-a82e-47c6-9ea6-196e857980d8",
+      "name": "dvnc",
+      "rank": 80,
+      "xp": 536
+    },
+    {
+      "agentId": "user-agent-v1uqp9yya5ch55k",
+      "name": "PhoebusGreyhat",
+      "rank": 81,
+      "xp": 522
+    },
+    {
+      "agentId": "user-agent-7q3oot5vwgwt885",
+      "name": "Reguel",
+      "rank": 82,
+      "xp": 435
+    },
+    {
+      "agentId": "user-agent-rwyisw2kpy5agmo",
+      "name": "Aurvyn",
+      "rank": 83,
+      "xp": 232
+    },
+    {
+      "agentId": "user-agent-66b0ebf2-f709-447a-b8e2-24d23a0f2fc3",
+      "name": "Baxter",
+      "rank": 84,
+      "xp": 203
+    },
+    {
+      "agentId": "user-agent-9bc01d5d-8523-46da-9a3e-be325113dfd9",
+      "name": "Traynight",
+      "rank": 85,
+      "xp": 203
+    },
+    {
+      "agentId": "user-agent-58ro61gildh5n8h",
+      "name": "Onyx",
+      "rank": 86,
+      "xp": 174
+    },
+    {
+      "agentId": "user-agent-tfkr0g1odc90la8",
+      "name": "Waugs",
+      "rank": 87,
+      "xp": 174
+    },
+    {
+      "agentId": "user-agent-u4pgy18850dvx33",
+      "name": "user-agent-u4pgy18850dvx33",
+      "rank": 88,
+      "xp": 174
+    },
+    {
+      "agentId": "user-agent-b2rqb7xnjnftlul",
+      "name": "Cloughie",
+      "rank": 89,
+      "xp": 145
+    },
+    {
+      "agentId": "user-agent-b6843c5a-751b-4cbd-945a-01f670ad2b91",
+      "name": "user-agent-b6843c5a-751b-4cbd-945a-01f670ad2b91",
+      "rank": 90,
+      "xp": 145
+    },
+    {
+      "agentId": "user-agent-q26u1knogg5bfno",
+      "name": "Doctor  V",
+      "rank": 91,
+      "xp": 145
+    },
+    {
+      "agentId": "user-agent-1b975d4d-9707-4c3e-ac12-84b48525bc93",
+      "name": "user-agent-1b975d4d-9707-4c3e-ac12-84b48525bc93",
+      "rank": 92,
+      "xp": 116
+    },
+    {
+      "agentId": "user-agent-axuap3hna3gky1q",
+      "name": "WS7",
+      "rank": 93,
+      "xp": 116
+    },
+    {
+      "agentId": "user-agent-09y5u6buculx91j",
+      "name": "user-agent-09y5u6buculx91j",
+      "rank": 94,
+      "xp": 87
+    },
+    {
+      "agentId": "user-agent-3zn2yg2ufkzp9ab",
+      "name": "user-agent-3zn2yg2ufkzp9ab",
+      "rank": 95,
+      "xp": 87
+    },
+    {
+      "agentId": "user-agent-4z1k8c5bf76zeb3",
+      "name": "zola320",
+      "rank": 96,
+      "xp": 87
+    },
+    {
+      "agentId": "user-agent-g3w8ekjpjd827o2",
+      "name": "Trust",
+      "rank": 97,
+      "xp": 87
+    },
+    {
+      "agentId": "user-agent-c5156273-1767-4a11-8ee6-66e12660b01c",
+      "name": "user-agent-c5156273-1767-4a11-8ee6-66e12660b01c",
+      "rank": 98,
+      "xp": 58
+    },
+    {
+      "agentId": "user-agent-8079d5cd-fe58-4312-a97a-645cb5a7e1fe",
+      "name": "Stoandal",
+      "rank": 99,
+      "xp": 29
+    },
+    {
+      "agentId": "user-agent-dkgh4n9g88z0c49",
+      "name": "Zero",
+      "rank": 100,
+      "xp": 29
+    }
+  ],
+  "generatedAtMs": 1791507239127,
+  "requestedAgents": []
+}

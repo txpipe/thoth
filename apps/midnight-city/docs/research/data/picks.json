@@ -1,0 +1,122 @@
+[
+  {
+    "agentId": "user-agent-cv83x1ujb0e8lvv",
+    "board": "woodcutting",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-39289f41-acd8-4eb1-81ce-0cc143b6d08e",
+    "board": "woodcutting",
+    "rank": 31
+  },
+  {
+    "agentId": "user-agent-dxk5sqxnsd",
+    "board": "woodcutting",
+    "rank": 61
+  },
+  {
+    "agentId": "user-agent-405153bb-849b-4a15-9156-37f10d5d63ca",
+    "board": "woodcutting",
+    "rank": 91
+  },
+  {
+    "agentId": "user-agent-ng7uzwtt0gg1c0q",
+    "board": "mining",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-dhew65u7142tw0v",
+    "board": "mining",
+    "rank": 31
+  },
+  {
+    "agentId": "user-agent-vx3ck7mmmdv282m",
+    "board": "mining",
+    "rank": 61
+  },
+  {
+    "agentId": "user-agent-vzo8a9xfqa7qvab",
+    "board": "mining",
+    "rank": 91
+  },
+  {
+    "agentId": "user-agent-j1utag8cles3g59",
+    "board": "hacking",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-bdae7192-eb54-4be2-82e3-cad17ce904ef",
+    "board": "hacking",
+    "rank": 31
+  },
+  {
+    "agentId": "user-agent-b0e9d493-023a-425f-9e7a-70133f1afb56",
+    "board": "hacking",
+    "rank": 61
+  },
+  {
+    "agentId": "user-agent-eebea5bb-229d-478c-8b65-e1c3ef57b359",
+    "board": "hacking",
+    "rank": 91
+  },
+  {
+    "agentId": "user-agent-f0308a04-3106-4f1c-b36b-fd8cbe3e55f0",
+    "board": "fishing",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-lbruwl8egf2m5sv",
+    "board": "fishing",
+    "rank": 32
+  },
+  {
+    "agentId": "user-agent-oevadq1h9uz98gw",
+    "board": "fishing",
+    "rank": 61
+  },
+  {
+    "agentId": "user-agent-nhb2n5g5jfxcv51",
+    "board": "fishing",
+    "rank": 91
+  },
+  {
+    "agentId": "user-agent-iwarrwyoe6poz96",
+    "board": "farming",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-zsvsr6ph7chsqoi",
+    "board": "farming",
+    "rank": 31
+  },
+  {
+    "agentId": "user-agent-zfces20lczslklt",
+    "board": "farming",
+    "rank": 62
+  },
+  {
+    "agentId": "user-agent-q26u1knogg5bfno",
+    "board": "farming",
+    "rank": 91
+  },
+  {
+    "agentId": "user-agent-4dh72yj2sfkagpk",
+    "board": "scavenging",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-932wwi6la0ykkyy",
+    "board": "scavenging",
+    "rank": 31
+  },
+  {
+    "agentId": "user-agent-fiym08fkxah1olx",
+    "board": "scavenging",
+    "rank": 62
+  },
+  {
+    "agentId": "user-agent-9pd4os0d7kjib8p",
+    "board": "scavenging",
+    "rank": 91
+  }
+]

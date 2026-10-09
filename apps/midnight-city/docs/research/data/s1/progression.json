@@ -1,0 +1,2814 @@
+[
+  {
+    "agentId": "user-agent-cv83x1ujb0e8lvv",
+    "fetchedAtMs": 1791507328593,
+    "tick": 19156359,
+    "profession": "lumberjack",
+    "professionRank": 36,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "tree-stand-127-33",
+      "source_id": "ironwood_coppice"
+    },
+    "activeAction": {
+      "kind": "engage",
+      "activity": "chop_wood",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 10,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "hacking": {
+        "level": 15,
+        "nextLevelXp": 976500,
+        "xp": 852970
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 36,
+        "nextLevelXp": 18840816,
+        "xp": 17068192
+      }
+    },
+    "board": "woodcutting",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-39289f41-acd8-4eb1-81ce-0cc143b6d08e",
+    "fetchedAtMs": 1791507331581,
+    "tick": 19156365,
+    "profession": "lumberjack",
+    "professionRank": 32,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "tree-stand-112-38",
+      "source_id": "dusk_cedar_break"
+    },
+    "activeAction": {
+      "kind": "engage",
+      "activity": "chop_wood",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 0,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "hacking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 522
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 32,
+        "nextLevelXp": 11288304,
+        "xp": 10741608
+      }
+    },
+    "board": "woodcutting",
+    "rank": 31
+  },
+  {
+    "agentId": "user-agent-dxk5sqxnsd",
+    "fetchedAtMs": 1791507334575,
+    "tick": 19156371,
+    "profession": "lumberjack",
+    "professionRank": 30,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "tree-stand-121-24",
+      "source_id": "ghost_willow_bank"
+    },
+    "activeAction": {
+      "kind": "engage",
+      "activity": "chop_wood",
+      "phase": "traveling"
+    },
+    "equipment": {},
+    "completedContracts": 0,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "hacking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 30,
+        "nextLevelXp": 10344240,
+        "xp": 8968190
+      }
+    },
+    "board": "woodcutting",
+    "rank": 61
+  },
+  {
+    "agentId": "user-agent-405153bb-849b-4a15-9156-37f10d5d63ca",
+    "fetchedAtMs": 1791507337594,
+    "tick": 19156377,
+    "profession": "lumberjack",
+    "professionRank": 29,
+    "activeWork": null,
+    "activeAction": {
+      "kind": "sleep",
+      "activity": null,
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 0,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 348
+      },
+      "hacking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 29,
+        "nextLevelXp": 8882942,
+        "xp": 7882122
+      }
+    },
+    "board": "woodcutting",
+    "rank": 91
+  },
+  {
+    "agentId": "user-agent-ng7uzwtt0gg1c0q",
+    "fetchedAtMs": 1791507340593,
+    "tick": 19156383,
+    "profession": "miner",
+    "professionRank": 27,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "ore-vein-33-6",
+      "source_id": "graphite_seam"
+    },
+    "activeAction": {
+      "kind": "engage",
+      "activity": "mine_ore",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 2,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "hacking": {
+        "level": 4,
+        "nextLevelXp": 66816,
+        "xp": 48256
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 27,
+        "nextLevelXp": 6421810,
+        "xp": 5454762
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 1989
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "mining",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-dhew65u7142tw0v",
+    "fetchedAtMs": 1791507343578,
+    "tick": 19156389,
+    "profession": "miner",
+    "professionRank": 19,
+    "activeWork": null,
+    "activeAction": {
+      "kind": null,
+      "activity": null,
+      "phase": null
+    },
+    "equipment": {},
+    "completedContracts": 48,
+    "skills": {
+      "agility": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 1779
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 183
+      },
+      "chemistry": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 2727
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 8695
+      },
+      "crafting": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 1333
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 4231
+      },
+      "engineering": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 2823
+      },
+      "farming": {
+        "level": 3,
+        "nextLevelXp": 37584,
+        "xp": 33208
+      },
+      "fishing": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 11854
+      },
+      "hacking": {
+        "level": 8,
+        "nextLevelXp": 267264,
+        "xp": 220808
+      },
+      "infiltration": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 1971
+      },
+      "mining": {
+        "level": 19,
+        "nextLevelXp": 2228436,
+        "xp": 1988762
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 4,
+        "nextLevelXp": 66816,
+        "xp": 41952
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 241
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 15,
+        "nextLevelXp": 976500,
+        "xp": 874308
+      }
+    },
+    "board": "mining",
+    "rank": 31
+  },
+  {
+    "agentId": "user-agent-vx3ck7mmmdv282m",
+    "fetchedAtMs": 1791507346580,
+    "tick": 19156395,
+    "profession": "miner",
+    "professionRank": 17,
+    "activeWork": {
+      "area_id": "miners-cave",
+      "interaction": null,
+      "kind": "wait",
+      "node_kind": "ore_vein",
+      "source_id": null
+    },
+    "activeAction": {
+      "kind": "engage",
+      "activity": "mine_ore",
+      "phase": "waiting"
+    },
+    "equipment": {},
+    "completedContracts": 0,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "hacking": {
+        "level": 15,
+        "nextLevelXp": 976500,
+        "xp": 837117
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 17,
+        "nextLevelXp": 1513044,
+        "xp": 1359249
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "mining",
+    "rank": 61
+  },
+  {
+    "agentId": "user-agent-vzo8a9xfqa7qvab",
+    "fetchedAtMs": 1791507349589,
+    "tick": 19156401,
+    "profession": "hacker",
+    "professionRank": 18,
+    "activeWork": null,
+    "activeAction": {
+      "kind": "engage",
+      "activity": "linger",
+      "phase": "traveling"
+    },
+    "equipment": {},
+    "completedContracts": 0,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "hacking": {
+        "level": 18,
+        "nextLevelXp": 1848384,
+        "xp": 1785521
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 16,
+        "nextLevelXp": 1222416,
+        "xp": 1034292
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "mining",
+    "rank": 91
+  },
+  {
+    "agentId": "user-agent-j1utag8cles3g59",
+    "fetchedAtMs": 1791507352581,
+    "tick": 19156407,
+    "profession": "hacker",
+    "professionRank": 28,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "crypto-terminal-34-19",
+      "source_id": "arcology_router"
+    },
+    "activeAction": {
+      "kind": "engage",
+      "activity": "extract_data",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 10,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "hacking": {
+        "level": 28,
+        "nextLevelXp": 7575466,
+        "xp": 7247718
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "hacking",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-bdae7192-eb54-4be2-82e3-cad17ce904ef",
+    "fetchedAtMs": 1791507355592,
+    "tick": 19156413,
+    "profession": "hacker",
+    "professionRank": 18,
+    "activeWork": null,
+    "activeAction": {
+      "kind": "engage",
+      "activity": "linger",
+      "phase": "traveling"
+    },
+    "equipment": {},
+    "completedContracts": 0,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "hacking": {
+        "level": 18,
+        "nextLevelXp": 1848384,
+        "xp": 1784586
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 14,
+        "nextLevelXp": 775296,
+        "xp": 662329
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "hacking",
+    "rank": 31
+  },
+  {
+    "agentId": "user-agent-b0e9d493-023a-425f-9e7a-70133f1afb56",
+    "fetchedAtMs": 1791507358580,
+    "tick": 19156419,
+    "profession": "hacker",
+    "professionRank": 17,
+    "activeWork": null,
+    "activeAction": {
+      "kind": "move_to",
+      "activity": null,
+      "phase": "traveling"
+    },
+    "equipment": {},
+    "completedContracts": 0,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "hacking": {
+        "level": 17,
+        "nextLevelXp": 1513044,
+        "xp": 1497083
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 13,
+        "nextLevelXp": 618804,
+        "xp": 555974
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "hacking",
+    "rank": 61
+  },
+  {
+    "agentId": "user-agent-eebea5bb-229d-478c-8b65-e1c3ef57b359",
+    "fetchedAtMs": 1791507361582,
+    "tick": 19156425,
+    "profession": "miner",
+    "professionRank": 18,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "ore-vein-11-5",
+      "source_id": "copper_drift"
+    },
+    "activeAction": {
+      "kind": "engage",
+      "activity": "mine_ore",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 0,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "hacking": {
+        "level": 17,
+        "nextLevelXp": 1513044,
+        "xp": 1318590
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 18,
+        "nextLevelXp": 1848384,
+        "xp": 1526790
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "hacking",
+    "rank": 91
+  },
+  {
+    "agentId": "user-agent-f0308a04-3106-4f1c-b36b-fd8cbe3e55f0",
+    "fetchedAtMs": 1791507364611,
+    "tick": 19156431,
+    "profession": "miner",
+    "professionRank": 4,
+    "activeWork": {
+      "area_id": "foundation-canal",
+      "interaction": null,
+      "kind": "wait",
+      "node_kind": "fishing_spot",
+      "source_id": "storm_drain_run"
+    },
+    "activeAction": {
+      "kind": "gather",
+      "activity": "catch_fish",
+      "phase": "waiting"
+    },
+    "equipment": {},
+    "completedContracts": 51,
+    "skills": {
+      "agility": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 6013
+      },
+      "bounty_hunting": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 1155
+      },
+      "chemistry": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 279
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 48
+      },
+      "cooking": {
+        "level": 24,
+        "nextLevelXp": 3883766,
+        "xp": 3770375
+      },
+      "crafting": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 943
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 40
+      },
+      "energy": {
+        "level": 14,
+        "nextLevelXp": 775296,
+        "xp": 634456
+      },
+      "engineering": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 279
+      },
+      "farming": {
+        "level": 17,
+        "nextLevelXp": 1513044,
+        "xp": 1372703
+      },
+      "fishing": {
+        "level": 46,
+        "nextLevelXp": 51826752,
+        "xp": 50101242
+      },
+      "hacking": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 4874
+      },
+      "infiltration": {
+        "level": 10,
+        "nextLevelXp": 417600,
+        "xp": 401185
+      },
+      "mining": {
+        "level": 4,
+        "nextLevelXp": 66816,
+        "xp": 55404
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 13,
+        "nextLevelXp": 618804,
+        "xp": 527926
+      },
+      "smithing": {
+        "level": 3,
+        "nextLevelXp": 37584,
+        "xp": 25022
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 40
+      },
+      "woodcutting": {
+        "level": 3,
+        "nextLevelXp": 37584,
+        "xp": 18516
+      }
+    },
+    "board": "fishing",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-lbruwl8egf2m5sv",
+    "fetchedAtMs": 1791507370589,
+    "tick": 19156443,
+    "profession": "miner",
+    "professionRank": 2,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "salvage-pile-16-36",
+      "source_id": "collapsed_signal_room"
+    },
+    "activeAction": {
+      "kind": "gather",
+      "activity": "search_salvage",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 53,
+    "skills": {
+      "agility": {
+        "level": 11,
+        "nextLevelXp": 439956,
+        "xp": 417610
+      },
+      "bounty_hunting": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 1269
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 231
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 160
+      },
+      "cooking": {
+        "level": 11,
+        "nextLevelXp": 439956,
+        "xp": 417658
+      },
+      "crafting": {
+        "level": 17,
+        "nextLevelXp": 1513044,
+        "xp": 1507920
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 136
+      },
+      "energy": {
+        "level": 11,
+        "nextLevelXp": 439956,
+        "xp": 417603
+      },
+      "engineering": {
+        "level": 21,
+        "nextLevelXp": 2730110,
+        "xp": 2653239
+      },
+      "farming": {
+        "level": 16,
+        "nextLevelXp": 1222416,
+        "xp": 994411
+      },
+      "fishing": {
+        "level": 11,
+        "nextLevelXp": 439956,
+        "xp": 417609
+      },
+      "hacking": {
+        "level": 11,
+        "nextLevelXp": 439956,
+        "xp": 417631
+      },
+      "infiltration": {
+        "level": 11,
+        "nextLevelXp": 439956,
+        "xp": 417657
+      },
+      "mining": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 10947
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 29,
+        "nextLevelXp": 8882942,
+        "xp": 7753731
+      },
+      "smithing": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 14586
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 136
+      },
+      "woodcutting": {
+        "level": 16,
+        "nextLevelXp": 1222416,
+        "xp": 1184098
+      }
+    },
+    "board": "fishing",
+    "rank": 32
+  },
+  {
+    "agentId": "user-agent-oevadq1h9uz98gw",
+    "fetchedAtMs": 1791507373598,
+    "tick": 19156449,
+    "profession": "hacker",
+    "professionRank": 1,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "secure-cache-12-45",
+      "source_id": "sensor_crawlspace"
+    },
+    "activeAction": {
+      "kind": "gather",
+      "activity": "breach_cache",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 0,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 3,
+        "nextLevelXp": 37584,
+        "xp": 17661
+      },
+      "hacking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "infiltration": {
+        "level": 37,
+        "nextLevelXp": 21909024,
+        "xp": 20352861
+      },
+      "mining": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "fishing",
+    "rank": 61
+  },
+  {
+    "agentId": "user-agent-nhb2n5g5jfxcv51",
+    "fetchedAtMs": 1791507376586,
+    "tick": 19156455,
+    "profession": "miner",
+    "professionRank": 25,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "ore-vein-58-5",
+      "source_id": "basalt_cut"
+    },
+    "activeAction": {
+      "kind": "gather",
+      "activity": "mine_ore",
+      "phase": "traveling"
+    },
+    "equipment": {},
+    "completedContracts": 9,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 3823
+      },
+      "hacking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 25,
+        "nextLevelXp": 4575960,
+        "xp": 4299896
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 183
+      },
+      "smithing": {
+        "level": 18,
+        "nextLevelXp": 1848384,
+        "xp": 1672534
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "fishing",
+    "rank": 91
+  },
+  {
+    "agentId": "user-agent-iwarrwyoe6poz96",
+    "fetchedAtMs": 1791507379583,
+    "tick": 19156461,
+    "profession": "hacker",
+    "professionRank": 13,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "crop-bed-37-79",
+      "source_id": "dusk_mushroom_cellar"
+    },
+    "activeAction": {
+      "kind": "gather",
+      "activity": "harvest_crop",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 28,
+    "skills": {
+      "agility": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 4756
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 4080
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 5187
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 5916
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 44,
+        "nextLevelXp": 41892912,
+        "xp": 39997483
+      },
+      "fishing": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 6148
+      },
+      "hacking": {
+        "level": 13,
+        "nextLevelXp": 618804,
+        "xp": 546346
+      },
+      "infiltration": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 6756
+      },
+      "mining": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 26,
+        "nextLevelXp": 5421974,
+        "xp": 5122387
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "farming",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-zsvsr6ph7chsqoi",
+    "fetchedAtMs": 1791507382578,
+    "tick": 19156467,
+    "profession": "lumberjack",
+    "professionRank": 27,
+    "activeWork": {
+      "area_id": "forest",
+      "interaction": null,
+      "kind": "wait",
+      "node_kind": "tree_stand",
+      "source_id": null
+    },
+    "activeAction": {
+      "kind": "engage",
+      "activity": "chop_wood",
+      "phase": "waiting"
+    },
+    "equipment": {},
+    "completedContracts": 13,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 151
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 20
+      },
+      "cooking": {
+        "level": 5,
+        "nextLevelXp": 104400,
+        "xp": 75550
+      },
+      "crafting": {
+        "level": 24,
+        "nextLevelXp": 3883766,
+        "xp": 3468976
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 18
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 4,
+        "nextLevelXp": 66816,
+        "xp": 55303
+      },
+      "fishing": {
+        "level": 9,
+        "nextLevelXp": 338256,
+        "xp": 286523
+      },
+      "hacking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 3857
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 183
+      },
+      "smithing": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 11840
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 18
+      },
+      "woodcutting": {
+        "level": 27,
+        "nextLevelXp": 6421810,
+        "xp": 5681636
+      }
+    },
+    "board": "farming",
+    "rank": 31
+  },
+  {
+    "agentId": "user-agent-zfces20lczslklt",
+    "fetchedAtMs": 1791507388592,
+    "tick": 19156479,
+    "profession": "hacker",
+    "professionRank": 24,
+    "activeWork": {
+      "area_id": "hacker-house-interior",
+      "interaction": null,
+      "kind": "wait",
+      "node_kind": "crypto_terminal",
+      "source_id": null
+    },
+    "activeAction": {
+      "kind": "engage",
+      "activity": "extract_data",
+      "phase": "waiting"
+    },
+    "equipment": {},
+    "completedContracts": 36,
+    "skills": {
+      "agility": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 514
+      },
+      "bounty_hunting": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 1098
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 11083
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 13963
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 1305
+      },
+      "fishing": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 8724
+      },
+      "hacking": {
+        "level": 24,
+        "nextLevelXp": 3883766,
+        "xp": 3733228
+      },
+      "infiltration": {
+        "level": 20,
+        "nextLevelXp": 2653200,
+        "xp": 2500470
+      },
+      "mining": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 15955
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "farming",
+    "rank": 62
+  },
+  {
+    "agentId": "user-agent-q26u1knogg5bfno",
+    "fetchedAtMs": 1791507391584,
+    "tick": 19156485,
+    "profession": "miner",
+    "professionRank": 7,
+    "activeWork": null,
+    "activeAction": {
+      "kind": "engage",
+      "activity": "linger",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 0,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 78
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 145
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 87
+      },
+      "hacking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 7,
+        "nextLevelXp": 204624,
+        "xp": 165358
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 58
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "farming",
+    "rank": 91
+  },
+  {
+    "agentId": "user-agent-4dh72yj2sfkagpk",
+    "fetchedAtMs": 1791507394598,
+    "tick": 19156491,
+    "profession": "lumberjack",
+    "professionRank": 9,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "salvage-pile-4-34",
+      "source_id": "skybridge_wreck"
+    },
+    "activeAction": {
+      "kind": "gather",
+      "activity": "search_salvage",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 3,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 9,
+        "nextLevelXp": 338256,
+        "xp": 271447
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 2262
+      },
+      "hacking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 43,
+        "nextLevelXp": 38416068,
+        "xp": 36056392
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 9,
+        "nextLevelXp": 338256,
+        "xp": 317390
+      }
+    },
+    "board": "scavenging",
+    "rank": 1
+  },
+  {
+    "agentId": "user-agent-932wwi6la0ykkyy",
+    "fetchedAtMs": 1791507397579,
+    "tick": 19156497,
+    "profession": "hacker",
+    "professionRank": 5,
+    "activeWork": null,
+    "activeAction": {
+      "kind": "engage",
+      "activity": "linger",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 37,
+    "skills": {
+      "agility": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 8362
+      },
+      "bounty_hunting": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 1029
+      },
+      "chemistry": {
+        "level": 3,
+        "nextLevelXp": 37584,
+        "xp": 18375
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 120
+      },
+      "cooking": {
+        "level": 4,
+        "nextLevelXp": 66816,
+        "xp": 38266
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 104
+      },
+      "energy": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 12064
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 13354
+      },
+      "fishing": {
+        "level": 3,
+        "nextLevelXp": 37584,
+        "xp": 33718
+      },
+      "hacking": {
+        "level": 5,
+        "nextLevelXp": 104400,
+        "xp": 101444
+      },
+      "infiltration": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 4146
+      },
+      "mining": {
+        "level": 7,
+        "nextLevelXp": 204624,
+        "xp": 188717
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 13,
+        "nextLevelXp": 618804,
+        "xp": 521177
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 104
+      },
+      "woodcutting": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 797
+      }
+    },
+    "board": "scavenging",
+    "rank": 31
+  },
+  {
+    "agentId": "user-agent-fiym08fkxah1olx",
+    "fetchedAtMs": 1791507400584,
+    "tick": 19156503,
+    "profession": "miner",
+    "professionRank": 13,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "crypto-terminal-19-37",
+      "source_id": "crypto_terminal"
+    },
+    "activeAction": {
+      "kind": "gather",
+      "activity": "trade_crypto",
+      "phase": "traveling"
+    },
+    "equipment": {},
+    "completedContracts": 0,
+    "skills": {
+      "agility": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "farming": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "fishing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 145
+      },
+      "hacking": {
+        "level": 9,
+        "nextLevelXp": 338256,
+        "xp": 302528
+      },
+      "infiltration": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "mining": {
+        "level": 13,
+        "nextLevelXp": 618804,
+        "xp": 522540
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 13485
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      }
+    },
+    "board": "scavenging",
+    "rank": 62
+  },
+  {
+    "agentId": "user-agent-9pd4os0d7kjib8p",
+    "fetchedAtMs": 1791507403589,
+    "tick": 19156509,
+    "profession": "miner",
+    "professionRank": 16,
+    "activeWork": {
+      "kind": "gather",
+      "node_id": "ore-vein-81-30",
+      "source_id": "ore_vein"
+    },
+    "activeAction": {
+      "kind": "engage",
+      "activity": "mine_ore",
+      "phase": "active"
+    },
+    "equipment": {},
+    "completedContracts": 37,
+    "skills": {
+      "agility": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 275
+      },
+      "bounty_hunting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 183
+      },
+      "chemistry": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 231
+      },
+      "combat": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "cooking": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 202
+      },
+      "crafting": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 202
+      },
+      "defence": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "energy": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 535
+      },
+      "engineering": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 231
+      },
+      "farming": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 593
+      },
+      "fishing": {
+        "level": 13,
+        "nextLevelXp": 618804,
+        "xp": 605988
+      },
+      "hacking": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 619
+      },
+      "infiltration": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 521
+      },
+      "mining": {
+        "level": 16,
+        "nextLevelXp": 1222416,
+        "xp": 978734
+      },
+      "ranged": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "scavenging": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 606
+      },
+      "smithing": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 202
+      },
+      "vitality": {
+        "level": 1,
+        "nextLevelXp": 250,
+        "xp": 0
+      },
+      "woodcutting": {
+        "level": 2,
+        "nextLevelXp": 16704,
+        "xp": 478
+      }
+    },
+    "board": "scavenging",
+    "rank": 91
+  }
+]
