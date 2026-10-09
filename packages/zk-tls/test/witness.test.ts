@@ -233,6 +233,28 @@ describe('test-key witness', () => {
     );
   });
 
+  it('rejects evidence whose responseRedactions differ from the policy', async () => {
+    const distancePolicy = zkFetchPolicySchema.parse({
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+      responseMatches: [{ type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' }],
+      responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }],
+    }) as ZkFetchPolicy;
+    const divergent = await observe(alice, {
+      values: { distance: '12.4' },
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        responseMatches: [{ type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' }],
+        responseRedactions: [{ regex: '"moving_time":\\s*\\d+' }],
+      },
+    });
+    await expect(attestWith(aliceAttestor, divergent, WINDOW, {}, distancePolicy)).rejects.toThrow(
+      /disclosure rules/,
+    );
+  });
+
   it('accepts evidence whose disclosure rules are spelled differently', async () => {
     const distance = { type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' };
     const movingTime = { type: 'regex', value: '"moving_time":\\s*(?<movingTime>\\d+)' };

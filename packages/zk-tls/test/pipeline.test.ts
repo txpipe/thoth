@@ -334,24 +334,38 @@ describe('zkFetch attestor + client', () => {
     ).toBe(true);
   });
 
-  it('refuses a request whose disclosure rules differ from the policy before any prover runs', async () => {
-    const probe = { called: 0 };
-    const client = clientWith({
-      provers: proversWith({
-        onProve: () => {
-          probe.called += 1;
-        },
-      }),
-    });
-    const divergent = {
-      ...collectionRequest,
-      responseMatches: [{ type: 'regex', value: '"moving_time":\\s*(?<data>[\\d.]+)' }],
-    };
-    const holder = new Uint8Array(32).fill(0xc1);
-    await expect(client.proveReq(divergent, holder)).rejects.toThrow(/responseMatches/);
-    await expect(client.collect(divergent, options())).rejects.toThrow(/responseMatches/);
-    expect(probe.called).toBe(0);
-  });
+  it.each([
+    {
+      rules: {
+        responseMatches: [{ type: 'regex' as const, value: '"moving_time":\\s*(?<data>[\\d.]+)' }],
+      },
+      pattern: /responseMatches/,
+    },
+    {
+      rules: { responseRedactions: [{ regex: '"moving_time":\\s*\\d+' }] },
+      pattern: /responseRedactions/,
+    },
+  ])(
+    'refuses a request whose disclosure rules differ from the policy before any prover runs',
+    async ({ rules, pattern }) => {
+      const probe = { called: 0 };
+      const client = clientWith({
+        provers: proversWith({
+          onProve: () => {
+            probe.called += 1;
+          },
+        }),
+      });
+      const divergent = { ...collectionRequest, ...rules };
+      const holder = new Uint8Array(32).fill(0xc1);
+      await expect(client.proveReq(divergent, holder)).rejects.toThrow(pattern);
+      await expect(client.collect(divergent, options())).rejects.toMatchObject({
+        name: 'ZkFetchThresholdError',
+        reason: 'invalid-options',
+      });
+      expect(probe.called).toBe(0);
+    },
+  );
 
   it('proves with the policy disclosure rules even when the request omits them', async () => {
     const seen = { request: undefined as ZkFetchRequest | undefined };
@@ -365,6 +379,18 @@ describe('zkFetch attestor + client', () => {
     await client.proveReq(collectionRequest, new Uint8Array(32).fill(0xc1));
     expect(seen.request?.responseMatches).toEqual(policy().responseMatches);
     expect(seen.request?.responseRedactions).toEqual(policy().responseRedactions);
+
+    // Supplying the policy's rules verbatim is accepted, not refused.
+    const supplied = policy();
+    const explicit = await client.proveReq(
+      {
+        ...collectionRequest,
+        responseMatches: supplied.responseMatches,
+        responseRedactions: supplied.responseRedactions,
+      },
+      new Uint8Array(32).fill(0xc1),
+    );
+    expect(explicit.claim.values).toHaveLength(3);
   });
 
   it('collects a healthy subset when an attestor observes a different value', async () => {
