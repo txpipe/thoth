@@ -1,5 +1,5 @@
 // Deploy Thoth's MockAttestation to the local ledger-9 devnet and record one
-// accepted 2-of-3 attestation: build and fund the deployer's wallet, deploy the
+// accepted 2-of-3 attestment: build and fund the deployer's wallet, deploy the
 // contract sealing two attestor keys (plus an unqueried third) and the policy
 // they enforce, call `verifyAttestation` with the collected signatures, and
 // read the claims vault back from the indexer.
@@ -8,6 +8,7 @@
 // (`npm run compact`, compiler 0.35.0). The repo's 0.34.0 build does not run
 // under midnight-js 5; see README "Runtime 0.19 versus 0.20".
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
@@ -22,10 +23,10 @@ import {
 } from '../../../../packages/contracts/test/helpers/private-state.js';
 import { makeWitnesses } from '../../../../packages/contracts/test/helpers/witnesses.js';
 import type * as Mock from '../artifacts/mock_attestation/contract/index.js';
-import { collectAttestation } from './attestation.js';
+import { collectAttestment } from './attestment.js';
 import { buildWallet, type Endpoints, walletProviders } from './wallet.js';
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const artifacts = path.resolve(
   process.env.ARTIFACTS ?? path.join(here, '../artifacts/mock_attestation'),
 );
@@ -49,9 +50,9 @@ const main = async (): Promise<void> => {
   step(`artifacts: ${artifacts}`);
   const mock = (await import(path.join(artifacts, 'contract/index.js'))) as typeof Mock;
 
-  step('collecting a 2-of-3 attestation');
+  step('collecting a 2-of-3 attestment');
   const observedAt = Math.floor(Date.now() / 1000) - 30;
-  const { registryKeys, policyHashes, submission } = await collectAttestation(
+  const { registryKeys, policyHashes, submission } = await collectAttestment(
     observedAt,
     mock.pureCircuits.holderCommitment,
   );
@@ -96,14 +97,9 @@ const main = async (): Promise<void> => {
   console.log(`  contract ${address}`);
   console.log(`  deploy tx ${deployed.deployTxData.public.txId}`);
 
-  step('submitting the attestation');
+  step('submitting the attestment');
   providers.privateStateProvider.setContractAddress(address);
-  await providers.privateStateProvider.set(PRIVATE_STATE_ID, {
-    claim: submission.claim,
-    signatures: submission.signatures,
-    commitRand: submission.commitRand,
-    holderSecret: submission.holderSecret,
-  });
+  await providers.privateStateProvider.set(PRIVATE_STATE_ID, submission);
   const call = await deployed.callTx.verifyAttestation();
   console.log(`  tx ${call.public.txId} in block ${call.public.blockHeight}`);
 
@@ -116,10 +112,10 @@ const main = async (): Promise<void> => {
   const recorded = mock.ledger(state.data).A_claimsVault.member(id);
   console.log(`  claim ${Buffer.from(id).toString('hex')} recorded: ${recorded}`);
   if (!recorded) {
-    throw new Error('the attestation was not recorded');
+    throw new Error('the attestment was not recorded');
   }
   await walletContext.wallet.stop();
-  console.log('\n✓ attestation accepted on-chain');
+  console.log('\n✓ attestment accepted on-chain');
 };
 
 // A rejection exits 1 with its stack; success exits explicitly, since the
