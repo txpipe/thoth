@@ -212,8 +212,9 @@ const runAttempt = async <V extends number, PK, S>(
  * @param request — the request each attestor's witness proves.
  * @param supplied — the caller's holder, window, and limits.
  * @returns the first message to reach the threshold, attestations sorted by registry slot.
- * @throws {@link ZkFetchThresholdError} if the options are invalid, expire, or
- *   the candidates run out.
+ * @throws {@link ZkFetchThresholdError} if the options are invalid, the request
+ *   carries disclosure rules different from the policy's, the deadline expires,
+ *   or the candidates run out.
  */
 export const collectThreshold = async <V extends number, PK, S>(
   config: ZkFetchClientConfig<V, PK, S>,
@@ -223,7 +224,13 @@ export const collectThreshold = async <V extends number, PK, S>(
   const { options, candidates } = parseOptions(config.trusted, supplied);
   // A snapshot bound to the policy's disclosure rules, so the caller cannot
   // change the secret headers mid-call or drive witnesses with other rules.
-  const snapshot = bindRequestToPolicy(request, config.policy);
+  // An unbound request is invalid input, like invalid options.
+  let snapshot: ZkFetchRequest;
+  try {
+    snapshot = bindRequestToPolicy(request, config.policy);
+  } catch {
+    throw new ZkFetchThresholdError('invalid-options');
+  }
   const failures: ZkFetchAttestorFailure[] = [];
   const assertUnexpired = () => {
     if (Date.now() >= options.expiresAt) {

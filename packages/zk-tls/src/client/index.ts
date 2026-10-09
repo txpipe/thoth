@@ -285,8 +285,9 @@ export interface ZkFetchClient<V extends number, PK, S> {
    * @param request — the HTTPS request, including headers private to the prover.
    * @param options — the fixed holder and window, the deadline, and the limits.
    * @returns an attestment over one exact message, sorted by registry slot.
-   * @throws {@link ZkFetchThresholdError} if the options are invalid, expire, or
-   *   no message reaches the threshold.
+   * @throws {@link ZkFetchThresholdError} if the options are invalid, the
+   *   request carries disclosure rules different from the policy's, the deadline
+   *   expires, or no message reaches the threshold.
    */
   collect(
     request: ZkFetchRequest,
