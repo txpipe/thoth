@@ -14,6 +14,7 @@ import {
   parsedEvidenceView,
   type VerifiedEvidence,
   type ZkFetchEvidence,
+  type ZkFetchParseRule,
   type ZkFetchPolicy,
   zkFetchPolicyHashOf,
   zkFetchPolicySchema,
@@ -61,7 +62,7 @@ const verifiedOf = (
 });
 
 describe('parse law (through deriveClaimFromEvidence)', () => {
-  const derived = (value: string, parse: 'int' | 'float'): { present: boolean; value: bigint } => {
+  const derived = (value: string, parse: ZkFetchParseRule): { present: boolean; value: bigint } => {
     const claim = deriveClaimFromEvidence({
       verified: verifiedOf(claimWith(REQUEST, {}), { v: value }),
       policy: {
@@ -139,6 +140,18 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
     expect(derived('1e999999999999999999999', 'float').present).toBe(false);
     expect(derived('18446744073709551615.5', 'float').present).toBe(false);
     expect(derived('18446744073709551616', 'float').present).toBe(false);
+  });
+
+  it('packs up to 8 UTF-8 bytes big-endian into one value (bytes8)', () => {
+    expect(derived('lhb10ef8', 'bytes8')).toEqual({ present: true, value: 0x6c68623130656638n });
+    expect(derived('dc4c', 'bytes8')).toEqual({ present: true, value: 0x64633463n });
+    expect(derived('é', 'bytes8')).toEqual({ present: true, value: 0xc3a9n });
+    expect(derived('', 'bytes8')).toEqual({ present: true, value: 0n });
+  });
+
+  it('leaves a bytes8 value longer than 8 bytes unpresent', () => {
+    expect(derived('abcdefghi', 'bytes8').present).toBe(false);
+    expect(derived('ééééé', 'bytes8').present).toBe(false);
   });
 });
 

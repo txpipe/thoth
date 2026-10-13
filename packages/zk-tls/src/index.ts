@@ -174,8 +174,13 @@ export interface VerifiedEvidence {
  * How a disclosed string is interpreted: `int` accepts digits only; `float`
  * accepts unsigned decimals with optional signed base-10 exponents and rounds
  * exactly to the nearest integer, with halves rounded up. Both require Uint<64>.
+ * `bytes8` reads up to 8 UTF-8 bytes as one big-endian number, so an identifier
+ * split across slots by regex groups is certified exactly.
+ *
+ * shortcut: `bytes8` is a proof-of-concept stand-in for #26's byte slots (ADR 0009);
+ * drop it when they land.
  */
-export type ZkFetchParseRule = 'int' | 'float';
+export type ZkFetchParseRule = 'int' | 'float' | 'bytes8';
 
 /**
  * One claim-slot binding: which extracted (disclosed) value feeds which
@@ -229,7 +234,7 @@ export const zkFetchPolicySchema = z.object({
       z.object({
         slot: z.number().int().nonnegative(),
         name: z.string().min(1),
-        parse: z.enum(['int', 'float']),
+        parse: z.enum(['int', 'float', 'bytes8']),
         optional: z.boolean().optional(),
       }),
     )
@@ -530,6 +535,10 @@ export const parseDisclosedValue = (value: string, rule: ZkFetchParseRule): bigi
     }
     case 'float':
       return parseDecimalUint64(value);
+    case 'bytes8': {
+      const bytes = new TextEncoder().encode(value);
+      return bytes.length <= 8 ? bytes.reduce((acc, byte) => (acc << 8n) | BigInt(byte), 0n) : null;
+    }
   }
 };
 
