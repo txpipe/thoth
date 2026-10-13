@@ -1,0 +1,17 @@
+{
+  "name": "@thoth-midnight-city/bounty",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Prototype (#122): a Midnight City Bounty on the Thoth modules, in the simulator.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "compact": "compact compile +0.34.0 --skip-zk src/bounty.compact artifacts/bounty",
+    "pretest": "npm run compact",
+    "test": "vitest run",
+    "types": "tsc --noEmit"
+  }
+}

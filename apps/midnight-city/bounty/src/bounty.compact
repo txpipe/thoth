@@ -1,0 +1,199 @@
+// Midnight City Bounty (#122), a proof of concept on the Thoth modules.
+//
+// A Sponsor-funded pot that pays an equal Share to every agent whose XP in one
+// skill rose by at least `threshold` before `deadline` (apps/midnight-city/CONTEXT.md).
+//
+// Claims carry 6 value slots: slot 0 is a Reading's XP (absent in a Control
+// claim) and slots 1-5 the agent ID, read by the `bytes8` parse rule from the
+// part after `user-agent-` in 8-character chunks. That's a stand-in for #26's
+// byte slots; `agentKeyOf` is the only circuit that reads them.
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+//      K=23 msg fields  V=6 values  N=2 threshold  M=3 signatures
+import "../../../../packages/contracts/attestation"<23, 6, 2, 3> prefix A_;
+
+import "../../../../packages/contracts/attestor_registry"<3, 23> prefix R_;
+
+export { A_Claim };
+
+export struct Registration {
+  holder: Bytes<32>; // the holder commitment all of this agent's claims carry
+  startXp: Uint<64>;
+  payout: UserAddress; // fixed at Registration; a Payout pays only here
+  qualified: Boolean;
+  paid: Boolean;
+}
+
+export sealed ledger controlPolicy: Bytes<32>;
+
+export sealed ledger readingPolicy: Bytes<32>;
+
+export sealed ledger threshold: Uint<64>;
+
+/// Start readings are observed before it; Qualifying readings after it.
+export sealed ledger opensAt: Uint<64>;
+
+export sealed ledger deadline: Uint<64>;
+
+/// End of the Payout period; the Sponsor's Refund comes after it.
+export sealed ledger payoutEnd: Uint<64>;
+
+export sealed ledger sponsor: UserAddress;
+
+/// Registrations by agent key (see `agentKey`).
+export ledger registrations: Map<Bytes<32>, Registration>;
+
+export ledger qualifiers: Counter;
+
+/// Everything the Sponsor deposited, and what Payouts have sent so far.
+export ledger pot: Uint<128>;
+
+export ledger paidOut: Uint<128>;
+
+export ledger refunded: Boolean;
+
+witness payoutSecret(): Bytes<32>;
+
+constructor(keys: Vector<3, JubjubPoint>,
+            control: Bytes<32>,
+            reading: Bytes<32>,
+            gain: Uint<64>,
+            opens: Uint<64>,
+            end: Uint<64>,
+            payoutPeriodEnd: Uint<64>,
+            sponsorAddress: UserAddress,
+            freshness: Uint<64>,
+            maxWin: Uint<64>
+            ) {
+  R_keys = disclose(keys);
+  A_policyHashes.insert(disclose(control));
+  A_policyHashes.insert(disclose(reading));
+  A_freshnessWindow = disclose(freshness);
+  A_maxWindow = disclose(maxWin);
+  controlPolicy = disclose(control);
+  readingPolicy = disclose(reading);
+  threshold = disclose(gain);
+  opensAt = disclose(opens);
+  deadline = disclose(end);
+  payoutEnd = disclose(payoutPeriodEnd);
+  sponsor = disclose(sponsorAddress);
+}
+
+/// The key an agent's Registration is stored under: a hash of its ID slots.
+export pure circuit agentKey(id: Vector<5, Uint<64>>): Bytes<32> {
+  return persistentHash<Vector<5, Uint<64>>>(id);
+}
+
+/// The agent a claim is about. The one circuit #26's byte slots change.
+circuit agentKeyOf(c: A_Claim): Bytes<32> {
+  return agentKey([c.values[1], c.values[2], c.values[3], c.values[4], c.values[5]]);
+}
+
+export pure circuit computeId(c: A_Claim, rand: Bytes<32>): Bytes<32> {
+  return A_computeId(c, rand);
+}
+
+export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
+  return A_holderCommitment(secret);
+}
+
+/// Vault one claim (module entry point); Registration and qualifying open it by id.
+export circuit verifyAttestation(): [] {
+  A_verifyAttestation();
+}
+
+/// Registration: a Control claim and a Start reading for the same agent, under one holder.
+export circuit register(controlId: Bytes<32>, startId: Bytes<32>, payout: UserAddress): [] {
+  const control = A_openClaim(controlId);
+  const start = A_openClaim(startId);
+  assert(control.policyHash == controlPolicy, "Not a Control claim");
+  assert(start.policyHash == readingPolicy, "Not a Reading");
+  const agent = disclose(agentKeyOf(control));
+  assert(agentKeyOf(start) == agent, "Agent mismatch");
+  assert((start.windowEnd as Uint<64>) <= opensAt, "Start reading after the Bounty opens");
+  assert(!registrations.member(agent), "Agent already registered");
+  registrations.insert(
+    agent,
+    Registration { holder: disclose(control.holder),
+                   startXp: disclose(start.values[0]),
+                   payout: disclose(payout),
+                   qualified: false,
+                   paid: false }
+    );
+}
+
+/// Qualifying: a later Reading of a registered agent, under its Registration's holder.
+export circuit qualify(readingId: Bytes<32>): [] {
+  const reading = A_openClaim(readingId);
+  assert(reading.policyHash == readingPolicy, "Not a Reading");
+  const agent = disclose(agentKeyOf(reading));
+  assert(registrations.member(agent), "Agent not registered");
+  const registration = registrations.lookup(agent);
+  assert(reading.holder == registration.holder, "Holder mismatch");
+  assert(!registration.qualified, "Already qualified");
+  assert((reading.windowStart as Uint<64>) >= opensAt, "Reading before the Bounty opens");
+  assert((reading.windowEnd as Uint<64>) <= deadline, "Late reading");
+  // Shares are fixed once qualifying closes, so every Payout splits the same count.
+  assert(blockTimeLt(deadline), "Qualifying closed");
+  assert(reading.values[0] >= registration.startXp + threshold, "Gain below threshold");
+  registrations.insert(
+    agent,
+    Registration { holder: registration.holder,
+                   startXp: registration.startXp,
+                   payout: registration.payout,
+                   qualified: true,
+                   paid: registration.paid }
+    );
+  qualifiers.increment(1);
+}
+
+/// The Sponsor deposits tNIGHT into the pot.
+export circuit fund(amount: Uint<128>): [] {
+  assert(blockTimeLt(deadline), "Bounty closed");
+  receiveUnshielded(nativeToken(), disclose(amount));
+  pot = (pot + disclose(amount)) as Uint<128>;
+}
+
+/// Payout: one Qualifier's Share, sent to the address fixed at its Registration.
+export circuit payout(agent: Bytes<32>, share: Uint<128>): [] {
+  assert(blockTimeGte(deadline), "Payout period not open");
+  assert(blockTimeLt(payoutEnd), "Payout period over");
+  const key = disclose(agent);
+  assert(registrations.member(key), "Agent not registered");
+  const registration = registrations.lookup(key);
+  assert(holderCommitment(payoutSecret()) == registration.holder, "Not the holder");
+  assert(registration.qualified, "Not a Qualifier");
+  assert(!registration.paid, "Already paid");
+  // Compact has no division: the caller names the Share, and this checks it's the
+  // pot split equally between the Qualifiers, rounded down.
+  const count = qualifiers.read();
+  assert(disclose(share) * count <= pot && pot < (disclose(share) + 1) * count, "Wrong Share");
+  registrations.insert(
+    key,
+    Registration { holder: registration.holder,
+                   startXp: registration.startXp,
+                   payout: registration.payout,
+                   qualified: registration.qualified,
+                   paid: true }
+    );
+  paidOut = (paidOut + disclose(share)) as Uint<128>;
+  sendUnshielded(
+    nativeToken(),
+    disclose(share),
+    right<ContractAddress, UserAddress>(registration.payout)
+    );
+}
+
+/// Refund: the Sponsor takes back what Payouts left in the pot.
+export circuit refund(): [] {
+  assert(blockTimeGte(qualifiers.read() == 0 ? deadline : payoutEnd), "Too early for a Refund");
+  assert(!refunded, "Already refunded");
+  refunded = true;
+  sendUnshielded(
+    nativeToken(),
+    (pot - paidOut) as Uint<128>,
+    right<ContractAddress, UserAddress>(sponsor)
+    );
+}
