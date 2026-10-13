@@ -18,32 +18,24 @@ import {
   jubjubSchnorrSign,
   jubjubSchnorrVerifyingKey,
   sampleJubjubSchnorrSk,
-  type WitnessContext,
 } from '@midnight-ntwrk/compact-runtime';
-import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
-import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
-import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
-import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
-import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
-import { CompiledContract } from '@midnight-ntwrk/midnight-js-protocol/compact-js';
-import type { MidnightProviders } from '@midnight-ntwrk/midnight-js-types';
-import { createMidnightProviders } from '@midnight-ntwrk/midnight-js-utils';
 import { Token } from '@midnightntwrk/wallet-sdk';
 import { claimToMessage } from '@thoth/core/claim';
 import { parseDisclosedValue } from '@thoth/zk-tls';
 import * as Rx from 'rxjs';
-import type * as Bounty from '../artifacts/bounty/contract/index.js';
-import { buildWallet, GENESIS_SEED, LOCAL_ENDPOINTS, walletProviders } from './wallet.js';
+import {
+  type Attestation,
+  type BountyClient,
+  type Circuit,
+  type Claim,
+  deployBounty,
+  NO_CLAIMS,
+  type PrivateState,
+  userAddressOf,
+} from './bounty-client.js';
+import { buildWallet, GENESIS_SEED, LOCAL_ENDPOINTS } from './wallet.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const artifacts = path.resolve(process.env.ARTIFACTS ?? path.join(here, '../artifacts/bounty'));
-const PRIVATE_STATE_ID = 'bounty';
-
-type Claim = Bounty.A_Claim;
-type UserAddress = { bytes: Uint8Array };
-type Attestation = { claim: Claim; signatures: JubjubSchnorrSignature[]; commitRand: Uint8Array };
-type PrivateState = { attestations: Attestation[]; holderSecret: Uint8Array };
-type Circuit = 'verifyAttestation' | 'register' | 'qualify' | 'fund' | 'payout' | 'refund';
 
 const CONTROL_POLICY = new Uint8Array(32).fill(0xc0);
 const READING_POLICY = new Uint8Array(32).fill(0xe0);
@@ -92,9 +84,49 @@ const agentSlots = (agentId: string): bigint[] => {
   );
 };
 
+/** Run `circuit` and log its block and time. */
+const call = async (
+  bounty: BountyClient,
+  as: PrivateState,
+  circuit: Circuit,
+  ...args: unknown[]
+) => {
+  const started = Date.now();
+  const { blockHeight } = await bounty.call(as, circuit, ...args);
+  console.log(
+    `  ${circuit}: block ${blockHeight}, ${((Date.now() - started) / 1000).toFixed(1)} s`,
+  );
+};
+
 const main = async (): Promise<void> => {
-  step(`artifacts: ${artifacts}`);
-  const bounty = (await import(path.join(artifacts, 'contract/index.js'))) as typeof Bounty;
+  step('building the wallet (Sponsor and both Controllers)');
+  const walletContext = await buildWallet(LOCAL_ENDPOINTS, GENESIS_SEED);
+  const self = userAddressOf(walletContext);
+  const nightBalance = async (): Promise<bigint> =>
+    (await Rx.firstValueFrom(walletContext.wallet.state())).unshielded.balances[Token.night] ?? 0n;
+  console.log(`  address ${hex(self.bytes)}, ${await nightBalance()} NIGHT`);
+
+  const opensAt = now() + 30n;
+  const deadline = opensAt + 600n;
+  const payoutEnd = deadline + 120n;
+  step('deploying the Bounty: opens +30 s, deadline +10.5 min, Payout period ends +12.5 min');
+  const bounty = await deployBounty(
+    walletContext,
+    {
+      keys: attestorKeys.map((key) => key.pk),
+      controlPolicy: CONTROL_POLICY,
+      readingPolicy: READING_POLICY,
+      threshold: THRESHOLD,
+      opensAt,
+      deadline,
+      payoutEnd,
+      sponsor: self,
+      freshnessWindow: 3_600n,
+      maxWindow: 300n,
+    },
+    { stateDir: path.join(here, '../.state') },
+  );
+  console.log(`  contract ${bounty.address}`);
 
   const claimFor = (
     policy: Uint8Array,
@@ -109,137 +141,17 @@ const main = async (): Promise<void> => {
     windowStart: at,
     windowEnd: at + 1n,
     subjectHash: randomBytes(32),
-    holder: bounty.pureCircuits.holderCommitment(secret),
+    holder: bounty.pure.holderCommitment(secret),
     present: [xp !== null, true, true, true, true, true],
     values: [xp ?? 0n, ...agentSlots(agentId)],
   });
 
-  step('building the wallet (Sponsor and both Controllers)');
-  const walletContext = await buildWallet(LOCAL_ENDPOINTS, GENESIS_SEED);
-  const wallet = walletProviders(walletContext);
-  const self: UserAddress = {
-    bytes: Buffer.from(walletContext.unshieldedKeystore.getAddress(), 'hex'),
-  };
-  const nightBalance = async (): Promise<bigint> =>
-    (await Rx.firstValueFrom(walletContext.wallet.state())).unshielded.balances[Token.night] ?? 0n;
-  console.log(`  address ${hex(self.bytes)}, ${await nightBalance()} NIGHT`);
-
-  // Node 2.1.0 rejects a transaction whose cost to dismiss exceeds max(15 ms, 2 µs per byte)
-  // (`OutsideTimeToDismiss`, custom error 231). A long TTL makes balancing add DUST inputs and
-  // their proofs, which a small call like `fund` can't afford, so calls use a short TTL. The
-  // large deploy can, and needs the long one on a young chain whose DUST is still generating.
-  const config = { networkId: 'undeployed', ttlSeconds: 3_600 };
-  const zkConfigProvider = new NodeZkConfigProvider<Circuit>(artifacts);
-  const providers: MidnightProviders<Circuit, typeof PRIVATE_STATE_ID, PrivateState> =
-    createMidnightProviders({
-      privateStateProvider: levelPrivateStateProvider<typeof PRIVATE_STATE_ID, PrivateState>({
-        midnightDbName: path.join(here, '../.state/midnight-level-db'),
-        privateStateStoreName: 'bounty-private-state',
-        signingKeyStoreName: 'bounty-signing-keys',
-        privateStoragePasswordProvider: () => 'Thoth-devnet-only-Passw0rd!',
-        accountId: Buffer.from(wallet.getCoinPublicKey()).toString('hex'),
-      }),
-      publicDataProvider: indexerPublicDataProvider(
-        LOCAL_ENDPOINTS.indexer,
-        LOCAL_ENDPOINTS.indexerWS,
-      ),
-      zkConfigProvider,
-      proofProvider: httpClientProofProvider(LOCAL_ENDPOINTS.proofServer, zkConfigProvider),
-      walletProvider: wallet,
-      midnightProvider: wallet,
-      config,
-    });
-
-  type Ctx = WitnessContext<Bounty.Ledger, PrivateState>;
-  const witnesses = {
-    // Each call takes the next queued claim, so Registration can open two.
-    getAttestationWitness: ({ privateState }: Ctx) => {
-      const [next, ...rest] = privateState.attestations;
-      if (next === undefined) {
-        throw new Error('getAttestationWitness: no claim queued');
-      }
-      return [
-        { ...privateState, attestations: rest },
-        [next.claim, next.signatures, next.commitRand],
-      ] as [PrivateState, [Claim, JubjubSchnorrSignature[], Uint8Array]];
-    },
-    getHolderSecret: ({ privateState }: Ctx) =>
-      [privateState, privateState.holderSecret] as [PrivateState, Uint8Array],
-    payoutSecret: ({ privateState }: Ctx) =>
-      [privateState, privateState.holderSecret] as [PrivateState, Uint8Array],
-    payoutPath: ({ ledger, privateState }: Ctx, leaf: Uint8Array) =>
-      [
-        privateState,
-        ledger.qualifiedPayees.findPathForLeaf(leaf) ??
-          ledger.qualifiedPayees.pathForLeaf(0n, leaf),
-      ] as const,
-  };
-  const compiledContract = CompiledContract.make<Bounty.Contract<PrivateState>>(
-    'Bounty',
-    bounty.Contract<PrivateState>,
-  ).pipe(
-    CompiledContract.withWitnesses(witnesses as never),
-    CompiledContract.withCompiledFileAssets(artifacts),
-  );
-
-  const opensAt = now() + 30n;
-  const deadline = opensAt + 600n;
-  const payoutEnd = deadline + 120n;
-  step('deploying the Bounty: opens +30 s, deadline +10.5 min, Payout period ends +12.5 min');
-  const deployed = await deployContract(providers, {
-    compiledContract,
-    privateStateId: PRIVATE_STATE_ID,
-    initialPrivateState: { attestations: [], holderSecret: new Uint8Array(32) },
-    args: [
-      attestorKeys.map((key) => key.pk),
-      CONTROL_POLICY,
-      READING_POLICY,
-      THRESHOLD,
-      opensAt,
-      deadline,
-      payoutEnd,
-      self,
-      3_600n,
-      300n,
-    ],
-  } as never);
-  const deployTx = deployed.deployTxData;
-  if (!('public' in deployTx)) {
-    throw new Error('expected a ledger-9 deploy');
-  }
-  // shortcut: the `as never` deploy options erase the contract's types; type them if this outlives the spike.
-  const address = (deployTx.public as { contractAddress: string }).contractAddress;
-  config.ttlSeconds = Number(process.env.TX_TTL_SECONDS ?? 120);
-  console.log(`  contract ${address}`);
-  const ledger = async () => {
-    const state = await providers.publicDataProvider.queryContractState(address);
-    if (!state) {
-      throw new Error(`no contract state at ${address}`);
-    }
-    return bounty.ledger(state.data);
-  };
-  // biome-ignore lint/suspicious/noExplicitAny: callTx is typed by the generated contract.
-  const call = async (as: PrivateState, circuit: Circuit, ...args: any[]) => {
-    await providers.privateStateProvider.set(PRIVATE_STATE_ID, as);
-    const started = Date.now();
-    // biome-ignore lint/suspicious/noExplicitAny: see above.
-    const tx = await (deployed.callTx as any)[circuit](...args);
-    console.log(
-      `  ${circuit}: block ${tx.public.blockHeight}, ${((Date.now() - started) / 1000).toFixed(1)} s`,
-    );
-  };
-
   step(`funding the pot with ${POT} NIGHT`);
   const beforeFund = await nightBalance();
   // Random bytes the contract writes in `fund`'s fallible phase, to clear node 2.1.0's fee wall.
-  await call(
-    { attestations: [], holderSecret: new Uint8Array(32) },
-    'fund',
-    POT,
-    randomBytes(2048),
-  );
+  await call(bounty, NO_CLAIMS, 'fund', POT, randomBytes(2048));
   console.log(
-    `  pot ${(await ledger()).pot}, wallet NIGHT ${beforeFund} → ${await nightBalance()}`,
+    `  pot ${(await bounty.ledger()).pot}, wallet NIGHT ${beforeFund} → ${await nightBalance()}`,
   );
 
   // Both Controllers' Start readings are observed before the Bounty opens; Registration
@@ -257,13 +169,14 @@ const main = async (): Promise<void> => {
   for (const c of controllers) {
     step(`registering ${c.agentId}`);
     const as = (attestations: Attestation[]) => ({ attestations, holderSecret: c.secret });
-    await call(as([c.control]), 'verifyAttestation');
-    await call(as([c.start]), 'verifyAttestation');
+    await call(bounty, as([c.control]), 'verifyAttestation');
+    await call(bounty, as([c.start]), 'verifyAttestation');
     await call(
+      bounty,
       as([c.control, c.start]),
       'register',
-      bounty.pureCircuits.computeId(c.control.claim, c.control.commitRand),
-      bounty.pureCircuits.computeId(c.start.claim, c.start.commitRand),
+      bounty.pure.computeId(c.control.claim, c.control.commitRand),
+      bounty.pure.computeId(c.start.claim, c.start.commitRand),
       self,
     );
   }
@@ -273,14 +186,15 @@ const main = async (): Promise<void> => {
     step(`qualifying ${c.agentId} with a Reading of 15,000 XP`);
     const reading = sign(claimFor(READING_POLICY, c.agentId, 15_000n, now() - 5n, c.secret));
     const as = (attestations: Attestation[]) => ({ attestations, holderSecret: c.secret });
-    await call(as([reading]), 'verifyAttestation');
+    await call(bounty, as([reading]), 'verifyAttestation');
     await call(
+      bounty,
       as([reading]),
       'qualify',
-      bounty.pureCircuits.computeId(reading.claim, reading.commitRand),
+      bounty.pure.computeId(reading.claim, reading.commitRand),
     );
   }
-  console.log(`  qualifiers ${(await ledger()).qualifiers}`);
+  console.log(`  qualifiers ${(await bounty.ledger()).qualifiers}`);
 
   await waitUntil(deadline, 'the deadline');
   const [alice] = controllers;
@@ -290,16 +204,16 @@ const main = async (): Promise<void> => {
   const share = POT / 2n;
   step(`Payout of ${share} NIGHT to ${alice.agentId}'s address, naming no agent`);
   const beforePayout = await nightBalance();
-  await call({ attestations: [], holderSecret: alice.secret }, 'payout', self, share);
+  await call(bounty, { attestations: [], holderSecret: alice.secret }, 'payout', self, share);
   await walletContext.wallet.waitForSyncedState();
   console.log(`  wallet NIGHT ${beforePayout} → ${await nightBalance()}`);
 
   await waitUntil(payoutEnd, 'the end of the Payout period');
   step(`Refund of what's left to the Sponsor`);
   const beforeRefund = await nightBalance();
-  await call({ attestations: [], holderSecret: new Uint8Array(32) }, 'refund');
+  await call(bounty, NO_CLAIMS, 'refund');
   await walletContext.wallet.waitForSyncedState();
-  const after = await ledger();
+  const after = await bounty.ledger();
   console.log(`  paidOut ${after.paidOut}, refunded ${after.refunded}`);
   console.log(`  wallet NIGHT ${beforeRefund} → ${await nightBalance()}`);
 

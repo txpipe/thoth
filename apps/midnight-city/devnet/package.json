@@ -13,7 +13,10 @@
     "compact:bounty": "compact compile +0.35.0 ../bounty/src/bounty.compact artifacts/bounty",
     "bounty": "tsx src/bounty.ts",
     "start": "tsx src/main.ts",
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "hermes": "tsx src/hermes-cli.ts",
+    "faucet": "tsx src/faucet.ts",
+    "hermes:cap-check": "tsx src/hermes-cap-check.ts"
   },
   "dependencies": {
     "@midnight-ntwrk/midnight-js-contracts": "5.0.0-rc.4",

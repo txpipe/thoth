@@ -98,6 +98,35 @@ What it took:
   chain's volume, so `down -v` first. A run stopped mid-transaction leaves
   spent DUST the next wallet doesn't know about yet (`DustDoubleSpend`).
 
+## Hermes's wallet
+
+Hermes holds its own wallet (#128), in `$MCITY_HOME` (default `~/.midnight-city-bounty`,
+apart from the City skill's `~/.midnight-city`):
+
+- `seed`: created by `init` with `0600` permissions, refused if anyone else can read
+  it, and never printed.
+- `config.json`: written by the operator, never by a command. It names the network
+  (`undeployed` only; anything else is refused) and `capNight`, the most NIGHT one
+  transaction may take from the wallet. The wallet refuses an over-cap transaction
+  before submitting it. Fees are DUST, so they don't count.
+
+```sh
+npm run -s hermes init       # {"created":true,"home":"…"}
+npm run -s hermes address    # {"unshielded":"mn_addr_undeployed1…","unshieldedHex":"…"}
+npm run -s hermes balance    # {"night":"…","dust":"…","capNight":"100"}
+npm run -s faucet -- <unshieldedHex> 1000000000000   # the genesis wallet funds Hermes
+npm run -s hermes:cap-check  # genesis deploys a Bounty; Hermes pays under and over its cap
+```
+
+Every command prints one JSON object on stdout and its progress on stderr. On
+2026-10-13 Hermes, funded by the faucet, registered its NIGHT for DUST on its own
+(the path the genesis wallet never needs), paid 50 into a Bounty under a cap of 100,
+and was refused 101: `refused: the transaction spends 101 NIGHT, over the cap of 100`.
+
+#128 asked for a `submit <tx-file>` command, so the wallet never sees contract code.
+Here the wallet is its own module (`wallet.ts`) that only balances, signs and
+submits; the skill calls it in-process instead of passing transactions through files.
+
 ## Version set
 
 Verified on 2026-10-09 with a fresh chain each time:

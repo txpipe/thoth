@@ -8,6 +8,7 @@
 import {
   type FinalizedTransaction,
   LedgerParameters,
+  type SignatureVerifyingKey,
   ZswapSecretKeys,
 } from '@midnight-ntwrk/midnight-js-protocol/ledger';
 import {
@@ -65,7 +66,10 @@ export const LOCAL_ENDPOINTS: Endpoints = {
 /** The dev preset mints to this seed at genesis. Local devnets only. */
 export const GENESIS_SEED = '0000000000000000000000000000000000000000000000000000000000000001';
 
-const log = (message: string): void => console.log(`  · ${message}`);
+// Progress goes to stderr, so a CLI's stdout carries only its JSON result.
+const log = (message: string): void => {
+  process.stderr.write(`  · ${message}\n`);
+};
 
 /**
  * Build, start and sync a wallet, waiting for funds and dust.
@@ -75,6 +79,24 @@ const log = (message: string): void => console.log(`  · ${message}`);
  * @returns the synced wallet, ready to pay fees.
  */
 export const buildWallet = async (endpoints: Endpoints, seed: string): Promise<WalletContext> => {
+  const context = await startWallet(endpoints, seed);
+  const synced = await waitForSync(context.wallet);
+  if ((synced.unshielded.balances[Token.night] ?? 0n) === 0n) {
+    log('waiting for NIGHT');
+    await waitFor(context.wallet, (s) => (s.unshielded.balances[Token.night] ?? 0n) > 0n);
+  }
+  await registerForDustGeneration(context);
+  return context;
+};
+
+/**
+ * Build, start and sync a wallet, without waiting for funds or dust.
+ *
+ * @param endpoints - the devnet's services.
+ * @param seed - the hex master seed.
+ * @returns the synced wallet.
+ */
+export const startWallet = async (endpoints: Endpoints, seed: string): Promise<WalletContext> => {
   const configuration = WalletFacade.resolveConfiguration({
     networkId: 'undeployed',
     costParameters: { feeBlocksMargin: 5 },
@@ -104,14 +126,8 @@ export const buildWallet = async (endpoints: Endpoints, seed: string): Promise<W
   await wallet.start(seeds);
 
   log('syncing wallet');
-  const synced = await waitForSync(wallet);
-  if ((synced.unshielded.balances[Token.night] ?? 0n) === 0n) {
-    log('waiting for NIGHT');
-    await waitFor(wallet, (s) => (s.unshielded.balances[Token.night] ?? 0n) > 0n);
-  }
-  const context = { wallet, seeds, unshieldedKeystore, forks: configuration.forks };
-  await registerForDustGeneration(context);
-  return context;
+  await waitForSync(wallet);
+  return { wallet, seeds, unshieldedKeystore, forks: configuration.forks };
 };
 
 /**
@@ -166,6 +182,34 @@ export const registerForDustGeneration = async ({
   }
   log('waiting for dust');
   await waitFor(wallet, hasDust);
+};
+
+/**
+ * The NIGHT a transaction takes from a wallet: its unshielded inputs owned by the
+ * wallet's key, less the outputs back to its address. Fees are paid in DUST, not NIGHT.
+ *
+ * @param tx - the finalized transaction.
+ * @param keystore - the wallet's unshielded keys.
+ * @returns the net NIGHT the wallet spends.
+ */
+export const nightSpent = (tx: FinalizedTransaction, keystore: UnshieldedKeystore): bigint => {
+  const key = keystore.getPublicKey();
+  // Keys are { tag, value } objects, so compare their contents, not their identity.
+  const ours = (owner: SignatureVerifyingKey): boolean =>
+    owner.tag === key.tag && owner.value === key.value;
+  const address = keystore.getAddress();
+  let spent = 0n;
+  for (const intent of tx.intents?.values() ?? []) {
+    for (const offer of [intent.guaranteedUnshieldedOffer, intent.fallibleUnshieldedOffer]) {
+      for (const input of offer?.inputs ?? []) {
+        spent += input.type === Token.night && ours(input.owner) ? input.value : 0n;
+      }
+      for (const output of offer?.outputs ?? []) {
+        spent -= output.type === Token.night && output.owner === address ? output.value : 0n;
+      }
+    }
+  }
+  return spent;
 };
 
 /**
@@ -225,12 +269,11 @@ const waitForDustFeeBudget = async (
  * @param context - the synced wallet.
  * @returns one object serving both provider seams.
  */
-export const walletProviders = ({
-  wallet,
-  seeds,
-  unshieldedKeystore,
-  forks,
-}: WalletContext): WalletProvider & MidnightProvider => {
+export const walletProviders = (
+  { wallet, seeds, unshieldedKeystore, forks }: WalletContext,
+  /** The most NIGHT one transaction may take from this wallet; unlimited when absent. */
+  capNight?: bigint,
+): WalletProvider & MidnightProvider => {
   const zswapKeys = ZswapSecretKeys.fromSeed(seeds.shielded);
   const active = (): Promise<ProtocolVersion.ProtocolVersion> =>
     Rx.firstValueFrom(wallet.state()).then((s) => s.activeProtocolVersion);
@@ -251,6 +294,12 @@ export const walletProviders = ({
       const signed = await wallet.signRecipe(recipe, unshieldedKeystore.signDataAsync);
       const finalized = await unwrap(await wallet.finalizeRecipe(signed));
       logDismissal(finalized);
+      const spent = nightSpent(finalized, unshieldedKeystore);
+      if (capNight !== undefined && spent > capNight) {
+        throw new Error(
+          `refused: the transaction spends ${spent} NIGHT, over the cap of ${capNight}`,
+        );
+      }
       return finalized;
     },
   });
