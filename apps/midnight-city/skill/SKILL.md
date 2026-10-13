@@ -10,8 +10,9 @@ its threshold before its deadline. You prove you control your agent, and how far
 rose, with zkFetch claims signed by the Bounty's attestors. Your City API token stays on
 this machine. Local devnet only.
 
-Every step is one call to `scripts/bounty <command> <bountyAddress> …`. It prints one JSON
-object on stdout; on failure, `{"error": …}` and exit 1. Progress lines on stderr are noise.
+Every step is one call to `scripts/bounty <command> <bountyAddress> …`, run from this skill
+directory. It prints one JSON object on stdout; on failure, `{"error": …}` and exit 1.
+Progress lines on stderr are noise.
 
 ## Steps
 
