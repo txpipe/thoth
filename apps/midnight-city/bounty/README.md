@@ -15,15 +15,43 @@ deploy     Sponsor seals: attestor keys, Control and Reading policies, threshold
            opensAt, deadline, end of the Payout period, Sponsor address
 fund       anyone adds tNIGHT to the pot, until the deadline
 verifyAttestation   a holder vaults each claim (Thoth's module entry point)
-register   Control claim + Start reading, same agent, same holder; fixes the payout address
-             Start reading observed by opensAt · one Registration per agent
+register   Control claim + Start reading, same agent, same holder; commits to the payout
+             address as a leaf, hash(secret, address) · Start reading observed by opensAt
+             · one Registration per agent
 qualify    a Reading under the Registration's holder, observed between opensAt and the
-             deadline and submitted before it, with XP ≥ Start reading + threshold
-payout     the holder, during the Payout period: the pot split equally, rounded down,
-             sent to the address fixed at Registration, once
+             deadline and submitted before it, with XP ≥ Start reading + threshold;
+             adds the Registration's payout leaf to the Qualifiers' Merkle tree
+payout     the holder, during the Payout period, naming only an address and the Share:
+             proves its leaf is in the tree without saying which, spends a nullifier
+             from its secret, and gets the pot split equally, rounded down
 refund     after the Payout period, or after the deadline if nobody qualified:
              what's left goes to the Sponsor, once
 ```
+
+## Payout privacy
+
+Which agents registered and qualified is public. Who gets paid isn't linked to
+them: the Registration holds only a leaf that hides the address, and a Payout
+proves *some* leaf in the Qualifiers' tree is the caller's. It reveals the
+address and a nullifier, and neither links to a leaf without the secret. The
+address is bound into the leaf, so a stolen secret can't redirect a Share, and
+the circuit checks that the Merkle path proves the caller's own leaf, or another
+Qualifier's path would pay anyone.
+
+Shares are equal and the tree is closed at the deadline, before the first
+Payout, so neither the amount nor the timing points back to an agent. What's
+left:
+
+- **The anonymity set is the Qualifiers.** With two, a guess is right half the
+  time; with one, nothing is hidden.
+- **The address must be fresh.** A reused address, or one funded from the
+  Controller's other addresses, links back through its own history.
+- **The fee payer** of a Payout transaction might link it to the Controller's
+  wallet. That's not checked yet.
+- **The Share is unshielded tNIGHT**, so the address and amount are visible.
+  Hiding them too would need a shielded token.
+
+## Rules
 
 Each claim must be under its own policy. The Control claim and Readings both
 carry the agent ID, and anyone can take a Reading of any agent, so only the
@@ -43,15 +71,14 @@ Control policy proves control.
   circuit checks `share × qualifiers ≤ pot < (share + 1) × qualifiers`.
   Qualifying closes at the deadline and funding stops then, so every Payout
   splits the same pot between the same count.
+- **The Qualifiers' tree** is a `HistoricMerkleTree` of depth 10, so a Bounty
+  takes at most 1,024 Qualifiers.
 - **One witness, several claims.** `openClaim` reads the module's single claim
   witness, so the test driver queues claims in private state, and each call
   takes the next one. Registration opens two.
 
 ## Open gaps
 
-- **Payout privacy.** The payout address is public from Registration onwards,
-  next to the agent. The design wants who gets paid kept private; that's still
-  open on the map (#117).
 - **Recorded data.** The tests use signed fixture claims, not the zkFetch
   fixtures in `../fixtures/`. Those were recorded with one `agent` group, before
   the `bytes8` split; turning them into claims (#123) means re-recording with

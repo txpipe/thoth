@@ -21,9 +21,8 @@ export { A_Claim };
 export struct Registration {
   holder: Bytes<32>; // the holder commitment all of this agent's claims carry
   startXp: Uint<64>;
-  payout: UserAddress; // fixed at Registration; a Payout pays only here
+  payoutLeaf: Bytes<32>; // the payout address under the holder's secret; the address stays private
   qualified: Boolean;
-  paid: Boolean;
 }
 
 export sealed ledger controlPolicy: Bytes<32>;
@@ -54,7 +53,16 @@ export ledger paidOut: Uint<128>;
 
 export ledger refunded: Boolean;
 
+/// The Qualifiers' payout leaves. A Payout proves its leaf is in here without
+/// saying which one, so it can't be linked to an agent.
+export ledger qualifiedPayees: HistoricMerkleTree<10, Bytes<32>>;
+
+/// One per paid Share, derived from the holder's secret; unlinkable to any leaf.
+export ledger payoutNullifiers: Set<Bytes<32>>;
+
 witness payoutSecret(): Bytes<32>;
+
+witness payoutPath(leaf: Bytes<32>): MerkleTreePath<10, Bytes<32>>;
 
 constructor(keys: Vector<3, JubjubPoint>,
             control: Bytes<32>,
@@ -99,6 +107,17 @@ export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
   return A_holderCommitment(secret);
 }
 
+/// A payout leaf: the address a Share goes to, committed under the holder's secret.
+export pure circuit payoutLeaf(secret: Bytes<32>, to: UserAddress): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>(
+           [pad(32, "midnight-city:payout-leaf"), secret, to.bytes]
+           );
+}
+
+circuit payoutNullifier(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "midnight-city:payout-nullifier"), secret]);
+}
+
 /// Vault one claim (module entry point); Registration and qualifying open it by id.
 export circuit verifyAttestation(): [] {
   A_verifyAttestation();
@@ -118,9 +137,8 @@ export circuit register(controlId: Bytes<32>, startId: Bytes<32>, payout: UserAd
     agent,
     Registration { holder: disclose(control.holder),
                    startXp: disclose(start.values[0]),
-                   payout: disclose(payout),
-                   qualified: false,
-                   paid: false }
+                   payoutLeaf: disclose(payoutLeaf(payoutSecret(), payout)),
+                   qualified: false }
     );
 }
 
@@ -142,10 +160,10 @@ export circuit qualify(readingId: Bytes<32>): [] {
     agent,
     Registration { holder: registration.holder,
                    startXp: registration.startXp,
-                   payout: registration.payout,
-                   qualified: true,
-                   paid: registration.paid }
+                   payoutLeaf: registration.payoutLeaf,
+                   qualified: true }
     );
+  qualifiedPayees.insert(registration.payoutLeaf);
   qualifiers.increment(1);
 }
 
@@ -156,34 +174,28 @@ export circuit fund(amount: Uint<128>): [] {
   pot = (pot + disclose(amount)) as Uint<128>;
 }
 
-/// Payout: one Qualifier's Share, sent to the address fixed at its Registration.
-export circuit payout(agent: Bytes<32>, share: Uint<128>): [] {
+/// Payout: one Qualifier's Share, sent to the address its Registration committed to.
+/// It names no agent: it proves a leaf in `qualifiedPayees` is the caller's.
+export circuit payout(to: UserAddress, share: Uint<128>): [] {
   assert(blockTimeGte(deadline), "Payout period not open");
   assert(blockTimeLt(payoutEnd), "Payout period over");
-  const key = disclose(agent);
-  assert(registrations.member(key), "Agent not registered");
-  const registration = registrations.lookup(key);
-  assert(holderCommitment(payoutSecret()) == registration.holder, "Not the holder");
-  assert(registration.qualified, "Not a Qualifier");
-  assert(!registration.paid, "Already paid");
+  const secret = payoutSecret();
+  const leaf = payoutLeaf(secret, to);
+  const path = payoutPath(leaf);
+  // The path must prove this caller's leaf, or another Qualifier's path would pay anyone.
+  assert(path.leaf == leaf, "Not a Qualifier");
+  assert(qualifiedPayees.checkRoot(disclose(merkleTreePathRoot<10, Bytes<32>>(path))),
+         "Not a Qualifier"
+         );
+  const nullifier = disclose(payoutNullifier(secret));
+  assert(!payoutNullifiers.member(nullifier), "Already paid");
+  payoutNullifiers.insert(nullifier);
   // Compact has no division: the caller names the Share, and this checks it's the
   // pot split equally between the Qualifiers, rounded down.
   const count = qualifiers.read();
   assert(disclose(share) * count <= pot && pot < (disclose(share) + 1) * count, "Wrong Share");
-  registrations.insert(
-    key,
-    Registration { holder: registration.holder,
-                   startXp: registration.startXp,
-                   payout: registration.payout,
-                   qualified: registration.qualified,
-                   paid: true }
-    );
   paidOut = (paidOut + disclose(share)) as Uint<128>;
-  sendUnshielded(
-    nativeToken(),
-    disclose(share),
-    right<ContractAddress, UserAddress>(registration.payout)
-    );
+  sendUnshielded(nativeToken(), disclose(share), right<ContractAddress, UserAddress>(disclose(to)));
 }
 
 /// Refund: the Sponsor takes back what Payouts left in the pot.

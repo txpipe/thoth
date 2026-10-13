@@ -12,6 +12,7 @@ import {
   claimFor,
   idOf,
   makeNotaryKey,
+  payoutLeaf,
   sign,
   type UserAddress,
 } from './sim.js';
@@ -90,14 +91,18 @@ const fund = async (amount: bigint) => {
   await sim.call('fund', { attestations: [], holderSecret: new Uint8Array(32) }, amount);
 };
 
-const payout = async (c: Controller, share: bigint, at = DEADLINE + 10n): Promise<Effects> => {
+/** A Payout names only the address and the Share; `pathFor` stages a forged Merkle path. */
+const payout = async (
+  c: Controller,
+  share: bigint,
+  {
+    at = DEADLINE + 10n,
+    to = c.payout,
+    pathFor,
+  }: { at?: bigint; to?: UserAddress; pathFor?: Uint8Array } = {},
+): Promise<Effects> => {
   sim.now = at;
-  return sim.call(
-    'payout',
-    { attestations: [], holderSecret: c.secret },
-    agentKey(c.agentId),
-    share,
-  );
+  return sim.call('payout', { attestations: [], holderSecret: c.secret, pathFor }, to, share);
 };
 
 const refund = async (at: bigint): Promise<Effects> => {
@@ -109,6 +114,16 @@ const refund = async (at: bigint): Promise<Effects> => {
 const payments = (effects: Effects): [string, bigint][] =>
   [...effects.claimedUnshieldedSpends].map(([[, to], amount]) => [to.address, amount]);
 const hex = (address: UserAddress): string => Buffer.from(address.bytes).toString('hex');
+
+/** Every Registration as public text, byte arrays in hex. */
+const publicRegistrations = (): string =>
+  JSON.stringify([...sim.ledger().registrations], (_, value) =>
+    value instanceof Uint8Array
+      ? Buffer.from(value).toString('hex')
+      : typeof value === 'bigint'
+        ? value.toString()
+        : value,
+  );
 
 const register = async (c: Controller, startXp = 5_000n) =>
   registerWith(
@@ -138,8 +153,13 @@ describe('Registration', () => {
     await register(alice, 5_000n);
     const registration = sim.ledger().registrations.lookup(agentKey(AGENT_A));
     expect(registration.startXp).toBe(5_000n);
-    expect(registration.payout.bytes).toEqual(alice.payout.bytes);
     expect(registration.qualified).toBe(false);
+  });
+
+  it('keeps the payout address out of the public Registration', async () => {
+    const alice = controller(AGENT_A, 0x11);
+    await register(alice);
+    expect(publicRegistrations()).not.toContain(hex(alice.payout));
   });
 });
 
@@ -152,6 +172,18 @@ describe('qualifying', () => {
     expect(sim.ledger().qualifiers).toBe(1n);
   });
 });
+
+/** A 1,001 pot with Alice and Bob both qualified. */
+const twoQualifiers = async () => {
+  await fund(1_001n);
+  const alice = controller(AGENT_A, 0x11);
+  const bob = controller(AGENT_B, 0x22);
+  await register(alice);
+  await register(bob);
+  await qualify(alice, await attest(alice, readingOf(alice, 15_000n, QUALIFY_WINDOW)));
+  await qualify(bob, await attest(bob, readingOf(bob, 20_000n, QUALIFY_WINDOW)));
+  return { alice, bob };
+};
 
 describe('Payout', () => {
   it('splits the pot equally between two Qualifiers, each paid at its Registration address', async () => {
@@ -166,6 +198,13 @@ describe('Payout', () => {
     // 1,001 / 2 rounds down to 500 each; the odd unit goes back in the Refund.
     expect(payments(await payout(alice, 500n))).toEqual([[hex(alice.payout), 500n]]);
     expect(payments(await payout(bob, 500n))).toEqual([[hex(bob.payout), 500n]]);
+  });
+
+  it('names no agent and changes nothing stored under one', async () => {
+    const { alice } = await twoQualifiers();
+    const before = publicRegistrations();
+    await payout(alice, 500n);
+    expect(publicRegistrations()).toEqual(before);
   });
 });
 
@@ -296,18 +335,6 @@ describe('qualifying rejects', () => {
   });
 });
 
-/** A 1,001 pot with Alice and Bob both qualified. */
-const twoQualifiers = async () => {
-  await fund(1_001n);
-  const alice = controller(AGENT_A, 0x11);
-  const bob = controller(AGENT_B, 0x22);
-  await register(alice);
-  await register(bob);
-  await qualify(alice, await attest(alice, readingOf(alice, 15_000n, QUALIFY_WINDOW)));
-  await qualify(bob, await attest(bob, readingOf(bob, 20_000n, QUALIFY_WINDOW)));
-  return { alice, bob };
-};
-
 describe('Payout rejects', () => {
   it('a second Payout', async () => {
     const { alice } = await twoQualifiers();
@@ -317,18 +344,32 @@ describe('Payout rejects', () => {
 
   it('a Payout before the deadline', async () => {
     const { alice } = await twoQualifiers();
-    await expect(payout(alice, 500n, DEADLINE - 1n)).rejects.toThrow('Payout period not open');
+    await expect(payout(alice, 500n, { at: DEADLINE - 1n })).rejects.toThrow(
+      'Payout period not open',
+    );
   });
 
   it('a Payout after the Payout period', async () => {
     const { alice } = await twoQualifiers();
-    await expect(payout(alice, 500n, PAYOUT_END)).rejects.toThrow('Payout period over');
+    await expect(payout(alice, 500n, { at: PAYOUT_END })).rejects.toThrow('Payout period over');
   });
 
-  it("a Payout by someone without the Registration's secret", async () => {
+  it('a Payout by someone who never qualified', async () => {
     await twoQualifiers();
     const mallory = controller(AGENT_A, 0x66);
-    await expect(payout(mallory, 500n)).rejects.toThrow('Not the holder');
+    await expect(payout(mallory, 500n)).rejects.toThrow('Not a Qualifier');
+  });
+
+  it('a stolen secret redirecting a Share to another address', async () => {
+    const { alice } = await twoQualifiers();
+    await expect(payout(alice, 500n, { to: address(0x66) })).rejects.toThrow('Not a Qualifier');
+  });
+
+  it("another Qualifier's Merkle path, presented with your own secret and address", async () => {
+    const { alice } = await twoQualifiers();
+    const mallory = controller(AGENT_A, 0x66);
+    const alicesLeaf = payoutLeaf(alice.secret, alice.payout);
+    await expect(payout(mallory, 500n, { pathFor: alicesLeaf })).rejects.toThrow('Not a Qualifier');
   });
 
   it('a Share larger than the pot split equally', async () => {

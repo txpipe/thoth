@@ -39,8 +39,16 @@ export type Attestation = {
   commitRand: Uint8Array;
 };
 
-/** The caller's private state: the claims its next call opens, in order, and its secret. */
-export type PrivateState = { attestations: Attestation[]; holderSecret: Uint8Array };
+/**
+ * The caller's private state: the claims its next call opens, in order, and its
+ * secret. `pathFor` makes the payout-path witness return another leaf's path, to
+ * stage a forged Payout.
+ */
+export type PrivateState = {
+  attestations: Attestation[];
+  holderSecret: Uint8Array;
+  pathFor?: Uint8Array | undefined;
+};
 
 /** A Midnight `UserAddress`, as the compiled contract takes it. */
 export type UserAddress = { bytes: Uint8Array };
@@ -59,6 +67,15 @@ const witnesses: Witnesses<PrivateState> = {
   },
   getHolderSecret: ({ privateState }) => [privateState, privateState.holderSecret],
   payoutSecret: ({ privateState }) => [privateState, privateState.holderSecret],
+  // An honest holder's own path; a leaf not in the tree gets a path that can't match the root.
+  payoutPath: ({ ledger, privateState }, leaf) => {
+    const target = privateState.pathFor ?? leaf;
+    return [
+      privateState,
+      ledger.qualifiedPayees.findPathForLeaf(target) ??
+        ledger.qualifiedPayees.pathForLeaf(0n, target),
+    ];
+  },
 };
 
 /** The Bounty's deploy-time terms. */
@@ -203,3 +220,7 @@ export const claimFor = (options: {
 
 /** The agent key a Registration is stored under, for an agent ID. */
 export const agentKey = (agentId: string): Uint8Array => pureCircuits.agentKey(agentSlots(agentId));
+
+/** The payout leaf a Registration commits to: the address under the holder's secret. */
+export const payoutLeaf = (secret: Uint8Array, to: UserAddress): Uint8Array =>
+  pureCircuits.payoutLeaf(secret, to);
