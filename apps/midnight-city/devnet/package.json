@@ -10,6 +10,8 @@
   },
   "scripts": {
     "compact": "compact compile +0.35.0 ../../../packages/contracts/test/mocks/MockAttestation.compact artifacts/mock_attestation",
+    "compact:bounty": "compact compile +0.35.0 ../bounty/src/bounty.compact artifacts/bounty",
+    "bounty": "tsx src/bounty.ts",
     "start": "tsx src/main.ts",
     "types": "tsc --noEmit"
   },

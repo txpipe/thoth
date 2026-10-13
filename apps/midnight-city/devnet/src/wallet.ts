@@ -7,6 +7,7 @@
 // release candidates.
 import {
   type FinalizedTransaction,
+  LedgerParameters,
   ZswapSecretKeys,
 } from '@midnight-ntwrk/midnight-js-protocol/ledger';
 import {
@@ -52,6 +53,17 @@ export interface WalletContext {
   /** Where each ledger version begins on this chain. */
   readonly forks: ProtocolVersion.ForkSchedule;
 }
+
+/** The local devnet's services, as `compose.yml` exposes them. */
+export const LOCAL_ENDPOINTS: Endpoints = {
+  node: 'http://127.0.0.1:9944',
+  indexer: 'http://127.0.0.1:8088/api/v4/graphql',
+  indexerWS: 'ws://127.0.0.1:8088/api/v4/graphql/ws',
+  proofServer: 'http://127.0.0.1:6300',
+};
+
+/** The dev preset mints to this seed at genesis. Local devnets only. */
+export const GENESIS_SEED = '0000000000000000000000000000000000000000000000000000000000000001';
 
 const log = (message: string): void => console.log(`  · ${message}`);
 
@@ -157,6 +169,53 @@ export const registerForDustGeneration = async ({
 };
 
 /**
+ * Log a transaction's size and whether it passes node 2.1.0's dismissal check (custom
+ * error 231), which the node itself reports without numbers.
+ *
+ * @param tx - the finalized transaction about to be submitted.
+ */
+const logDismissal = (tx: FinalizedTransaction): void => {
+  const size = tx.serialize().length;
+  try {
+    tx.cost(LedgerParameters.initialParameters(), true);
+    log(`tx ${size} bytes: within its time to dismiss`);
+  } catch (error) {
+    log(`tx ${size} bytes: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Wait until the wallet's DUST covers a transaction's fee, as Midnight's passport localnet
+ * wallet does: on a young chain DUST is still generating, and a short TTL counts only what
+ * exists by then. The fee estimate throws "insufficient funds" until the wallet can pay.
+ *
+ * @param wallet - the synced facade.
+ * @param tx - the transaction to price.
+ * @param ttl - the TTL to price it at, fresh at each attempt.
+ */
+const waitForDustFeeBudget = async (
+  wallet: WalletFacade,
+  tx: Parameters<WalletFacade['estimateTransactionFee']>[0],
+  ttl: () => Date,
+): Promise<void> => {
+  for (let waited = 0; ; waited += 5) {
+    try {
+      await wallet.estimateTransactionFee(tx, { ttl: ttl() });
+      return;
+    } catch (error) {
+      const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
+      if (!/insufficient funds|could not balance dust/i.test(text) || waited >= 600) {
+        throw error;
+      }
+    }
+    if (waited === 0) {
+      log('waiting for enough DUST to pay the fee');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+  }
+};
+
+/**
  * The wallet as midnight-js 5's wallet and midnight providers, for the v9 era
  * only. midnight-js hands over live ledger-v9 objects; the facade wants them
  * sealed with the protocol version they were authored at, so each seam adopts
@@ -183,12 +242,16 @@ export const walletProviders = ({
     getCoinPublicKey: () => zswapKeys.coinPublicKey,
     getEncryptionPublicKey: () => zswapKeys.encryptionPublicKey,
     balanceTx: async (tx, ttl) => {
-      const recipe = await wallet.balanceUnboundTransaction(
-        WalletTransaction.adopt('Unbound', tx, await active()),
-        { ttl: ttl ?? new Date(Date.now() + 30 * 60 * 1000) },
-      );
+      const handle = WalletTransaction.adopt('Unbound', tx, await active());
+      // Keep the caller's TTL window, restarted at each attempt, so waiting for DUST can't expire it.
+      const window = (ttl?.getTime() ?? Date.now() + 30 * 60 * 1000) - Date.now();
+      const freshTtl = (): Date => new Date(Date.now() + window);
+      await waitForDustFeeBudget(wallet, handle, freshTtl);
+      const recipe = await wallet.balanceUnboundTransaction(handle, { ttl: freshTtl() });
       const signed = await wallet.signRecipe(recipe, unshieldedKeystore.signDataAsync);
-      return unwrap(await wallet.finalizeRecipe(signed));
+      const finalized = await unwrap(await wallet.finalizeRecipe(signed));
+      logDismissal(finalized);
+      return finalized;
     },
   });
   const midnightProvider = createMidnightProviderFromHandlers({

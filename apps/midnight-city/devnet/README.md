@@ -49,6 +49,55 @@ zkFetch client collecting the threshold. Registry slot 2 holds an unqueried key
 and a dummy signature. The observation window follows the wall clock, because
 the chain checks it against block time.
 
+## The Bounty
+
+`npm run bounty` runs the Midnight City Bounty (`../bounty`) on this devnet with
+real tNIGHT: deploy, fund the pot, register and qualify two agents, pay one
+Qualifier its Share anonymously, and refund the rest to the Sponsor after the
+Payout period. The genesis wallet plays every role. Claims are signed by three
+test attestor keys pinned at deploy; zkFetch is covered by
+`../bounty/test/recorded.test.ts`, not here.
+
+```sh
+npm run compact:bounty                       # 0.35.0, with keys (~5 min)
+docker compose down -v && rm -rf .state      # a fresh chain for each run
+docker compose up -d --wait && npm run bounty   # ~15 min of real deadlines
+```
+
+A run on 2026-10-13 (each line one transaction, all within their time to dismiss):
+
+```text
+deploy                16,565 B
+fund 1,001 NIGHT       9,444 B   block   8   wallet −1,001
+verifyAttestation ×6  ~9,400 B   36–48 s each, including the proof
+register ×2            9,335 B   blocks 27, 42
+qualify ×2             9,686 B   blocks 51, 60   qualifiers 2
+payout 500             9,438 B   block 111       wallet +500, names no agent
+refund 501            10,669 B   block 131       wallet +501, back to the start
+```
+
+What it took:
+
+- **Node 2.1.0's fee wall** (custom error 231, `OutsideTimeToDismiss`). A
+  transaction may take at most max(15 ms, 2 µs per byte) to dismiss.
+  `fund` is a small call that also spends the caller's coins: 16.5 ms against
+  15 ms. Midnight's passport repo hit the same wall and never got past it.
+  `fund` now writes 2 KB of the caller's random bytes in its fallible phase,
+  after `kernel.checkpoint()`: that grows the transaction without adding to
+  its cost to dismiss. A constant didn't work, because its zero bytes are
+  trimmed, and neither did a guaranteed-phase write, because that adds cost.
+  `wallet.ts` logs every transaction's size and dismissal check before
+  submitting, since the node reports the error without numbers.
+- **TTLs.** The deploy uses a 1-hour TTL and every call 120 s
+  (`TX_TTL_SECONDS`). The large deploy needs the long TTL on a young chain;
+  the short one keeps balancing from adding DUST inputs to small calls.
+- **DUST on a young chain.** `balanceTx` waits until the fee estimate stops
+  failing with "insufficient funds", the way passport's localnet wallet does,
+  restarting the TTL each time.
+- **A fresh chain per run.** `docker compose up` reattaches the previous
+  chain's volume, so `down -v` first. A run stopped mid-transaction leaves
+  spent DUST the next wallet doesn't know about yet (`DustDoubleSpend`).
+
 ## Version set
 
 Verified on 2026-10-09 with a fresh chain each time:

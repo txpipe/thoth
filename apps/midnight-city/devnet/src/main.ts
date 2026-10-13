@@ -24,22 +24,18 @@ import {
 import { makeWitnesses } from '../../../../packages/contracts/test/helpers/witnesses.js';
 import type * as Mock from '../artifacts/mock_attestation/contract/index.js';
 import { collectAttestment } from './attestment.js';
-import { buildWallet, type Endpoints, walletProviders } from './wallet.js';
+import {
+  buildWallet,
+  LOCAL_ENDPOINTS as endpoints,
+  GENESIS_SEED,
+  walletProviders,
+} from './wallet.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const artifacts = path.resolve(
   process.env.ARTIFACTS ?? path.join(here, '../artifacts/mock_attestation'),
 );
 
-const endpoints: Endpoints = {
-  node: 'http://127.0.0.1:9944',
-  indexer: 'http://127.0.0.1:8088/api/v4/graphql',
-  indexerWS: 'ws://127.0.0.1:8088/api/v4/graphql/ws',
-  proofServer: 'http://127.0.0.1:6300',
-};
-
-// The dev preset mints to this seed at genesis. Local devnets only.
-const GENESIS_SEED = '0000000000000000000000000000000000000000000000000000000000000001';
 const PRIVATE_STATE_ID = 'mockAttestation';
 
 type Circuit = 'verifyAttestation' | 'openAndRead' | 'openAndReadPresence';
