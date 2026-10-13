@@ -10,6 +10,7 @@
   },
   "scripts": {
     "start": "mkdir -p .state && node src/prove.ts > .state/run.log 2>&1; node src/check.ts",
+    "test": "node --test src/check.test.ts",
     "types": "tsc --noEmit"
   }
 }
