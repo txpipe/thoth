@@ -13,7 +13,8 @@ const WITNESS_URLS = (process.env.WITNESS_URLS ?? 'ws://localhost:8001/ws,ws://l
   .map((url) => url.trim());
 
 // The first listed agent only (#121). A `[^\]]*` before the group would capture the last one.
-const FIRST_AGENT = '"agentIds":\\["(?<agent>user-agent-[0-9a-z]+)"';
+// IDs come as base 36, as hex, or as a UUID with hyphens.
+const FIRST_AGENT = '"agentIds":\\["(?<agent>user-agent-[0-9a-z-]+)"';
 
 const token = loadToken();
 const authorization = `Bearer ${token}`;
@@ -41,7 +42,7 @@ const publicRequest = {
   method: 'GET',
   responseMatches: [{ type: 'regex', value: FIRST_AGENT }],
   // The witness sees only this slice: no other agent IDs and no response headers.
-  responseRedactions: [{ regex: '"agentIds":\\["user-agent-[0-9a-z]+"' }],
+  responseRedactions: [{ regex: '"agentIds":\\["user-agent-[0-9a-z-]+"' }],
 } satisfies ZkFetchRequest;
 const request: ZkFetchRequest = { ...publicRequest, secretHeaders: { authorization } };
 

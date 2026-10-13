@@ -79,7 +79,7 @@ if (evidenceText !== '') {
     [new Set(verified.map((view) => view.attestorAddress)).size === 2, 'two distinct witnesses'],
     [new Set(verified.map((view) => view.identifier)).size === 1, 'witnesses sign one claim'],
     [
-      verified.every((view) => /^user-agent-[0-9a-z]+$/.test(view.disclosedValues.agent ?? '')),
+      verified.every((view) => /^user-agent-[0-9a-z-]+$/.test(view.disclosedValues.agent ?? '')),
       'both disclose an agent ID',
     ],
   ];

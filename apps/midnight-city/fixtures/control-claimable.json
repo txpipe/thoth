@@ -1,17 +1,17 @@
 {
-  "generatedAt": "2026-10-13T16:50:18.136Z",
+  "generatedAt": "2026-10-13T17:36:53.244Z",
   "request": {
     "url": "https://midnight.city/observer/api/local-control/claimable",
     "method": "GET",
     "responseMatches": [
       {
         "type": "regex",
-        "value": "\"agentIds\":\\[\"(?<agent>user-agent-[0-9a-z]+)\""
+        "value": "\"agentIds\":\\[\"(?<agent>user-agent-[0-9a-z-]+)\""
       }
     ],
     "responseRedactions": [
       {
-        "regex": "\"agentIds\":\\[\"user-agent-[0-9a-z]+\""
+        "regex": "\"agentIds\":\\[\"user-agent-[0-9a-z-]+\""
       }
     ]
   },
@@ -19,27 +19,27 @@
     {
       "claim": {
         "provider": "http",
-        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"agentIds\\\":\\\\[\\\"(?<agent>user-agent-[0-9a-z]+)\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"agentIds\\\":\\\\[\\\"user-agent-[0-9a-z]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/local-control/claimable\"}",
-        "owner": "0x13a1bdfa027c8440189e713fa06dd350172af92d",
-        "timestampS": 1791910216,
-        "context": "{\"extractedParameters\":{\"agent\":\"user-agent-lhb10ef8yjy1wfc\"},\"providerHash\":\"0x388e093bb581687beadf808101a1803c96707d95e4e27f5308b6cc88be68dc79\"}",
-        "identifier": "0x5bca0e17f954fb0a8be9edcc82ebff0e36b5a224a1e576893d09fbe22caab2b4",
+        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"agentIds\\\":\\\\[\\\"(?<agent>user-agent-[0-9a-z-]+)\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"agentIds\\\":\\\\[\\\"user-agent-[0-9a-z-]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/local-control/claimable\"}",
+        "owner": "0xfe92f1e9658475f28cbff34f9846cadd29d14254",
+        "timestampS": 1791913011,
+        "context": "{\"extractedParameters\":{\"agent\":\"user-agent-lhb10ef8yjy1wfc\"},\"providerHash\":\"0x35f0d8bb4a2872f03041ed526041b284358c9db5a0f288b450b60fc69e0ac0f3\"}",
+        "identifier": "0xb5cd75e11088e3b3670d011af5f3079e978c5eb0e41b3dc70ea2adaa3d2e7018",
         "epoch": 1
       },
-      "signatureHex": "0x3116d03ecfebece0b4acc0f4e4c67919843c79286771f872f87e1a4363a1dc534281bcd73f6215901a8131423e5a9be90ec122673723010426da02318944c5bf1b",
+      "signatureHex": "0x3ff744c2cc2913530cd35551e9aaafcb5178008162731dc6bd33986fa6a82a404fb3da0e3052ec27ef7c450dbe33247a938a870f3755dd9d6610470ee474169d1c",
       "attestorAddress": "0x8fd379246834eac74b8419ffda202cf8051f7a03"
     },
     {
       "claim": {
         "provider": "http",
-        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"agentIds\\\":\\\\[\\\"(?<agent>user-agent-[0-9a-z]+)\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"agentIds\\\":\\\\[\\\"user-agent-[0-9a-z]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/local-control/claimable\"}",
-        "owner": "0x23ac99808c590c9a6b1298d8f3461f87f89351b7",
-        "timestampS": 1791910217,
-        "context": "{\"extractedParameters\":{\"agent\":\"user-agent-lhb10ef8yjy1wfc\"},\"providerHash\":\"0x388e093bb581687beadf808101a1803c96707d95e4e27f5308b6cc88be68dc79\"}",
-        "identifier": "0x5bca0e17f954fb0a8be9edcc82ebff0e36b5a224a1e576893d09fbe22caab2b4",
+        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"agentIds\\\":\\\\[\\\"(?<agent>user-agent-[0-9a-z-]+)\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"agentIds\\\":\\\\[\\\"user-agent-[0-9a-z-]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/local-control/claimable\"}",
+        "owner": "0x6d552554582ad05c3d06f94e7b44aa2f8609f769",
+        "timestampS": 1791913012,
+        "context": "{\"extractedParameters\":{\"agent\":\"user-agent-lhb10ef8yjy1wfc\"},\"providerHash\":\"0x35f0d8bb4a2872f03041ed526041b284358c9db5a0f288b450b60fc69e0ac0f3\"}",
+        "identifier": "0xb5cd75e11088e3b3670d011af5f3079e978c5eb0e41b3dc70ea2adaa3d2e7018",
         "epoch": 1
       },
-      "signatureHex": "0xbf25827aab44b00162112663b22c6414d78ee93dc2e1aeed4605138e2606e11340cfb360a7d15b0939998e565ce33e4c0f305f9f861bec3026d653136ccb98f91c",
+      "signatureHex": "0xb49d97e08920e32559839f436eeddbcd5452adb077e8f57fa63f222d31e605b1684fa11cccec94d3b0a4e99907fa44850eb971630b4932d96c9723c3f97ec3cb1b",
       "attestorAddress": "0x88f9b82462f6c4bf4a0fb15e5c3971559a316e7f"
     }
   ]
