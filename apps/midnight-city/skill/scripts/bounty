@@ -2,7 +2,8 @@
 # The Bounty skill's one command: bounty <status|register|qualify|payout> <bountyAddress> …
 # Runs the library in ../devnet; prints one JSON object on stdout, progress on stderr.
 set -euo pipefail
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# -P resolves symlinks: the skill is linked into ~/.hermes/skills/, and ../../devnet is relative to the repo.
+here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd -P)"
 # The zkFetch client logs to stdout at info; silence it so stdout carries only the JSON result.
 export LOG_LEVEL="${LOG_LEVEL:-silent}"
 exec npm run -s --prefix "$here/../../devnet" skill -- "$@"

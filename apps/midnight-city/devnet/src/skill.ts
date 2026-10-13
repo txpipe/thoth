@@ -146,6 +146,9 @@ export const register = async (address: string, agentId: string, payoutHex?: str
   if (hex(zkFetchPolicyHashOf(CONTROL_POLICY)) !== hex(ledger.controlPolicy)) {
     throw new Error("this Bounty sealed a Control policy this client doesn't produce");
   }
+  if ((await currentXp(agentId, skill)) === undefined) {
+    throw new Error('agent offline: a Start reading needs it online, so bring it online first');
+  }
   const attestors = await resolveAttestors(endpoints, ledger.R_keys);
   const token = parseEnv(readFileSync(TOKEN_ENV, 'utf8')).MCITY_API_TOKEN;
   if (!token) {
