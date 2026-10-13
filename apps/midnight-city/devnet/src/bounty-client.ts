@@ -224,3 +224,20 @@ export const joinBounty = async (
   } as never);
   return clientOf(ready, address, found.callTx as never);
 };
+
+/**
+ * Read the Bounty at `address` from the indexer, without a wallet.
+ *
+ * @returns its ledger.
+ */
+export const readBounty = async (address: string): Promise<Bounty.Ledger> => {
+  const bounty = await loadBounty();
+  const state = await indexerPublicDataProvider(
+    LOCAL_ENDPOINTS.indexer,
+    LOCAL_ENDPOINTS.indexerWS,
+  ).queryContractState(address);
+  if (!state) {
+    throw new Error(`no Bounty at ${address}`);
+  }
+  return bounty.ledger(state.data);
+};

@@ -16,7 +16,10 @@
     "types": "tsc --noEmit",
     "hermes": "tsx src/hermes-cli.ts",
     "faucet": "tsx src/faucet.ts",
-    "hermes:cap-check": "tsx src/hermes-cap-check.ts"
+    "hermes:cap-check": "tsx src/hermes-cap-check.ts",
+    "attestor": "tsx src/attestor-server.ts",
+    "skill": "tsx src/skill-cli.ts",
+    "sponsor": "tsx src/sponsor.ts"
   },
   "dependencies": {
     "@midnight-ntwrk/midnight-js-contracts": "5.0.0-rc.4",

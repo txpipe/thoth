@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createKeystore, WalletSeeds } from '@midnightntwrk/wallet-sdk';
+import type { AttestorEndpoint } from './attest.js';
 
 /** Hermes's wallet directory. */
 export const HOME = process.env.MCITY_HOME ?? join(homedir(), '.midnight-city-bounty');
@@ -17,6 +18,8 @@ export interface HermesConfig {
   network: 'undeployed';
   /** The most NIGHT one transaction may take from the wallet. */
   capNight: bigint;
+  /** The attestors the operator trusts, each with the witness it trusts. */
+  attestors: AttestorEndpoint[];
 }
 
 /**
@@ -40,7 +43,8 @@ export const loadConfig = (): HermesConfig => {
   if (typeof raw.capNight !== 'string' || !/^\d+$/.test(raw.capNight)) {
     throw new Error('capNight must be a whole number of NIGHT, as a string');
   }
-  return { network: 'undeployed', capNight: BigInt(raw.capNight) };
+  const attestors = Array.isArray(raw.attestors) ? (raw.attestors as AttestorEndpoint[]) : [];
+  return { network: 'undeployed', capNight: BigInt(raw.capNight), attestors };
 };
 
 /**
