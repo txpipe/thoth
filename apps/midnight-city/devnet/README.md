@@ -127,6 +127,50 @@ and was refused 101: `refused: the transaction spends 101 NIGHT, over the cap of
 Here the wallet is its own module (`wallet.ts`) that only balances, signs and
 submits; the skill calls it in-process instead of passing transactions through files.
 
+## Hermes runs a Bounty, with live claims
+
+The skill in [`../skill`](../skill) (`SKILL.md` plus `scripts/bounty`) runs a Bounty
+given only its address: `status`, `register`, `qualify`, `payout`. Each prints one JSON
+object. Underneath is `src/skill.ts`, a plain library an MCP server could wrap.
+
+- **Live claims.** Two attestor processes (`npm run attestor -- <id> <port> <witness
+  address>`) each hold a Jubjub key and trust one local witness. Hermes proves each
+  claim through both witnesses with the City token as a secret header, collects 2-of-3
+  over HTTP, and checks the attestors' keys against the Bounty's pinned `R_keys`.
+- **Given only the address**, Hermes reads the terms from the chain and works out the
+  skill from the sealed Reading policy. Its XP slot is named after the skill: a label,
+  not a binding, until #113.
+- **One secret per Bounty**, in `$MCITY_HOME/bounties/<address>.json` (0600), saved
+  before first use. Only the first agent the token controls can register. The Share
+  goes to the address fixed at Registration.
+
+```sh
+npm run witnesses --workspace=packages/zk-tls        # repo root
+npm run -s attestor -- attestor-a 7001 0x8fd379246834eac74b8419ffda202cf8051f7a03
+npm run -s attestor -- attestor-b 7002 0x88f9b82462f6c4bf4a0fb15e5c3971559a316e7f
+# operator: config.json gains "attestors":[{"url":"http://127.0.0.1:7001","witnessUrl":"ws://localhost:8001/ws"}, …]
+npm run -s faucet -- <hermes unshieldedHex> 1000000000000 && npm run -s hermes prepare
+npm run -s sponsor -- deploy --skill woodcutting --threshold 600 --opens-in 300 \
+  --open-for 900 --payout-for 600 --pot 1000 --attestor http://127.0.0.1:7001 --attestor http://127.0.0.1:7002
+../skill/scripts/bounty <status|register|qualify|payout> <bountyAddress> [agentId]
+```
+
+The run on 2026-10-13, with the Controller's agent woodcutting in the live City
+(Bounty 2; Bounty 1 was the same with a threshold of 2,500):
+
+```text
+20:28  status    {"skill":"woodcutting","threshold":"600",…,"registered":false}
+20:33  register  {"registered":true,"agent":"user-agent-lhb10ef8yjy1wfc","skill":"woodcutting","startXp":"169099","blockHeight":"86"}   1m53s
+20:35  qualify   {"qualified":false,"gain":"493","threshold":"600","reason":"gain below threshold"}
+20:36  qualify   {"qualified":false,"reason":"wait until 2026-10-13T20:37:31.000Z: the Bounty isn't open"}
+20:39  qualify   {"qualified":true,"gain":"1131","blockHeight":"126"}
+20:52  payout    {"paid":true,"share":"1000","to":"91a0…52cf","blockHeight":"267"}
+       balance   NIGHT 1,000,000,000,000 → 1,000,000,001,000 (→ …002,000 after Bounty 1's Share)
+```
+
+The City token appeared in no run log, attestor log, witness log or output. The
+zkFetch client logs to stdout, so `scripts/bounty` sets `LOG_LEVEL=silent`.
+
 ## Version set
 
 Verified on 2026-10-09 with a fresh chain each time:
