@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-13T17:42:13.289Z",
+  "generatedAt": "2026-10-13T19:02:59.347Z",
   "skill": "mining",
   "request": {
     "url": "https://midnight.city/observer/api/skill/agents/user-agent-lhb10ef8yjy1wfc/progression",
@@ -11,7 +11,7 @@
       },
       {
         "type": "regex",
-        "value": "\"canStartConversation\":(?:true|false),\"id\":\"(?<agent>user-agent-[0-9a-z-]+)\""
+        "value": "\"canStartConversation\":(?:true|false),\"id\":\"user-agent-(?<id1>[0-9a-z-]{1,8})(?<id2>[0-9a-z-]{0,8})(?<id3>[0-9a-z-]{0,8})(?<id4>[0-9a-z-]{0,8})(?<id5>[0-9a-z-]{0,8})\""
       }
     ],
     "responseRedactions": [
@@ -19,7 +19,7 @@
         "regex": "\"mining\":\\{\"level\":\\d+,\"nextLevelXp\":\\d+,\"xp\":\\d+\\}"
       },
       {
-        "regex": "\"canStartConversation\":(?:true|false),\"id\":\"user-agent-[0-9a-z-]+\""
+        "regex": "\"canStartConversation\":(?:true|false),\"id\":\"user-agent-[0-9a-z-]{1,8}[0-9a-z-]{0,8}[0-9a-z-]{0,8}[0-9a-z-]{0,8}[0-9a-z-]{0,8}\""
       }
     ]
   },
@@ -27,27 +27,27 @@
     {
       "claim": {
         "provider": "http",
-        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":(?<xp>\\\\d+)\\\\}\"},{\"type\":\"regex\",\"value\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"(?<agent>user-agent-[0-9a-z-]+)\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":\\\\d+\\\\}\"},{\"regex\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"user-agent-[0-9a-z-]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/skill/agents/user-agent-lhb10ef8yjy1wfc/progression\"}",
-        "owner": "0x4729d8bc9f273041facda4c7fcd872c9d0293f2d",
-        "timestampS": 1791913329,
-        "context": "{\"extractedParameters\":{\"agent\":\"user-agent-lhb10ef8yjy1wfc\",\"xp\":\"0\"},\"providerHash\":\"0x43c3f0cc361e289ee4ecbac16cea12227a353845309ab0e22df3e33e9b7295bb\"}",
-        "identifier": "0xaa6be95f0554c2add8b8fd03d4df7c1d5108f61c323239312e9d17d302bd80be",
+        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":(?<xp>\\\\d+)\\\\}\"},{\"type\":\"regex\",\"value\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"user-agent-(?<id1>[0-9a-z-]{1,8})(?<id2>[0-9a-z-]{0,8})(?<id3>[0-9a-z-]{0,8})(?<id4>[0-9a-z-]{0,8})(?<id5>[0-9a-z-]{0,8})\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":\\\\d+\\\\}\"},{\"regex\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"user-agent-[0-9a-z-]{1,8}[0-9a-z-]{0,8}[0-9a-z-]{0,8}[0-9a-z-]{0,8}[0-9a-z-]{0,8}\\\"\"}],\"url\":\"https://midnight.city/observer/api/skill/agents/user-agent-lhb10ef8yjy1wfc/progression\"}",
+        "owner": "0xe0252783c5d1e3e54b3bc7ce3a452c15e9e1f5d2",
+        "timestampS": 1791918171,
+        "context": "{\"extractedParameters\":{\"id1\":\"lhb10ef8\",\"id2\":\"yjy1wfc\",\"id3\":\"\",\"id4\":\"\",\"id5\":\"\",\"xp\":\"1073\"},\"providerHash\":\"0x729bd46e4d431f52c591bf2db7408caf2460bbe67833f6491c3b2c46d191097a\"}",
+        "identifier": "0xc29fb5d41f1d42cf0de2ab934140cf988663246a02ed102123ccd71f92cd0679",
         "epoch": 1
       },
-      "signatureHex": "0x6e890274f88b6c48ddb74f526c2efdf3b1f1a36319d4414150c9012aeaaf59c216632ca22daceb6262f20b2545da399e6ede97e4aac38ce7cb45373644f2b0911c",
+      "signatureHex": "0x7c8973670a4c36a3bb6a986ccb49045e1ab7a8c8506ca49f40a6feca46893a161e46025c099a9eed1af1327018eb4479d3adedc9812cf1c35a477b45a4aeb1f81c",
       "attestorAddress": "0x8fd379246834eac74b8419ffda202cf8051f7a03"
     },
     {
       "claim": {
         "provider": "http",
-        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":(?<xp>\\\\d+)\\\\}\"},{\"type\":\"regex\",\"value\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"(?<agent>user-agent-[0-9a-z-]+)\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":\\\\d+\\\\}\"},{\"regex\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"user-agent-[0-9a-z-]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/skill/agents/user-agent-lhb10ef8yjy1wfc/progression\"}",
-        "owner": "0x5489eed4120b38823749bfe1e59a109f2fc01255",
-        "timestampS": 1791913327,
-        "context": "{\"extractedParameters\":{\"agent\":\"user-agent-lhb10ef8yjy1wfc\",\"xp\":\"0\"},\"providerHash\":\"0x43c3f0cc361e289ee4ecbac16cea12227a353845309ab0e22df3e33e9b7295bb\"}",
-        "identifier": "0xaa6be95f0554c2add8b8fd03d4df7c1d5108f61c323239312e9d17d302bd80be",
+        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":(?<xp>\\\\d+)\\\\}\"},{\"type\":\"regex\",\"value\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"user-agent-(?<id1>[0-9a-z-]{1,8})(?<id2>[0-9a-z-]{0,8})(?<id3>[0-9a-z-]{0,8})(?<id4>[0-9a-z-]{0,8})(?<id5>[0-9a-z-]{0,8})\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":\\\\d+\\\\}\"},{\"regex\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"user-agent-[0-9a-z-]{1,8}[0-9a-z-]{0,8}[0-9a-z-]{0,8}[0-9a-z-]{0,8}[0-9a-z-]{0,8}\\\"\"}],\"url\":\"https://midnight.city/observer/api/skill/agents/user-agent-lhb10ef8yjy1wfc/progression\"}",
+        "owner": "0xef7f3527082213aa29f484f7a990c4f518ae7fbd",
+        "timestampS": 1791918173,
+        "context": "{\"extractedParameters\":{\"id1\":\"lhb10ef8\",\"id2\":\"yjy1wfc\",\"id3\":\"\",\"id4\":\"\",\"id5\":\"\",\"xp\":\"1073\"},\"providerHash\":\"0x729bd46e4d431f52c591bf2db7408caf2460bbe67833f6491c3b2c46d191097a\"}",
+        "identifier": "0xc29fb5d41f1d42cf0de2ab934140cf988663246a02ed102123ccd71f92cd0679",
         "epoch": 1
       },
-      "signatureHex": "0x17d5d5c1b017ba646e2396e6267d5edeb6abe76341e090c1d3f831eb576fa8c827266caa69f6da3093444b82de36c79aeee1fec0576718f472aa097e9f6f21511b",
+      "signatureHex": "0x83ecf4813acde91e7175ef839327f4ce9eec1640ad98bd5dfa1fc79840038cca6f4eaf8ac2b0b994962a4a0316890725998d1fb16dd37de1de42d2d6bd955d581b",
       "attestorAddress": "0x88f9b82462f6c4bf4a0fb15e5c3971559a316e7f"
     }
   ]

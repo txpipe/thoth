@@ -6,7 +6,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import type { ZkFetchEvidence } from '@thoth/zk-tls';
 import type { ZkFetchRequest } from '@thoth/zk-tls/client';
 import { zkFetchProver } from '@thoth/zk-tls/prover';
-import { CLAIMABLE_URL, EVIDENCE_PATH, loadToken } from './common.ts';
+import { AGENT_ID_GROUPS, agentFrom, CLAIMABLE_URL, EVIDENCE_PATH, loadToken } from './common.ts';
 
 const WITNESS_URLS = (process.env.WITNESS_URLS ?? 'ws://localhost:8001/ws,ws://localhost:8002/ws')
   .split(',')
@@ -14,7 +14,7 @@ const WITNESS_URLS = (process.env.WITNESS_URLS ?? 'ws://localhost:8001/ws,ws://l
 
 // The first listed agent only (#121). A `[^\]]*` before the group would capture the last one.
 // IDs come as base 36, as hex, or as a UUID with hyphens.
-const FIRST_AGENT = '"agentIds":\\["(?<agent>user-agent-[0-9a-z-]+)"';
+const FIRST_AGENT = `"agentIds":\\["user-agent-${AGENT_ID_GROUPS}"`;
 
 const token = loadToken();
 const authorization = `Bearer ${token}`;
@@ -29,7 +29,7 @@ console.log(
 if (!response.ok) {
   throw new Error(`claimable returned HTTP ${response.status}`);
 }
-const plainAgent = new RegExp(FIRST_AGENT).exec(body)?.groups?.agent;
+const plainAgent = agentFrom(new RegExp(FIRST_AGENT).exec(body)?.groups);
 if (plainAgent === undefined) {
   throw new Error('the first-agent regex does not match the claimable response');
 }

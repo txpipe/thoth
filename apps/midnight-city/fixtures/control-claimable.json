@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-10-13T17:36:53.244Z",
+  "generatedAt": "2026-10-13T19:00:40.258Z",
   "request": {
     "url": "https://midnight.city/observer/api/local-control/claimable",
     "method": "GET",
     "responseMatches": [
       {
         "type": "regex",
-        "value": "\"agentIds\":\\[\"(?<agent>user-agent-[0-9a-z-]+)\""
+        "value": "\"agentIds\":\\[\"user-agent-(?<id1>[0-9a-z-]{1,8})(?<id2>[0-9a-z-]{0,8})(?<id3>[0-9a-z-]{0,8})(?<id4>[0-9a-z-]{0,8})(?<id5>[0-9a-z-]{0,8})\""
       }
     ],
     "responseRedactions": [
@@ -19,27 +19,27 @@
     {
       "claim": {
         "provider": "http",
-        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"agentIds\\\":\\\\[\\\"(?<agent>user-agent-[0-9a-z-]+)\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"agentIds\\\":\\\\[\\\"user-agent-[0-9a-z-]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/local-control/claimable\"}",
-        "owner": "0xfe92f1e9658475f28cbff34f9846cadd29d14254",
-        "timestampS": 1791913011,
-        "context": "{\"extractedParameters\":{\"agent\":\"user-agent-lhb10ef8yjy1wfc\"},\"providerHash\":\"0x35f0d8bb4a2872f03041ed526041b284358c9db5a0f288b450b60fc69e0ac0f3\"}",
-        "identifier": "0xb5cd75e11088e3b3670d011af5f3079e978c5eb0e41b3dc70ea2adaa3d2e7018",
+        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"agentIds\\\":\\\\[\\\"user-agent-(?<id1>[0-9a-z-]{1,8})(?<id2>[0-9a-z-]{0,8})(?<id3>[0-9a-z-]{0,8})(?<id4>[0-9a-z-]{0,8})(?<id5>[0-9a-z-]{0,8})\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"agentIds\\\":\\\\[\\\"user-agent-[0-9a-z-]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/local-control/claimable\"}",
+        "owner": "0x4e71a6abfaadfb2d9f5bde102e84b6a1204d6f40",
+        "timestampS": 1791918038,
+        "context": "{\"extractedParameters\":{\"id1\":\"lhb10ef8\",\"id2\":\"yjy1wfc\",\"id3\":\"\",\"id4\":\"\",\"id5\":\"\"},\"providerHash\":\"0x67ae31f54127c5bd1f4315cf4a4dfa9e38223f5eb263fc6650dd638713ccb5b9\"}",
+        "identifier": "0x114fad5aa1572ac9f2028b0e3ecffc80532e3daf546eff68b66d3e93a09b19c6",
         "epoch": 1
       },
-      "signatureHex": "0x3ff744c2cc2913530cd35551e9aaafcb5178008162731dc6bd33986fa6a82a404fb3da0e3052ec27ef7c450dbe33247a938a870f3755dd9d6610470ee474169d1c",
+      "signatureHex": "0x5b8f2754f1f7eda8b3ce25126151f551c3f2f6b875c7906ffe329ba644464e081bebba600c77e20f7e99f7fad259c181348670e68f30c32f3d2aea20400174041c",
       "attestorAddress": "0x8fd379246834eac74b8419ffda202cf8051f7a03"
     },
     {
       "claim": {
         "provider": "http",
-        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"agentIds\\\":\\\\[\\\"(?<agent>user-agent-[0-9a-z-]+)\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"agentIds\\\":\\\\[\\\"user-agent-[0-9a-z-]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/local-control/claimable\"}",
-        "owner": "0x6d552554582ad05c3d06f94e7b44aa2f8609f769",
-        "timestampS": 1791913012,
-        "context": "{\"extractedParameters\":{\"agent\":\"user-agent-lhb10ef8yjy1wfc\"},\"providerHash\":\"0x35f0d8bb4a2872f03041ed526041b284358c9db5a0f288b450b60fc69e0ac0f3\"}",
-        "identifier": "0xb5cd75e11088e3b3670d011af5f3079e978c5eb0e41b3dc70ea2adaa3d2e7018",
+        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"agentIds\\\":\\\\[\\\"user-agent-(?<id1>[0-9a-z-]{1,8})(?<id2>[0-9a-z-]{0,8})(?<id3>[0-9a-z-]{0,8})(?<id4>[0-9a-z-]{0,8})(?<id5>[0-9a-z-]{0,8})\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"agentIds\\\":\\\\[\\\"user-agent-[0-9a-z-]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/local-control/claimable\"}",
+        "owner": "0xa17012c976e4d4ef5a8a88ea740d0af531ecae99",
+        "timestampS": 1791918039,
+        "context": "{\"extractedParameters\":{\"id1\":\"lhb10ef8\",\"id2\":\"yjy1wfc\",\"id3\":\"\",\"id4\":\"\",\"id5\":\"\"},\"providerHash\":\"0x67ae31f54127c5bd1f4315cf4a4dfa9e38223f5eb263fc6650dd638713ccb5b9\"}",
+        "identifier": "0x114fad5aa1572ac9f2028b0e3ecffc80532e3daf546eff68b66d3e93a09b19c6",
         "epoch": 1
       },
-      "signatureHex": "0xb49d97e08920e32559839f436eeddbcd5452adb077e8f57fa63f222d31e605b1684fa11cccec94d3b0a4e99907fa44850eb971630b4932d96c9723c3f97ec3cb1b",
+      "signatureHex": "0x76fe2ea6daeb8b59ca5c2af0515b35aa3d6d1766cd94c0d3895c6095c741ce8f634c19349dd47638a005875846ffed2690ee61c4fec5aab30b90105780dfa46d1b",
       "attestorAddress": "0x88f9b82462f6c4bf4a0fb15e5c3971559a316e7f"
     }
   ]

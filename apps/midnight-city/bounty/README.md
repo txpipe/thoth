@@ -77,12 +77,18 @@ Control policy proves control.
   witness, so the test driver queues claims in private state, and each call
   takes the next one. Registration opens two.
 
+## Recorded data
+
+`test/recorded.test.ts` runs the Controller's agent's real Control claim and
+Reading, from `../fixtures/`, through two zkFetch attestors and the client into
+the Bounty: the agent registers, linked across the two claims by its recorded
+ID, and the recorded Reading is refused as a Control claim. Each attestor trusts
+the witness that recorded its evidence. Re-record with the two spikes
+(`../spike-ownership`, `../spike-xp`); their regexes split the ID into the five
+groups the policies read.
+
 ## Open gaps
 
-- **Recorded data.** The tests use signed fixture claims, not the zkFetch
-  fixtures in `../fixtures/`. Those were recorded with one `agent` group, before
-  the `bytes8` split; turning them into claims (#123) means re-recording with
-  the five-group regex.
 - **#112.** A claim's window is chosen by the client, so one observation can be
   vaulted again under another window. That doesn't help here, because each
   agent registers once and qualifies once.

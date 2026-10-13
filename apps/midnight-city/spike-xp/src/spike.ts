@@ -24,11 +24,27 @@ const WITNESS_URLS = (process.env.WITNESS_URLS ?? 'ws://localhost:8001/ws,ws://l
   .map((url) => url.trim());
 const FIXTURE_PATH = new URL(`../../fixtures/reading-${SKILL}.json`, import.meta.url);
 
+/**
+ * The agent ID after `user-agent-` as five 8-character groups, one per `bytes8`
+ * claim slot (a proof-of-concept stand-in for #26). IDs run up to 36 characters.
+ */
+const AGENT_ID_GROUPS = `(?<id1>[0-9a-z-]{1,8})${[2, 3, 4, 5]
+  .map((n) => `(?<id${n}>[0-9a-z-]{0,8})`)
+  .join('')}`;
+
+/** The agent ID a match's five groups spell, or undefined without one. */
+const agentFrom = (
+  groups: Readonly<Record<string, string | undefined>> | undefined,
+): string | undefined =>
+  groups?.id1 === undefined
+    ? undefined
+    : `user-agent-${[1, 2, 3, 4, 5].map((n) => groups[`id${n}`] ?? '').join('')}`;
+
 /** The skill's XP. Keys come sorted and compact, so the object's shape is fixed. */
 const xpMatch = (skill: string): string =>
   `"${skill}":\\{"level":\\d+,"nextLevelXp":\\d+,"xp":(?<xp>\\d+)\\}`;
 // agent.id, pinned by the key sorted just before it inside `agent`.
-const AGENT_MATCH = '"canStartConversation":(?:true|false),"id":"(?<agent>user-agent-[0-9a-z-]+)"';
+const AGENT_MATCH = `"canStartConversation":(?:true|false),"id":"user-agent-${AGENT_ID_GROUPS}"`;
 /** The slice a match reads, which is all the witness gets to see. */
 const reveal = (match: string): string => match.replace(/\(\?<\w+>([^()]*)\)/g, '$1');
 
@@ -113,7 +129,7 @@ if (pick === undefined || pick.status !== 200) {
 
 // Check both regexes on a plain read before paying for proofs.
 const plainXp = new RegExp(xpMatch(SKILL)).exec(pick.body)?.groups?.xp;
-const plainAgent = new RegExp(AGENT_MATCH).exec(pick.body)?.groups?.agent;
+const plainAgent = agentFrom(new RegExp(AGENT_MATCH).exec(pick.body)?.groups);
 console.log(`plain read of ${pick.agentId}: ${SKILL} xp ${plainXp}, agent.id ${plainAgent}`);
 if (plainXp === undefined || plainAgent !== pick.agentId) {
   throw new Error('the XP or agent regex does not bind the plain progression read');
@@ -131,7 +147,8 @@ const messages = claims.map((claim) =>
 );
 
 for (const { verified } of proofs) {
-  const { xp, agent } = verified.disclosedValues;
+  const { xp } = verified.disclosedValues;
+  const agent = agentFrom(verified.disclosedValues);
   console.log(`witness ${verified.attestorAddress}: ${SKILL} xp ${xp}, agent ${agent}`);
 }
 const agree = new Set(messages.map((message) => message.join())).size === 1;
@@ -145,7 +162,7 @@ if (first === undefined || claim === undefined || message === undefined) {
 }
 const iso = (seconds: bigint) => new Date(Number(seconds) * 1000).toISOString();
 console.log(
-  `\nclaim: agent ${first.verified.disclosedValues.agent} had ${SKILL} XP ${claim.values[0]}, observed between ${iso(windowStart)} and ${iso(windowEnd)}`,
+  `\nclaim: agent ${agentFrom(first.verified.disclosedValues)} had ${SKILL} XP ${claim.values[0]}, observed between ${iso(windowStart)} and ${iso(windowEnd)}`,
 );
 const subjectRequest = claimRequestOf(first.verified.claim);
 const subject = zkFetchSubjectOf(subjectRequest);

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { claimUrl, type ZkFetchEvidence } from '@thoth/zk-tls';
 import { verifyZkFetchProof } from '@thoth/zk-tls/attestor';
-import { CLAIMABLE_URL, EVIDENCE_PATH, loadToken, RUN_LOG_PATH } from './common.ts';
+import { agentFrom, CLAIMABLE_URL, EVIDENCE_PATH, loadToken, RUN_LOG_PATH } from './common.ts';
 
 /** Where `npm run witnesses --workspace=packages/zk-tls` logs, unless overridden. */
 const WITNESS_LOGS = (
@@ -70,7 +70,7 @@ if (evidenceText !== '') {
   const verified = await Promise.all(evidences.map((evidence) => verifyZkFetchProof(evidence)));
   for (const view of verified) {
     console.log(
-      `witness ${view.attestorAddress}: ${claimUrl(view.claim)} at ${view.claim.timestampS}, agent ${view.disclosedValues.agent}`,
+      `witness ${view.attestorAddress}: ${claimUrl(view.claim)} at ${view.claim.timestampS}, agent ${agentFrom(view.disclosedValues)}`,
     );
   }
   const checks: [boolean, string][] = [
@@ -79,7 +79,9 @@ if (evidenceText !== '') {
     [new Set(verified.map((view) => view.attestorAddress)).size === 2, 'two distinct witnesses'],
     [new Set(verified.map((view) => view.identifier)).size === 1, 'witnesses sign one claim'],
     [
-      verified.every((view) => /^user-agent-[0-9a-z-]+$/.test(view.disclosedValues.agent ?? '')),
+      verified.every((view) =>
+        /^user-agent-[0-9a-z-]+$/.test(agentFrom(view.disclosedValues) ?? ''),
+      ),
       'both disclose an agent ID',
     ],
   ];

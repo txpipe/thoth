@@ -165,17 +165,18 @@ export const makeNotaryKey = (): NotaryKey => {
 };
 
 /** A signature that never verifies, for an attestor that didn't sign. */
-const UNSIGNED: JubjubSchnorrSignature = { announcement: { x: 0n, y: 1n }, response: 0n };
+export const UNSIGNED: JubjubSchnorrSignature = { announcement: { x: 0n, y: 1n }, response: 0n };
+
+/** Sign a flat message, as an attestor's signer does. */
+export const signMessage = (sk: bigint, message: readonly bigint[]): JubjubSchnorrSignature =>
+  jubjubSchnorrSign(new CompactTypeVector(message.length, CompactTypeField), [...message], sk);
 
 /** Sign `claim` with `keys` (null: that attestor didn't sign) and pick its vault randomness. */
 export const sign = (claim: A_Claim, keys: readonly (NotaryKey | null)[]): Attestation => {
   const message = claimToMessage(claim);
-  const type = new CompactTypeVector(message.length, CompactTypeField);
   return {
     claim,
-    signatures: keys.map((key) =>
-      key === null ? UNSIGNED : jubjubSchnorrSign(type, [...message], key.sk),
-    ),
+    signatures: keys.map((key) => (key === null ? UNSIGNED : signMessage(key.sk, message))),
     commitRand: randomBytes(32),
   };
 };

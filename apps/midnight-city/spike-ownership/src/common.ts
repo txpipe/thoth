@@ -32,3 +32,19 @@ export const loadToken = (): string => {
   }
   return token;
 };
+
+/**
+ * The agent ID after `user-agent-` as five 8-character groups, one per `bytes8`
+ * claim slot (a proof-of-concept stand-in for #26). IDs run up to 36 characters.
+ */
+export const AGENT_ID_GROUPS = `(?<id1>[0-9a-z-]{1,8})${[2, 3, 4, 5]
+  .map((n) => `(?<id${n}>[0-9a-z-]{0,8})`)
+  .join('')}`;
+
+/** The agent ID a match's five groups spell, or undefined without one. */
+export const agentFrom = (
+  groups: Readonly<Record<string, string | undefined>> | undefined,
+): string | undefined =>
+  groups?.id1 === undefined
+    ? undefined
+    : `user-agent-${[1, 2, 3, 4, 5].map((n) => groups[`id${n}`] ?? '').join('')}`;
