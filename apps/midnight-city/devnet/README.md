@@ -171,6 +171,28 @@ The run on 2026-10-13, with the Controller's agent woodcutting in the live City
 The City token appeared in no run log, attestor log, witness log or output. The
 zkFetch client logs to stdout, so `scripts/bounty` sets `LOG_LEVEL=silent`.
 
+## Hermes runs it itself
+
+With the skill linked into `~/.hermes/skills/midnight-city-bounty`, Hermes ran a
+Bounty (threshold 1,500 Woodcutting XP) from three one-shot prompts
+(`hermes -s midnight-city-bounty -z "…do whatever the Bounty needs next…"`): one
+before it opened, one after, one after the deadline. Nobody told it the steps.
+
+```text
+run 1  brought the agent online (direct-control `connect`), started a 45-minute
+       woodcutting run, and registered        {"registered":true,"startXp":"179742","blockHeight":"927"}
+run 2  qualified                              {"qualified":true,"gain":"2726","blockHeight":"1058"}
+       probed payout                          {"paid":false,"reason":"wait until …22:40:12.000Z: Payouts start at the deadline"}
+run 3  took the Share                         {"paid":true,"share":"1000","to":"91a0…52cf","blockHeight":"1351"}
+       balance                                NIGHT 1,000,000,002,000 → 1,000,000,003,000
+```
+
+In the game it did only what it was asked: bring the agent online and chop wood.
+It also found three defects, now fixed:
+- `scripts/bounty` resolved its path through the symlink.
+- An offline agent surfaced as `zkFetch threshold not reached`.
+- `status` couldn't show a Payout, which only Hermes's own state can know.
+
 ## Version set
 
 Verified on 2026-10-09 with a fresh chain each time:

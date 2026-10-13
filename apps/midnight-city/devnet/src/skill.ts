@@ -42,6 +42,8 @@ interface BountyState {
   /** Hex address the Share is paid to, fixed at Registration. */
   payout: string;
   registered: boolean;
+  /** Set by our own Payout: the chain can't say, since a Payout names no agent. */
+  paid?: boolean;
 }
 
 const stateFile = (address: string): string => join(HOME, 'bounties', `${address}.json`);
@@ -125,6 +127,7 @@ export const status = async (address: string) => {
     agent: state?.agentId,
     registered: registration !== undefined,
     qualified: registration?.qualified ?? false,
+    paid: state?.paid ?? false,
     startXp: registration?.startXp,
     xp: xp ?? (state === undefined ? undefined : 'agent offline'),
     gain: registration !== undefined && xp !== undefined ? xp - registration.startXp : undefined,
@@ -282,6 +285,7 @@ export const payout = async (address: string) => {
     { bytes: Buffer.from(state.payout, 'hex') },
     share,
   );
+  saveState(address, { ...state, paid: true });
   await wallet.wallet.stop();
   return { paid: true, share, to: state.payout, blockHeight };
 };
