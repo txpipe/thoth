@@ -18,6 +18,9 @@ import "../../../../packages/contracts/attestor_registry"<3, 23> prefix R_;
 
 export { A_Claim };
 
+// The pinned attestor keys and the window rules, so a holder can check its attestors and timing.
+export { R_keys, A_freshnessWindow, A_maxWindow };
+
 export struct Registration {
   holder: Bytes<32>; // the holder commitment all of this agent's claims carry
   startXp: Uint<64>;
