@@ -1,0 +1,54 @@
+{
+  "generatedAt": "2026-10-13T17:42:13.289Z",
+  "skill": "mining",
+  "request": {
+    "url": "https://midnight.city/observer/api/skill/agents/user-agent-lhb10ef8yjy1wfc/progression",
+    "method": "GET",
+    "responseMatches": [
+      {
+        "type": "regex",
+        "value": "\"mining\":\\{\"level\":\\d+,\"nextLevelXp\":\\d+,\"xp\":(?<xp>\\d+)\\}"
+      },
+      {
+        "type": "regex",
+        "value": "\"canStartConversation\":(?:true|false),\"id\":\"(?<agent>user-agent-[0-9a-z-]+)\""
+      }
+    ],
+    "responseRedactions": [
+      {
+        "regex": "\"mining\":\\{\"level\":\\d+,\"nextLevelXp\":\\d+,\"xp\":\\d+\\}"
+      },
+      {
+        "regex": "\"canStartConversation\":(?:true|false),\"id\":\"user-agent-[0-9a-z-]+\""
+      }
+    ]
+  },
+  "evidences": [
+    {
+      "claim": {
+        "provider": "http",
+        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":(?<xp>\\\\d+)\\\\}\"},{\"type\":\"regex\",\"value\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"(?<agent>user-agent-[0-9a-z-]+)\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":\\\\d+\\\\}\"},{\"regex\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"user-agent-[0-9a-z-]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/skill/agents/user-agent-lhb10ef8yjy1wfc/progression\"}",
+        "owner": "0x4729d8bc9f273041facda4c7fcd872c9d0293f2d",
+        "timestampS": 1791913329,
+        "context": "{\"extractedParameters\":{\"agent\":\"user-agent-lhb10ef8yjy1wfc\",\"xp\":\"0\"},\"providerHash\":\"0x43c3f0cc361e289ee4ecbac16cea12227a353845309ab0e22df3e33e9b7295bb\"}",
+        "identifier": "0xaa6be95f0554c2add8b8fd03d4df7c1d5108f61c323239312e9d17d302bd80be",
+        "epoch": 1
+      },
+      "signatureHex": "0x6e890274f88b6c48ddb74f526c2efdf3b1f1a36319d4414150c9012aeaaf59c216632ca22daceb6262f20b2545da399e6ede97e4aac38ce7cb45373644f2b0911c",
+      "attestorAddress": "0x8fd379246834eac74b8419ffda202cf8051f7a03"
+    },
+    {
+      "claim": {
+        "provider": "http",
+        "parameters": "{\"body\":\"\",\"method\":\"GET\",\"paramValues\":{},\"responseMatches\":[{\"type\":\"regex\",\"value\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":(?<xp>\\\\d+)\\\\}\"},{\"type\":\"regex\",\"value\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"(?<agent>user-agent-[0-9a-z-]+)\\\"\"}],\"responseRedactions\":[{\"regex\":\"\\\"mining\\\":\\\\{\\\"level\\\":\\\\d+,\\\"nextLevelXp\\\":\\\\d+,\\\"xp\\\":\\\\d+\\\\}\"},{\"regex\":\"\\\"canStartConversation\\\":(?:true|false),\\\"id\\\":\\\"user-agent-[0-9a-z-]+\\\"\"}],\"url\":\"https://midnight.city/observer/api/skill/agents/user-agent-lhb10ef8yjy1wfc/progression\"}",
+        "owner": "0x5489eed4120b38823749bfe1e59a109f2fc01255",
+        "timestampS": 1791913327,
+        "context": "{\"extractedParameters\":{\"agent\":\"user-agent-lhb10ef8yjy1wfc\",\"xp\":\"0\"},\"providerHash\":\"0x43c3f0cc361e289ee4ecbac16cea12227a353845309ab0e22df3e33e9b7295bb\"}",
+        "identifier": "0xaa6be95f0554c2add8b8fd03d4df7c1d5108f61c323239312e9d17d302bd80be",
+        "epoch": 1
+      },
+      "signatureHex": "0x17d5d5c1b017ba646e2396e6267d5edeb6abe76341e090c1d3f831eb576fa8c827266caa69f6da3093444b82de36c79aeee1fec0576718f472aa097e9f6f21511b",
+      "attestorAddress": "0x88f9b82462f6c4bf4a0fb15e5c3971559a316e7f"
+    }
+  ]
+}
