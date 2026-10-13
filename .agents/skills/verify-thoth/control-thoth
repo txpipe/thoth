@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# control-thoth — build thoth the way a consumer gets it and drive its public seams.
+#
+# One run per VERIFY_RUN_ID, in $VERIFY_RUN_ROOT/$VERIFY_RUN_ID (default root:
+# ${TMPDIR:-/tmp}/verify-thoth). The run dir holds the example app compiled from
+# packages/contracts/examples/example_app.compact and a node_modules link to this worktree's,
+# so the compiled contract imports the Compact runtime as an app's own build does.
+# The packages' dist/ and node_modules/ belong to the worktree: one run per worktree at a time.
+#
+# Subcommands (see SKILL.md):
+#   launch                              install deps if stale, build dist/, compile the example app
+#   doctor                              read-only: is this run worth driving?
+#   env                                 print run.env's path, to source: . "$(control-thoth env)"
+#   run [--evidence PREFIX] [--offline] -- <cmd...>
+#                                       run a command from the repo root with the run's node;
+#                                       exit code is the command's; --offline: no network
+#   cleanup                             remove the run dir; never .evidence/, dist/ or node_modules/
+set -euo pipefail
+
+SKILL_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(CDPATH='' cd -- "$SKILL_DIR/../../.." && pwd)"
+RUN_ROOT="${VERIFY_RUN_ROOT:-${TMPDIR:-/tmp}/verify-thoth}"
+
+die() { printf 'control-thoth: %s\n' "$*" >&2; exit 1; }
+
+require_run_id() {
+  [ -n "${VERIFY_RUN_ID:-}" ] || die "VERIFY_RUN_ID is unset. Pick one per run, e.g. export VERIFY_RUN_ID=<issue>"
+  case "$VERIFY_RUN_ID" in */* | . | ..) die "VERIFY_RUN_ID must be a plain name, got '$VERIFY_RUN_ID'" ;; esac
+  RUN_DIR="$RUN_ROOT/$VERIFY_RUN_ID"
+  RUN_ENV="$RUN_DIR/run.env"
+}
+
+load_run() {
+  require_run_id
+  [ -f "$RUN_ENV" ] || die "no run at $RUN_DIR. Run: control-thoth launch"
+  # shellcheck disable=SC1090
+  . "$RUN_ENV"
+}
+
+# The compiler the repo pins in its own scripts (`compact compile +X.Y.Z`).
+compact_pin() { sed -n 's/.*compact compile +\([0-9.]*\).*/\1/p' "$REPO_ROOT/package.json" | head -n 1; }
+
+# The bin dir of the Node .nvmrc names: the current node if its major matches, else mise's.
+pick_node() {
+  local want have dir
+  want="$(tr -d 'v[:space:]' < "$REPO_ROOT/.nvmrc")"
+  have="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)"
+  if [ "$have" = "$want" ]; then
+    dirname "$(node -p process.execPath)"
+  elif command -v mise > /dev/null && dir="$(mise where "node@$want" 2> /dev/null)"; then
+    echo "$dir/bin"
+  else
+    [ -n "$have" ] || die "no node on PATH, and no mise node@$want"
+    echo "control-thoth: Node $have, .nvmrc says $want and mise has no node@$want; using Node $have" >&2
+    dirname "$(node -p process.execPath)"
+  fi
+}
+
+cmd_launch() {
+  require_run_id
+  [ ! -e "$RUN_DIR" ] || die "run $VERIFY_RUN_ID exists at $RUN_DIR. Run: control-thoth cleanup"
+  local other node_bin pin
+  other="$(grep -lxF "REPO=$REPO_ROOT" "$RUN_ROOT"/*/run.env 2> /dev/null | head -n 1 || true)"
+  [ -z "$other" ] || die "run $(basename "$(dirname "$other")") is driving this worktree, whose dist/ every run shares. Clean it up first: VERIFY_RUN_ID=$(basename "$(dirname "$other")") $0 cleanup"
+  node_bin="$(pick_node)"
+  pin="$(compact_pin)"
+  [ -n "$pin" ] || die "no 'compact compile +<version>' in package.json"
+  mkdir -p "$RUN_DIR"
+  printf 'REPO=%s\nRUN_DIR=%s\nNODE_BIN=%s\nCOMPACT=%s\nHEAD=%s\n' "$REPO_ROOT" "$RUN_DIR" \
+    "$node_bin" "$pin" "$(git -C "$REPO_ROOT" rev-parse HEAD)" > "$RUN_ENV"
+  cd "$REPO_ROOT"
+  export PATH="$node_bin:$PATH"
+  echo "launch: node $(node --version), compact $pin, HEAD $(git rev-parse --short HEAD)"
+  if [ ! node_modules/.package-lock.json -nt package-lock.json ]; then
+    npm ci --prefer-offline --no-audit --no-fund
+  fi
+  npm run build
+  compact compile "+$pin" --skip-zk packages/contracts/examples/example_app.compact "$RUN_DIR/example_app"
+  ln -s "$REPO_ROOT/node_modules" "$RUN_DIR/node_modules"
+  touch "$RUN_DIR/built"
+  echo "launch: ready, run dir $RUN_DIR"
+}
+
+cmd_doctor() {
+  load_run
+  local fail=0 want have resolved
+  ok() { echo "ok    $*"; }
+  bad() { echo "FAIL  $*"; fail=1; }
+  cd "$REPO_ROOT"
+  if [ "$REPO" = "$REPO_ROOT" ]; then ok "run belongs to this worktree ($REPO)"; else bad "run belongs to $REPO, not this worktree"; fi
+  if [ "$(git rev-parse HEAD)" = "$HEAD" ]; then ok "HEAD $HEAD is the one launched"; else bad "HEAD moved since launch ($HEAD): cleanup and launch again"; fi
+  want="$(tr -d 'v[:space:]' < .nvmrc)"
+  have="$("$NODE_BIN/node" -p 'process.versions.node' 2> /dev/null || true)"
+  if [ -z "$have" ]; then bad "no node at $NODE_BIN"; elif [ "${have%%.*}" = "$want" ]; then ok "node $have (.nvmrc $want)"; else ok "node $have, not .nvmrc's $want (see SKILL.md, Launch)"; fi
+  if [ "$(compact compile "+$COMPACT" --version 2> /dev/null)" = "$COMPACT" ]; then ok "compact compiler $COMPACT"; else bad "compact compile +$COMPACT does not run: compact update $COMPACT"; fi
+  local stale
+  stale="$(find packages -path '*/node_modules' -prune -o -path '*/dist' -prune -o -path '*/artifacts' -prune -o \
+    \( -name '*.ts' -o -name '*.compact' -o -name 'package.json' \) -newer "$RUN_DIR/built" -print)"
+  if [ -z "$stale" ]; then ok "no source changed since the build"; else bad "changed since the build: $(echo $stale): cleanup and launch again"; fi
+  for pkg in core attestor client zk-tls; do
+    resolved="$(PATH="$NODE_BIN:$PATH" node --input-type=module -e "console.log(new URL(import.meta.resolve('@thoth/$pkg')).pathname)" 2> /dev/null || true)"
+    if [ "$resolved" = "$REPO_ROOT/packages/$pkg/dist/index.js" ] && [ -f "$resolved" ]; then ok "@thoth/$pkg resolves to packages/$pkg/dist/index.js"; else bad "@thoth/$pkg resolves to '${resolved:-nothing}'"; fi
+  done
+  if [ -f "$RUN_DIR/example_app/contract/index.js" ] && [ "$(readlink "$RUN_DIR/node_modules")" = "$REPO_ROOT/node_modules" ]; then ok "example app compiled at $RUN_DIR/example_app"; else bad "no compiled example app in $RUN_DIR"; fi
+  if [ -f examples/demo-attestation/fixtures/fixture-github-attestor-core-x-0m.json ]; then ok "recorded zkFetch evidence present"; else bad "examples/demo-attestation/fixtures/fixture-github-attestor-core-x-0m.json is missing"; fi
+  if unshare --map-root-user --net true 2> /dev/null; then ok "run --offline available"; else ok "run --offline unavailable here (no user namespaces): drop --offline and say so in the Evidence"; fi
+  [ "$fail" = 0 ] || { echo "doctor: do not drive this run"; exit 1; }
+  echo "doctor: ok"
+}
+
+cmd_run() {
+  load_run
+  local evidence="" offline=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --evidence) shift; evidence="${1:-}"; [ -n "$evidence" ] || die "run: --evidence needs a path prefix" ;;
+      --offline) offline=1 ;;
+      --) shift; break ;;
+      *) break ;;
+    esac
+    shift
+  done
+  [ $# -gt 0 ] || die "run: usage: run [--evidence PREFIX] [--offline] -- <cmd...>"
+  # A new network namespace with only loopback, down: nothing the command does can reach a network.
+  [ -z "$offline" ] || set -- unshare --map-root-user --net "$@"
+  local out err code=0
+  out="$(mktemp)"
+  err="$(mktemp)"
+  (cd "$REPO_ROOT" && PATH="$NODE_BIN:$PATH" VERIFY_THOTH_RUN_DIR="$RUN_DIR" "$@") > "$out" 2> "$err" || code=$?
+  if [ -n "$evidence" ]; then
+    mkdir -p "$(dirname -- "$evidence")"
+    local cmd
+    printf -v cmd '%q ' "$@"
+    printf '%s\n' "${cmd% }" > "$evidence.cmd"
+    cat "$out" > "$evidence.stdout"
+    cat "$err" > "$evidence.stderr"
+    printf '%s\n' "$code" > "$evidence.exit"
+  fi
+  cat "$out"
+  cat "$err" >&2
+  rm -f "$out" "$err"
+  exit "$code"
+}
+
+cmd_cleanup() {
+  require_run_id
+  if [ ! -e "$RUN_DIR" ]; then
+    echo "cleanup: nothing at $RUN_DIR"
+    return
+  fi
+  case "$(cd "$RUN_DIR" && pwd -P)/" in
+    "$(cd "$RUN_ROOT" && pwd -P)"/?*/) ;;
+    *) die "refusing to remove $RUN_DIR: not under $RUN_ROOT" ;;
+  esac
+  rm -rf -- "$RUN_DIR"
+  echo "cleanup: removed $RUN_DIR (.evidence/, dist/ and node_modules/ untouched)"
+}
+
+case "${1:-}" in
+  launch) shift; cmd_launch "$@" ;;
+  doctor) shift; cmd_doctor "$@" ;;
+  env) load_run; echo "$RUN_ENV" ;;
+  run) shift; cmd_run "$@" ;;
+  cleanup) shift; cmd_cleanup "$@" ;;
+  *) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
