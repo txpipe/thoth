@@ -88,7 +88,12 @@ const qualify = async (c: Controller, reading: Attestation, at = reading.claim.w
 
 const fund = async (amount: bigint) => {
   sim.now = T0;
-  await sim.call('fund', { attestations: [], holderSecret: new Uint8Array(32) }, amount);
+  await sim.call(
+    'fund',
+    { attestations: [], holderSecret: new Uint8Array(32) },
+    amount,
+    randomBytes(2048),
+  );
 };
 
 /** A Payout names only the address and the Share; `pathFor` stages a forged Merkle path. */
@@ -408,7 +413,12 @@ describe('the pot and observations', () => {
   it('rejects funding after the deadline, so Shares stay fixed', async () => {
     sim.now = DEADLINE;
     await expect(
-      sim.call('fund', { attestations: [], holderSecret: new Uint8Array(32) }, 10n),
+      sim.call(
+        'fund',
+        { attestations: [], holderSecret: new Uint8Array(32) },
+        10n,
+        randomBytes(2048),
+      ),
     ).rejects.toThrow('Bounty closed');
   });
 
