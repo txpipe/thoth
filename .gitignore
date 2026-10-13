@@ -13,3 +13,6 @@ packages/contracts/artifacts/
 .DS_Store
 .idea/
 .vscode/
+
+# verification evidence, kept in nico-agent's Bucket, never committed
+.evidence/
