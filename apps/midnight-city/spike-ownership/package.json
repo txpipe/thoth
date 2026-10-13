@@ -1,0 +1,15 @@
+{
+  "name": "@thoth-midnight-city/spike-ownership",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Spike (#129): prove a City API token controls an agent through two zkFetch witnesses, token unseen.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "mkdir -p .state && node src/prove.ts > .state/run.log 2>&1; node src/check.ts",
+    "types": "tsc --noEmit"
+  }
+}
