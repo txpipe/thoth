@@ -47,7 +47,10 @@
 //     values[0] as Field, ..., values[V-1] as Field,
 //     byteHalves[0] as Field, ..., byteHalves[B-1] as Field ]
 // Byte ranges are half-open (appId[0..16] is bytes 0-15). Each 32-byte field
-// is split in two halves so every byte is signed.
+// is split in two halves so every byte is signed; each 16-byte half is read
+// little-endian (byte 0 least significant) when cast to Uint<128>/Field, the
+// runtime's `convertBytesToUint` convention. `claimToMessage` uses the same
+// primitive, so the two encoders agree field-for-field.
 //
 // Module parameters (import "attestation"<K, V, B, N, M>):
 //   #K — signed-message length in fields. Must equal 11 + 2*V + 2*B (the

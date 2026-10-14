@@ -13,8 +13,8 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "compact": "compact compile +0.34.0 packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation",
-    "compact:no-zk": "compact compile +0.34.0 --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation",
+    "compact": "compact compile +0.34.0 packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.34.0 packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes",
+    "compact:no-zk": "compact compile +0.34.0 --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.34.0 --skip-zk packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes",
     "pretest": "npm run compact && npm run build",
     "test": "vitest run",
     "build": "npm run build --workspace=packages/core && npm run build --workspaces --if-present",

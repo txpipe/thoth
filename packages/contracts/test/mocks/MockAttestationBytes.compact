@@ -1,0 +1,66 @@
+// Test mock: a thin deployable wrapper around the attestation + registry
+// modules, specialized to V=3 values, B=2 byte halves (one 32-byte byte
+// value), K=21 message fields, M=3 signatures, N=2 threshold (2-of-3). Exists
+// only to give the modules a top-level shell to compile against and to
+// re-export the pure parity surface (`message`, `computeId`, `holderOf`,
+// `holderCommitment`) plus byte-value predicate demos the simulator tests use.
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+//           K=21 msg fields  V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
+import "../../attestation"<21, 3, 2, 2, 3> prefix B_;
+
+import "../../attestor_registry"<3, 21> prefix R_;
+
+export { B_Claim, B_ClaimEntry };
+
+export { B_freshnessWindow, B_maxWindow, B_policyHashes, B_claimsVault, B_nullifiers };
+
+export circuit verifyAttestation(): [] {
+  B_verifyAttestation();
+}
+
+export pure circuit message(a: B_Claim): Vector<21, Field> {
+  return B_buildMessage(a);
+}
+
+export pure circuit computeId(a: B_Claim, rand: Bytes<32>): Bytes<32> {
+  return B_computeId(a, rand);
+}
+
+export pure circuit holderOf(secret: Bytes<32>): Field {
+  return B_holderOf(secret);
+}
+
+export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
+  return B_holderCommitment(secret);
+}
+
+export pure circuit keysDistinct(ks: Vector<3, JubjubPoint>): Boolean {
+  return R_keysDistinct(ks);
+}
+
+// App-predicate demo: reassemble the claim's byte value 0 from its two
+// adjacent 16-byte halves and compare it as one Bytes<32>. The caller supplies
+// the expected value (e.g. the other claim's attested identifier), so the same
+// circuit is the equality predicate over two claims.
+export circuit openAndReadBytes(id: Bytes<32>, expected: Bytes<32>): [] {
+  const c = B_openClaim(id);
+  assert(Bytes[...c.byteHalves[0], ...c.byteHalves[1]] == expected, "byteValue[0] mismatch");
+}
+
+witness freshWindow(): Uint<64>;
+
+witness maxWin(): Uint<64>;
+
+witness seedPolicies(): Vector<2, Bytes<32>>;
+
+constructor() {
+  B_freshnessWindow = disclose(freshWindow());
+  B_maxWindow = disclose(maxWin());
+  for (const h of seedPolicies()) {
+    B_policyHashes.insert(disclose(h));
+  }
+  R_initRegistry();
+}
