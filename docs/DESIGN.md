@@ -95,20 +95,29 @@ behind them are the ADRs in [`adr/`](adr/).
 | `windowStart`, `windowEnd` | When the attestor observed, in Unix seconds (ADR 0005) |
 | `subjectHash` | Circuit hash of what the claim is about (ADR 0001) |
 | `holder` | Per-claim commitment of the caller's secret (ADR 0004) |
-| `present` | One flag per value slot: was it measured |
+| `present` | One flag per value slot: `V` numeric slots, then `W` byte slots |
 | `values` | `V` positional `Uint<64>` measurements |
+| `byteValues` | `W` positional 32-byte measurements (identifiers, strings) |
+
+A byte value travels exactly as its 32 bytes; the contract stores each one as
+two adjacent 16-byte halves and carries the byte slot's flag on both halves. The
+absent law is one-directional: an absent slot must carry zero, while a present
+slot may be zero — including a short value whose zero-padding leaves a half all
+zeros.
 
 There is no nonce and no kind code. The contract derives replay protection from
 the observation identity (ADR 0006), and the policy hash binds the kind.
 
 ### Wire order
 
-Attestors sign, and the contract rebuilds, a flat vector of `K = 2*V + 11`
-fields. `buildMessage` in
+Attestors sign, and the contract rebuilds, a flat vector of
+`K = 2*V + 2*B + 11` fields (`B = 2*W` is the number of byte halves).
+`buildMessage` in
 [`attestation.compact`](../packages/contracts/attestation.compact) defines it;
 `claimToMessage` in `@thoth/core/claim` mirrors it, and a parity test keeps the
 two equal. Each 32-byte field is split into two 16-byte halves, each read as a
-`Uint<128>`, so every byte is signed.
+`Uint<128>` little-endian (byte 0 least significant — the runtime's
+`convertBytesToUint` convention), so every byte is signed.
 
 | Index | Field | Encoding |
 |-------|-------|----------|
@@ -120,7 +129,12 @@ two equal. Each 32-byte field is split into two 16-byte halves, each read as a
 | 7, 8 | `subjectHash` | two halves |
 | 9, 10 | `holder` | two halves |
 | 11 … 10+V | `present[0]` … `present[V-1]` | `1` measured, `0` absent |
-| 11+V … 10+2V | `values[0]` … `values[V-1]` | the value; `0` when absent |
+| 11+V … 10+V+B | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
+| 11+V+B … 10+V+B+V | `values[0]` … `values[V-1]` | the value; `0` when absent |
+| 11+V+B+V … 10+V+B+V+B | `byteHalves[0]` … `byteHalves[B-1]` | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]` |
+
+With `W = 0` every byte row disappears and the table is the numeric-only
+`K = 2*V + 11` layout exactly.
 
 ## The contract
 

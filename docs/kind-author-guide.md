@@ -49,6 +49,10 @@ Never bake an app's policy into an attestor instance.
 - Hash the normalized form: `policyHashOf(law, normalized, claimVersion)`.
   Policies that mean the same thing must hash the same, or two honest
   attestors sign different messages and never reach the threshold together.
+- Each slot declares how its disclosed string is interpreted: `int` or `float`
+  feeds a numeric slot, `bytes` keeps the string's UTF-8 bytes zero-padded to 32
+  in a byte slot (a string longer than 32 bytes is not certifiable). Numeric
+  rules must target numeric slots; `bytes` must target byte slots.
 - Keep per-operator trust anchors out of the policy. Which witness an attestor
   trusts is instance configuration (zkFetch's `witnessAddress`), not law.
 - Pin the hash of one fixed policy to its bytes in a test, as
@@ -81,19 +85,25 @@ let it drive a policy decision.
 
 ## 5. The claim
 
-Use the canonical claim: `claimSchema(V)` for the schema and `claimToMessage`
-for `message`. Your kind decides only the header fields that come from the
-evidence and the values:
+Use the canonical claim: `claimSchema(V, W)` for the schema and
+`claimToMessage` for `message` (omit `W` for a numeric-only kind). Your kind decides only the header fields that come from the evidence
+and the values:
 
 - `policyHash` is your policy hash and `subjectHash` is your subject hash.
 - `windowStart` and `windowEnd` are the window the client proposed. Sign it
   only if your source's observation falls inside it. When the
   fact itself happened, such as a block height or event time, is a value, not
   the window (ADR 0005).
-- `values` are `Uint<64>`, positional, one per slot of the policy's slot map.
-  Set `present[i]` for every measured slot, even when its value is zero. An
+- `values` are `Uint<64>`, positional, one per numeric slot of the policy's slot
+  map. Set `present[i]` for every measured slot, even when its value is zero. An
   unmeasured slot is `present[i] = false` with value `0`; the contract rejects
   anything else. Do not guess a value you could not read.
+- `byteValues` are 32-byte values (identifiers, strings), positional, one per
+  byte slot. Canonicalize a disclosed string by zero-padding its UTF-8 bytes to
+  32; a longer string is not certifiable and its slot stays unpresent. The kind
+  layer carries one flag per byte slot (`present[V + i]`); `claimToMessage` and
+  the contract split each value into two adjacent 16-byte halves and repeat the
+  flag on both halves.
 - `appId` and `holder` come from the claim proposal. The attestor signs them
   but cannot check them. The contract checks `holder` against the caller's
   secret; `appId` is compared by the app's own predicate, not by the module.
@@ -105,15 +115,16 @@ or app must rely on has to be a field of the signed message.
 
 `defineAttestor({ kind, policy, evidence, claim, verify, message })` is the
 keyless, shareable law. `verify` receives parsed input and throws to reject.
-Validate that `values` and `present` have equal lengths and that every policy
-slot fits within the requested count before proof verification. Then:
+Validate that `present` has one flag per value slot (`values` plus `byteValues`)
+and that every policy slot fits within the requested numeric and byte counts and
+targets the matching region before proof verification. Then:
 
 1. verify the evidence's own signature;
 2. check the evidence against the policy;
 3. check that the observation falls inside the proposed window;
 4. check that the proposed `subjectHash` is the one of what the evidence signed;
-5. check that the proposed values and `present` say exactly what the evidence
-   showed.
+5. check that the proposed values, byte values, and `present` say exactly what
+   the evidence showed.
 
 `message` is `claimToMessage(claim)`. A kind that needs a different message
 shape can return another type, but then it needs its own contract module.

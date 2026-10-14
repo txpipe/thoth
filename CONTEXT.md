@@ -31,7 +31,7 @@ _Avoid_: Driver, plugin.
 ### The claim
 
 **Claim**:
-The canonical statement of what was observed, and the thing attestors sign. It carries the version, the app id, the policy hash, the observation window, the subject hash, the holder, the present mask, and the measured values. It carries no nonce and no kind.
+The canonical statement of what was observed, and the thing attestors sign. It carries the version, the app id, the policy hash, the observation window, the subject hash, the holder, the present mask, and the measured values (numeric and byte). It carries no nonce and no kind.
 _Avoid_: Assertion, statement.
 
 **Version**:
@@ -71,7 +71,7 @@ When the attestor observed the claim, not when the underlying fact happened. The
 _Avoid_: Timestamp, event time.
 
 **present**:
-The mask marking which value slots were measured, one flag per slot, numeric slots first and byte slots after. `present[i]` true means slot i was measured, even when its value is zero. An absent slot must carry zero.
+The mask marking which value slots were measured, one flag per slot, numeric slots first and byte slots after. In the signed message each byte slot's flag is carried on both of its 16-byte halves. `present[i]` true means slot i was measured, even when its value is zero. An absent slot must carry zero.
 _Avoid_: Valid, filled.
 
 **Values**:
@@ -79,7 +79,7 @@ The measured values of a claim, one per value slot: numbers in the numeric slots
 _Avoid_: Data, payload.
 
 **Byte slot**:
-A value slot carrying a fixed-width byte string, for facts that are not numbers, such as identifiers. A policy's parse rule canonicalizes a source's string into the slot, zero-padding shorter values. The slot is exactly its bytes; equality is byte equality.
+A value slot carrying a fixed-width byte string, for facts that are not numbers, such as identifiers. A policy's parse rule canonicalizes a source's string into the slot, zero-padding shorter values. The slot is exactly its bytes; equality is byte equality. The signed message splits it into two adjacent 16-byte halves and repeats the slot's flag on each, so a predicate reassembles the halves in-circuit.
 _Avoid_: Blob, string slot.
 
 **Claim proposal**:
@@ -95,7 +95,7 @@ One attested session: the single fetch or event read the witnesses signed. Uniqu
 _Avoid_: Request, session.
 
 **Observation identity**:
-The fields that make an observation unique: app id, policy hash, subject hash, window, values, and present. It excludes holder and version.
+The fields that make an observation unique: app id, policy hash, subject hash, window, numeric values, byte values, and present. It excludes holder and version.
 _Avoid_: Claim id, nonce.
 
 **Fact**:
@@ -109,7 +109,7 @@ The flat list of field values the attestors sign and the contract rebuilds.
 _Avoid_: Payload, digest.
 
 **Wire layout**:
-The order and encoding of the message's fields, `K = 11 + 2V + 3W` of them: a byte value takes two fields. `buildMessage` in `attestation.compact` defines it and `claimToMessage` mirrors it.
+The order and encoding of the message's fields, `K = 11 + 2V + 2B` of them (`B = 2W` byte halves): a byte value takes two adjacent fields, each half carrying the slot's flag. `buildMessage` in `attestation.compact` defines it and `claimToMessage` mirrors it.
 _Avoid_: Format, serialization.
 
 **Attestation**:
