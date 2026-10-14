@@ -104,8 +104,10 @@ constructor() {
 
 - `#K` — signed-message length in fields (`K` must equal `2*V + 2*B + 11`)
 - `#V` — number of numeric claim value slots (`Claim.values: Vector<V, Uint<64>>`)
-- `#B` — number of byte halves (`Claim.byteHalves: Vector<B, Bytes<16>>`): twice the
-  number of 32-byte byte values. `B = 0` reproduces the numeric-only layout exactly
+- `#B` — number of byte halves (`Claim.byteHalves: Vector<B, Bytes<16>>`). Must be
+  even (`B = 2W` for `W` 32-byte byte values, each two adjacent halves); `B = 0`
+  reproduces the numeric-only layout exactly. The compiler cannot check this, so
+  `#B` even is an embedder invariant
 - `#N` — the app's N-of-M threshold
 - `#M` — number of attestor signatures supplied / registry key slots
 

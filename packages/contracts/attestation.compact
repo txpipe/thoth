@@ -58,9 +58,11 @@
 //        byte-half presence fields, the V value fields, and the B half fields).
 //        This is what the registry's countValidSignatures verifies over.
 //   #V — number of numeric claim value slots (Claim.values: Vector<V, Uint<64>>).
-//   #B — number of byte halves (Claim.byteHalves: Vector<B, Bytes<16>>): twice
-//        the number of 32-byte byte value slots. B = 0 is valid and reproduces
-//        the numeric-only layout exactly.
+//   #B — number of byte halves (Claim.byteHalves: Vector<B, Bytes<16>>). Must be
+//        even: B = 2W for W 32-byte byte value slots, each carried as two
+//        adjacent halves. B = 0 is valid and reproduces the numeric-only layout
+//        exactly. Compact cannot assert evenness (no static assert, and a vector
+//        size cannot be B/2), so B even is the embedder's invariant.
 //   #N — the app's N-of-M threshold: at least #N of the #M signatures must
 //        verify for a claim to be accepted.
 //   #M — number of attestor signatures supplied / registry key slots.
@@ -144,7 +146,8 @@ module attestation<#K, #V, #B, #N, #M> {
   /// `bytePresent` flags, the values mapped to `Field`, and the byte halves.
   /// Tuple/vector spread (`...`) appends each section, so at specialization
   /// `[header..., present..., bytePresent..., values..., byteHalves...]` has
-  /// length 11 + 2*V + 2*B, which must equal K (enforced by the embedder).
+  /// length 11 + 2*V + 2*B; a mismatch with K is a static error at
+  /// specialization, so the compiler checks it.
   /// This is the single wire shape the attestor must mirror.
   export pure circuit buildMessage(c: Claim): Vector<K, Field> {
     const appId = splitBytes(c.appId);
