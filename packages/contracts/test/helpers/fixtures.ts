@@ -93,10 +93,10 @@ export const makeClaim = (
 
 // Build a valid one-byte-value `Claim` fixture for the bytes mock (V = 3,
 // B = 2). The byte flag covers both halves, matching the attestor law.
-export const makeByteClaim = (
-  overrides: Partial<B_Claim> & { byteValue?: Uint8Array } = {},
-): B_Claim => {
-  const byteValue = overrides.byteValue ?? DEFAULT_BYTE_VALUE;
+export const makeByteClaim = ({
+  byteValue = DEFAULT_BYTE_VALUE,
+  ...overrides
+}: Partial<B_Claim> & { byteValue?: Uint8Array } = {}): B_Claim => {
   const [low, high] = splitHalves(byteValue);
   return {
     version: 1n,

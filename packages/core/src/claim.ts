@@ -185,7 +185,9 @@ export function claimSchema<V extends number = number, W extends number = 0>(
 const UINT128_MAX = (1n << 128n) - 1n;
 
 // Split 32 bytes into two 16-byte halves cast to `Uint<128>`, exactly as
-// `attestation.compact`'s `splitBytes` does, so every byte is signed.
+// `attestation.compact`'s `splitBytes` does, so every byte is signed. Each half
+// is read little-endian (byte 0 least significant), the runtime's
+// `convertBytesToUint` convention, matching the in-circuit cast.
 function splitBytes(bytes: Uint8Array): [bigint, bigint] {
   if (bytes.length !== 32) {
     throw new Error(`expected 32 bytes, got ${bytes.length}`);

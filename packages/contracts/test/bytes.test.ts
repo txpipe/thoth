@@ -34,6 +34,15 @@ const holder = DEFAULT_HOLDER_SECRET;
 const ZERO32 = new Uint8Array(32);
 const ZERO16 = ZERO32.slice(0, 16);
 
+// A value whose bytes differ across the 16-byte half boundary, so a swapped or
+// reversed half cannot pass the split/reassembly assertions.
+const fullSpan = (): Uint8Array => Uint8Array.from({ length: 32 }, (_, i) => i);
+
+// Little-endian value of a byte vector, as Compact's `convertBytesToUint` reads
+// it (first byte least significant), computed independently of the encoder.
+const le = (bytes: Uint8Array): bigint =>
+  bytes.reduce((acc, byte, i) => acc + BigInt(byte) * 256n ** BigInt(i), 0n);
+
 // Reinterpret the bytes mock's contract shape as the kind-facing core shape:
 // collapse each byte slot's duplicated per-half flags to one and reassemble its
 // two halves. `W = 1` here, so the single byte slot is halves 0 and 1.
@@ -85,9 +94,21 @@ describe('bytes claim wire', () => {
   });
 
   it('round-trips a core claim through the contract shape', () => {
-    const claim = makeByteClaim();
+    const claim = makeByteClaim({ byteValue: fullSpan() });
     const core = coreOf(claim);
     expect(toBytesClaim(core)).toEqual(claim);
+  });
+
+  it('encodes a full-span value as little-endian bytes 0–15 / 16–31 halves', () => {
+    const value = fullSpan();
+    const claim = makeByteClaim({ byteValue: value });
+    const [low, high] = splitHalves(value);
+    const lowField = le(low);
+    const highField = le(high);
+    // Distinct, non-zero halves — a swap or reversal fails both encoders.
+    expect(lowField).not.toBe(highField);
+    expect(claimToMessage(coreOf(claim)).slice(19, 21)).toEqual([lowField, highField]);
+    expect(pureCircuits.message(claim).slice(19, 21)).toEqual([lowField, highField]);
   });
 
   it('pins an absent byte flag to two zero fields even with halves present', () => {
@@ -178,6 +199,24 @@ describe('byte-value predicates', () => {
     );
   });
 
+  it('reassembles a value whose content spans both halves, in order', async () => {
+    const value = fullSpan();
+    const stored = await vault(value);
+    const id = bytesIdOf(stored.claim, stored.commitRand);
+    const state = { ...stored, holderSecret: holder };
+    // The contract reassembles `[bytes 0–15, bytes 16–31]`, recovering the value.
+    await sim.call('openAndReadBytes', state, id, value);
+    // A high-half mutation is rejected (the low/high test only touches low)...
+    await expect(sim.call('openAndReadBytes', state, id, flip(value, 20))).rejects.toThrow(
+      'byteValue[0] mismatch',
+    );
+    // ...and so is the halves swapped, so the order is pinned, not just the set.
+    const swapped = new Uint8Array([...value.slice(16), ...value.slice(0, 16)]);
+    await expect(sim.call('openAndReadBytes', state, id, swapped)).rejects.toThrow(
+      'byteValue[0] mismatch',
+    );
+  });
+
   it('accepts two claims with equal values and rejects a claim with another value', async () => {
     const first = await vault(padded32('abc'));
     const second = await vault(padded32('abc'));
@@ -211,14 +250,25 @@ describe('signature and identity coverage', () => {
     sim = await MockAttestationBytesSim.create(createPrivateState<B_Claim>(holder), registryKeys);
   });
 
-  it('rejects a single-byte mutation of a half under the honest signatures', async () => {
-    const claim = makeByteClaim();
-    const submission = signed(claim);
-    const [low, high] = splitHalves(DEFAULT_BYTE_VALUE);
-    await expect(
-      submit({ ...submission, claim: { ...claim, byteHalves: [flip(low, 0), high] } }),
-    ).rejects.toThrow('Insufficient valid signatures');
-  });
+  it.each([
+    ['low', 3],
+    ['high', 19],
+  ])(
+    'rejects a single-byte mutation of the %s half under the honest signatures',
+    async (_, byteIndex) => {
+      const value = fullSpan();
+      const claim = makeByteClaim({ byteValue: value });
+      const submission = signed(claim);
+      const halves = splitHalves(value);
+      const mutated =
+        byteIndex < 16
+          ? [flip(halves[0], byteIndex), halves[1]]
+          : [halves[0], flip(halves[1], byteIndex - 16)];
+      await expect(
+        submit({ ...submission, claim: { ...claim, byteHalves: mutated } }),
+      ).rejects.toThrow('Insufficient valid signatures');
+    },
+  );
 
   it('accepts claims differing only in byte value, then rejects the replay', async () => {
     const first = signed(makeByteClaim({ byteValue: padded32('abc') }));
