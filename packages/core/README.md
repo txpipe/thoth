@@ -24,8 +24,8 @@ The package exposes three entry points:
   - `AttestorDescriptor<D, PK>` — the client-facing face of an attestor: everything a client needs to address it
   - `Attestation<C, PK, S>` — the signed artifact an attestor produces and a client collects
 - **`@thoth/core/claim`**:
-  - `Claim<V>` / `ClaimInput<V>` — the canonical claim: header (version, appId, policyHash, windowStart, windowEnd, subjectHash, holder), a `present` mask, and `V` numeric `values`
-  - `claimSchema<V>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape
+  - `Claim<V, W>` / `ClaimInput<V, W>` — the canonical claim: header (version, appId, policyHash, windowStart, windowEnd, subjectHash, holder), a `present` mask (`V` numeric slots then `W` byte slots), `V` numeric `values`, and `W` 32-byte `byteValues`. `W` defaults to `0`
+  - `claimSchema<V, W>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape (`W` defaults to `0`; an omitted `byteValues` defaults to `[]`). Call it with no arguments when `V`/`W` are unknown at parse time: the exact-length constraints are then skipped
   - `bytes32Schema` — a zod schema for the claim's 32-byte `appId`, `policyHash` and `subjectHash`
   - `claimToMessage` — encode a parsed `Claim` into the exact `FlatMessage` the contract's `buildMessage` verifies
   - `FlatMessage` — a Compact `Vector<K, Field>` as a `readonly bigint[]`
@@ -65,6 +65,25 @@ const def: AttestorDefinition<'my-kind@1', z.ZodType, z.ZodType, z.ZodType> = {
   message: (claim) => claimToMessage(claim),
 };
 ```
+
+### The claim shape vs the wire shape
+
+The front-facing claim and the contract's stored claim are deliberately
+different shapes. A `Claim` addresses every slot with **one** `present` mask of
+length `V+W` — numeric slots first, byte slots after — because that is the seam
+a kind reasons about. The contract instead stores each byte value as two
+adjacent 16-byte halves and carries a flag per half (`bytePresent`, `B = 2W`);
+the per-half flag exists because a `W = 0` specialization must still compile and
+Compact cannot index a zero-length vector
+([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
+`claimToMessage` bridges the two: it duplicates each byte slot's flag onto both
+halves and splits each `byteValues[i]` into bytes 0–15 / 16–31, so the two
+encoders agree field-for-field (guarded by the parity test). The same
+whole-vs-split pattern already applies to the header fields, which are whole in
+the claim and split into halves on the wire. Two invariants follow: honest
+claims always give a byte slot's two halves the same flag, and no production
+path converts a stored (contract-shaped) claim back into a `Claim` — apps read a
+stored claim via `openClaim` and use its halves directly.
 
 ### The claim context
 

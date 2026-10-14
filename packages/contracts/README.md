@@ -10,7 +10,7 @@ your own `.compact` contracts and compile as part of your own DApp build.
 
 | File | Module | Role |
 |------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and the observation window (`maxWindow`, `freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)`. The claim can be opened at any time to access the values. |
+| `attestation.compact` | `attestation<#K, #V, #B, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and the observation window (`maxWindow`, `freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)`. The claim can be opened at any time to access the numeric values and byte halves. |
 | `attestor_registry.compact` | `attestor_registry<#M, #K>` | Seals the M pinned attestor keys via `initRegistry` — the module's own init circuit, which asserts the keys are pairwise distinct at deploy and provides `countValidSignatures` over a `Vector<K, Field>` message, verified with the stdlib `jubjubSchnorrVerify` (compiler ≥ 0.32; developed against 0.34.0). Counts only — no threshold |
 
 The modules form a single import graph (`attestation` → `attestor_registry`), so
@@ -39,8 +39,8 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//            K=17 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "node_modules/@thoth/contracts/attestation"<17, 3, 2, 3> prefix A_;
+//            K=17 msg fields  V=3 values  B=0 byte halves  N=2 threshold  M=3 signatures
+import "node_modules/@thoth/contracts/attestation"<17, 3, 0, 2, 3> prefix A_;
 
 import "node_modules/@thoth/contracts/attestor_registry"<3, 17> prefix R_;
 ```
@@ -53,7 +53,7 @@ export COMPACT_PATH="$(node -p 'require.resolve("@thoth/contracts/package.json")
 ```
 
 ```compact
-import "attestation"<17, 3, 2, 3> prefix A_;
+import "attestation"<17, 3, 0, 2, 3> prefix A_;
 import "attestor_registry"<3, 17> prefix R_;
 ```
 
@@ -71,8 +71,8 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//            K=17 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "attestation"<17, 3, 2, 3> prefix A_;
+//            K=17 msg fields  V=3 values  B=0 byte halves  N=2 threshold  M=3 signatures
+import "attestation"<17, 3, 0, 2, 3> prefix A_;
 import "attestor_registry"<3, 17> prefix R_;
 
 witness seedPolicies(): Vector<1, Bytes<32>>;
@@ -100,10 +100,12 @@ constructor() {
 
 ## Module parameters
 
-`attestation<#K, #V, #N, #M>` — embed as `import "attestation"<K, V, N, M>`:
+`attestation<#K, #V, #B, #N, #M>` — embed as `import "attestation"<K, V, B, N, M>`:
 
-- `#K` — signed-message length in fields (`K` must equal `2*V + 11`)
-- `#V` — number of claim value slots (`Claim.values: Vector<V, Uint<64>>`)
+- `#K` — signed-message length in fields (`K` must equal `2*V + 2*B + 11`)
+- `#V` — number of numeric claim value slots (`Claim.values: Vector<V, Uint<64>>`)
+- `#B` — number of byte halves (`Claim.byteHalves: Vector<B, Bytes<16>>`): twice the
+  number of 32-byte byte values. `B = 0` reproduces the numeric-only layout exactly
 - `#N` — the app's N-of-M threshold
 - `#M` — number of attestor signatures supplied / registry key slots
 
@@ -118,14 +120,18 @@ All are fixed when a contract embeds the module.
 The attestor MUST reproduce this exact flat field vector to sign the same
 message (same order, sizes, presence-flag semantics, and the split of each
 32-byte field into two 16-byte halves, so every byte is signed). `present` is a
-`Vector<V, Boolean>`: one flag per value slot; `present[i] = true` means
-`values[i]` was populated (its value may still be `0`). The message length is `K = 2*V + 11` (11 header fields, V
-presence flags, V values) — fixed when a contract embeds the module.
+`Vector<V, Boolean>` with one flag per numeric slot, and `bytePresent` is a
+`Vector<B, Boolean>` with one flag per byte half — both halves of a byte value
+share the flag. `values` and `byteHalves` sit between them. The message length
+is `K = 2*V + 2*B + 11` (11 header fields, V numeric flags, B byte flags, V
+values, B halves) — fixed when a contract embeds the module.
 
-`verifyAttestation` rejects a claim with `present[i] = false` and `values[i] != 0`
-with `"Absent slot has nonzero value"`. Absent slots must carry zero, so their
+`verifyAttestation` rejects a claim with a false flag over a non-zero value —
+numeric (`values[i] != 0`) or byte (`byteHalves[j]` not all zero) — with
+`"Absent slot has nonzero value"`. Absent slots must carry zero, so their
 unused values cannot distinguish observations for replay protection. A measured
-zero remains valid with `present[i] = true`.
+zero remains valid with its flag `true`, including a short byte value whose
+zero-padding leaves a half all zeros.
 
 ## Design notes
 
@@ -137,7 +143,8 @@ zero remains valid with `present[i] = true`.
   has to be a field of the message the attestor signs.
 - **Replay protection follows the observation identity.** The nullifier is
   `persistentHash` of a struct containing `appId`, `policyHash`, `subjectHash`,
-  `windowStart`, `windowEnd`, `values`, and `present`, in that order. It excludes
+  `windowStart`, `windowEnd`, `values`, `byteHalves`, `present`, and
+  `bytePresent`, in that order. It excludes
   `holder` and `version`. The claim carries no nonce. Re-attesting the same
   observation for a fresh holder or using fresh vault commitment randomness
   still fails with `"Observation replay"` (ADR 0006). Presence flags distinguish
@@ -196,12 +203,13 @@ zero remains valid with `present[i] = true`.
 
 ## Reading presence in-circuit
 
-`present` is native `Vector<V, Boolean>`, so an app predicate over a vaulted
-claim reads any slot directly:
+`present` and `bytePresent` are native `Vector<…, Boolean>`, so an app
+predicate over a vaulted claim reads any slot directly:
 
 ```compact
 const c = A_openClaim(id);
 assert(c.present[0], "slot 0 must have been measured");
+assert(c.bytePresent[0], "byte half 0 must have been measured");
 ```
 
 Because presence is part of the signed message, a claim whose `present[i]`
@@ -223,7 +231,8 @@ See `examples/example_app.compact` for the full wiring.
 (claimsVault membership + holder match + `persistentCommit(claim, commitRand)
 == id`) and re-hydrates the `Claim` in-circuit. Apps compose predicates over the
 returned `Claim` inside their own circuits — one open, read any subset of
-`values[i]` (attestors signed the whole claim).
+`values[i]` and `byteHalves[i]` (attestors signed the whole claim). A byte value
+is reassembled with `Bytes[...c.byteHalves[2 * i], ...c.byteHalves[2 * i + 1]]`.
 
 - **Never re-export `openClaim` as a top-level contract entry point.** Its
   return value is witness/ledger tainted; a top-level export would force a
