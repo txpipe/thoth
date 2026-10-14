@@ -17,18 +17,26 @@ export type FlatMessage = readonly bigint[];
 /**
  * The fixed claim shape every kind is expected to sign.
  *
- * Mirror of `attestation.compact`'s `Claim` struct: a header (version, appId,
+ * Mirror of `attestation.compact`'s `Claim` semantics: a header (version, appId,
  * policyHash, windowStart, windowEnd, subjectHash, holder), a per-position
- * `present` mask, and `V` numeric `values`. There is no kind code: the policy
- * hash is the on-chain binding, and the kind stays an off-chain concept.
+ * `present` mask (`V` numeric slots followed by `W` byte slots), `V` numeric
+ * `values`, and `W` 32-byte `byteValues`. The contract stores each byte value as
+ * its two adjacent 16-byte halves and carries the byte slot's flag once per
+ * half; `claimToMessage` performs that split, so this shape stays the
+ * kind-facing one.
+ *
+ * There is no kind code: the policy hash is the on-chain binding, and the kind
+ * stays an off-chain concept.
  *
  * This is the canonical shape kinds adopt unless they deviate.
  *
- * @typeParam V — the number of value slots (`attestation<#K, #V, #N, #M>`).
+ * @typeParam V — the number of numeric value slots (`attestation<#K, #V, #B, #N, #M>`).
+ * @typeParam W — the number of 32-byte byte value slots; `W = 0` is the canonical
+ *   numeric-only shape and the default.
  * @see attestation.compact — the `Claim` struct this mirrors.
  */
-// biome-ignore lint/correctness/noUnusedVariables: phantom type param — carries the claim's value count `V`.
-export interface Claim<V extends number> {
+// biome-ignore lint/correctness/noUnusedVariables: phantom type param — carries the claim's numeric value count `V`.
+export interface Claim<V extends number, W extends number = 0> {
   /** Schema version of the claim format. Currently `1`. */
   version: bigint;
   /** The app the claim is for. 32 bytes. */
@@ -54,10 +62,16 @@ export interface Claim<V extends number> {
   subjectHash: Uint8Array;
   /** Per-claim commitment of the caller secret. 32 bytes, derived by holderCommitmentOf. */
   holder: Uint8Array;
-  /** Per-position present mask; `present[i]` true means `values[i]` was populated. */
+  /**
+   * Per-position present mask, exactly `V + W` flags: `present[i]` true means
+   * `values[i]` was populated for `i < V`, and the byte value with index `i - V`
+   * was populated for `i >= V`.
+   */
   present: readonly boolean[];
   /** Positional numeric claim values, exactly `V` of them. */
   values: readonly bigint[];
+  /** Positional byte claim values, exactly `W` of them, 32 bytes each. */
+  byteValues: readonly Uint8Array[];
 }
 
 /**
@@ -66,12 +80,13 @@ export interface Claim<V extends number> {
  *
  * Uses `number | bigint` for the numeric fields so both JSON/wire payloads and
  * `bigint`-carrying objects validate; {@link claimSchema} coerces them to
- * `bigint` on parse.
+ * `bigint` on parse. A raw payload may omit `byteValues` (defaults to `[]`).
  *
- * @typeParam V — the number of value slots.
+ * @typeParam V — the number of numeric value slots.
+ * @typeParam W — the number of byte value slots.
  */
-// biome-ignore lint/correctness/noUnusedVariables: phantom type param — carries the claim's value count `V`.
-export interface ClaimInput<V extends number> {
+// biome-ignore lint/correctness/noUnusedVariables: phantom type param — carries the claim's numeric value count `V`.
+export interface ClaimInput<V extends number, W extends number = 0> {
   /** Schema version; a raw payload may omit it (defaults to {@link CLAIM_VERSION}). */
   version: number | bigint;
   /** The app the claim is for. 32 bytes. */
@@ -86,10 +101,12 @@ export interface ClaimInput<V extends number> {
   subjectHash: Uint8Array;
   /** Per-claim commitment of the caller secret. 32 bytes, derived by holderCommitmentOf. */
   holder: Uint8Array;
-  /** Per-position present mask; length constrained to `V` by the schema. */
+  /** Per-position present mask; a schema built with `v` constrains it to `V + W`. */
   present: readonly boolean[];
-  /** Positional claim values; length constrained to `V` by the schema. */
+  /** Positional numeric claim values; a schema built with `v` constrains it to `V`. */
   values: readonly (number | bigint)[];
+  /** Positional byte claim values (32 bytes each); constrained to `W` when built with `v`, defaults to `[]`. */
+  byteValues?: readonly Uint8Array[];
 }
 
 /**
@@ -107,20 +124,27 @@ export const bytes32Schema = z
   .refine((bytes) => bytes.length === 32, { message: 'expected 32 bytes' });
 
 /**
- * Zod schema for a fixed `V` claim.
+ * Zod schema for a fixed `V`-numeric / `W`-byte claim.
  *
  * Runtime validator + type source: `z.output` is a {@link Claim}, `z.input` a
  * {@link ClaimInput}. Kinds use it as their `claim` schema (or an extended
  * schema) so client-proposed claims are validated against the canonical shape.
  *
- * @param v — the number of value slots; constrains `present` and `values` to
- *   length `v`.
- * @returns a schema whose output is a {@link Claim}: validates the fixed shape
- *   and coerces the numeric fields to `bigint`.
+ * @typeParam V — the number of numeric value slots; `number` when omitted.
+ * @typeParam W — the number of byte value slots; defaults to `0`.
+ * @param v — the number of numeric value slots, or omit when the count is
+ *   unknown at parse time. Omitted, every exact-length constraint is skipped.
+ * @param w — the number of 32-byte byte value slots; constrains `byteValues`
+ *   and the mask's tail. Defaults to `0`; read only when `v` is given.
+ * @returns a schema whose output is a {@link Claim}: validates the fixed shape,
+ *   defaults an omitted `byteValues` to `[]`, and coerces the numeric fields to
+ *   `bigint`.
  */
-export function claimSchema<V extends number>(
-  v: V,
-): z.ZodType<Claim<V>, z.core.$ZodTypeInternals<Claim<V>, ClaimInput<V>>> {
+export function claimSchema<V extends number = number, W extends number = 0>(
+  v?: V,
+  w?: W,
+): z.ZodType<Claim<V, W>, z.core.$ZodTypeInternals<Claim<V, W>, ClaimInput<V, W>>> {
+  const byteCount = w ?? 0;
   const schema = z
     .object({
       version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
@@ -130,8 +154,15 @@ export function claimSchema<V extends number>(
       windowEnd: z.union([z.number(), z.bigint()]),
       subjectHash: bytes32Schema,
       holder: bytes32Schema,
-      present: z.array(z.boolean()).length(v),
-      values: z.array(z.union([z.number(), z.bigint()])).length(v),
+      present: v === undefined ? z.array(z.boolean()) : z.array(z.boolean()).length(v + byteCount),
+      values:
+        v === undefined
+          ? z.array(z.union([z.number(), z.bigint()]))
+          : z.array(z.union([z.number(), z.bigint()])).length(v),
+      byteValues:
+        v === undefined
+          ? z.array(bytes32Schema).default([])
+          : z.array(bytes32Schema).length(byteCount).prefault([]),
     })
     .transform((input) => ({
       version: BigInt(input.version),
@@ -143,10 +174,11 @@ export function claimSchema<V extends number>(
       holder: input.holder,
       present: input.present,
       values: input.values.map((value) => BigInt(value)),
+      byteValues: input.byteValues,
     }));
   return schema as unknown as z.ZodType<
-    Claim<V>,
-    z.core.$ZodTypeInternals<Claim<V>, ClaimInput<V>>
+    Claim<V, W>,
+    z.core.$ZodTypeInternals<Claim<V, W>, ClaimInput<V, W>>
   >;
 }
 
@@ -171,20 +203,37 @@ function splitBytes(bytes: Uint8Array): [bigint, bigint] {
  * `Claim` shape: an 11-field header (version, then `appId` and `policyHash`
  * each split into two 16-byte halves, `windowStart`, `windowEnd`, then
  * `subjectHash`, and `holder` split the same way, exactly as `attestation.compact`'s
- * `buildMessage` does), followed by the `present` flags (`1`/`0`) and the
- * `values`. The result has length `2*V + 11`, which is
- * the signed-message length `K` the target contract is specialized with.
+ * `buildMessage` does), followed by the `present` flags (`1`/`0`), each byte
+ * slot's flag repeated for its two halves, the `values`, and each byte value's
+ * two halves (`bytes 0–15`, then `bytes 16–31`, in value order).
+ *
+ * The result has length `2*V + 4*W + 11`, which is the signed-message length
+ * `K` the target contract is specialized with (`K = 11 + 2V + 2B`, `B = 2W`).
  *
  * Kinds that extend the claim or use a different layout keep their own
  * `message()`; a kind whose `message` is exactly the canonical shape may
  * implement `message()` by delegating to this helper.
  *
+ * @typeParam V — the number of numeric value slots.
+ * @typeParam W — the number of byte value slots.
  * @param claim — a parsed {@link Claim}.
  * @returns the flat message the signer commits to and the contract verifies.
- * @throws if `claim.appId`, `claim.policyHash`,
- *   `claim.subjectHash` or `claim.holder` is not exactly 32 bytes.
+ * @throws if `claim.appId`, `claim.policyHash`, `claim.subjectHash`,
+ *   `claim.holder`, or any `claim.byteValues[i]` is not exactly 32 bytes, or if
+ *   `present` does not have length `V + W`.
  */
-export function claimToMessage<V extends number>(claim: Claim<V>): FlatMessage {
+export function claimToMessage<V extends number, W extends number = 0>(
+  claim: Claim<V, W>,
+): FlatMessage {
+  const numericCount = claim.values.length;
+  const byteCount = claim.byteValues.length;
+  if (claim.present.length !== numericCount + byteCount) {
+    throw new Error(
+      `present must have length ${numericCount + byteCount}, got ${claim.present.length}`,
+    );
+  }
+  const flags = claim.present.map((present) => (present ? 1n : 0n));
+  const byteFlags = flags.slice(numericCount).flatMap((flag) => [flag, flag]);
   return [
     claim.version,
     ...splitBytes(claim.appId),
@@ -193,7 +242,9 @@ export function claimToMessage<V extends number>(claim: Claim<V>): FlatMessage {
     claim.windowEnd,
     ...splitBytes(claim.subjectHash),
     ...splitBytes(claim.holder),
-    ...claim.present.map((p) => (p ? 1n : 0n)),
+    ...flags.slice(0, numericCount),
+    ...byteFlags,
     ...claim.values,
+    ...claim.byteValues.flatMap((bytes) => splitBytes(bytes)),
   ];
 }

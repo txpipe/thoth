@@ -1,35 +1,39 @@
 // Cross-seam acceptance: two test-key witnesses observe one request, two
 // zkFetch attestors sign the derived claim with real Jubjub keys, the client
-// collects the threshold set, and the contract simulator accepts it. Every
-// signed binding is then mutated under the same signatures, each on a fresh
-// ledger so a rejection can only come from the signature check, never from a
-// nullifier the honest submission left behind.
+// collects the threshold set, and the contract simulator accepts it. The policy
+// carries one byte value slot (an identifier) alongside its numeric slots, so
+// the path from a disclosed string to a signed 32-byte value is covered here.
+// Every signed binding is then mutated under the same signatures, each on a
+// fresh ledger so a rejection can only come from the signature check, never from
+// a nullifier the honest submission left behind.
 import { randomBytes } from 'node:crypto';
 import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import type { KeyPair } from '@thoth/attestor';
 import { descriptorOf } from '@thoth/attestor';
 import { buildTrustedSet } from '@thoth/client';
 import { jubjubVerifier } from '@thoth/client/jubjub';
-import type { Claim } from '@thoth/core/claim';
 import { type ZkFetchPolicy, zkFetchPolicyHashOf, zkFetchSubjectHashOf } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { type ZkFetchRequest, zkFetchClient } from '@thoth/zk-tls/client';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DISCLOSURE_RULES } from '../../zk-tls/test/helpers/helper.js';
 import { testWitness } from '../../zk-tls/test/helpers/witness.js';
-import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
-import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
+import type { B_Claim } from '../artifacts/mock_attestation_bytes/contract/index.js';
+import { pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import {
   APP_ID,
+  bytesIdOf,
   DUMMY_SIGNATURE,
   flip,
-  idOf,
   makeNotaryKey,
   POLICY_B,
+  padded32,
+  splitHalves,
+  toBytesClaim,
 } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
-import { MockAttestationSim } from './helpers/sim.js';
+import { MockAttestationBytesSim } from './helpers/sim.js';
 
 /** A Jubjub key pair whose signer signs the flat message the registry verifies. */
 const jubjubKeyPair = (): KeyPair<JubjubPoint, JubjubSchnorrSignature> => {
@@ -38,16 +42,19 @@ const jubjubKeyPair = (): KeyPair<JubjubPoint, JubjubSchnorrSignature> => {
 };
 
 const VALUE_SLOTS = 3;
+const BYTE_SLOTS = 1;
 const OBSERVED_AT = 1_786_122_944;
 const WINDOW_END = BigInt(OBSERVED_AT + 60);
+const OWNER = 'alice';
 
-// Slot 0 is measured; slot 1 is optional and never disclosed, so it is signed
-// unpresent; slot 2 is outside the policy.
+// Numeric slots 0..2, then one byte value slot at index 3. Slot 1 is optional
+// and never disclosed, so it is signed unpresent; slot 2 is outside the policy.
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.github.com'],
   slots: [
     { slot: 0, name: 'stars', parse: 'int' },
     { slot: 1, name: 'forks', parse: 'int', optional: true },
+    { slot: 3, name: 'owner', parse: 'bytes' },
   ],
   ...DISCLOSURE_RULES,
 };
@@ -69,7 +76,7 @@ const registryKeys = [...attestors.map((attestor) => attestor.publicKey), makeNo
 
 const holderSecret = randomBytes(32);
 
-type Submission = { claim: A_Claim; signatures: JubjubSchnorrSignature[]; commitRand: Uint8Array };
+type Submission = { claim: B_Claim; signatures: JubjubSchnorrSignature[]; commitRand: Uint8Array };
 
 // Collect the honest threshold set through the zkFetch client and lay its
 // signatures out at their registry slots, the dummy filling the unqueried one.
@@ -95,13 +102,14 @@ const collectSubmission = async (): Promise<Submission> => {
     policy,
     appId: APP_ID,
     valueSlots: VALUE_SLOTS,
+    byteSlots: BYTE_SLOTS,
     provers: Object.fromEntries(
       operators.map(({ witness, attestor }) => [
         attestor.id,
         {
           prove: (proved: ZkFetchRequest) =>
             witness.sign({
-              values: { stars: '42' },
+              values: { stars: '42', owner: OWNER },
               timestampS: OBSERVED_AT,
               parameters: {
                 url: proved.url,
@@ -128,26 +136,22 @@ const collectSubmission = async (): Promise<Submission> => {
       collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
       DUMMY_SIGNATURE,
   );
-  return { claim: toContractClaim(claim), signatures, commitRand: randomBytes(32) };
+  return { claim: toBytesClaim(claim), signatures, commitRand: randomBytes(32) };
 };
-
-const toContractClaim = (claim: Claim<number>): A_Claim => ({
-  ...claim,
-  present: [...claim.present],
-  values: [...claim.values],
-});
 
 // A fresh ledger that seals the policy the attestors enforced, with its block
 // time at the end of the observation window.
-const freshLedger = async (): Promise<MockAttestationSim> => {
-  const sim = await MockAttestationSim.create(createPrivateState(holderSecret), registryKeys, {
-    policyHashes: [zkFetchPolicyHashOf(policy), POLICY_B],
-  });
+const freshLedger = async (): Promise<MockAttestationBytesSim> => {
+  const sim = await MockAttestationBytesSim.create(
+    createPrivateState<B_Claim>(holderSecret),
+    registryKeys,
+    { policyHashes: [zkFetchPolicyHashOf(policy), POLICY_B] },
+  );
   sim.now = Number(WINDOW_END);
   return sim;
 };
 
-const submit = (sim: MockAttestationSim, submission: Submission, secret = holderSecret) =>
+const submit = (sim: MockAttestationBytesSim, submission: Submission, secret = holderSecret) =>
   sim.call('verifyAttestation', { ...submission, holderSecret: secret });
 
 describe('cross-seam acceptance', () => {
@@ -166,7 +170,9 @@ describe('cross-seam acceptance', () => {
       windowStart: BigInt(OBSERVED_AT),
       windowEnd: WINDOW_END,
       present: [true, false, false],
+      bytePresent: [true, true],
       values: [42n, 0n, 0n],
+      byteHalves: splitHalves(padded32(OWNER)),
     });
     expect(honest.signatures[2]).toBe(DUMMY_SIGNATURE);
   });
@@ -174,29 +180,48 @@ describe('cross-seam acceptance', () => {
   it('accepts the honest claim end to end', async () => {
     const sim = await freshLedger();
     await submit(sim, honest);
-    expect(sim.ledgerView().A_claimsVault.member(idOf(honest.claim, honest.commitRand))).toBe(true);
+    expect(sim.ledgerView().B_claimsVault.member(bytesIdOf(honest.claim, honest.commitRand))).toBe(
+      true,
+    );
   });
 
   const otherSecret = randomBytes(32);
   it.each([
-    { name: 'a value', mutate: (c: A_Claim) => ({ ...c, values: [43n, 0n, 0n] }) },
-    { name: 'the presence mask', mutate: (c: A_Claim) => ({ ...c, present: [true, true, false] }) },
+    { name: 'a value', mutate: (c: B_Claim) => ({ ...c, values: [43n, 0n, 0n] }) },
+    {
+      name: 'the presence mask',
+      mutate: (c: B_Claim) => ({ ...c, present: [true, true, false] }),
+    },
+    {
+      name: 'the byte presence mask',
+      mutate: (c: B_Claim) => ({ ...c, bytePresent: [true, false] }),
+    },
+    {
+      name: 'the byte value',
+      mutate: (c: B_Claim) => ({
+        ...c,
+        byteHalves: [
+          flip(c.byteHalves[0] ?? new Uint8Array(16), 0),
+          c.byteHalves[1] ?? new Uint8Array(16),
+        ],
+      }),
+    },
     // POLICY_B is sealed too, so only the signatures can reject it.
-    { name: 'the policy', mutate: (c: A_Claim) => ({ ...c, policyHash: POLICY_B }) },
-    { name: 'the app id', mutate: (c: A_Claim) => ({ ...c, appId: flip(c.appId, 0) }) },
+    { name: 'the policy', mutate: (c: B_Claim) => ({ ...c, policyHash: POLICY_B }) },
+    { name: 'the app id', mutate: (c: B_Claim) => ({ ...c, appId: flip(c.appId, 0) }) },
     {
       name: 'the subject',
-      mutate: (c: A_Claim) => ({ ...c, subjectHash: flip(c.subjectHash, 0) }),
+      mutate: (c: B_Claim) => ({ ...c, subjectHash: flip(c.subjectHash, 0) }),
     },
     {
       name: 'the window start',
-      mutate: (c: A_Claim) => ({ ...c, windowStart: c.windowStart + 1n }),
+      mutate: (c: B_Claim) => ({ ...c, windowStart: c.windowStart + 1n }),
     },
-    { name: 'the window end', mutate: (c: A_Claim) => ({ ...c, windowEnd: c.windowEnd + 1n }) },
+    { name: 'the window end', mutate: (c: B_Claim) => ({ ...c, windowEnd: c.windowEnd + 1n }) },
     // The new caller knows the secret behind the substituted holder.
     {
       name: 'the holder',
-      mutate: (c: A_Claim) => ({ ...c, holder: pureCircuits.holderCommitment(otherSecret) }),
+      mutate: (c: B_Claim) => ({ ...c, holder: pureCircuits.holderCommitment(otherSecret) }),
       secret: otherSecret,
     },
   ])('rejects the signatures over a claim with $name mutated', async ({ mutate, secret }) => {

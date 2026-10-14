@@ -1,15 +1,15 @@
 // Test mock: a thin deployable wrapper around the attestation + registry
-// modules, specialized to V=3 values, K=17 message fields, M=3 signatures,
-// N=2 threshold (2-of-3). Exists only to give the modules a top-level shell to
-// compile against and to re-export the pure parity surface (`message`,
-// `computeId`, `holderOf`, `holderCommitment`, `subjectHash`) plus types and
-// ledger fields the simulator/tests need.
+// modules, specialized to V=3 values, B=0 byte halves, K=17 message fields,
+// M=3 signatures, N=2 threshold (2-of-3). Exists only to give the modules a
+// top-level shell to compile against and to re-export the pure parity surface
+// (`message`, `computeId`, `holderOf`, `holderCommitment`, `subjectHash`) plus
+// types and ledger fields the simulator/tests need.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=17 msg fields  V=3 values  N=2 threshold  M=3 signatures
-import "../../attestation"<17, 3, 2, 3> prefix A_;
+//           K=17 msg fields  V=3 values  B=0 byte halves  N=2 threshold  M=3 signatures
+import "../../attestation"<17, 3, 0, 2, 3> prefix A_;
 
 import "../../attestor_registry"<3, 17> prefix R_;
 

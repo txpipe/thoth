@@ -1,14 +1,22 @@
 import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js';
 
-export type PrivateState = {
-  readonly claim: A_Claim | null;
+/**
+ * Private state the simulator threads through a mock contract's witnesses.
+ *
+ * @typeParam Claim — the artifact's claim type; defaults to the numeric-only
+ *   mock's `A_Claim` so existing call sites stay unchanged.
+ */
+export type PrivateState<Claim = A_Claim> = {
+  readonly claim: Claim | null;
   readonly signatures: JubjubSchnorrSignature[];
   readonly commitRand: Uint8Array;
   readonly holderSecret: Uint8Array;
 };
 
-export const createPrivateState = (holderSecret: Uint8Array): PrivateState => ({
+export const createPrivateState = <Claim = A_Claim>(
+  holderSecret: Uint8Array,
+): PrivateState<Claim> => ({
   claim: null,
   signatures: [],
   commitRand: new Uint8Array(32),

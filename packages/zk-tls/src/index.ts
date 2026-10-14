@@ -81,11 +81,12 @@ export const zkFetchEvidenceSchema = z.object({
  *
  * Mirror of `@thoth/core/claim`'s `claimSchema` minus the exact-length
  * constraints (see issue #26). The value count is requested implicitly by
- * `values.length`; `present` must have the same length.
+ * `values.length`; the byte-value count by `byteValues.length` (default `[]`);
+ * `present` must have one flag per value slot.
  */
 export const zkFetchClaimSchema: z.ZodType<
-  Claim<number>,
-  z.core.$ZodTypeInternals<Claim<number>, ClaimInput<number>>
+  Claim<number, number>,
+  z.core.$ZodTypeInternals<Claim<number, number>, ClaimInput<number, number>>
 > = z
   .object({
     version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
@@ -97,9 +98,10 @@ export const zkFetchClaimSchema: z.ZodType<
     holder: bytes32Schema,
     present: z.array(z.boolean()),
     values: z.array(z.union([z.number(), z.bigint()])),
+    byteValues: z.array(bytes32Schema).default([]),
   })
-  .refine((input) => input.present.length === input.values.length, {
-    message: 'present and values must have the same length',
+  .refine((input) => input.present.length === input.values.length + input.byteValues.length, {
+    message: 'present and values must have the same length, plus one byte flag per byteValue',
     path: ['present'],
   })
   .transform((input) => ({
@@ -112,9 +114,10 @@ export const zkFetchClaimSchema: z.ZodType<
     holder: input.holder,
     present: input.present,
     values: input.values.map((value) => BigInt(value)),
+    byteValues: input.byteValues,
   })) as unknown as z.ZodType<
-  Claim<number>,
-  z.core.$ZodTypeInternals<Claim<number>, ClaimInput<number>>
+  Claim<number, number>,
+  z.core.$ZodTypeInternals<Claim<number, number>, ClaimInput<number, number>>
 >;
 
 /**
@@ -138,9 +141,11 @@ export interface ZkFetchDefinition {
    * The kind's check: verify the evidence, check it against the policy, and
    * enforce the proposed claim matches the disclosures. Throws to reject.
    */
-  verify(input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number>>): Promise<void>;
+  verify(
+    input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number, number>>,
+  ): Promise<void>;
   /** The wire law: encode the parsed claim into the flat signed message. */
-  message(claim: Claim<number>): FlatMessage;
+  message(claim: Claim<number, number>): FlatMessage;
 }
 
 /**
@@ -176,23 +181,27 @@ export interface VerifiedEvidence {
  * How a disclosed string is interpreted: `int` accepts digits only; `float`
  * accepts unsigned decimals with optional signed base-10 exponents and rounds
  * exactly to the nearest integer, with halves rounded up. Both require Uint<64>.
+ * `bytes` keeps the string's UTF-8 bytes, zero-padded to 32, and is rejected
+ * (unparseable) when longer than 32 bytes.
  */
-export type ZkFetchParseRule = 'int' | 'float';
+export type ZkFetchParseRule = 'int' | 'float' | 'bytes';
 
 /**
  * One claim-slot binding: which extracted (disclosed) value feeds which
- * numeric claim slot, and how its string form is interpreted.
+ * claim slot, and how its string form is interpreted.
  *
- * `slot` becomes the index into `Claim.values`/`Claim.present`; `name` is a
- * named regex group from the proof's `responseMatches`, as disclosed by the
- * verified evidence.
+ * `slot` becomes the index into the claim's value slots — numeric slots are
+ * `0..V-1` and byte value slots are `V..V+W-1` — and `name` is a named regex
+ * group from the proof's `responseMatches`, as disclosed by the verified
+ * evidence. A numeric rule MUST target a numeric slot; `'bytes'` MUST target a
+ * byte slot.
  */
 export interface ZkFetchSlot {
-  /** Index into the claim's `values`/`present` vectors. */
+  /** Index into the claim's value slots: numeric `0..V-1`, byte `V..V+W-1`. */
   slot: number;
   /** The extracted-parameter name (named regex group) to read. */
   name: string;
-  /** How the disclosed string is converted to the claim's numeric value. */
+  /** How the disclosed string is converted to the claim value. */
   parse: ZkFetchParseRule;
   /**
    * Whether the slot must be certifiable for the evidence to be attested.
@@ -269,7 +278,7 @@ export const zkFetchPolicySchema = z.object({
       z.object({
         slot: z.number().int().nonnegative(),
         name: z.string().min(1),
-        parse: z.enum(['int', 'float']),
+        parse: z.enum(['int', 'float', 'bytes']),
         optional: z.boolean().optional(),
       }),
     )
@@ -630,26 +639,55 @@ const parseDecimalUint64 = (value: string): bigint | null => {
   return rounded < UINT64_MAX ? rounded : null;
 };
 
+/** The fixed width of a claim byte value (ADR 0009). */
+const BYTE_VALUE_BYTES = 32;
+
 /**
- * Parse a disclosed string value into the claim's numeric slot value.
+ * Parse a disclosed string into a 32-byte claim value: its UTF-8 bytes,
+ * zero-padded to 32. Returns `null` when the string is longer than 32 bytes
+ * (not certifiable), so the attestor never guesses a truncated reading.
+ */
+const parseDisclosedBytes = (value: string): Uint8Array | null => {
+  const bytes = new TextEncoder().encode(value);
+  if (bytes.length > BYTE_VALUE_BYTES) {
+    return null;
+  }
+  const padded = new Uint8Array(BYTE_VALUE_BYTES);
+  padded.set(bytes);
+  return padded;
+};
+
+/**
+ * Parse a disclosed string value into the claim's slot value for its rule.
  *
- * Returns `null` when the value cannot be interpreted under the rule or falls
- * outside the wire's `Uint<64>` range `[0, 2^64)` — such a disclosure is not
- * certifiable and its slot stays unpresent, rather than the attestor guessing
- * a numeric reading or signing a value the contract can never verify.
+ * Returns `null` when the value cannot be interpreted under the rule — a
+ * numeric reading outside the wire's `Uint<64>` range `[0, 2^64)`, or a byte
+ * reading longer than 32 bytes — so such a disclosure is not certifiable and
+ * its slot stays unpresent, rather than the attestor guessing a reading or
+ * signing a value the contract can never verify.
  *
  * `float` accepts `[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?` as a whole
  * string. It rounds in decimal arithmetic, with halves rounded up. Neither
- * rule accepts whitespace, grouping separators, or a leading sign.
+ * numeric rule accepts whitespace, grouping separators, or a leading sign.
+ * `bytes` keeps the string's UTF-8 bytes, zero-padded to 32.
  *
  * Exported for the attestor side's disclosure cross-check
  * (`assertClaimMatchesDisclosures`); claim derivation uses it internally.
  *
  * @param value — the disclosed string value.
  * @param rule — how to interpret it.
- * @returns the numeric value, or `null` when unparseable or out of range.
+ * @returns the numeric value or the 32-byte value, or `null` when unparseable.
  */
-export const parseDisclosedValue = (value: string, rule: ZkFetchParseRule): bigint | null => {
+export function parseDisclosedValue(value: string, rule: 'int' | 'float'): bigint | null;
+export function parseDisclosedValue(value: string, rule: 'bytes'): Uint8Array | null;
+export function parseDisclosedValue(
+  value: string,
+  rule: ZkFetchParseRule,
+): bigint | Uint8Array | null;
+export function parseDisclosedValue(
+  value: string,
+  rule: ZkFetchParseRule,
+): bigint | Uint8Array | null {
   switch (rule) {
     case 'int': {
       if (!/^\d+$/.test(value)) {
@@ -660,8 +698,10 @@ export const parseDisclosedValue = (value: string, rule: ZkFetchParseRule): bigi
     }
     case 'float':
       return parseDecimalUint64(value);
+    case 'bytes':
+      return parseDisclosedBytes(value);
   }
-};
+}
 
 /**
  * The parsed view of {@link ZkFetchEvidence} that claim derivation and policy
@@ -694,17 +734,34 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
 };
 
 /**
- * Require every policy slot index to fit within a requested claim size.
+ * Require every policy slot index to fit within the requested claim size and
+ * to match its region: numeric rules target `0..valueSlots-1`, `'bytes'`
+ * targets `valueSlots..valueSlots+byteSlots-1`.
  *
  * @param policy — a parsed policy whose slot indices are nonnegative integers.
- * @param valueSlots — the requested number of value slots.
- * @throws if a policy slot is outside the requested count.
+ * @param valueSlots — the requested number of numeric value slots.
+ * @param byteSlots — the requested number of byte value slots.
+ * @throws if a policy slot is outside the requested count or targets the wrong
+ *   region for its rule.
  */
-export function assertPolicySlotsInRange(policy: ZkFetchPolicy, valueSlots: number): void {
-  const outOfRange = policy.slots.find((slot) => slot.slot >= valueSlots);
+export function assertPolicySlotsInRange(
+  policy: ZkFetchPolicy,
+  valueSlots: number,
+  byteSlots: number,
+): void {
+  const total = valueSlots + byteSlots;
+  const outOfRange = policy.slots.find((slot) => slot.slot >= total);
   if (outOfRange !== undefined) {
+    throw new Error(`policy slot ${outOfRange.slot} is out of the claim's ${total} value slots`);
+  }
+  const wrongRegion = policy.slots.find((slot) =>
+    slot.parse === 'bytes' ? slot.slot < valueSlots : slot.slot >= valueSlots,
+  );
+  if (wrongRegion !== undefined) {
     throw new Error(
-      `policy slot ${outOfRange.slot} is out of the claim's ${valueSlots} value slots`,
+      wrongRegion.parse === 'bytes'
+        ? `policy slot ${wrongRegion.slot} uses the 'bytes' rule but targets a numeric slot`
+        : `policy slot ${wrongRegion.slot} uses the '${wrongRegion.parse}' rule but targets a byte slot`,
     );
   }
 }
@@ -713,25 +770,28 @@ export function assertPolicySlotsInRange(policy: ZkFetchPolicy, valueSlots: numb
  * Derive the canonical {@link Claim} the attestor signs from parsed evidence.
  *
  * The claim reflects the evidence, not the client's proposal. `values`/`present`
- * come from the policy-declared disclosures, and `subjectHash` is
- * {@link zkFetchSubjectHashOf} the signed request ({@link claimRequestOf}), so
- * every witness that fetched the same request derives the same subject.
+ * and `byteValues` come from the policy-declared disclosures, and `subjectHash`
+ * is {@link zkFetchSubjectHashOf} the signed request ({@link claimRequestOf}),
+ * so every witness that fetched the same request derives the same subject.
  * `version` comes from the policy's `claimVersion` (default 1) and
  * `policyHash` is {@link zkFetchPolicyHashOf} the policy; `appId` is the
  * caller's, as is the per-claim `holder` commitment (ADR 0004). The observation
- * window is the caller's `windowStart` and `windowEnd`, which the client proposes and the law requires to contain the
- * witness's own observation (ADR 0005). A slot whose disclosure is absent stays unpresent. The
- * evidence carries only what the witness saw.
+ * window is the caller's `windowStart` and `windowEnd`, which the client
+ * proposes and the law requires to contain the witness's own observation
+ * (ADR 0005). A slot whose disclosure is absent stays unpresent. The evidence
+ * carries only what the witness saw.
  *
- * @typeParam V — the claim's value-slot count.
+ * @typeParam V — the claim's numeric value-slot count.
+ * @typeParam W — the claim's byte value-slot count.
  * @param options — the parsed evidence view, the policy, the app id, the holder
- *   commitment, the slot count, and the observation window to sign.
+ *   commitment, the numeric and byte slot counts, and the observation window to
+ *   sign.
  * @returns the derived claim.
- * @throws if a policy slot is out of the claim's value range, the policy
- *   fails {@link zkFetchPolicySchema}, or the signed parameters carry no
- *   request (see {@link claimRequestOf}).
+ * @throws if a policy slot is out of the claim's value range or targets the
+ *   wrong region, the policy fails {@link zkFetchPolicySchema}, or the signed
+ *   parameters carry no request (see {@link claimRequestOf}).
  */
-export const deriveClaimFromEvidence = <V extends number>(options: {
+export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(options: {
   /** The evidence view (see {@link parsedEvidenceView}). */
   verified: VerifiedEvidence;
   /** The policy declaring the slot map. */
@@ -740,17 +800,27 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
   appId: Uint8Array;
   /** Per-claim commitment of the caller secret, proposed by the client. 32 bytes. */
   holder: Uint8Array;
-  /** The claim's value-slot count (the target contract's `#V`). */
+  /** The claim's numeric value-slot count (the target contract's `#V`). */
   valueSlots: V;
+  /**
+   * The claim's byte value-slot count (the target contract stores each value
+   * as two halves, so its `#B` is twice this). Defaults to `0`.
+   */
+  byteSlots?: W;
   /** Start of the observation window to sign, proposed by the client. Unix seconds. */
   windowStart: bigint;
   /** End of the observation window to sign, proposed by the client. Unix seconds. */
   windowEnd: bigint;
-}): Claim<V> => {
+}): Claim<V, W> => {
   const { verified, policy, appId, holder, valueSlots, windowStart, windowEnd } = options;
-  assertPolicySlotsInRange(policy, valueSlots);
-  const present = Array.from({ length: valueSlots }, () => false);
+  const byteSlots = options.byteSlots ?? 0;
+  assertPolicySlotsInRange(policy, valueSlots, byteSlots);
+  const present = Array.from({ length: valueSlots + byteSlots }, () => false);
   const values = Array.from({ length: valueSlots }, () => 0n);
+  const byteValues: Uint8Array[] = Array.from(
+    { length: byteSlots },
+    () => new Uint8Array(BYTE_VALUE_BYTES),
+  );
   for (const slot of policy.slots) {
     const raw = verified.disclosedValues[slot.name];
     if (raw === undefined) {
@@ -761,7 +831,11 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
       continue;
     }
     present[slot.slot] = true;
-    values[slot.slot] = value;
+    if (typeof value === 'bigint') {
+      values[slot.slot] = value;
+    } else {
+      byteValues[slot.slot - valueSlots] = value;
+    }
   }
   const { claimVersion } = normalizePolicy(policy);
   return {
@@ -774,7 +848,8 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
     subjectHash: zkFetchSubjectHashOf(claimRequestOf(verified.claim)),
     present,
     values,
-  } as Claim<V>;
+    byteValues,
+  } as Claim<V, W>;
 };
 
 /**

@@ -55,7 +55,7 @@ const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetc
  *
  * @typeParam V — the claim's value-slot count (the dApp contract's `#V`).
  * @param options — the evidence, the shared policy, the app id, the slot
- *   count, and the observation window every witness's evidence falls in.
+ *   counts, and the observation window every witness's evidence falls in.
  * @returns the claim to propose (and to submit, once collected).
  * @throws if the evidence is invalid, fails the policy, or does not fit the
  *   dApp's claim length.
@@ -71,12 +71,26 @@ export const buildClaimProposal = async <V extends number>(options: {
   holder: Uint8Array;
   /** The claim's value-slot count (the target contract's `#V`). */
   valueSlots: V;
+  /**
+   * The claim's byte value-slot count (the target contract stores each value
+   * as two halves, so its `#B` is twice this). Defaults to `0`.
+   */
+  byteSlots?: number;
   /** Start of the window to sign: the earliest observation across the witnesses. */
   windowStart: bigint;
   /** End of the window to sign: the latest observation across the witnesses. */
   windowEnd: bigint;
 }): Promise<Claim<V>> => {
-  const { evidence, policy, appId, holder, valueSlots, windowStart, windowEnd } = options;
+  const {
+    evidence,
+    policy,
+    appId,
+    holder,
+    valueSlots,
+    byteSlots = 0,
+    windowStart,
+    windowEnd,
+  } = options;
   const verified = parsedEvidenceView(evidence);
   assertEvidenceMatchesPolicy(verified, policy);
   const derived = deriveClaimFromEvidence({
@@ -85,10 +99,11 @@ export const buildClaimProposal = async <V extends number>(options: {
     appId,
     holder,
     valueSlots,
+    byteSlots,
     windowStart,
     windowEnd,
   });
-  return claimSchema(valueSlots).parse(derived);
+  return claimSchema(valueSlots, byteSlots).parse(derived);
 };
 
 /**

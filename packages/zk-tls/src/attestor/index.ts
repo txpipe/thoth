@@ -77,38 +77,55 @@ export const verifyZkFetchProof = async (evidence: ZkFetchEvidence): Promise<Ver
   return parsedEvidenceView(evidence);
 };
 
+/** Whether two byte arrays are equal, byte for byte. */
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
+  a.length === b.length && a.every((byte, index) => byte === b[index]);
+
+/** The all-zero 32-byte value an absent byte slot must carry. */
+const ZERO_BYTES_32 = new Uint8Array(32);
+
 /**
  * Check a client-proposed claim against the disclosed values.
  *
  * The client proposes claim values; the attestor only signs what the evidence
  * disclosed. For every policy slot this enforces that the proposal's `present`
  * flag and value match the disclosure exactly (an absent disclosure must be
- * proposed unpresent), so a client cannot have the attestor certify a
- * different reading of the same evidence.
+ * proposed unpresent) — numeric slots against `values`, byte slots against
+ * `byteValues` — so a client cannot have the attestor certify a different
+ * reading of the same evidence.
  *
  * @param options — the proposed claim, the disclosed values, and the policy.
  * @throws with a descriptive message on the first mismatch.
  */
 export const assertClaimMatchesDisclosures = (options: {
   /** The client-proposed claim. */
-  claim: Claim<number>;
+  claim: Claim<number, number>;
   /** The disclosed values (redacted values excluded). */
   disclosures: Readonly<Record<string, string>>;
   /** The policy declaring the slot map. */
   policy: ZkFetchPolicy;
 }): void => {
   const { claim, disclosures, policy } = options;
+  const valueSlots = claim.values.length;
   for (const slot of policy.slots) {
     const raw = disclosures[slot.name];
-    const parsed = raw === undefined ? null : parseDisclosedValue(raw, slot.parse);
-    const certifiable = parsed !== null;
-    const expected = parsed ?? 0n;
     const proposedPresent = claim.present[slot.slot] ?? false;
-    const proposedValue = claim.values[slot.slot] ?? 0n;
-    if (proposedPresent !== certifiable || proposedValue !== expected) {
-      throw new Error(
-        `claim slot ${slot.slot} does not match the disclosed value for "${slot.name}"`,
-      );
+    if (slot.parse === 'bytes') {
+      const parsed = raw === undefined ? null : parseDisclosedValue(raw, 'bytes');
+      const proposed = claim.byteValues[slot.slot - valueSlots] ?? ZERO_BYTES_32;
+      if (proposedPresent !== (parsed !== null) || !sameBytes(proposed, parsed ?? ZERO_BYTES_32)) {
+        throw new Error(
+          `claim slot ${slot.slot} does not match the disclosed value for "${slot.name}"`,
+        );
+      }
+    } else {
+      const parsed = raw === undefined ? null : parseDisclosedValue(raw, slot.parse);
+      const proposed = claim.values[slot.slot] ?? 0n;
+      if (proposedPresent !== (parsed !== null) || proposed !== (parsed ?? 0n)) {
+        throw new Error(
+          `claim slot ${slot.slot} does not match the disclosed value for "${slot.name}"`,
+        );
+      }
     }
   }
 };
@@ -126,7 +143,7 @@ export const assertClaimMatchesDisclosures = (options: {
  */
 export const assertClaimMatchesSubject = (options: {
   /** The client-proposed claim. */
-  claim: Claim<number>;
+  claim: Claim<number, number>;
   /** The verified evidence whose signed parameters name the request. */
   verified: VerifiedEvidence;
 }): void => {
@@ -150,7 +167,7 @@ export const assertClaimMatchesSubject = (options: {
  */
 export const assertObservationInWindow = (options: {
   /** The client-proposed claim. */
-  claim: Claim<number>;
+  claim: Claim<number, number>;
   /** The verified evidence whose signed claim carries the observation time. */
   verified: VerifiedEvidence;
 }): void => {
@@ -185,8 +202,14 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
     policy: zkFetchPolicySchema,
     evidence: zkFetchEvidenceSchema,
     claim: zkFetchClaimSchema,
-    verify: async (input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number>>) => {
-      assertPolicySlotsInRange(input.policy, input.claim.values.length);
+    verify: async (
+      input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number, number>>,
+    ) => {
+      assertPolicySlotsInRange(
+        input.policy,
+        input.claim.values.length,
+        input.claim.byteValues.length,
+      );
       const verified = await verifyZkFetchProof(input.evidence);
       assertEvidenceMatchesPolicy(verified, input.policy);
       assertObservationInWindow({ claim: input.claim, verified });
@@ -197,7 +220,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
         policy: input.policy,
       });
     },
-    message: (claim: Claim<number>): FlatMessage => claimToMessage(claim),
+    message: (claim: Claim<number, number>): FlatMessage => claimToMessage(claim),
   });
 }
 
@@ -251,6 +274,7 @@ export function zkFetchAttestor<PK, S>(parts: {
         appId: proposed.appId,
         holder: proposed.holder,
         valueSlots: proposed.values.length,
+        byteSlots: proposed.byteValues.length,
         windowStart: proposed.windowStart,
         windowEnd: proposed.windowEnd,
       });

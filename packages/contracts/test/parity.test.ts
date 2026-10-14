@@ -44,7 +44,7 @@ describe('claimToMessage parity', () => {
   describe('field-for-field equality (level 1)', () => {
     it('matches the contract buildMessage for every claim shape', () => {
       for (const claim of claims) {
-        expect(claimToMessage(claim)).toEqual(pureCircuits.message(claim));
+        expect(claimToMessage({ ...claim, byteValues: [] })).toEqual(pureCircuits.message(claim));
       }
     });
   });
@@ -53,7 +53,7 @@ describe('claimToMessage parity', () => {
     it('accepts signatures made over claimToMessage output', async () => {
       const commitRand = randomBytes(32);
       const claim = makeClaim({ values: [111n, 222n, 333n], present: [true, true, true] });
-      const msg = claimToMessage(claim);
+      const msg = claimToMessage({ ...claim, byteValues: [] });
 
       // Sign the off-chain encoder's message directly with the first two keys.
       const signatures = [

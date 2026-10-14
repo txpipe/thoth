@@ -184,10 +184,19 @@ const runAttempt = async <V extends number, PK, S>(
 
   const attempt = async () => {
     const evidence = await step('evidence', () => proveWith(config.provers, attestor, request));
-    const { policy, appId, valueSlots } = config;
+    const { policy, appId, valueSlots, byteSlots } = config;
     const { holder, windowStart, windowEnd } = options;
     const claim = await step('evidence', () =>
-      buildClaimProposal({ evidence, policy, appId, holder, valueSlots, windowStart, windowEnd }),
+      buildClaimProposal({
+        evidence,
+        policy,
+        appId,
+        holder,
+        valueSlots,
+        byteSlots,
+        windowStart,
+        windowEnd,
+      }),
     );
     const collected = await step('attestation', () => attestWith(config, member, evidence, claim));
     return { collected, claim, message: collected.attestation.message };

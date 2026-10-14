@@ -11,6 +11,7 @@ import {
   claimRequestOf,
   deriveClaimFromEvidence,
   type ProviderClaimData,
+  parseDisclosedValue,
   parsedEvidenceView,
   type VerifiedEvidence,
   type ZkFetchEvidence,
@@ -481,5 +482,77 @@ describe('assertEvidenceMatchesPolicy', () => {
       {},
     );
     expect(assertEvidenceMatchesPolicy(missing, optional)).toBe('api.github.com');
+  });
+});
+
+describe("the 'bytes' parse rule", () => {
+  const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
+    allowedHosts: ['api.github.com'],
+    slots,
+    ...DISCLOSURE_RULES,
+  });
+
+  const padded = (value: string): Uint8Array => {
+    const out = new Uint8Array(32);
+    out.set(new TextEncoder().encode(value));
+    return out;
+  };
+
+  const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
+
+  const PARAMS = { ...REQUEST, extractedParameters: { id: 'abc' } };
+
+  const derive = (slots: ZkFetchPolicy['slots'], id: string) =>
+    deriveClaimFromEvidence({
+      verified: verifiedOf(claimWith(PARAMS, {}), { id }),
+      policy: policy(slots),
+      appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
+      valueSlots: 1,
+      byteSlots: 1,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
+    });
+
+  it('parses a disclosed string into its UTF-8 bytes, zero-padded to 32', () => {
+    expect(parseDisclosedValue('abc', 'bytes')).toEqual(padded('abc'));
+    expect(parseDisclosedValue('', 'bytes')).toEqual(new Uint8Array(32));
+    // The limit counts bytes, not characters.
+    const accented = parseDisclosedValue('é', 'bytes');
+    expect(accented?.slice(0, 2)).toEqual(new Uint8Array([0xc3, 0xa9]));
+    expect(accented?.slice(2)).toEqual(new Uint8Array(30));
+  });
+
+  it('rejects a string longer than 32 bytes and accepts exactly 32', () => {
+    expect(parseDisclosedValue('a'.repeat(33), 'bytes')).toBeNull();
+    expect(parseDisclosedValue('a'.repeat(32), 'bytes')).toHaveLength(32);
+  });
+
+  it('derives the byte value and its flag into the byte region', () => {
+    const claim = derive([{ slot: 1, name: 'id', parse: 'bytes' }], 'abc');
+    expect(claim.present).toEqual([false, true]);
+    expect(claim.values).toEqual([0n]);
+    expect(claim.byteValues[0]).toEqual(padded('abc'));
+  });
+
+  it('leaves an over-long disclosure unpresent, like an unparseable number', () => {
+    const claim = derive([{ slot: 1, name: 'id', parse: 'bytes', optional: true }], 'a'.repeat(33));
+    expect(claim.present).toEqual([false, false]);
+    expect(claim.byteValues[0]).toEqual(new Uint8Array(32));
+  });
+
+  it('rejects a rule that targets the wrong region', () => {
+    expect(() => derive([{ slot: 0, name: 'id', parse: 'bytes' }], 'abc')).toThrow(
+      /targets a numeric slot/,
+    );
+    expect(() => derive([{ slot: 1, name: 'id', parse: 'int' }], 'abc')).toThrow(
+      /targets a byte slot/,
+    );
+  });
+
+  it('is pinned by the policy hash', () => {
+    const intPolicy = policy([{ slot: 0, name: 'id', parse: 'int' }]);
+    const bytesPolicy = policy([{ slot: 0, name: 'id', parse: 'bytes' }]);
+    expect(hex(zkFetchPolicyHashOf(bytesPolicy))).not.toEqual(hex(zkFetchPolicyHashOf(intPolicy)));
   });
 });
