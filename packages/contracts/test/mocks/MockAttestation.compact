@@ -51,6 +51,10 @@ export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
   return A_holderCommitment(secret);
 }
 
+export pure circuit keysDistinct(ks: Vector<3, JubjubPoint>): Boolean {
+  return R_keysDistinct(ks);
+}
+
 // App-predicate demo: open a vaulted claim in-circuit and read several value
 // slots in one shot. `openClaim` is intentionally NOT re-exported at the top
 // level (its tainted return would force a disclosing reveal); apps compose
@@ -87,8 +91,6 @@ export circuit openAndBindHost(id: Bytes<32>, s: Subject, host: Bytes<32>): [] {
   assert(s.host == host, "Host not accepted");
 }
 
-witness seedKeys(): Vector<3, JubjubPoint>;
-
 witness freshWindow(): Uint<64>;
 
 witness maxWin(): Uint<64>;
@@ -101,5 +103,5 @@ constructor() {
   for (const h of seedPolicies()) {
     A_policyHashes.insert(disclose(h));
   }
-  R_keys = disclose(seedKeys());
+  R_initRegistry();
 }

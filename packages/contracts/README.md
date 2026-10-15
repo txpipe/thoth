@@ -11,7 +11,7 @@ your own `.compact` contracts and compile as part of your own DApp build.
 | File | Module | Role |
 |------|--------|------|
 | `attestation.compact` | `attestation<#K, #V, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and the observation window (`maxWindow`, `freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)`. The claim can be opened at any time to access the values. |
-| `attestor_registry.compact` | `attestor_registry<#M, #K>` | Pinned attestor public keys (sealed) + `countValidSignatures` over a `Vector<K, Field>` message, verified with the stdlib `jubjubSchnorrVerify` (compiler ≥ 0.32; developed against 0.34.0). Counts only — no threshold |
+| `attestor_registry.compact` | `attestor_registry<#M, #K>` | Seals the M pinned attestor keys via `initRegistry` — the module's own init circuit, which asserts the keys are pairwise distinct at deploy and provides `countValidSignatures` over a `Vector<K, Field>` message, verified with the stdlib `jubjubSchnorrVerify` (compiler ≥ 0.32; developed against 0.34.0). Counts only — no threshold |
 
 The modules form a single import graph (`attestation` → `attestor_registry`), so
 they are always installed as one package. Import them by path from your
@@ -58,9 +58,45 @@ import "attestor_registry"<3, 17> prefix R_;
 ```
 
 See `examples/example_app.compact` for a complete top-level embedding that
-pins registry keys, the accepted policy hashes, the freshness window, and the
-maximum observation window in the constructor, re-exports the module types/ledgers/pure circuits, and exports a
+initializes the registry, seals the accepted policy hashes, the freshness
+window, and the maximum observation window in the constructor, re-exports the module types/ledgers/pure circuits, and exports a
 `verifyAttestation` entry point.
+
+### Constructor wiring
+
+Two kinds of sealed ledger are set at deploy, through different seams:
+
+```compact
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+//            K=17 msg fields  V=3 values  N=2 threshold  M=3 signatures
+import "attestation"<17, 3, 2, 3> prefix A_;
+import "attestor_registry"<3, 17> prefix R_;
+
+witness seedPolicies(): Vector<1, Bytes<32>>;
+
+constructor() {
+  A_freshnessWindow = disclose(3600);  // sealed: freshness window (seconds)
+  A_maxWindow = disclose(300);         // sealed: longest observation window
+  for (const h of seedPolicies()) {
+    A_policyHashes.insert(disclose(h)); // sealed: accepted policy hashes
+  }
+  R_initRegistry();                    // seals the M attestor keys; rejects duplicates
+}
+```
+
+- `freshnessWindow`, `maxWindow`, and `policyHashes` belong to the Attestation
+  module and are written by the **embedder's** witnesses (or literals).
+- The registry's `keys` are **not** writable by the embedder — the ledger is
+  deliberately unexported. `R_initRegistry()` is the only writer: it fetches
+  the keys from the module's own `seedKeys` witness, seals them, and asserts
+  they are pairwise distinct (empty slots exempt). A duplicate-key deployment
+  fails here at deploy time with `"Duplicate registry keys"`, and a second
+  `R_initRegistry()` fails with `"Registry already initialized"`.
+- Empty slots never count toward the threshold, and the registry cannot see
+  `N`: pin at least `N` distinct keys, or no claim can ever be accepted.
 
 ## Module parameters
 
@@ -149,6 +185,11 @@ zero remains valid with `present[i] = true`.
   holding its signer's public key. Placement is the app's: the client's trusted
   set records each attestor's slot in this registry, and each collected
   signature goes at that slot.
+- **The registry rejects duplicate keys at deploy.** `initRegistry` asserts
+  the pinned keys are pairwise distinct (empty slots exempt), so one key can
+  never fill two slots of the threshold — the N-of-M count is over distinct
+  keys. Distinctness is the only property checked: key provenance and validity
+  are the app's trust decision. `keys` is sealed and unexported, so this check cannot be skipped by an embedder.
 - **A new kind needs no change here** as long as it signs the standard claim:
   an app accepts it by sealing its policy hash. See
   [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md).
@@ -168,11 +209,13 @@ flag disagrees with an asserted predicate can never pass signature verification.
 
 ## Deploy wiring
 
-`freshnessWindow`, `maxWindow` and `policyHashes` (Attestation) and `keys` (Registry) are
-**sealed** ledgers set exactly once in the top-level constructor. Fill
-`policyHashes` by inserting each accepted policy hash there; no circuit can add
-one after deploy. See `examples/example_app.compact`
-for the full wiring.
+`freshnessWindow`, `maxWindow` and `policyHashes` (Attestation) are **sealed**
+ledgers set exactly once in the top-level constructor from the embedder's own
+witnesses — fill `policyHashes` by inserting each accepted policy hash there;
+no circuit can add one after deploy. The registry's `keys` are sealed by
+calling `R_initRegistry()` in the constructor (see
+[Constructor wiring](#constructor-wiring)); there is no other way to set them.
+See `examples/example_app.compact` for the full wiring.
 
 ## Opening a vaulted claim
 

@@ -1,22 +1,46 @@
 // Attestor registry module for Thoth.
 //
-// Holds the app's pinned set of `M` attestor public keys (supplied at embed /
-// top-level construction) and provides `countValidSignatures` over an arbitrary
-// `Vector<K, Field>` signed message. This module only COUNTS signature
-// validity — it never interprets the message contents (the message shape is
-// defined by the Attestation module that embeds this one), and it does NOT
-// enforce a threshold (the Attestation module applies its own `#N`).
+// Holds the app's pinned set of `M` attestor public keys and provides
+// `countValidSignatures` over an arbitrary `Vector<K, Field>` signed message.
+// This module only COUNTS signature validity — it never interprets the
+// message contents (the message shape is defined by the Attestation module
+// that embeds this one), and it does NOT enforce a threshold (the Attestation
+// module applies its own `#N`).
 //
-// Registry keys are a *sealed* ledger: they are set exactly once by the
-// top-level constructor at deploy time and cannot change afterwards — matching
-// DESIGN.md's "the app pins its trusted set at deployment".
+// Registry keys are a *sealed* ledger: `initRegistry` sets them exactly once
+// at deploy time and they cannot change afterwards. The ledger is deliberately
+// NOT exported, and embedders must not re-export `initRegistry`: a sealed field
+// cannot be written by code reachable from an exported circuit, so exposing the
+// init circuit is a compile error.
+// The `initialized` flag backs this at runtime: a second `initRegistry` call
+// fails even from within the constructor.
 pragma language_version >= 0.22;
 
 module attestor_registry<#M, #K> {
   import CompactStandardLibrary;
 
-  /// The M attestor public keys, pinned at deploy by the top-level constructor.
-  export sealed ledger keys: Vector<M, JubjubPoint>;
+  /// The M attestor public keys, pinned at deploy by `initRegistry`.
+  /// Not exported: the module's own init circuit is the only writer.
+  sealed ledger keys: Vector<M, JubjubPoint>;
+
+  /// Whether `initRegistry` has run. Unexported and unsealed, written only by
+  /// `initRegistry`, which refuses a second call.
+  ledger initialized: Boolean;
+
+  /// Deploy-time witness providing the M attestor public keys.
+  witness seedKeys(): Vector<M, JubjubPoint>;
+
+  /// Initialize the registry from the `seedKeys` witness and seal the keys.
+  /// The sole registry constructor: refuses a second call, then asserts the
+  /// pinned keys are pairwise distinct (empty slots exempt), so the N-of-M
+  /// threshold holds against exactly the keys the app pinned.
+  export circuit initRegistry(): [] {
+    assert(!initialized, "Registry already initialized");
+    initialized = true;
+    const ks: Vector<M, JubjubPoint> = seedKeys();
+    keys = disclose(ks);
+    assert(keysDistinct(ks), "Duplicate registry keys");
+  }
 
   /// Whether one signature verifies against its registry slot.
   circuit slotValid(
@@ -45,5 +69,24 @@ module attestor_registry<#M, #K> {
     return fold((acc: Uint<64>, ok: Boolean) => (acc + (ok ? 1 : 0)) as Uint<64>,
                 0 as Uint<64>,
                 verdicts);
+  }
+
+  /// How many slots of `ks` hold `k`. Empty slots count like any other, so a
+  /// truly empty key (the `default<JubjubPoint>` value) occurs once per
+  /// unfilled slot.
+  circuit keyCount(ks: Vector<M, JubjubPoint>, k: JubjubPoint): Uint<64> {
+    return fold((acc: Uint<64>, k2: JubjubPoint) => (acc + (k == k2 ? 1 : 0)) as Uint<64>,
+                0 as Uint<64>,
+                ks);
+  }
+
+  /// Whether the M registry keys are pairwise distinct, empty slots exempt:
+  /// true iff every non-empty key occupies exactly one slot. `initRegistry`
+  /// asserts this at deploy so the check costs nothing per claim.
+  export circuit keysDistinct(ks: Vector<M, JubjubPoint>): Boolean {
+    return fold((distinct: Boolean, k: JubjubPoint) =>
+                distinct && (k == default<JubjubPoint> || keyCount(ks, k) == 1),
+                true,
+                ks);
   }
 }
