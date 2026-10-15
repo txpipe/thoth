@@ -211,11 +211,17 @@ predicate over a vaulted claim reads any slot directly:
 ```compact
 const c = A_openClaim(id);
 assert(c.present[0], "slot 0 must have been measured");
-assert(c.bytePresent[0], "byte half 0 must have been measured");
+assert(c.bytePresent[0] && c.bytePresent[1], "byte value 0 must have been measured");
 ```
 
 Because presence is part of the signed message, a claim whose `present[i]`
 flag disagrees with an asserted predicate can never pass signature verification.
+
+Honest claims always give a byte value's two halves the same flag (the attestor
+law derives them from a single disclosure), but the module does **not** enforce
+the pairing: the absent-slot law checks each half only against zero. A predicate
+that must hold against a colluding threshold should require both flags or
+compare the reassembled value.
 
 ## Deploy wiring
 
@@ -246,19 +252,22 @@ is reassembled with `Bytes[...c.byteHalves[2 * i], ...c.byteHalves[2 * i + 1]]`.
 
 ## Notes / open questions
 
-- Reusability across apps: the claim shape is positional (`values: Vector<V, Uint<64>>`)
-  plus per-slot `present` flags. It is simple enough that any app can parse it, but the
-  *meaning* of each slot is app-defined. There is no per-value tag in the signed
-  message; the policy that produced the claim is identified by `policyHash`.
+- Reusability across apps: the claim shape is positional (`values: Vector<V, Uint<64>>`
+  and `byteHalves: Vector<B, Bytes<16>>`) plus per-slot presence flags (numeric
+  `present`, per-half `bytePresent`). It is simple enough that any app can parse
+  it, but the *meaning* of each slot is app-defined. There is no per-value tag in
+  the signed message; the policy that produced the claim is identified by
+  `policyHash`.
 
 ## Development
 
 ```bash
 npm install                 # from the repo root (workspace)
-npm test                    # compiles the mock (--skip-zk), runs vitest
+npm test                    # compiles the mocks (--skip-zk), runs vitest
 npm run check               # biome + compact format
 ```
 
-The package's own test suite uses the mock top-level embedding in
-`test/mocks/MockAttestation.compact`; it exercises the modules and is not
-shipped with the package.
+The package's own test suite uses the mock top-level embeddings in
+`test/mocks/MockAttestation.compact` (numeric-only) and
+`test/mocks/MockAttestationBytes.compact` (one byte value); they exercise the
+modules and are not shipped with the package.

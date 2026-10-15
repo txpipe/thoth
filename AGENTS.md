@@ -30,14 +30,14 @@ Run everything from the repo root (npm workspace):
 
 - `npm install` — install all workspaces
 - `npm run types` — typecheck every package (`tsc --noEmit` per workspace)
-- `npm test` — compiles the mock contract and builds the packages (via
+- `npm test` — compiles the mock contracts and builds the packages (via
   `pretest`), then runs vitest (contract simulator, core, and zk-tls kind tests)
 - `npm run check` — biome format/lint + `compact format -c` check
 - `npm run check:fix` — auto-fix biome + compact formatting
 - `npm run build` — build all packages that have a `build` script (`tsc`),
   producing `dist/`
 - `npm run compact` / `npm run compact:no-zk` — compile the mock top-level
-  contract (with/without PLONK key generation)
+  contracts (with/without PLONK key generation)
 
 Per-package: `npm run <script> --workspace=packages/<name>`.
 
@@ -147,9 +147,10 @@ thoth/
 ## Testing
 
 - Contract logic is tested with the **simulator** via vitest in
-  `packages/contracts/test/`. The mock top-level shell
-  (`packages/contracts/test/mocks/MockAttestation.compact`) specializes the
-  modules (V=3, K=17, M=3, N=2) so tests run against real artifacts.
+  `packages/contracts/test/`. The mock top-level shells
+  (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, K=17, M=3,
+  N=2 — and `MockAttestationBytes.compact` — V=3, B=2, K=21) specialize the
+  modules so tests run against real artifacts.
 - `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
   compiled pure circuits — never hand-roll the message encoding; use
   `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.

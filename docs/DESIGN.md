@@ -100,7 +100,8 @@ behind them are the ADRs in [`adr/`](adr/).
 | `byteValues` | `W` positional 32-byte measurements (identifiers, strings) |
 
 A byte value travels exactly as its 32 bytes; the contract stores each one as
-two adjacent 16-byte halves and carries the byte slot's flag on both halves. The
+two adjacent 16-byte halves and carries the byte slot's flag on both halves
+(honest claims; the module does not check that the two flags agree). The
 absent law is one-directional: an absent slot must carry zero, while a present
 slot may be zero — including a short value whose zero-padding leaves a half all
 zeros.

@@ -80,7 +80,7 @@ export const buildClaimProposal = async <V extends number>(options: {
   windowStart: bigint;
   /** End of the window to sign: the latest observation across the witnesses. */
   windowEnd: bigint;
-}): Promise<Claim<V>> => {
+}): Promise<Claim<V, number>> => {
   const {
     evidence,
     policy,

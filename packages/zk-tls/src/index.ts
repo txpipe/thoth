@@ -178,13 +178,38 @@ export interface VerifiedEvidence {
 }
 
 /**
- * How a disclosed string is interpreted: `int` accepts digits only; `float`
+ * How a disclosed string is interpreted. `int` accepts digits only; `float`
  * accepts unsigned decimals with optional signed base-10 exponents and rounds
- * exactly to the nearest integer, with halves rounded up. Both require Uint<64>.
- * `bytes` keeps the string's UTF-8 bytes, zero-padded to 32, and is rejected
- * (unparseable) when longer than 32 bytes.
+ * exactly to the nearest integer, with halves rounded up. Both require
+ * `Uint<64>`. The byte rules — `bytes`, `hex`, `base64` — fill a 32-byte slot
+ * and reject a value that does not fit:
+ *
+ * - `bytes` keeps the string's UTF-8 bytes. Not injective: trailing NUL bytes
+ *   collapse into the padding and unpaired surrogates normalize to U+FFFD.
+ * - `hex` decodes hex digits, case-insensitively, with an optional `0x`/`0X`
+ *   prefix. Every other character — separators, whitespace, punctuation — is
+ *   data, not formatting: `AA:BB` and `AA-BB` are not hex.
+ * - `base64` decodes the standard (`+/`) or URL-safe (`-_`) alphabet, with
+ *   optional trailing `=` padding.
+ *
+ * Decoding normalizes only the representations that carry no data: hex case,
+ * the `0x` marker, the base64 alphabet, and base64 padding. It never deletes
+ * a character, so strings that differ in separators or whitespace stay
+ * distinct (ADR 0010).
  */
-export type ZkFetchParseRule = 'int' | 'float' | 'bytes';
+export type ZkFetchParseRule = 'int' | 'float' | 'bytes' | 'hex' | 'base64';
+
+/** The parse rules that fill a 32-byte claim slot (see {@link ZkFetchParseRule}). */
+export type ByteRule = 'bytes' | 'hex' | 'base64';
+
+/**
+ * Whether a parse rule targets a byte value slot rather than a numeric one.
+ *
+ * @param rule — the parse rule.
+ * @returns `true` for `bytes`, `hex`, and `base64`.
+ */
+export const isByteRule = (rule: ZkFetchParseRule): rule is ByteRule =>
+  rule !== 'int' && rule !== 'float';
 
 /**
  * One claim-slot binding: which extracted (disclosed) value feeds which
@@ -193,8 +218,8 @@ export type ZkFetchParseRule = 'int' | 'float' | 'bytes';
  * `slot` becomes the index into the claim's value slots — numeric slots are
  * `0..V-1` and byte value slots are `V..V+W-1` — and `name` is a named regex
  * group from the proof's `responseMatches`, as disclosed by the verified
- * evidence. A numeric rule MUST target a numeric slot; `'bytes'` MUST target a
- * byte slot.
+ * evidence. A numeric rule MUST target a numeric slot; a byte rule (`bytes`,
+ * `hex`, `base64`) MUST target a byte slot.
  */
 export interface ZkFetchSlot {
   /** Index into the claim's value slots: numeric `0..V-1`, byte `V..V+W-1`. */
@@ -203,6 +228,13 @@ export interface ZkFetchSlot {
   name: string;
   /** How the disclosed string is converted to the claim value. */
   parse: ZkFetchParseRule;
+  /**
+   * Exact byte length the value must have, for byte rules only: the UTF-8
+   * length for `bytes`, the decoded length for `hex`/`base64` (1–32). Omitted,
+   * any length that fits the 32-byte slot is accepted. A mismatch makes the
+   * disclosure not certifiable.
+   */
+  length?: number;
   /**
    * Whether the slot must be certifiable for the evidence to be attested.
    * A required (default) slot needs its disclosure present AND parseable; an
@@ -275,12 +307,23 @@ export const zkFetchPolicySchema = z.object({
   allowedHosts: z.array(z.string()).min(1),
   slots: z
     .array(
-      z.object({
-        slot: z.number().int().nonnegative(),
-        name: z.string().min(1),
-        parse: z.enum(['int', 'float', 'bytes']),
-        optional: z.boolean().optional(),
-      }),
+      z
+        .object({
+          slot: z.number().int().nonnegative(),
+          name: z.string().min(1),
+          parse: z.enum(['int', 'float', 'bytes', 'hex', 'base64']),
+          length: z.number().int().min(1).max(32).optional(),
+          optional: z.boolean().optional(),
+        })
+        .superRefine((slot, context) => {
+          if (slot.length !== undefined && !isByteRule(slot.parse)) {
+            context.addIssue({
+              code: 'custom',
+              message: `'length' is only valid for byte rules, not '${slot.parse}'`,
+              path: ['length'],
+            });
+          }
+        }),
     )
     .min(1),
   responseMatches: z
@@ -643,12 +686,64 @@ const parseDecimalUint64 = (value: string): bigint | null => {
 const BYTE_VALUE_BYTES = 32;
 
 /**
- * Parse a disclosed string into a 32-byte claim value: its UTF-8 bytes,
- * zero-padded to 32. Returns `null` when the string is longer than 32 bytes
- * (not certifiable), so the attestor never guesses a truncated reading.
+ * Decode `hex` text: case-insensitive digits with an optional `0x`/`0X`
+ * prefix. Every other character is data, so separators, whitespace and
+ * punctuation make the string invalid rather than being ignored.
+ *
+ * @param value — the disclosed string.
+ * @returns the decoded bytes, or `null` when the string is not valid hex.
  */
-const parseDisclosedBytes = (value: string): Uint8Array | null => {
-  const bytes = new TextEncoder().encode(value);
+const decodeHex = (value: string): Uint8Array | null => {
+  const digits = value.replace(/^0[xX]/, '');
+  if (digits.length === 0 || digits.length % 2 !== 0 || digits.length > 2 * BYTE_VALUE_BYTES) {
+    return null;
+  }
+  if (!/^[0-9a-fA-F]+$/.test(digits)) {
+    return null;
+  }
+  const bytes = new Uint8Array(digits.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(digits.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes;
+};
+
+/**
+ * Decode `base64` text: the standard (`+/`) or URL-safe (`-_`) alphabet with
+ * optional trailing `=` padding.
+ *
+ * Whitespace and other characters are invalid (never ignored), partial padding
+ * is invalid, and an encoding whose trailing bits are not canonical is
+ * invalid, so a lenient decoder-favorite like `AB==` cannot fold into the same
+ * value as `AA==`.
+ *
+ * @param value — the disclosed string.
+ * @returns the decoded bytes, or `null` when the string is not valid base64.
+ */
+const decodeBase64 = (value: string): Uint8Array | null => {
+  const match = /^([A-Za-z0-9+/_-]+)(=*)$/.exec(value);
+  const body = match?.[1];
+  const padding = match?.[2] ?? '';
+  if (body === undefined || padding.length > 2) {
+    return null;
+  }
+  if (padding.length > 0 && (body.length + padding.length) % 4 !== 0) {
+    return null;
+  }
+  const canonical = body.replace(/-/g, '+').replace(/_/g, '/');
+  if (canonical.length > 43) {
+    // 43 unpadded characters are the most 32 bytes can encode.
+    return null;
+  }
+  const bytes = Buffer.from(canonical, 'base64');
+  if (bytes.toString('base64').replace(/=+$/, '') !== canonical) {
+    return null;
+  }
+  return bytes;
+};
+
+/** Pad decoded bytes into a 32-byte claim value, or `null` when over 32 bytes. */
+const padTo32 = (bytes: Uint8Array): Uint8Array | null => {
   if (bytes.length > BYTE_VALUE_BYTES) {
     return null;
   }
@@ -658,18 +753,41 @@ const parseDisclosedBytes = (value: string): Uint8Array | null => {
 };
 
 /**
+ * Decode a disclosed string into its bytes under a byte rule, unpadded.
+ *
+ * @param value — the disclosed string.
+ * @param rule — the byte rule that interprets it.
+ * @returns the decoded bytes, or `null` when the string is not a valid
+ *   encoding under the rule.
+ */
+const decodeByteValue = (value: string, rule: ByteRule): Uint8Array | null => {
+  switch (rule) {
+    case 'bytes':
+      return new TextEncoder().encode(value);
+    case 'hex':
+      return decodeHex(value);
+    case 'base64':
+      return decodeBase64(value);
+  }
+};
+
+/**
  * Parse a disclosed string value into the claim's slot value for its rule.
  *
  * Returns `null` when the value cannot be interpreted under the rule — a
  * numeric reading outside the wire's `Uint<64>` range `[0, 2^64)`, or a byte
- * reading longer than 32 bytes — so such a disclosure is not certifiable and
- * its slot stays unpresent, rather than the attestor guessing a reading or
- * signing a value the contract can never verify.
+ * reading that is not a valid encoding or does not fit the 32-byte slot — so
+ * such a disclosure is not certifiable and its slot stays unpresent, rather
+ * than the attestor guessing a reading or signing a value the contract can
+ * never verify.
  *
  * `float` accepts `[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?` as a whole
  * string. It rounds in decimal arithmetic, with halves rounded up. Neither
  * numeric rule accepts whitespace, grouping separators, or a leading sign.
- * `bytes` keeps the string's UTF-8 bytes, zero-padded to 32.
+ * The byte rules are described in {@link ZkFetchParseRule}; decoding folds
+ * only representations that carry no data (hex case, the `0x` marker, the
+ * base64 alphabet and padding), never deleting a character. A slot's `length`
+ * pin is not applied here — use {@link parseSlotValue} for that.
  *
  * Exported for the attestor side's disclosure cross-check
  * (`assertClaimMatchesDisclosures`); claim derivation uses it internally.
@@ -679,7 +797,7 @@ const parseDisclosedBytes = (value: string): Uint8Array | null => {
  * @returns the numeric value or the 32-byte value, or `null` when unparseable.
  */
 export function parseDisclosedValue(value: string, rule: 'int' | 'float'): bigint | null;
-export function parseDisclosedValue(value: string, rule: 'bytes'): Uint8Array | null;
+export function parseDisclosedValue(value: string, rule: ByteRule): Uint8Array | null;
 export function parseDisclosedValue(
   value: string,
   rule: ZkFetchParseRule,
@@ -699,8 +817,41 @@ export function parseDisclosedValue(
     case 'float':
       return parseDecimalUint64(value);
     case 'bytes':
-      return parseDisclosedBytes(value);
+    case 'hex':
+    case 'base64': {
+      const bytes = decodeByteValue(value, rule);
+      return bytes === null ? null : padTo32(bytes);
+    }
   }
+}
+
+/**
+ * Parse a disclosed string for one policy slot: the slot's rule, its exact
+ * `length` pin (byte rules only), and the 32-byte slot width.
+ *
+ * @param slot — the policy slot declaring the rule and any length pin.
+ * @param value — the disclosed string.
+ * @returns the numeric value or the 32-byte value, or `null` when the string
+ *   is unparseable, longer than 32 bytes, or off the pinned length.
+ */
+export function parseSlotValue(
+  slot: ZkFetchSlot & { parse: ByteRule },
+  value: string,
+): Uint8Array | null;
+export function parseSlotValue(
+  slot: ZkFetchSlot & { parse: 'int' | 'float' },
+  value: string,
+): bigint | null;
+export function parseSlotValue(slot: ZkFetchSlot, value: string): bigint | Uint8Array | null;
+export function parseSlotValue(slot: ZkFetchSlot, value: string): bigint | Uint8Array | null {
+  if (!isByteRule(slot.parse)) {
+    return parseDisclosedValue(value, slot.parse);
+  }
+  const bytes = decodeByteValue(value, slot.parse);
+  if (bytes === null || (slot.length !== undefined && bytes.length !== slot.length)) {
+    return null;
+  }
+  return padTo32(bytes);
 }
 
 /**
@@ -735,8 +886,8 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
 
 /**
  * Require every policy slot index to fit within the requested claim size and
- * to match its region: numeric rules target `0..valueSlots-1`, `'bytes'`
- * targets `valueSlots..valueSlots+byteSlots-1`.
+ * to match its region: numeric rules target `0..valueSlots-1`, byte rules
+ * (`bytes`, `hex`, `base64`) target `valueSlots..valueSlots+byteSlots-1`.
  *
  * @param policy — a parsed policy whose slot indices are nonnegative integers.
  * @param valueSlots — the requested number of numeric value slots.
@@ -755,12 +906,12 @@ export function assertPolicySlotsInRange(
     throw new Error(`policy slot ${outOfRange.slot} is out of the claim's ${total} value slots`);
   }
   const wrongRegion = policy.slots.find((slot) =>
-    slot.parse === 'bytes' ? slot.slot < valueSlots : slot.slot >= valueSlots,
+    isByteRule(slot.parse) ? slot.slot < valueSlots : slot.slot >= valueSlots,
   );
   if (wrongRegion !== undefined) {
     throw new Error(
-      wrongRegion.parse === 'bytes'
-        ? `policy slot ${wrongRegion.slot} uses the 'bytes' rule but targets a numeric slot`
+      isByteRule(wrongRegion.parse)
+        ? `policy slot ${wrongRegion.slot} uses the '${wrongRegion.parse}' rule but targets a numeric slot`
         : `policy slot ${wrongRegion.slot} uses the '${wrongRegion.parse}' rule but targets a byte slot`,
     );
   }
@@ -826,7 +977,7 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
     if (raw === undefined) {
       continue;
     }
-    const value = parseDisclosedValue(raw, slot.parse);
+    const value = parseSlotValue(slot, raw);
     if (value === null) {
       continue;
     }
@@ -899,7 +1050,7 @@ export const assertEvidenceMatchesPolicy = (
       continue;
     }
     const raw = verified.disclosedValues[slot.name];
-    if (raw === undefined || parseDisclosedValue(raw, slot.parse) === null) {
+    if (raw === undefined || parseSlotValue(slot, raw) === null) {
       throw new Error(
         `policy requires a certifiable value for "${slot.name}" but the proof did not disclose a parseable value`,
       );

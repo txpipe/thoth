@@ -33,7 +33,8 @@
 // Byte value slots: a byte value is 32 bytes carried as two adjacent
 // 16-byte halves (`byteHalves: Vector<B, Bytes<16>>`, B = 2W) with one presence
 // flag per half (`bytePresent`). Both halves of one value carry the same flag in
-// honest claims: the attestor law derives them from a single disclosure.
+// honest claims: the attestor law derives them from a single disclosure. The
+// module does not check the pairing: the absent-slot law is per half.
 //
 // Wire layout (buildMessage), K = 11 + 2*V + 2*B fields:
 //   [ version,

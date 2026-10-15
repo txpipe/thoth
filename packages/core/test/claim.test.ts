@@ -95,4 +95,29 @@ describe('claimToMessage', () => {
     expect(message.slice(11, 14)).toEqual([1n, 0n, 1n]);
     expect(message.slice(14, 17)).toEqual([7n, 0n, 9n]);
   });
+
+  it('interleaves flags and halves across two byte slots (W = 2)', () => {
+    const first = Uint8Array.from({ length: 32 }, (_, i) => i);
+    const second = Uint8Array.from({ length: 32 }, (_, i) => 0x80 + i);
+    const claim = claimSchema(2, 2).parse({
+      ...numericBase,
+      present: [false, true, true, false],
+      values: [0n, 0n],
+      byteValues: [first, second],
+    });
+    const message = claimToMessage(claim);
+    // header(11) + present(2) + bytePresent(4) + values(2) + halves(4) = 23
+    expect(message).toHaveLength(11 + 2 * 2 + 2 * 4);
+    // numeric flags, then each byte slot's flag duplicated once per half
+    expect(message.slice(11, 13)).toEqual([0n, 1n]);
+    expect(message.slice(13, 17)).toEqual([1n, 1n, 0n, 0n]);
+    expect(message.slice(17, 19)).toEqual([0n, 0n]);
+    // halves in value order, each value bytes 0–15 / 16–31 as LE Uint<128>
+    expect(message.slice(19, 23)).toEqual([
+      le(first.slice(0, 16)),
+      le(first.slice(16)),
+      le(second.slice(0, 16)),
+      le(second.slice(16)),
+    ]);
+  });
 });

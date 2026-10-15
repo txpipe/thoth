@@ -45,9 +45,19 @@ prover that the client can use to obtain evidence:
   - `parsedEvidenceView(evidence)` returns the parsed evidence view claim
     derivation runs on, without a signature check; the caller decides trust.
   - `parseDisclosedValue(value, rule)` applies the parse law: `int`/`float` turn
-    a disclosed string into a numeric slot value, `bytes` into a 32-byte value
-    (its UTF-8 bytes zero-padded to 32). It returns `null` when unparseable — out
-    of the wire's `Uint<64>` range, or longer than 32 bytes.
+    a disclosed string into a numeric slot value; `bytes` keeps the string's
+    UTF-8 bytes; `hex` decodes hex digits, case-insensitively, with an optional
+    `0x`/`0X` prefix; `base64` decodes the standard (`+/`) or URL-safe (`-_`)
+    alphabet, with optional trailing `=` padding. All three byte rules fill a
+    32-byte slot, and `null` means unparseable — out of the wire's `Uint<64>`
+    range, not a valid encoding, or longer than 32 bytes. Decoding never deletes
+    a character: separators, whitespace and punctuation are data, so only hex
+    case, the `0x` marker, the base64 alphabet and base64 padding fold together
+    (ADR 0010). The `bytes` mapping is not injective: trailing NUL bytes merge
+    into the padding and unpaired surrogates normalize to U+FFFD, so equality is
+    over the padded bytes. `parseSlotValue(slot, value)` is the slot-aware
+    variant that also applies a slot's exact `length` pin, and `isByteRule(rule)`
+    separates the numeric rules from the byte rules.
   - `claimUrl(claim)` returns the URL a signed claim attests, decoded from its
     parameters.
   - `normalizePolicy(policy)` parses a policy, fills its defaults, lowercases,

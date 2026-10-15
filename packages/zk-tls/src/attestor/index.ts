@@ -14,8 +14,9 @@ import {
   assertPolicySlotsInRange,
   claimRequestOf,
   deriveClaimFromEvidence,
-  parseDisclosedValue,
+  isByteRule,
   parsedEvidenceView,
+  parseSlotValue,
   type VerifiedEvidence,
   ZK_FETCH_LAW,
   type ZkFetchDefinition,
@@ -91,8 +92,8 @@ const ZERO_BYTES_32 = new Uint8Array(32);
  * disclosed. For every policy slot this enforces that the proposal's `present`
  * flag and value match the disclosure exactly (an absent disclosure must be
  * proposed unpresent) — numeric slots against `values`, byte slots against
- * `byteValues` — so a client cannot have the attestor certify a different
- * reading of the same evidence.
+ * `byteValues` under the slot's rule and `length` pin — so a client cannot
+ * have the attestor certify a different reading of the same evidence.
  *
  * @param options — the proposed claim, the disclosed values, and the policy.
  * @throws with a descriptive message on the first mismatch.
@@ -110,8 +111,8 @@ export const assertClaimMatchesDisclosures = (options: {
   for (const slot of policy.slots) {
     const raw = disclosures[slot.name];
     const proposedPresent = claim.present[slot.slot] ?? false;
-    if (slot.parse === 'bytes') {
-      const parsed = raw === undefined ? null : parseDisclosedValue(raw, 'bytes');
+    if (isByteRule(slot.parse)) {
+      const parsed = raw === undefined ? null : parseSlotValue({ ...slot, parse: slot.parse }, raw);
       const proposed = claim.byteValues[slot.slot - valueSlots] ?? ZERO_BYTES_32;
       if (proposedPresent !== (parsed !== null) || !sameBytes(proposed, parsed ?? ZERO_BYTES_32)) {
         throw new Error(
@@ -119,7 +120,7 @@ export const assertClaimMatchesDisclosures = (options: {
         );
       }
     } else {
-      const parsed = raw === undefined ? null : parseDisclosedValue(raw, slot.parse);
+      const parsed = raw === undefined ? null : parseSlotValue({ ...slot, parse: slot.parse }, raw);
       const proposed = claim.values[slot.slot] ?? 0n;
       if (proposedPresent !== (parsed !== null) || proposed !== (parsed ?? 0n)) {
         throw new Error(

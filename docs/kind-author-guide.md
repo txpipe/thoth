@@ -49,10 +49,15 @@ Never bake an app's policy into an attestor instance.
 - Hash the normalized form: `policyHashOf(law, normalized, claimVersion)`.
   Policies that mean the same thing must hash the same, or two honest
   attestors sign different messages and never reach the threshold together.
-- Each slot declares how its disclosed string is interpreted: `int` or `float`
-  feeds a numeric slot, `bytes` keeps the string's UTF-8 bytes zero-padded to 32
-  in a byte slot (a string longer than 32 bytes is not certifiable). Numeric
-  rules must target numeric slots; `bytes` must target byte slots.
+- Each slot declares how its disclosed string is interpreted. `int` or `float`
+  feeds a numeric slot. The byte rules fill a 32-byte slot: `bytes` keeps the
+  string's UTF-8 bytes (not injective — trailing NULs and unpaired surrogates
+  collapse into the padding), `hex` decodes case-insensitive hex with an
+  optional `0x` prefix, and `base64` decodes the standard or URL-safe alphabet
+  with optional `=` padding. A value that does not fit, or misses a declared
+  `length`, is not certifiable. Decoding never deletes a character — separators
+  and whitespace are data (ADR 0010). Numeric rules must target numeric slots;
+  byte rules must target byte slots.
 - Keep per-operator trust anchors out of the policy. Which witness an attestor
   trusts is instance configuration (zkFetch's `witnessAddress`), not law.
 - Pin the hash of one fixed policy to its bytes in a test, as
@@ -139,19 +144,20 @@ In your `attest`:
 - check per-instance trust anchors, such as "the evidence was signed by *my*
   witness";
 - **derive the claim yourself** from the verified evidence and sign that, not
-  the proposal. Take `appId`, `holder`, the window and the requested count from
-  the proposal, but derive every value and present flag;
+  the proposal. Take `appId`, `holder`, the window and the requested numeric and
+  byte counts from the proposal, but derive every value and present flag;
 - sign `definition.message(claim)` and return the claim, message, public key
   and signature.
 
-The instance has no registry slot or fixed value-slot count, so one instance
-and signing key can serve apps with different claim layouts. Each consuming
-contract enforces its own fixed `#V`.
+The instance has no registry slot or fixed slot counts, so one instance and
+signing key can serve apps with different claim layouts. Each consuming contract
+enforces its own fixed `#V` and `#B`.
 
-Infer the requested count from `claim.values.length`, as `zkFetchAttestor`
-does. Derive the authoritative claim at that count, filling unused positions
-with `present = false` and `value = 0`. The dApp client configures its count
-for the consuming contract; the attestor instance needs no `valueSlots` field.
+Infer the requested counts from `claim.values.length` and
+`claim.byteValues.length`, as `zkFetchAttestor` does. Derive the authoritative
+claim at those counts, filling unused positions with `present = false` and a
+zero value. The dApp client configures its counts for the consuming contract;
+the attestor instance needs no `valueSlots`/`byteSlots` field.
 
 ## 8. The client
 

@@ -90,7 +90,7 @@ Requirements: Node.js 24 (`.nvmrc`), the Compact CLI (compiler 0.34.0).
 
 ```bash
 npm install
-npm test          # compiles the mock contract, then runs vitest
+npm test          # compiles the mock contracts, then runs vitest
 npm run check     # biome format/lint + compact format check
 ```
 

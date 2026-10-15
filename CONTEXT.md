@@ -79,11 +79,11 @@ The measured values of a claim, one per value slot: numbers in the numeric slots
 _Avoid_: Data, payload.
 
 **Byte slot**:
-A value slot carrying a fixed-width byte string, for facts that are not numbers, such as identifiers. A policy's parse rule canonicalizes a source's string into the slot, zero-padding shorter values. The slot is exactly its bytes; equality is byte equality. The signed message splits it into two adjacent 16-byte halves and repeats the slot's flag on each, so a predicate reassembles the halves in-circuit.
+A value slot carrying a fixed-width byte string, for facts that are not numbers, such as identifiers. A policy's parse rule canonicalizes a source's string into the slot: `bytes` keeps its UTF-8 bytes, `hex` and `base64` decode it, and an optional `length` pins the exact byte count. Normalization only folds representations that carry no data (hex case, an optional `0x` marker, the base64 alphabet, base64 padding) — separators and whitespace are data (ADR 0010). The slot is exactly its bytes; equality is byte equality. The signed message splits it into two adjacent 16-byte halves and repeats the slot's flag on each, so a predicate reassembles the halves in-circuit.
 _Avoid_: Blob, string slot.
 
 **Claim proposal**:
-The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder, window and requested value-slot count from the proposal.
+The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder, window and the requested numeric and byte value-slot counts from the proposal.
 _Avoid_: Draft, request.
 
 **Claim context**:

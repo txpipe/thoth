@@ -122,6 +122,29 @@ describe('bytes claim wire', () => {
     expect(message).toHaveLength(17);
     expect(message).toEqual(mockPureCircuits.message(claim));
   });
+
+  it('pins the numeric-only (B = 0) vault id against serialization drift', () => {
+    // For B = 0 the empty byte vectors contribute no fields, so this is the
+    // numeric-only module's id; a struct reorder or added field turns it red.
+    const b = (byte: number) => new Uint8Array(32).fill(byte);
+    const claim: A_Claim = {
+      version: 1n,
+      appId: b(0x11),
+      policyHash: b(0x22),
+      windowStart: 100n,
+      windowEnd: 200n,
+      subjectHash: b(0x33),
+      holder: b(0x44),
+      present: [true, false, true],
+      values: [7n, 8n, 9n],
+      bytePresent: [],
+      byteHalves: [],
+    };
+    const rand = Uint8Array.from({ length: 32 }, (_, i) => i);
+    expect(Buffer.from(mockPureCircuits.computeId(claim, rand)).toString('hex')).toBe(
+      '05ad544859fbde8b12d09006a2ca6de2e73193f9495b8502bd1755b0b499c8d1',
+    );
+  });
 });
 
 describe('the absent-slot law in the simulator', () => {
