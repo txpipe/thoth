@@ -61,6 +61,38 @@ const verifiedOf = (
   canonicalHash: 'ab'.repeat(32),
 });
 
+describe('zkFetchPolicySchema disclosure rules', () => {
+  const policyWith = (rules: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'>) => ({
+    allowedHosts: ['api.github.com'],
+    slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+    ...rules,
+  });
+  const match = { type: 'regex', value: '(?<distance>[\\d.]+)' } as const;
+
+  it('refuses {{param}} templates in every rule text', () => {
+    const templated = [
+      policyWith({
+        responseMatches: [{ type: 'regex', value: '"{{field}}":(?<distance>[\\d.]+)' }],
+        responseRedactions: [],
+      }),
+      policyWith({ responseMatches: [match], responseRedactions: [{ regex: '{{field}}' }] }),
+      policyWith({ responseMatches: [match], responseRedactions: [{ jsonPath: '{{field}}' }] }),
+      policyWith({ responseMatches: [match], responseRedactions: [{ xPath: '{{field}}' }] }),
+    ];
+    for (const policy of templated) {
+      expect(() => zkFetchPolicySchema.parse(policy)).toThrow(/templates/);
+    }
+  });
+
+  it('refuses a rule field the policy cannot declare', () => {
+    const policy = {
+      ...policyWith(DISCLOSURE_RULES),
+      responseMatches: [{ type: 'contains', value: 'error', invert: true }],
+    } as never;
+    expect(() => zkFetchPolicySchema.parse(policy)).toThrow(/[Uu]nrecognized key/);
+  });
+});
+
 describe('parse law (through deriveClaimFromEvidence)', () => {
   const derived = (value: string, parse: 'int' | 'float'): { present: boolean; value: bigint } => {
     const claim = deriveClaimFromEvidence({

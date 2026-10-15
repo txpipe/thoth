@@ -247,11 +247,20 @@ export interface ZkFetchPolicy {
   claimVersion?: bigint;
 }
 
+// Reclaim fills `{{name}}` from caller-chosen `paramValues` before matching, so
+// a templated rule signs one text and runs another.
+const noTemplate = (rule: string): boolean => !/\{\{[^{}]+\}\}/.test(rule);
+const TEMPLATE_ERROR = 'disclosure rules cannot use {{param}} templates';
+
 /**
  * Runtime validator + type source for {@link ZkFetchPolicy}.
  *
  * Both sides parse the shared policy through it: the client at `init`, the
- * attestor before running its checks.
+ * attestor before running its checks. Rule entries are strict — Reclaim's
+ * `invert`/`hash` are refused, not silently dropped — and their texts must be
+ * `{{param}}`-free: the witness substitutes templates from caller-chosen
+ * `paramValues` before matching while the signed rules keep the template
+ * text, so a templated policy would not bind the rules it hashed.
  */
 export const zkFetchPolicySchema = z.object({
   allowedHosts: z.array(z.string()).min(1),
@@ -267,17 +276,17 @@ export const zkFetchPolicySchema = z.object({
     .min(1),
   responseMatches: z
     .array(
-      z.object({
+      z.strictObject({
         type: z.enum(['regex', 'contains']),
-        value: z.string().min(1),
+        value: z.string().min(1).refine(noTemplate, TEMPLATE_ERROR),
       }),
     )
     .min(1),
   responseRedactions: z.array(
-    z.object({
-      regex: z.string().optional(),
-      jsonPath: z.string().optional(),
-      xPath: z.string().optional(),
+    z.strictObject({
+      regex: z.string().refine(noTemplate, TEMPLATE_ERROR).optional(),
+      jsonPath: z.string().refine(noTemplate, TEMPLATE_ERROR).optional(),
+      xPath: z.string().refine(noTemplate, TEMPLATE_ERROR).optional(),
     }),
   ),
   claimVersion: z.bigint().optional(),
