@@ -223,8 +223,9 @@ transport size limits separately from attestation policy checks.
 of the policy hash. Recompute every policy hash your contract seals: a policy
 without them is rejected by the schema. The same disclosure rules under a
 different spelling hash the same — array order, empty redaction keys, and
-absent-vs-`[]` redactions are inert; the content of the rules and any extra
-fields (e.g. Reclaim's `invert`/`hash`) are the law. Administrate one policy
+absent-vs-`[]` redactions are inert; the content of the rules is the law. The
+policy cannot declare Reclaim's `invert` or `hash` (the schema refuses them), so
+evidence whose signed rules carry them is refused too. Administrate one policy
 object per trusted set, and the client propagates it to every request and
 witness.
 

@@ -51,12 +51,16 @@ export class ZkFetchThresholdError extends Error {
   /**
    * @param reason — why no threshold was reached.
    * @param failures — attestors that failed.
+   * @param options — standard error options; the bind catch passes the local
+   *   `cause` for diagnostics. Never carries request, evidence, or remote
+   *   error text.
    */
   constructor(
     reason: ZkFetchThresholdError['reason'],
     failures: readonly ZkFetchAttestorFailure[] = [],
+    options?: ErrorOptions,
   ) {
-    super(`zkFetch threshold not reached: ${reason}`);
+    super(`zkFetch threshold not reached: ${reason}`, options);
     this.name = 'ZkFetchThresholdError';
     this.reason = reason;
     this.failures = [...failures];
@@ -228,8 +232,8 @@ export const collectThreshold = async <V extends number, PK, S>(
   let snapshot: ZkFetchRequest;
   try {
     snapshot = bindRequestToPolicy(request, config.policy);
-  } catch {
-    throw new ZkFetchThresholdError('invalid-options');
+  } catch (error) {
+    throw new ZkFetchThresholdError('invalid-options', [], { cause: error });
   }
   const failures: ZkFetchAttestorFailure[] = [];
   const assertUnexpired = () => {

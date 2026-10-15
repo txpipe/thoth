@@ -372,6 +372,7 @@ describe('zkFetch attestor + client', () => {
       await expect(client.collect(divergent, options())).rejects.toMatchObject({
         name: 'ZkFetchThresholdError',
         reason: 'invalid-options',
+        cause: expect.objectContaining({ message: expect.stringMatching(pattern) }),
       });
       expect(probe.called).toBe(0);
     },
