@@ -21,9 +21,14 @@ const WITNESS_URLS = (process.env.WITNESS_URLS ?? '')
   .filter((url) => url !== '');
 const TARGET_URL = process.env.LIVE_URL ?? 'https://api.github.com/repos/txpipe/dolos';
 
+const RESPONSE_MATCH = { type: 'regex' as const, value: '"stargazers_count":\\s*(?<stars>\\d+)' };
+const RESPONSE_REDACTION = { regex: '"stargazers_count":\\s*\\d+' };
+
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.github.com'],
   slots: [{ slot: 0, name: 'stars', parse: 'int' }],
+  responseMatches: [RESPONSE_MATCH],
+  responseRedactions: [RESPONSE_REDACTION],
 };
 
 describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
@@ -34,8 +39,8 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
       context: { label: 'thoth-live-check' },
       // Reveal only the star count: whole responses carry per-request headers
       // (rate limits, dates, request ids) that make witnesses disagree.
-      responseMatches: [{ type: 'regex' as const, value: '"stargazers_count":\\s*(?<stars>\\d+)' }],
-      responseRedactions: [{ regex: '"stargazers_count":\\s*\\d+' }],
+      responseMatches: [RESPONSE_MATCH],
+      responseRedactions: [RESPONSE_REDACTION],
     };
     const evidences = await Promise.all(
       WITNESS_URLS.map((witnessUrl) => zkFetchProver({ witnessUrl }).prove(request)),

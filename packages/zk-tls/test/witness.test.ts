@@ -9,10 +9,12 @@ import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
   zkFetchPolicyHashOf,
+  zkFetchPolicySchema,
   zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { DISCLOSURE_RULES } from './helpers/helper.js';
 import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
@@ -27,6 +29,7 @@ const policy: ZkFetchPolicy = {
     { slot: 0, name: 'balance', parse: 'int' },
     { slot: 1, name: 'score', parse: 'float', optional: true },
   ],
+  ...DISCLOSURE_RULES,
 };
 
 const observe = (
@@ -36,7 +39,12 @@ const observe = (
   witness.sign({
     values: { balance: '0', score: '7.6' },
     timestampS: 1_786_000_000,
-    parameters: { url: 'https://api.example.com/v1/account', method: 'GET', body: '' },
+    parameters: {
+      url: 'https://api.example.com/v1/account',
+      method: 'GET',
+      body: '',
+      ...DISCLOSURE_RULES,
+    },
     context: { intent: 'ab'.repeat(32) },
     ...overrides,
   });
@@ -62,17 +70,18 @@ const attestWith = (
   evidence: ZkFetchEvidence,
   window: { windowStart: bigint; windowEnd: bigint } = WINDOW,
   claimOverrides: Partial<Claim<number>> = {},
+  activePolicy: ZkFetchPolicy = policy,
 ) => {
   const derived = deriveClaimFromEvidence({
     verified: parsedEvidenceView(evidence),
-    policy,
+    policy: activePolicy,
     appId: APP_ID,
     holder: new Uint8Array(32).fill(0xc1),
     valueSlots: 3,
     ...window,
   });
   const claim = { ...derived, ...claimOverrides };
-  return attestor.attest({ policy, evidence, claim } as unknown as Parameters<
+  return attestor.attest({ policy: activePolicy, evidence, claim } as unknown as Parameters<
     typeof attestor.attest
   >[0]);
 };
@@ -164,7 +173,7 @@ describe('test-key witness', () => {
   it('is deterministic across runs', async () => {
     // RFC 6979 signing: the same observation always yields this signature.
     expect((await observe(alice)).signatureHex).toBe(
-      '0xc8f99f97782ae3983f0236964238b2dc2f84944f9da2d4fc20e25ead54cd188652fe9ef0d2201e4c73c90e64e72e5f4c1737978c59b95e46c7a5f0fec7385e3a1b',
+      '0x79cff7aef768dd40ad4e61a20a084a35ed3bb2deae1c8443592500701280da9b7536aa09f930244d461c96daefa815f838f97c77f4119d2dfd00bd521d7c6fed1b',
     );
   });
 
@@ -197,6 +206,120 @@ describe('test-key witness', () => {
   it('is rejected when signed by another witness', async () => {
     await expect(attestWith(aliceAttestor, await observe(bob))).rejects.toThrow(
       /not this attestor's witness/,
+    );
+  });
+
+  it('rejects evidence whose disclosure rules differ from the policy', async () => {
+    const distancePolicy = zkFetchPolicySchema.parse({
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+      responseMatches: [{ type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' }],
+      responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }],
+    }) as ZkFetchPolicy;
+    // The witness signs a plan that captures another numeric field under the
+    // policy's group name — the wrong-field substitution attack.
+    const attack = await observe(alice, {
+      values: { distance: '999' },
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        responseMatches: [{ type: 'regex', value: '"moving_time":\\s*(?<distance>[\\d.]+)' }],
+        responseRedactions: [{ regex: '"moving_time":\\s*[\\d.]+' }],
+      },
+    });
+    const sign = vi.spyOn(aliceAttestor.signer, 'sign');
+    await expect(attestWith(aliceAttestor, attack, WINDOW, {}, distancePolicy)).rejects.toThrow(
+      /disclosure rules/,
+    );
+    expect(sign).not.toHaveBeenCalled();
+    sign.mockRestore();
+  });
+
+  it('rejects evidence whose responseRedactions differ from the policy', async () => {
+    const distancePolicy = zkFetchPolicySchema.parse({
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+      responseMatches: [{ type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' }],
+      responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }],
+    }) as ZkFetchPolicy;
+    const divergent = await observe(alice, {
+      values: { distance: '12.4' },
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        responseMatches: [{ type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' }],
+        responseRedactions: [{ regex: '"moving_time":\\s*\\d+' }],
+      },
+    });
+    await expect(attestWith(aliceAttestor, divergent, WINDOW, {}, distancePolicy)).rejects.toThrow(
+      /disclosure rules/,
+    );
+  });
+
+  it('accepts evidence whose disclosure rules are spelled differently', async () => {
+    const distance = { type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' };
+    const movingTime = { type: 'regex', value: '"moving_time":\\s*(?<movingTime>\\d+)' };
+    const activePolicy: ZkFetchPolicy = {
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+      responseMatches: [distance, movingTime],
+      responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }],
+    };
+    const evidence = await observe(alice, {
+      values: { distance: '12.4' },
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        responseMatches: [movingTime, distance],
+        responseRedactions: [{ jsonPath: '', xPath: '', regex: '"distance":\\s*[\\d.]+' }],
+      },
+    });
+    const attestation = await attestWith(aliceAttestor, evidence, WINDOW, {}, activePolicy);
+    expect(attestation.claim.values[0]).toBe(12n);
+  });
+
+  it('accepts evidence that omits responseRedactions under a policy with none', async () => {
+    const activePolicy: ZkFetchPolicy = {
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'balance', parse: 'int' }],
+      responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+      responseRedactions: [],
+    };
+    const evidence = await observe(alice, {
+      values: { balance: '7' },
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+      },
+    });
+    const attestation = await attestWith(aliceAttestor, evidence, WINDOW, {}, activePolicy);
+    expect(attestation.claim.values[0]).toBe(7n);
+  });
+
+  it('rejects evidence whose rules carry a field the policy cannot declare', async () => {
+    const activePolicy: ZkFetchPolicy = {
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'balance', parse: 'int' }],
+      responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+      responseRedactions: [],
+    };
+    const inverted = await observe(alice, {
+      values: { balance: '7' },
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        responseMatches: [{ type: 'regex', value: '(?<data>.*)', invert: true }],
+        responseRedactions: [],
+      },
+    });
+    await expect(attestWith(aliceAttestor, inverted, WINDOW, {}, activePolicy)).rejects.toThrow(
+      /disclosure rules/,
     );
   });
 

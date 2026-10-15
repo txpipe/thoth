@@ -21,6 +21,7 @@ import {
 } from '@thoth/zk-tls';
 import { assertClaimMatchesDisclosures, assertClaimMatchesSubject } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
+import { DISCLOSURE_RULES } from './helpers/helper.js';
 
 /** The app id every claim in this suite is for. */
 const APP_ID = new Uint8Array(32).fill(0xa1);
@@ -60,6 +61,38 @@ const verifiedOf = (
   canonicalHash: 'ab'.repeat(32),
 });
 
+describe('zkFetchPolicySchema disclosure rules', () => {
+  const policyWith = (rules: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'>) => ({
+    allowedHosts: ['api.github.com'],
+    slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+    ...rules,
+  });
+  const match = { type: 'regex', value: '(?<distance>[\\d.]+)' } as const;
+
+  it('refuses {{param}} templates in every rule text', () => {
+    const templated = [
+      policyWith({
+        responseMatches: [{ type: 'regex', value: '"{{field}}":(?<distance>[\\d.]+)' }],
+        responseRedactions: [],
+      }),
+      policyWith({ responseMatches: [match], responseRedactions: [{ regex: '{{field}}' }] }),
+      policyWith({ responseMatches: [match], responseRedactions: [{ jsonPath: '{{field}}' }] }),
+      policyWith({ responseMatches: [match], responseRedactions: [{ xPath: '{{field}}' }] }),
+    ];
+    for (const policy of templated) {
+      expect(() => zkFetchPolicySchema.parse(policy)).toThrow(/templates/);
+    }
+  });
+
+  it('refuses a rule field the policy cannot declare', () => {
+    const policy = {
+      ...policyWith(DISCLOSURE_RULES),
+      responseMatches: [{ type: 'contains', value: 'error', invert: true }],
+    } as never;
+    expect(() => zkFetchPolicySchema.parse(policy)).toThrow(/[Uu]nrecognized key/);
+  });
+});
+
 describe('parse law (through deriveClaimFromEvidence)', () => {
   const derived = (value: string, parse: 'int' | 'float'): { present: boolean; value: bigint } => {
     const claim = deriveClaimFromEvidence({
@@ -67,6 +100,7 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
       policy: {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 0, name: 'v', parse }],
+        ...DISCLOSURE_RULES,
       },
       appId: APP_ID,
       holder: new Uint8Array(32).fill(0xc1),
@@ -181,6 +215,7 @@ describe('deriveClaimFromEvidence', () => {
   const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
     allowedHosts: ['api.github.com'],
     slots,
+    ...DISCLOSURE_RULES,
   });
 
   it('maps disclosed values into the declared slots', () => {
@@ -319,6 +354,7 @@ describe('assertClaimMatchesDisclosures', () => {
   const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
     allowedHosts: ['api.github.com'],
     slots,
+    ...DISCLOSURE_RULES,
   });
 
   it('accepts a claim that reflects the disclosures', () => {
@@ -354,12 +390,16 @@ describe('assertEvidenceMatchesPolicy', () => {
   const policy: ZkFetchPolicy = {
     allowedHosts: ['api.github.com'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+    ...DISCLOSURE_RULES,
   };
 
   const verified = (url: string): VerifiedEvidence =>
-    verifiedOf(claimWith({ url }, { extractedParameters: { distance: '12.4' } }), {
-      distance: '12.4',
-    });
+    verifiedOf(
+      claimWith({ url, ...DISCLOSURE_RULES }, { extractedParameters: { distance: '12.4' } }),
+      {
+        distance: '12.4',
+      },
+    );
 
   it('drops the removed unsigned response-size policy', () => {
     const parsed = zkFetchPolicySchema.parse({ ...policy, maxResponseBytes: 4 });
@@ -407,14 +447,20 @@ describe('assertEvidenceMatchesPolicy', () => {
 
   it('refuses a required slot whose disclosure is missing or unparseable', () => {
     const missing = verifiedOf(
-      claimWith({ url: 'https://api.github.com/x' }, { extractedParameters: {} }),
+      claimWith(
+        { url: 'https://api.github.com/x', ...DISCLOSURE_RULES },
+        { extractedParameters: {} },
+      ),
       {},
     );
     expect(() => assertEvidenceMatchesPolicy(missing, policy)).toThrow(
       /not disclose a parseable value/,
     );
     const unparseable = verifiedOf(
-      claimWith({ url: 'https://api.github.com/x' }, { extractedParameters: { distance: 'abc' } }),
+      claimWith(
+        { url: 'https://api.github.com/x', ...DISCLOSURE_RULES },
+        { extractedParameters: { distance: 'abc' } },
+      ),
       { distance: 'abc' },
     );
     expect(() => assertEvidenceMatchesPolicy(unparseable, policy)).toThrow(
@@ -428,7 +474,10 @@ describe('assertEvidenceMatchesPolicy', () => {
       slots: [{ slot: 0, name: 'distance', parse: 'float', optional: true }],
     };
     const missing = verifiedOf(
-      claimWith({ url: 'https://api.github.com/x' }, { extractedParameters: {} }),
+      claimWith(
+        { url: 'https://api.github.com/x', ...DISCLOSURE_RULES },
+        { extractedParameters: {} },
+      ),
       {},
     );
     expect(assertEvidenceMatchesPolicy(missing, optional)).toBe('api.github.com');

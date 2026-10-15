@@ -15,6 +15,7 @@ import { type ZkFetchPolicy, zkFetchPolicyHashOf, zkFetchSubjectHashOf } from '@
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { type ZkFetchRequest, zkFetchClient } from '@thoth/zk-tls/client';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { DISCLOSURE_RULES } from '../../zk-tls/test/helpers/helper.js';
 import { testWitness } from '../../zk-tls/test/helpers/witness.js';
 import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
@@ -48,6 +49,7 @@ const policy: ZkFetchPolicy = {
     { slot: 0, name: 'stars', parse: 'int' },
     { slot: 1, name: 'forks', parse: 'int', optional: true },
   ],
+  ...DISCLOSURE_RULES,
 };
 const request: ZkFetchRequest = { url: 'https://api.github.com/repos/x', method: 'GET' };
 
@@ -101,7 +103,12 @@ const collectSubmission = async (): Promise<Submission> => {
             witness.sign({
               values: { stars: '42' },
               timestampS: OBSERVED_AT,
-              parameters: { url: proved.url, method: proved.method ?? 'GET', body: '' },
+              parameters: {
+                url: proved.url,
+                method: proved.method ?? 'GET',
+                body: '',
+                ...DISCLOSURE_RULES,
+              },
               context: proved.context,
             }),
         },

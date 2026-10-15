@@ -15,8 +15,8 @@ import type {
 } from './index.js';
 import {
   attestWith,
+  bindRequestToPolicy,
   buildClaimProposal,
-  copyRequest,
   proveWith,
   SecretHeaderError,
 } from './proposal.js';
@@ -51,12 +51,16 @@ export class ZkFetchThresholdError extends Error {
   /**
    * @param reason — why no threshold was reached.
    * @param failures — attestors that failed.
+   * @param options — standard error options; the bind catch passes the local
+   *   `cause` for diagnostics. Never carries request, evidence, or remote
+   *   error text.
    */
   constructor(
     reason: ZkFetchThresholdError['reason'],
     failures: readonly ZkFetchAttestorFailure[] = [],
+    options?: ErrorOptions,
   ) {
-    super(`zkFetch threshold not reached: ${reason}`);
+    super(`zkFetch threshold not reached: ${reason}`, options);
     this.name = 'ZkFetchThresholdError';
     this.reason = reason;
     this.failures = [...failures];
@@ -212,8 +216,9 @@ const runAttempt = async <V extends number, PK, S>(
  * @param request — the request each attestor's witness proves.
  * @param supplied — the caller's holder, window, and limits.
  * @returns the first message to reach the threshold, attestations sorted by registry slot.
- * @throws {@link ZkFetchThresholdError} if the options are invalid, expire, or
- *   the candidates run out.
+ * @throws {@link ZkFetchThresholdError} if the options are invalid, the request
+ *   carries disclosure rules different from the policy's, the deadline expires,
+ *   or the candidates run out.
  */
 export const collectThreshold = async <V extends number, PK, S>(
   config: ZkFetchClientConfig<V, PK, S>,
@@ -221,8 +226,15 @@ export const collectThreshold = async <V extends number, PK, S>(
   supplied: ZkFetchThresholdOptions,
 ): Promise<ZkFetchThresholdAttestment<V, PK, S>> => {
   const { options, candidates } = parseOptions(config.trusted, supplied);
-  // A snapshot, so the caller cannot change the secret headers mid-call.
-  const snapshot = copyRequest(request);
+  // A snapshot bound to the policy's disclosure rules, so the caller cannot
+  // change the secret headers mid-call or drive witnesses with other rules.
+  // An unbound request is invalid input, like invalid options.
+  let snapshot: ZkFetchRequest;
+  try {
+    snapshot = bindRequestToPolicy(request, config.policy);
+  } catch (error) {
+    throw new ZkFetchThresholdError('invalid-options', [], { cause: error });
+  }
   const failures: ZkFetchAttestorFailure[] = [];
   const assertUnexpired = () => {
     if (Date.now() >= options.expiresAt) {

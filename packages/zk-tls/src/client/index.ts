@@ -14,6 +14,8 @@ import type {
   ZkFetchDefinition,
   ZkFetchEvidence,
   ZkFetchPolicy,
+  ZkFetchResponseMatch,
+  ZkFetchResponseRedaction,
 } from '../index.js';
 import { assertPolicySlotsInRange, zkFetchPolicySchema } from '../index.js';
 import type {
@@ -22,7 +24,7 @@ import type {
   ZkFetchThresholdOptions,
 } from './collect.js';
 import { collectThreshold, ZkFetchThresholdError } from './collect.js';
-import { attestWith, buildClaimProposal, copyRequest, proveWith } from './proposal.js';
+import { attestWith, bindRequestToPolicy, buildClaimProposal, proveWith } from './proposal.js';
 
 export type { ZkFetchAttestorFailure, ZkFetchThresholdAttestment, ZkFetchThresholdOptions };
 export { ZkFetchThresholdError };
@@ -62,13 +64,18 @@ export interface ZkFetchRequest {
    * identical across independent fetches. Whole responses carry per-request
    * headers such as rate limits, dates, and request ids, which make witnesses
    * disagree.
+   *
+   * The policy holds the disclosure rules and the client always proves with
+   * them: a request that supplies its own rules must carry exactly the
+   * policy's, or it is refused before any witness is contacted.
    */
-  responseMatches?: readonly { type: 'regex' | 'contains'; value: string }[];
+  responseMatches?: readonly ZkFetchResponseMatch[];
   /**
    * Slices of the response revealed to the witness — Reclaim's reveal
-   * whitelist: everything not selected here stays hidden from the proof.
+   * whitelist: everything not selected here stays hidden from the proof. Like
+   * `responseMatches`, the client proves with the policy's rules.
    */
-  responseRedactions?: readonly { regex?: string; jsonPath?: string; xPath?: string }[];
+  responseRedactions?: readonly ZkFetchResponseRedaction[];
   /** Arbitrary context signed into the claim (e.g. a label). */
   context?: Readonly<Record<string, unknown>>;
 }
@@ -278,8 +285,9 @@ export interface ZkFetchClient<V extends number, PK, S> {
    * @param request — the HTTPS request, including headers private to the prover.
    * @param options — the fixed holder and window, the deadline, and the limits.
    * @returns an attestment over one exact message, sorted by registry slot.
-   * @throws {@link ZkFetchThresholdError} if the options are invalid, expire, or
-   *   no message reaches the threshold.
+   * @throws {@link ZkFetchThresholdError} if the options are invalid, the
+   *   request carries disclosure rules different from the policy's, the deadline
+   *   expires, or no message reaches the threshold.
    */
   collect(
     request: ZkFetchRequest,
@@ -350,7 +358,7 @@ export const zkFetchClient = {
         collectThreshold({ ...config, policy: checkedPolicy }, request, options),
       proveReq: async (request, holder): Promise<ZkFetchClientProof<V, PK, S>> => {
         const checkedHolder = bytes32Schema.parse(holder).slice();
-        const signedRequest = copyRequest(request);
+        const signedRequest = bindRequestToPolicy(request, checkedPolicy);
         const entries = await Promise.all(
           trusted.attestors.map(async ({ attestor }) => {
             const evidence = await proveWith(provers, attestor, signedRequest);

@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema, CLAIM_VERSION } from '@thoth/core/claim';
+import type { CanonicalValue } from '@thoth/core/claim-context';
 import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
 
@@ -201,26 +203,64 @@ export interface ZkFetchSlot {
 }
 
 /**
+ * One response pattern the witness applies, whose named groups become the
+ * disclosed values keyed by group name.
+ */
+export interface ZkFetchResponseMatch {
+  /** How the pattern is matched: `regex`, or `contains` as a plain guard. */
+  type: 'regex' | 'contains';
+  /** The pattern itself. */
+  value: string;
+}
+
+/**
+ * One slice of the response revealed to the witness — Reclaim's reveal
+ * whitelist; everything not selected stays hidden from the proof.
+ */
+export interface ZkFetchResponseRedaction {
+  /** Reveal the slice matching this regex. */
+  regex?: string;
+  /** Reveal the slice at this JSON path. */
+  jsonPath?: string;
+  /** Reveal the slice at this XPath. */
+  xPath?: string;
+}
+
+/**
  * The policy under which a zkFetch attestor attests.
  *
  * The rule for "this evidence may be attested": only evidence whose host is
- * allowlisted and whose signed disclosures cover every required slot.
+ * allowlisted, whose witness-signed disclosure rules are exactly the policy's,
+ * and whose signed disclosures cover every required slot.
  */
 export interface ZkFetchPolicy {
   /** Hosts the attested URL may target; exact or any subdomain suffix. */
   allowedHosts: readonly string[];
   /** Map extracted (disclosed) values onto claim slots. */
   slots: readonly ZkFetchSlot[];
+  /** The response patterns the witness must have applied, in the signed disclosure rules. */
+  responseMatches: readonly ZkFetchResponseMatch[];
+  /** The reveal whitelist the witness must have applied, in the signed disclosure rules. */
+  responseRedactions: readonly ZkFetchResponseRedaction[];
   /** Claim schema version the attestor signs; must match the contract's.
    * Defaults to 1. */
   claimVersion?: bigint;
 }
 
+// Reclaim fills `{{name}}` from caller-chosen `paramValues` before matching, so
+// a templated rule signs one text and runs another.
+const noTemplate = (rule: string): boolean => !/\{\{[^{}]+\}\}/.test(rule);
+const TEMPLATE_ERROR = 'disclosure rules cannot use {{param}} templates';
+
 /**
  * Runtime validator + type source for {@link ZkFetchPolicy}.
  *
  * Both sides parse the shared policy through it: the client at `init`, the
- * attestor before running its checks.
+ * attestor before running its checks. Rule entries are strict — Reclaim's
+ * `invert`/`hash` are refused, not silently dropped — and their texts must be
+ * `{{param}}`-free: the witness substitutes templates from caller-chosen
+ * `paramValues` before matching while the signed rules keep the template
+ * text, so a templated policy would not bind the rules it hashed.
  */
 export const zkFetchPolicySchema = z.object({
   allowedHosts: z.array(z.string()).min(1),
@@ -234,16 +274,85 @@ export const zkFetchPolicySchema = z.object({
       }),
     )
     .min(1),
+  responseMatches: z
+    .array(
+      z.strictObject({
+        type: z.enum(['regex', 'contains']),
+        value: z.string().min(1).refine(noTemplate, TEMPLATE_ERROR),
+      }),
+    )
+    .min(1),
+  responseRedactions: z.array(
+    z.strictObject({
+      regex: z.string().refine(noTemplate, TEMPLATE_ERROR).optional(),
+      jsonPath: z.string().refine(noTemplate, TEMPLATE_ERROR).optional(),
+      xPath: z.string().refine(noTemplate, TEMPLATE_ERROR).optional(),
+    }),
+  ),
   claimVersion: z.bigint().optional(),
 });
+
+/**
+ * Sort an array of disclosure-rule entries by their canonical serialization.
+ *
+ * Plain JSON entries with an order-independent meaning sort stably; two plans
+ * whose arrays differ only in order then compare and hash the same.
+ */
+const sortCanonical = <T>(entries: readonly T[]): T[] =>
+  [...entries].sort((a, b) => {
+    const left = canonicalJson(a);
+    const right = canonicalJson(b);
+    return left < right ? -1 : left > right ? 1 : 0;
+  });
+
+/**
+ * The one canonical form every disclosure-rules comparison and hash reads.
+ *
+ * Folds what Reclaim itself folds: an absent rules array is empty, a
+ * redaction's absent `regex`/`jsonPath`/`xPath` are empty strings, and the
+ * entries are sorted (see {@link sortCanonical}) — so plans spelled
+ * differently (array order, empty redaction keys, absent-vs-`[]`) compare and
+ * hash the same. Every other field is preserved exactly as present, so a plan
+ * carrying fields the policy cannot declare (Reclaim's `invert`, `hash`)
+ * still mismatches and rejects.
+ *
+ * @param rules — the signed plan's or policy's disclosure rules.
+ * @returns the canonical form, with both arrays always present.
+ */
+const normalizedRulesOf = (rules: {
+  responseMatches?: unknown;
+  responseRedactions?: unknown;
+}): { responseMatches: CanonicalValue[]; responseRedactions: CanonicalValue[] } => {
+  const matches = (rules.responseMatches ?? []) as readonly CanonicalValue[];
+  const redactions = (rules.responseRedactions ?? []) as readonly CanonicalValue[];
+  return {
+    responseMatches: sortCanonical(matches),
+    responseRedactions: sortCanonical(
+      redactions.map((entry) => {
+        if (entry === null || typeof entry !== 'object') {
+          return entry;
+        }
+        const record = entry as Record<string, CanonicalValue | undefined>;
+        return {
+          ...record,
+          regex: record.regex ?? '',
+          jsonPath: record.jsonPath ?? '',
+          xPath: record.xPath ?? '',
+        };
+      }),
+    ),
+  };
+};
 
 /**
  * Parse and normalize a zkFetch policy into the form every hash and check
  * reads.
  *
  * So that policies that mean the same thing agree: unknown keys are dropped,
- * defaults are filled in, hosts are lowercased, deduplicated and sorted, and
- * slots are sorted by index and have `optional` filled.
+ * defaults are filled in, hosts are lowercased, deduplicated and sorted,
+ * slots are sorted by index and have `optional` filled, and the disclosure
+ * rules are canonicalized (see {@link normalizedRulesOf}) — array order,
+ * empty redaction keys and absent-vs-`[]` rules never change the hash.
  *
  * @param policy — the policy to normalize.
  * @returns the parsed, normalized policy.
@@ -251,11 +360,14 @@ export const zkFetchPolicySchema = z.object({
  */
 export const normalizePolicy = (policy: ZkFetchPolicy) => {
   const parsed = zkFetchPolicySchema.parse(policy);
+  const rules = normalizedRulesOf(parsed);
   return {
     allowedHosts: [...new Set(parsed.allowedHosts.map((host) => host.toLowerCase()))].sort(),
     slots: parsed.slots
       .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
       .sort((a, b) => a.slot - b.slot),
+    responseMatches: rules.responseMatches,
+    responseRedactions: rules.responseRedactions,
     claimVersion: parsed.claimVersion ?? CLAIM_VERSION,
   };
 };
@@ -353,10 +465,10 @@ const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => 
 /**
  * Parse a claim's signed parameters and validate the field both callers need.
  *
- * The witness signs the `method`, `url` and `body` it fetched; this is the one
- * place that parses them, so the JSON handling and the `url` check stay
- * consistent. `method` and `body` come back raw — each caller validates the
- * ones it uses, so {@link claimUrl} keeps its url-only contract.
+ * The witness signs the `method`, `url`, `body` and disclosure rules it
+ * fetched; this is the one place that parses them, so the JSON handling and
+ * the `url` check stay consistent. `method`, `body` and the rules come back
+ * raw — each caller validates the ones it uses.
  *
  * @param claim — the signed claim data.
  * @returns the parsed parameters, with a non-empty `url` guaranteed.
@@ -364,8 +476,20 @@ const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => 
  */
 const claimParametersOf = (
   claim: ProviderClaimData,
-): Readonly<{ url: string; method?: unknown; body?: unknown }> => {
-  let parameters: Readonly<{ url?: unknown; method?: unknown; body?: unknown }>;
+): Readonly<{
+  url: string;
+  method?: unknown;
+  body?: unknown;
+  responseMatches?: unknown;
+  responseRedactions?: unknown;
+}> => {
+  let parameters: Readonly<{
+    url?: unknown;
+    method?: unknown;
+    body?: unknown;
+    responseMatches?: unknown;
+    responseRedactions?: unknown;
+  }>;
   try {
     parameters = JSON.parse(claim.parameters) as typeof parameters;
   } catch {
@@ -374,7 +498,13 @@ const claimParametersOf = (
   if (typeof parameters.url !== 'string' || parameters.url === '') {
     throw new Error('claim parameters carry no url');
   }
-  return { url: parameters.url, method: parameters.method, body: parameters.body };
+  return {
+    url: parameters.url,
+    method: parameters.method,
+    body: parameters.body,
+    responseMatches: parameters.responseMatches,
+    responseRedactions: parameters.responseRedactions,
+  };
 };
 
 /**
@@ -651,9 +781,13 @@ export const deriveClaimFromEvidence = <V extends number>(options: {
  * Check evidence against the policy.
  *
  * Fails fast so the attestor does not waste work: the attested URL must be
- * HTTPS against an allowlisted host, every *required* policy slot's disclosure
- * must be certifiable (present and parseable — optional slots may be absent and
- * are signed unpresent). Captured response text is untrusted client output and
+ * HTTPS against an allowlisted host, the witness-signed disclosure rules must
+ * equal the policy's canonical form (see {@link normalizedRulesOf} — array
+ * order, empty redaction keys and absent-vs-`[]` rules are inert, every other
+ * field must match, so a slot's group name cannot be pointed at a different
+ * field), and every *required* policy slot's disclosure must be
+ * certifiable (present and parseable — optional slots may be absent and are
+ * signed unpresent). Captured response text is untrusted client output and
  * does not participate in policy checks.
  *
  * @param verified — the evidence view (see {@link parsedEvidenceView}).
@@ -665,13 +799,25 @@ export const assertEvidenceMatchesPolicy = (
   verified: VerifiedEvidence,
   policy: ZkFetchPolicy,
 ): string => {
-  const url = new URL(claimUrl(verified.claim));
+  const parameters = claimParametersOf(verified.claim);
+  const url = new URL(parameters.url);
   if (url.protocol !== 'https:') {
     throw new Error(`attested url must be https, got ${url.protocol}//`);
   }
   const host = url.hostname.toLowerCase();
   if (!hostAllowed(host, policy.allowedHosts)) {
     throw new Error(`attested host ${host} not in allowlist [${policy.allowedHosts.join(', ')}]`);
+  }
+  const signedRules = normalizedRulesOf({
+    responseMatches: parameters.responseMatches,
+    responseRedactions: parameters.responseRedactions,
+  });
+  const policyRules = normalizedRulesOf({
+    responseMatches: policy.responseMatches,
+    responseRedactions: policy.responseRedactions,
+  });
+  if (!isDeepStrictEqual(signedRules, policyRules)) {
+    throw new Error('evidence disclosure rules do not match the policy');
   }
   for (const slot of policy.slots) {
     if (slot.optional) {

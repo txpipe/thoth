@@ -67,7 +67,10 @@ check before signing:
    content, and extracts the values it disclosed. It leaves the supplied evidence
    unchanged even when Reclaim canonicalizes the context during verification.
 2. `assertEvidenceMatchesPolicy(verified, policy)` checks the attested URL
-   against the host allowlist and requires every required slot to be certifiable.
+   against the host allowlist, requires the witness-signed `responseMatches`
+   and `responseRedactions` to equal the policy's canonical disclosure rules
+   (array order, empty redaction keys, and absent-vs-`[]` are inert), and
+   requires every required slot to be certifiable.
    Captured `responseText` is untrusted, client-supplied transport output; the
    witness signature does not authenticate it, so policy checks do not use it.
 3. `assertObservationInWindow({ claim, verified })` requires the witness's own

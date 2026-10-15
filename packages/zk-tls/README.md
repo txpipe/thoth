@@ -31,7 +31,9 @@ prover that the client can use to obtain evidence:
   - Schemas: `zkFetchEvidenceSchema`, `zkFetchPolicySchema`,
     `zkFetchClaimSchema`.
   - `assertEvidenceMatchesPolicy(verified, policy)` checks HTTPS against the host
-    allowlist. Required slots must be certifiable, meaning disclosed and parseable; optional slots may be absent
+    allowlist and requires the witness-signed `responseMatches`/`responseRedactions`
+    to equal the policy's canonical disclosure rules. Required slots must be
+    certifiable, meaning disclosed and parseable; optional slots may be absent
     and are signed unpresent.
   - `deriveClaimFromEvidence({ verified, policy, appId, holder, valueSlots, windowStart, windowEnd })`
     derives the canonical `Claim` the attestor signs: values/present from the
@@ -48,9 +50,10 @@ prover that the client can use to obtain evidence:
   - `claimUrl(claim)` returns the URL a signed claim attests, decoded from its
     parameters.
   - `normalizePolicy(policy)` parses a policy, fills its defaults, lowercases,
-    deduplicates and sorts its hosts, and sorts its slots by index, so policies
-    that mean the same thing normalize the same. The hash and the checks read
-    it.
+    deduplicates and sorts its hosts, sorts its slots by index, and canonicalizes
+    the disclosure rules (array order, empty redaction keys, and absent-vs-`[]`
+    are inert), so policies that mean the same thing normalize the same. The
+    hash and the checks read it.
   - `zkFetchPolicyHashOf(policy)` hashes a normalized policy under the
     `zk-fetch@1` law (`ZK_FETCH_LAW`) and the policy's claim version, so
     policies that differ only in defaults, host order or slot order hash the
@@ -60,8 +63,8 @@ prover that the client can use to obtain evidence:
     `zkFetchSubjectHashOf(request)` hashes it. The host is its own field so an
     app can compare the host hash in-circuit and keep the path private.
   - Types: `ZkFetchDefinition`, `ProviderClaimData`, `ZkFetchEvidence`,
-    `VerifiedEvidence`, `ZkFetchPolicy`, `ZkFetchSlot`, `ZkFetchSubjectRequest`,
-    `ZkFetchSubject`.
+    `VerifiedEvidence`, `ZkFetchPolicy`, `ZkFetchSlot`, `ZkFetchResponseMatch`,
+    `ZkFetchResponseRedaction`, `ZkFetchSubjectRequest`, `ZkFetchSubject`.
 - **`@thoth/zk-tls/attestor`.** The attestor, or host, side:
   - `verifyZkFetchProof(evidence)` verifies the witness's ECDSA signature
     with the Reclaim SDK and extracts the values it disclosed, returned as
@@ -168,11 +171,16 @@ for an example.
   `maxResponseBytes` has been removed from the policy, schema, and policy hash.
   Existing policy hashes that included it must be recomputed. Applications may
   limit transport payloads separately, but those limits certify no response size.
+  The disclosure rules are required policy fields and part of the policy hash:
+  a policy without them is rejected by the schema, and every existing policy
+  hash changes — recompute the hashes your contract seals.
 - **Redaction is a law, not a hint.** Reclaim redacts client-side:
   `responseRedactions` selects the slices revealed to the witness, and the rest
-  of the response never reaches it. The reveal plan is part of the signed
-  parameters, so an app holding the evidence can recompute exactly what was
-  disclosed. Hidden fields cannot be certified.
+  of the response never reaches it. The disclosure rules — `responseMatches`
+  and `responseRedactions` — are part of the policy: the witness signs the
+  rules it executed, the attestor requires them to equal the policy's
+  canonical form, and the policy hash commits to them, so a slot's group name
+  cannot be pointed at a different field. Hidden fields cannot be certified.
 - **The attestor certifies facts, not decisions.** Values place exactly what the
   evidence disclosed; the app's predicate over the claim slots is the decision.
   A slot whose disclosure is absent, or unparseable under the policy rule, is
@@ -180,11 +188,14 @@ for an example.
 - **One policy per trusted set.** N-of-M only means "N independent attestors
   agree on the same signed message". The contract cannot see what a slot means,
   so every attestor answering a request must enforce the exact same law: same
-  `V`, slot map, parse rules, and encoding. Message equality then enforces
-  semantic agreement in practice: different interpretations of the same evidence
-  produce different messages, and the registry refuses to count them together.
-  The policy constrains hosts and slot semantics; which witness an attestor
-  trusts is per instance, via its `witnessAddress`, not part of the shared law.
+  `V`, slot map, parse rules, disclosure rules, and encoding. Message equality
+  then enforces semantic agreement in practice: different interpretations of the
+  same evidence produce different messages, and the registry refuses to count
+  them together. The policy constrains hosts, slot semantics, and the disclosure
+  rules; which witness an attestor trusts is per instance, via its
+  `witnessAddress`, not part of the shared law. The client proves with the
+  policy's own rule arrays, so one policy object holds every request and every
+  attestor to the same spelling.
   The policy is the dApp's law, carried with each request and enforced by the
   attestor for that request; an attestor holds no app-specific policy or slot count.
   Keeping a claim meaningful is the consuming contract's job: it pins the trusted set
