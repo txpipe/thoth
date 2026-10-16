@@ -1,40 +1,7 @@
-// Thoth Attestation module.
-//
-// Verifies an off-chain attested `Claim` against an N-of-M attestor
-// signature threshold, controls replay and the observation window, and stores
-// a claimsVault entry keyed by `persistentCommit(claim, rand)`.
-//
-// Responsibilities:
-//   - verify >= #N of #M signatures from the appended AttestorRegistry over the
-//     frozen flat message built by `buildMessage` (this module's contract law);
-//   - reject a claim whose `policyHash` is not in the sealed `policyHashes`
-//     set. The policy hash is the on-chain binding: there is no kind code, and
-//     a contract serves several policies (kinds) by sealing several hashes;
-//   - sign `subjectHash` into the message but not check it: an app that binds
-//     the source recomputes it in-circuit from private subject fields and
-//     compares it to `claim.subjectHash` (ADR 0001);
-//   - require the caller secret to match the signed per-claim holder commitment;
-//   - require every absent value slot to carry zero — numeric slots and byte
-//     halves alike;
-//   - reject observation replay via the nullifiers set;
-//   - check the observation window (ADR 0005), unconditionally: it must not be
-//     inverted nor longer than the sealed `maxWindow`, the block time must be
-//     at or after `windowStart`, and before `windowEnd + freshnessWindow`.
-//     A zero `freshnessWindow` does not disable the check: the block time must
-//     then fall inside the window itself;
-//   - store { holder, windowStart, windowEnd } in the claimsVault. Nothing is
-//     returned: the app composes its own predicates over the claim via
-//     `openClaim`.
-//
-// Signature counting is delegated to the registry; the threshold decision
-// (#N) lives here. The message shape (order+sizes) is the single thing the
-// attestor must mirror, per the documented wire layout below.
-//
-// Byte value slots: a byte value is 32 bytes carried as two adjacent
-// 16-byte halves (`byteHalves: Vector<B, Bytes<16>>`, B = 2W) with one presence
-// flag per half (`bytePresent`). Both halves of one value carry the same flag in
-// honest claims: the attestor law derives them from a single disclosure. The
-// module does not check the pairing: the absent-slot law is per half.
+// Thoth attestation module: verifies an N-of-M attested `Claim`, rejects
+// replays and out-of-window claims, and vaults it under
+// `persistentCommit(claim, rand)`. The registry counts the signatures that
+// verify; this module applies the threshold #N and defines the signed message.
 //
 // Wire layout (buildMessage), K = 12 + 2*V + 2*B fields:
 //   [ version,
@@ -49,32 +16,25 @@
 //     values[0] as Field, ..., values[V-1] as Field,
 //     byteHalves[0] as Field, ..., byteHalves[B-1] as Field ]
 // Byte ranges are half-open (appId[0..16] is bytes 0-15). Each 32-byte field
-// is split in two halves so every byte is signed; each 16-byte half is read
-// little-endian (byte 0 least significant) when cast to Uint<128>/Field, the
-// runtime's `convertBytesToUint` convention. `claimToMessage` uses the same
-// primitive, so the two encoders agree field-for-field. The header's last
-// field is the module's own B: K alone fixes only 2*V + 2*B, so two layouts
-// (e.g. V=3, B=4 and V=1, B=6) could share a message length; signing B pins V
-// too, and a message signed under another layout fails verification here.
+// is split in two halves so every byte is signed; a 16-byte half is read
+// little-endian (byte 0 least significant) when cast to Uint<128>, the
+// runtime's `convertBytesToUint` convention, which `claimToMessage` in
+// `@thoth/core/claim` mirrors. The header signs B because K alone fixes only
+// 2*V + 2*B: two layouts (V=3, B=4 and V=1, B=6) share a length, and a message
+// signed under one must fail verification under the other.
 //
-// Module parameters (import "attestation"<K, V, B, N, M>):
-//   #K — signed-message length in fields. Must equal 12 + 2*V + 2*B (the
-//        12-field header in buildMessage, the V numeric presence fields, the B
-//        byte-half presence fields, the V value fields, and the B half fields).
-//        This is what the registry's countValidSignatures verifies over.
-//   #V — number of numeric claim value slots (Claim.values: Vector<V, Uint<64>>).
-//   #B — number of byte halves (Claim.byteHalves: Vector<B, Bytes<16>>). Must be
-//        even: B = 2W for W 32-byte byte value slots, each carried as two
-//        adjacent halves. B = 0 is valid and reproduces the numeric-only layout
-//        exactly. Compact cannot assert evenness (no static assert, and a vector
-//        size cannot be B/2), so B even is the embedder's invariant. #B is the
-//        only count in halves: the client's byteSlots counts slots, so
-//        byteSlots: 1 pairs with #B = 2. An odd #B compiles, then rejects
-//        every claim.
-//   #N — the app's N-of-M threshold: at least #N of the #M signatures must
-//        verify for a claim to be accepted.
-//   #M — number of attestor signatures supplied / registry key slots.
-// All parameters are fixed when a contract embeds the module.
+// Module parameters (import "attestation"<K, V, B, N, M>), fixed when a
+// contract embeds the module:
+//   #K — signed-message length in fields: 12 + 2*V + 2*B, per the layout above.
+//   #V — number of numeric value slots (Claim.values: Vector<V, Uint<64>>).
+//   #B — number of byte halves (Claim.byteHalves: Vector<B, Bytes<16>>): two
+//        adjacent halves per 32-byte byte value, so B = 2W and B must be even.
+//        Compact cannot assert evenness (no static assert, and a vector size
+//        cannot be B/2): an odd #B compiles, then rejects every claim. B = 0 is
+//        the numeric-only layout. The client's byteSlots counts slots, so
+//        byteSlots: 1 pairs with #B = 2.
+//   #N — the threshold: at least #N of the #M signatures must verify.
+//   #M — number of signature slots, the registry's key count.
 pragma language_version >= 0.22;
 
 module attestation<#K, #V, #B, #N, #M> {
@@ -95,10 +55,10 @@ module attestation<#K, #V, #B, #N, #M> {
     windowEnd: Uint<32>; // Unix seconds the attestor's observation ended
     subjectHash: Bytes<32>; // circuit hash of what the claim is about (ADR 0001)
     holder: Bytes<32>; // per-claim commitment of the caller secret (ADR 0004)
-    present: Vector<V, Boolean>; // present[i] = values[i] was populated (measured), even if 0
-    bytePresent: Vector<B, Boolean>; // bytePresent[j] = byteHalves[j] was measured; one flag per half
-    values: Vector<V, Uint<64>>; // positional numeric claim values; 0 IS a valid value
-    byteHalves: Vector<B, Bytes<16>>; // interleaved halves: [b0[0..16], b0[16..32], b1[0..16], ...]
+    present: Vector<V, Boolean>; // present[i] = values[i] was measured, even if 0
+    bytePresent: Vector<B, Boolean>; // one flag per half; an honest claim gives both halves of a value the same flag
+    values: Vector<V, Uint<64>>; // positional numeric values; 0 is a valid measured value
+    byteHalves: Vector<B, Bytes<16>>; // [b0[0..16], b0[16..32], b1[0..16], ...]
   }
 
   // Observation identity (ADR 0006). Holder and version do not distinguish facts.
@@ -114,15 +74,14 @@ module attestation<#K, #V, #B, #N, #M> {
     bytePresent: Vector<B, Boolean>;
   }
 
-  /// Freshness window (seconds), sealed at deploy by the top-level
-  /// constructor: how long after `windowEnd` a claim stays submittable.
-  /// 0 does not disable the check; the claim must then land inside its window.
+  /// Seconds after `windowEnd` a claim stays submittable, sealed by the
+  /// top-level constructor. 0 does not disable the check: the claim must then
+  /// land inside its window.
   export sealed ledger freshnessWindow: Uint<64>;
-  /// Longest accepted observation window (seconds), sealed at deploy by the
-  /// top-level constructor.
+  /// Longest accepted observation window in seconds, sealed by the top-level
+  /// constructor.
   export sealed ledger maxWindow: Uint<64>;
-  /// Accepted policy hashes, sealed at deploy by the top-level constructor.
-  /// A claim is accepted only under one of these policies.
+  /// Accepted policy hashes, sealed by the top-level constructor (ADR 0008).
   export sealed ledger policyHashes: Set<Bytes<32>>;
   export ledger claimsVault: Map<Bytes<32>, ClaimEntry>;
   export ledger nullifiers: Set<Bytes<32>>;
@@ -130,8 +89,8 @@ module attestation<#K, #V, #B, #N, #M> {
   witness getAttestationWitness(): [Claim, Vector<M, JubjubSchnorrSignature>, Bytes<32>];
   witness getHolderSecret(): Bytes<32>;
 
-  /// Pseudonymous holder identity: hashToCurve over a domain-separated holder
-  /// secret. The resulting binding is the on-chain pseudonym for claim entries.
+  /// The vault pseudonym of a holder secret: hashToCurve over the
+  /// domain-separated secret.
   circuit deriveHolder(secret: Bytes<32>): Field {
     return jubjubPointX(hashToCurve<Vector<2, Bytes<32>>>([pad(32, "thoth:holder:v1"), secret]));
   }
@@ -147,17 +106,8 @@ module attestation<#K, #V, #B, #N, #M> {
     return (h as Uint<128>) as Field;
   }
 
-  /// Reconstruct the flat signed message: a 12-field fixed header (version,
-  /// appId and policyHash each as two 16-byte halves, windowStart, windowEnd,
-  /// then subjectHash as two 16-byte halves, then the holder commitment
-  /// as two halves, then the module's byte-half count B, which binds the slot
-  /// layout) followed by the `present` flags, the per-half
-  /// `bytePresent` flags, the values mapped to `Field`, and the byte halves.
-  /// Tuple/vector spread (`...`) appends each section, so at specialization
-  /// `[header..., present..., bytePresent..., values..., byteHalves...]` has
-  /// length 12 + 2*V + 2*B; a mismatch with K is a static error at
-  /// specialization, so the compiler checks it.
-  /// This is the single wire shape the attestor must mirror.
+  /// The flat signed message, per the wire layout in the file header. A #K
+  /// that does not match the layout is a compile error at specialization.
   export pure circuit buildMessage(c: Claim): Vector<K, Field> {
     const appId = splitBytes(c.appId);
     const policyHash = splitBytes(c.policyHash);
@@ -183,28 +133,27 @@ module attestation<#K, #V, #B, #N, #M> {
     return [...header, ...presentFields, ...bytePresentFields, ...valuesFields, ...byteFields];
   }
 
-  /// Claim id = persistentCommit(claim, rand) — must match the id
-  /// verifyAttestation stores under. Exported pure for test parity.
+  /// The claim id `verifyAttestation` stores under. Exported pure so tests
+  /// can reproduce it.
   export pure circuit computeId(claim: Claim, rand: Bytes<32>): Bytes<32> {
     return persistentCommit<Claim>(claim, rand);
   }
 
-  /// Derive a holder off-chain identically to the in-circuit derivation.
-  /// Exported pure for test parity.
+  /// The vault pseudonym of a holder secret. Exported pure so tests can
+  /// reproduce it.
   export pure circuit holderOf(secret: Bytes<32>): Field {
     return deriveHolder(secret);
   }
 
-  /// Per-claim holder commitment (ADR 0004): persistentHash over a
-  /// domain-separated holder secret. Tagged apart from `deriveHolder`'s vault
-  /// pseudonym, so one secret yields unrelated values in the two roles.
-  /// Exported pure so the off-chain `holderCommitmentOf` can match it.
+  /// The per-claim holder commitment (ADR 0004). Its tag differs from
+  /// `deriveHolder`'s, so one secret yields unrelated values in the two roles.
+  /// Exported pure so `holderCommitmentOf` in `@thoth/core/claim-context` can
+  /// match it.
   export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
     return persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:holder-commitment:v1"), secret]);
   }
 
-  /// Verify an attested claim, on replay + observation-window gates, then
-  /// store it.
+  /// Verify an attested claim and store it in the claims vault.
   export circuit verifyAttestation(): [] {
     const [claim, sigs, rand] = getAttestationWitness();
     assert(claim.version == 1, "Unsupported claim version");
@@ -265,13 +214,11 @@ module attestation<#K, #V, #B, #N, #M> {
       );
   }
 
-  /// Prove the caller owns a vaulted claim and re-hydrate it in-circuit
-  /// Returns the claim so app predicates can read `values` and `byteHalves`
-  /// directly (reassemble a byte value with
+  /// Prove the caller owns a vaulted claim and return it for in-circuit
+  /// predicates (a byte value is
   /// `Bytes[...c.byteHalves[2 * i], ...c.byteHalves[2 * i + 1]]`).
-  /// Consumes no nullifier, so opening is repeatable (apps that need
-  /// "use once" enforce it with their own holder-keyed state — see README).
-  /// Never re-export this as a top-level contract entry point: its return
+  /// Consumes no nullifier, so opening is repeatable: "use once" is the app's
+  /// own state. Never re-export it as a top-level entry point: its return
   /// value is tainted and would force a disclose that reveals every value.
   export circuit openClaim(id: Bytes<32>): Claim {
     const [claim,, commitRand] = getAttestationWitness();
