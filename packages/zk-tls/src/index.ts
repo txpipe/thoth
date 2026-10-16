@@ -22,13 +22,16 @@ export interface ProviderClaimData {
   parameters: string;
   /** The public key or address that requested the claim. */
   owner: string;
-  /** When the witness observed, Unix seconds. */
+  /**
+   * The observation time the witness signed, Unix seconds. The request sets it; Reclaim rejects
+   * it only when it is more than 10 minutes in the future.
+   */
   timestampS: number;
   /** Canonical JSON of the context, including `extractedParameters`. */
   context: string;
   /** Hash of provider, parameters and context. */
   identifier: string;
-  /** Legacy Reclaim beacon epoch. */
+  /** Reclaim's beacon epoch, signed with the claim; this kind does not read it. */
   epoch: number;
 }
 

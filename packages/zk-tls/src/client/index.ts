@@ -37,9 +37,9 @@ const sameMessage = (a: FlatMessage, b: FlatMessage): boolean =>
   a.length === b.length && a.every((value, i) => value === b[i]);
 
 /**
- * What to fetch and which of its fields the proof reveals.
+ * What to fetch and which of its fields the evidence reveals.
  *
- * Public headers are visible to whoever verifies the proof; secret headers
+ * Public headers are visible to whoever verifies the evidence; secret headers
  * and context are not.
  */
 export interface ZkFetchRequest {
@@ -175,8 +175,9 @@ export interface ZkFetchClientProof<V extends number, PK, S> {
    * Ask the pinned attestors to sign this claim.
    *
    * @param ids — the attestor ids to query; defaults to every pinned attestor.
-   * @throws `AttestationMismatchError` on the first rejected attestation, or
-   *   if a target attestor has no evidence.
+   * @throws `AttestorNotInTrustedSetError` if an id is not in the trusted set.
+   * @throws `AttestationMismatchError` on the first rejected attestation.
+   * @throws `Error` if a target attestor has no evidence, or whatever the transport throws.
    */
   attest(...ids: string[]): Promise<Attestment<V, PK, S>>;
 }
@@ -189,8 +190,11 @@ export interface ZkFetchClient<V extends number, PK, S> {
    *
    * @param holder — per-claim commitment from `holderCommitmentOf(secret)`,
    *   32 bytes. Keep the secret for the contract witness; use a fresh one per claim.
-   * @throws if the holder is not 32 bytes, a prover answers for another
-   *   origin, evidence carries a secret header value, or the witnesses disagree.
+   * @throws `ZodError` if the holder is not 32 bytes or a prover returns malformed evidence.
+   * @throws `SecretHeaderError` if evidence carries a secret header value.
+   * @throws `Error` if the request carries disclosure rules other than the policy's, a
+   *   prover fails or answers for another origin, evidence fails the policy or does not
+   *   fit the slot counts, or the witnesses disagree.
    */
   proveReq(request: ZkFetchRequest, holder: Uint8Array): Promise<ZkFetchClientProof<V, PK, S>>;
   /**
@@ -216,12 +220,16 @@ export interface ZkFetchClient<V extends number, PK, S> {
  * ```ts
  * import { zkFetchClient } from '@thoth/zk-tls/client';
  *
+ * // `trusted` pins attestor-a and attestor-b; each needs its own prover.
  * const client = zkFetchClient.init({
  *   trusted, transport, verifier, policy, appId, valueSlots,
- *   provers: { txpipeEndpoint: zkFetchProver({ witnessUrl }) },
+ *   provers: {
+ *     'attestor-a': zkFetchProver({ witnessUrl: witnessA }),
+ *     'attestor-b': zkFetchProver({ witnessUrl: witnessB }),
+ *   },
  * });
- * const proof = await client.proveReq({ url, method, publicHeaders }, holder);
- * const attestment = await proof.attest('txpipeEndpoint', 'eryxEndpoint', 'midnightFoundation');
+ * const proved = await client.proveReq({ url, method, publicHeaders }, holder);
+ * const attestment = await proved.attest('attestor-a', 'attestor-b');
  * ```
  */
 export const zkFetchClient = {
@@ -333,8 +341,9 @@ export type ZkFetchAttestationInput = AttestationInput<
  * The contract counts the threshold; the client only checks that every
  * collected attestation commits to the same message.
  *
- * @throws if a target attestor has no evidence, or `AttestationMismatchError`
- *   on the first rejected attestation.
+ * @throws `AttestorNotInTrustedSetError` if an id is not in the trusted set.
+ * @throws `AttestationMismatchError` on the first rejected attestation.
+ * @throws `Error` if a target attestor has no evidence, or whatever the transport throws.
  */
 const collectAttestations = async <V extends number, PK, S>(options: {
   trusted: TrustedSet<ZkFetchDefinition, PK>;

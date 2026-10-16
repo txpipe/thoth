@@ -150,7 +150,9 @@ export const proveWith = async <PK>(
  * Ask one attestor to sign `claim` and vet the returned attestation.
  *
  * @returns the attestation, tagged with the member's registry slot.
+ * @throws `AttestorNotInTrustedSetError` if `member` is not in `trusted`.
  * @throws `AttestationMismatchError` if the key, claim, message, or signature is wrong.
+ * @throws whatever the transport throws.
  */
 export const attestWith = async <V extends number, PK, S>(
   config: Pick<ZkFetchClientConfig<V, PK, S>, 'trusted' | 'transport' | 'verifier' | 'policy'>,

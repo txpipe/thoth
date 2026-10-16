@@ -25,11 +25,9 @@ Serve `attestor.attest(input)` to dApps over the transport you choose;
 `@thoth/client` shows a minimal HTTP one. Share `descriptorOf(attestor)` from
 `@thoth/attestor` with the dApps that pin you.
 
-The instance takes no registry slot and no slot counts. Its signed message
-binds no registry or contract, so one instance serves any dApp: each dApp
-places your public key in its own registry and records that slot in its
-trusted set, and each claim proposal carries the slot counts of the contract
-it is for. The instance derives absent slots as unpresent and zero.
+The instance takes no registry slot and no slot counts, so one instance
+serves any dApp ([why](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
+Each claim proposal carries the slot counts of the contract it is for.
 
 ### The witness address
 
@@ -107,7 +105,9 @@ Every operator in one trusted set must run the same witness version and
 behavior. Witnesses agree only when they add identical context fields to the
 Reclaim claim identifier for the same request and disclosures. Thoth does not
 pin witness behavior, so an upstream change can split a trusted set: the
-client fails closed with `witnesses disagree` before any attestor is contacted.
+client fails closed, `proveReq` with `witnesses disagree` before any attestor
+is contacted, and `collect` with `ZkFetchThresholdError` once no message can
+reach the threshold.
 
 Before a trusted set adopts a new witness version, coordinate every operator,
 run the live check below against the candidate witnesses, and rotate only
@@ -118,7 +118,7 @@ after it passes.
 The live check proves one request with two real witnesses and asserts that
 both derive the same identifier and message. It needs network and witness
 processes, so `test/live.test.ts` skips unless `WITNESS_URLS` names at least
-two witnesses, and `npm test` never runs it.
+two witnesses; `npm test` runs it only when that variable is set.
 
 Start two witnesses in one shell:
 

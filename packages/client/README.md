@@ -1,16 +1,20 @@
 # @thoth/client
 
-The dApp side of Thoth: the attestors an app pins, the interface to reach them, and the check every returned attestation passes before it is collected. For kind authors writing a kind's client, and for apps that use one.
+The dApp side of Thoth, for kind authors writing a kind's client and for apps that use one: the attestors an app pins, the interface to reach them, and the check every returned attestation passes before it is collected.
 
 > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
 ## Install
 
+The package is not on npm yet. Build it from a checkout of this repo and install it by path:
+
 ```bash
-npm install @thoth/client
+git clone https://github.com/txpipe-shop/thoth && cd thoth
+npm install && npm run build
+cd /path/to/your-app && npm install /path/to/thoth/packages/client
 ```
 
-The npm name may change until the npm scope is settled.
+It will publish as `@thoth/client`; that name may change until the npm scope is settled.
 
 ## Usage
 
@@ -30,12 +34,22 @@ const trusted = buildTrustedSet({
   ],
 }); // throws InvalidTrustedSetError
 
+// JSON carries neither bigint nor bytes, so tag them; the attestor's server uses the same pair.
+const toJson = (value: unknown): string =>
+  JSON.stringify(value, (_, v) =>
+    typeof v === 'bigint' ? { $bigint: v.toString() } : v instanceof Uint8Array ? { $bytes: [...v] } : v,
+  );
+const fromJson = (text: string) =>
+  JSON.parse(text, (_, v) =>
+    v?.$bigint !== undefined ? BigInt(v.$bigint) : v?.$bytes !== undefined ? Uint8Array.from(v.$bytes) : v,
+  );
+
 // Your kind's client supplies the transport; this package only defines the interface.
 const transport: AttestorTransport<MyDefinition, JubjubPoint, JubjubSchnorrSignature> = {
   async request(attestor, input) {
-    const res = await fetch(`${attestor.id}/attest`, { method: 'POST', body: JSON.stringify(input) });
+    const res = await fetch(`${attestor.id}/attest`, { method: 'POST', body: toJson(input) });
     if (!res.ok) throw new Error(`attestor ${attestor.id} rejected: ${res.status}`);
-    return decodeAttestation(await res.json()); // bigint and bytes do not survive JSON as-is
+    return fromJson(await res.text());
   },
 };
 
@@ -52,7 +66,7 @@ const collected = await resolveAttestation({
 // Place collected.attestation.signature at collected.registryIndex.
 ```
 
-`attestorOf(trusted, id)` returns the descriptor alone and `attestorIdsOf(trusted)` lists every member's id. The errors come from `@thoth/client/errors`; each carries the attestor's id and a `reason` naming the failed check.
+`attestorOf(trusted, id)` returns the descriptor alone and `attestorIdsOf(trusted)` lists every member's id. The errors come from `@thoth/client/errors`; each carries the attestor's id, and `AttestationMismatchError` and `InvalidTrustedSetError` add a `reason` naming the failed check.
 
 ## Concepts
 

@@ -78,6 +78,7 @@ unless `WITNESS_URLS` names them; see the attestor guide's
 CI (`.github/workflows/`) compiles the Compact contracts and runs the type
 check, vitest and Biome on every push and pull request. Locally, the
 pre-commit hook runs Biome on the staged files and the Compact format check,
-and the pre-push hook runs the same gates as CI.
+and the pre-push hook runs Biome, the contract compilation, the type check,
+the build and vitest.
 
 Conventions for code, comments and docs are in [AGENTS.md](AGENTS.md).

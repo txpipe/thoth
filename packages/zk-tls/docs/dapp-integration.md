@@ -51,15 +51,17 @@ const trusted = buildTrustedSet({
   ],
 });
 
+// toJson and fromJson tag bigint and bytes, which plain JSON drops; they are
+// defined in the @thoth/client README, and the attestor's server uses the same pair.
 const transport: AttestorTransport<ZkFetchDefinition, PublicKey, Signature> = {
   async request(attestor, input) {
     const res = await fetch(`https://${attestor.id}/attest`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input),
+      body: toJson(input),
     });
     if (!res.ok) throw new Error(`attestor ${attestor.id} rejected: ${res.status}`);
-    return res.json();
+    return fromJson(await res.text());
   },
 };
 
@@ -97,7 +99,7 @@ const client = zkFetchClient.init({
 
 // holderSecret: 32 cryptographically random bytes, fresh per claim, kept locally.
 const holder = holderCommitmentOf(holderSecret);
-const proof = await client.proveReq(
+const proved = await client.proveReq(
   {
     url: 'https://www.strava.com/api/v3/athlete/activities?per_page=1',
     method: 'GET',
@@ -108,7 +110,7 @@ const proof = await client.proveReq(
   holder,
 );
 
-const attestment = await proof.attest(); // or .attest(txpipeDescriptor.id)
+const attestment = await proved.attest(); // or .attest(txpipeDescriptor.id)
 ```
 
 `proveReq` fetches through every pinned attestor's witness and requires them
@@ -151,7 +153,7 @@ what is refused, and what `ZkFetchThresholdError` carries.
 
 `ZkFetchRequest` describes the fetch. The witness signs the URL, method, body
 and disclosure rules into the claim, so the policy can rely on them.
-`publicHeaders` are visible to whoever verifies the proof; `secretHeaders` and
+`publicHeaders` are visible to whoever verifies the evidence; `secretHeaders` and
 `context` are not. The two fields with protocol meaning:
 
 - `responseMatches` selects what gets certified. A named group
@@ -159,7 +161,7 @@ and disclosure rules into the claim, so the policy can rely on them.
   `contains` match only guards the response.
 - `responseRedactions` is Reclaim's reveal whitelist, by `regex`, `jsonPath`
   or `xPath`. The selected slices are the only parts of the response the
-  witness, and so the proof, ever sees.
+  witness, and so the evidence, ever sees.
 
 The policy owns both. The client proves every request with the policy's rules:
 a request that omits them gets the policy's, and one that supplies its own must
@@ -171,7 +173,8 @@ Whatever you reveal must be identical across independent fetches, because each
 witness signs the revealed slice into the claim. A whole-response
 `(?<data>.*)` match is not safe: HTTP headers carry per-request values such as
 rate limits, dates and request ids, so two witnesses derive different
-identifiers and the client rejects the set with `witnesses disagree`. Reveal
+identifiers and their attestors sign different messages: `proveReq` fails with
+`witnesses disagree`, and `collect` cannot count them together. Reveal
 only the fields the policy binds, and prefer values the origin returns
 deterministically.
 
@@ -204,10 +207,9 @@ Byte rules fill a 32-byte slot and reject a value that does not fit:
 - `base64` decodes the standard or URL-safe alphabet, with optional `=`
   padding.
 
-Decoding folds only representations that carry no data: hex case, the `0x`
-marker, the base64 alphabet and padding. It never deletes a character, so
-`AA:BB`, `AA-BB` and `AABB` are three different strings, and only the last is
-valid hex ([ADR 0010](../../../docs/adr/0010-encoded-byte-rules.md)).
+What decoding folds and what it keeps as data is in the
+[Byte slot](../../../CONTEXT.md#the-claim) entry
+([ADR 0010](../../../docs/adr/0010-encoded-byte-rules.md)).
 
 A slot may pin the value's exact byte length with `length` (1–32: the UTF-8
 length for `bytes`, the decoded length for `hex` and `base64`). A required slot
@@ -232,9 +234,9 @@ separately if you need to.
 is its flat encoding; each `attestment.collected[i]` carries the
 `registryIndex` your trusted set assigned to the attestor that signed it. Place
 each signature at its slot in the contract's fixed signature vector and call
-`verifyAttestation` with the claim in the contract's shape: the circuit takes
-each byte value as two 16-byte halves with a flag per half, so pass
-`toContractClaim(attestment.claim)`, for numeric-only claims too.
+`verifyAttestation` with the claim in the contract's shape,
+`toContractClaim(attestment.claim)`, for numeric-only claims too; the
+[wire order](../../../docs/DESIGN.md#wire-order) shows that shape.
 
 ```ts
 import { toContractClaim } from '@thoth/core/claim';
@@ -249,10 +251,11 @@ Replay protection keys on the signed observation: app id, policy hash, subject
 hash, window, values and `present`. A new holder or context does not make a new
 observation.
 
-A recorded proof lives at
+Recorded evidence lives at
 `examples/demo-attestation/fixtures/fixture-github-attestor-core-x-0m.json`
-in the repo. It discloses three numeric fields of a GitHub repository and hides
-everything else; the package tests verify it with the attestor's own verifier.
+in the repo. It fetches a GitHub repository and discloses the whole HTTP
+transcript, headers and body, as one `data` group; the package tests verify it
+with the attestor's own verifier.
 
 ## Reclaim's hosted zkFetch SDK
 

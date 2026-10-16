@@ -1,6 +1,6 @@
 # Thoth
 
-Private N-of-M attestation for Midnight: your contract accepts an off-chain fact only when N of the M attestors it pinned have signed it, and the fact stays private.
+Private N-of-M attestation for Midnight: your contract accepts an off-chain fact only when N of the M attestors it pinned have signed it, and the fact reaches the contract as private input.
 
 > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
@@ -25,25 +25,26 @@ of scope and why.
 
 ## How it works
 
-1. Your dApp obtains evidence of a fact. With the zkFetch kind, that is a
-   Reclaim zkFetch proof of an HTTPS response.
+1. Your dApp obtains evidence of a fact. With the zkFetch
+   [kind](CONTEXT.md#kinds), that is a Reclaim zkFetch proof of an HTTPS
+   response.
 2. Each attestor in your app's [trusted set](CONTEXT.md#signing-and-collection)
    checks the evidence and signs a canonical [claim](CONTEXT.md#the-claim)
    derived from it.
 3. Your dApp submits the claim and N signatures to your contract as private
    witness data. The contract checks the signatures against its pinned
-   registry, the policy, the window, the holder and replay
+   registry, the [policy](CONTEXT.md#the-claim), the window, the
+   [holder](CONTEXT.md#the-claim) and replay through the
+   [nullifier](CONTEXT.md#on-chain)
    ([full list](packages/contracts/README.md#guarantees-and-limits)).
 4. Your contract's predicate runs over the claim values.
 
 Attestors certify facts, not decisions: a claim states what was observed, and
 your app defines the predicate over it.
 
-Claim values are private witness data and are not stored on-chain; the
-contract stores only commitments and the nullifier. They are not hidden from
-guessing, though: the nullifier is a public hash of the observation, so anyone
-can confirm a guessed value by recomputing it. This is an open security issue
-(ADR 0009).
+Claim values are private witness data and are not stored on-chain, but the
+public nullifier lets anyone confirm a guessed value; the contracts README
+[says what is public](packages/contracts/README.md#guarantees-and-limits).
 
 ## Which package to use
 
@@ -52,7 +53,7 @@ can confirm a guessed value by recomputing it. This is an open security issue
 | [`@thoth/contracts`](packages/contracts/README.md) | Embed N-of-M verification in your Midnight contract |
 | [`@thoth/zk-tls`](packages/zk-tls/README.md) | Attest a web fact with zkFetch, as a dApp or as an attestor operator |
 | [`@thoth/client`](packages/client/README.md) | Write a kind's client: the trusted set and the attestation checks |
-| [`@thoth/attestor`](packages/attestor/README.md) | Write a kind's attestor: pair its law with a signing key |
+| [`@thoth/attestor`](packages/attestor/README.md) | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
 | [`@thoth/core`](packages/core/README.md) | Write a kind's law against the shared claim types |
 
 If you are building a dApp on web data, start with `@thoth/contracts` and
@@ -61,7 +62,7 @@ If you are building a dApp on web data, start with `@thoth/contracts` and
 
 ## Quickstart
 
-No deploy script ships yet. The closest thing to a quickstart is
+There is no deploy script; the closest thing to a quickstart is
 [`packages/contracts/test/acceptance.test.ts`](packages/contracts/test/acceptance.test.ts):
 it runs two zkFetch attestors, collects a 2-of-3 claim, and submits it to the
 contract simulator. Run it with the [dev setup](CONTRIBUTING.md#dev-setup) in
@@ -103,7 +104,8 @@ const { claim, collected } = await client.collect(request, {
 ```
 
 [`examples/example_app.compact`](packages/contracts/examples/example_app.compact)
-is a 2-of-3 contract with a predicate; the
+is a 2-of-3 contract and the
+[test mocks](packages/contracts/test/mocks/) add predicates; the
 [dApp guide](packages/zk-tls/docs/dapp-integration.md) and the
 [attestor guide](packages/zk-tls/docs/attestor-guide.md) cover each side in
 full.
@@ -129,4 +131,5 @@ replace.
 - [docs/adr/](docs/adr/): the design decisions and their reasons
 - [CONTEXT.md](CONTEXT.md): the glossary
 - [CONTRIBUTING.md](CONTRIBUTING.md): dev setup, repo layout and commands
+- Credit: extracted from Witness Fitness, 2nd place in the open track of the Midnight Buenos Aires hackathon.
 - License: [MIT](LICENSE)
