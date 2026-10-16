@@ -98,7 +98,7 @@ What the attestor checks before signing:
 - The witness address is the one the instance was built with.
 - The signed request carries no `{{param}}` template ([why](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
 - The attested URL is HTTPS on an allowed host.
-- The disclosure rules the witness signed equal the policy's, so a slot cannot be pointed at a different field than the policy intends. Array order, empty redaction keys and an absent array are inert; every other difference, including Reclaim's `invert` and `hash`, rejects.
+- The disclosure rules the witness signed equal the policy's, so a slot cannot be pointed at a different field than the policy intends. Array order, the order of a rule's keys, empty redaction keys and an absent array are inert; every other difference, including Reclaim's `invert` and `hash`, rejects.
 - Every required slot is certifiable: disclosed and parseable under its rule and `length` pin. An optional slot that is absent or unparseable is signed unpresent.
 - The witness's observation time falls inside the proposed window, bounds included.
 - The proposed `subjectHash` is the hash of the request the witness signed, and the proposed values are exactly what the evidence disclosed. The attestor then signs the claim it derived itself, so a client cannot have it certify a different reading.

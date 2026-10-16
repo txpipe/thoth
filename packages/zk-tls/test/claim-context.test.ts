@@ -103,6 +103,25 @@ describe('zkFetchPolicyHashOf', () => {
     );
   });
 
+  it('hashes redactions the same whichever keys they spell out', () => {
+    const plan = (responseRedactions: ZkFetchPolicy['responseRedactions']): ZkFetchPolicy => ({
+      ...policy,
+      responseRedactions,
+    });
+    expect(
+      hex(zkFetchPolicyHashOf(plan([{ jsonPath: '$.b' }, { regex: '', jsonPath: '$.a' }]))),
+    ).toBe(
+      hex(
+        zkFetchPolicyHashOf(
+          plan([
+            { regex: '', jsonPath: '$.b' },
+            { regex: '', jsonPath: '$.a' },
+          ]),
+        ),
+      ),
+    );
+  });
+
   it('rejects a malformed policy', () => {
     expect(() => zkFetchPolicyHashOf({ ...policy, allowedHosts: [] })).toThrow();
   });
