@@ -209,7 +209,7 @@ export type ByteRule = 'bytes' | 'hex' | 'base64';
  * @returns `true` for `bytes`, `hex`, and `base64`.
  */
 export const isByteRule = (rule: ZkFetchParseRule): rule is ByteRule =>
-  rule !== 'int' && rule !== 'float';
+  rule === 'bytes' || rule === 'hex' || rule === 'base64';
 
 /**
  * One claim-slot binding: which extracted (disclosed) value feeds which
