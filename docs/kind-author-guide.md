@@ -109,7 +109,10 @@ and the values:
   certifiable and its slot stays unpresent. The kind
   layer carries one flag per byte slot (`present[V + i]`); `claimToMessage` and
   the contract split each value into two adjacent 16-byte halves and repeat the
-  flag on both halves.
+  flag on both halves. The contract's witness takes that split shape too, so a
+  dApp returns `toContractClaim(claim)` (from `@thoth/core/claim`) from
+  `getAttestationWitness`, never the kind-facing claim itself — even with
+  `W = 0`, whose empty `bytePresent`/`byteHalves` the contract still requires.
 - `appId` and `holder` come from the claim proposal. The attestor signs them
   but cannot check them. The contract checks `holder` against the caller's
   secret; `appId` is compared by the app's own predicate, not by the module.

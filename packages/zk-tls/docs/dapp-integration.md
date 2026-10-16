@@ -263,7 +263,17 @@ witness.
 is its flat encoding; each `attestment.collected[i]` carries the `registryIndex`
 your trusted set assigned to the attestor that signed it. Place each signature
 at its slot in the contract's fixed signature vector and call
-`verifyAttestation` with the claim.
+`verifyAttestation`, with the claim converted to the contract's shape: the
+witness takes each byte value as two 16-byte halves with a flag per half, so
+pass `toContractClaim(attestment.claim)`, not `attestment.claim` itself (this
+holds for numeric-only claims too).
+
+```ts
+import { toContractClaim } from '@thoth/core/claim';
+
+// In getAttestationWitness:
+const claim = toContractClaim(attestment.claim);
+```
 See `@thoth/contracts` for the circuit and the registry wiring.
 
 Each attestor operator runs their own Reclaim witness and builds the attestor
