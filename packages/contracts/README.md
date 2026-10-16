@@ -107,7 +107,10 @@ constructor() {
 - `#B` — number of byte halves (`Claim.byteHalves: Vector<B, Bytes<16>>`). Must be
   even (`B = 2W` for `W` 32-byte byte values, each two adjacent halves); `B = 0`
   reproduces the numeric-only layout exactly. The compiler cannot check this, so
-  `#B` even is an embedder invariant
+  `#B` even is an embedder invariant. `#B` is the only count in halves: `#V`
+  and the client's `byteSlots` count slots, so `byteSlots: 1` pairs with
+  `#B = 2` (`import "attestation"<21, 3, 2, 2, 3>`). An odd `#B` compiles but
+  then rejects every claim
 - `#N` — the app's N-of-M threshold
 - `#M` — number of attestor signatures supplied / registry key slots
 
