@@ -323,6 +323,40 @@ describe('test-key witness', () => {
     );
   });
 
+  // A template, or a `{{` Reclaim reads as a wildcard, in each signed request field.
+  it.each([
+    { url: 'https://{{x}}.api.example.com/v1/account' },
+    { url: 'https://{{x}}@api.example.com/v1/account' },
+    { url: 'https://api.example.com/v1/%7B%7Bx%7D%7D' },
+    { url: 'https://api.example.com/v1/{%7Bx}%7D' },
+    { url: 'https://api.example.com/v1/%7B{x%7D}' },
+    { url: 'https://api.example.com/v1/{\n{x}}' },
+    { url: 'https://api.example.com/v1/{\t{x}}' },
+    { url: 'https://api.example.com/v1/%7B\r%7Bx%7D%7D' },
+    { url: 'https://api.example.com/v1/%\n7B%\n7Bx}}' },
+    { url: 'https://api.example.com/v1/%7b%7bx%7d%7d' },
+    { url: 'https://api.example.com/v1/{{}}' },
+    { body: '{"user":"{{}}"}' },
+    { body: '{"user":"{{x}}"}' },
+    { geoLocation: '{{x}}' },
+    { proxySessionId: '{{x}}' },
+  ])('refuses a {{param}} template in the signed request, case %#', async (templated) => {
+    const evidence = await observe(alice, {
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        ...DISCLOSURE_RULES,
+        paramValues: { x: 'evil.example/' },
+        ...templated,
+      },
+    });
+    const sign = vi.spyOn(aliceAttestor.signer, 'sign');
+    await expect(attestWith(aliceAttestor, evidence)).rejects.toThrow(/\{\{param\}\} templates/);
+    expect(sign).not.toHaveBeenCalled();
+    sign.mockRestore();
+  });
+
   it('is rejected when the claim identifier does not match its signed content', async () => {
     const evidence = await observe(alice);
     const forged = {

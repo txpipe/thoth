@@ -169,6 +169,16 @@ carry exactly the policy's or the client refuses before any witness is
 contacted. A slot is certifiable only when a `responseMatches` group extracted
 it from a revealed slice, so name the slot exactly like the group.
 
+Put a per-user URL in the request as a concrete URL
+(`https://example.com/user/42`), never as a Reclaim `{{param}}` template.
+The witness signs the template text but fetches the URL after filling in
+caller-chosen `paramValues`, so a template in the host or the userinfo
+(`https://{{x}}@api.example.com/…`) fetches a host outside the policy's
+`allowedHosts`, and the subject hash commits to text that was not fetched. The
+client and the attestor refuse evidence whose signed URL, body, `geoLocation`
+or `proxySessionId` contains `{{`, in the URL also when written as `%7B`/`%7D`
+or split by a tab or line break, which URL parsing drops.
+
 Whatever you reveal must be identical across independent fetches, because each
 witness signs the revealed slice into the claim. A whole-response
 `(?<data>.*)` match is not safe: HTTP headers carry per-request values such as

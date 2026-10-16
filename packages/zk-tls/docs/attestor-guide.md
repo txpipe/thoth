@@ -53,11 +53,13 @@ and runs these checks before signing:
 1. `verifyZkFetchProof(evidence)` verifies the witness's ECDSA signature over
    the claim, checks the claim identifier against its signed content, and reads
    the values the witness disclosed.
-2. `assertEvidenceMatchesPolicy(verified, policy)` checks the attested URL
-   against the host allowlist, requires the witness-signed `responseMatches`
-   and `responseRedactions` to equal the policy's canonical disclosure rules,
-   and requires every required slot to be certifiable. `responseText` is not
-   witness-signed, so no check reads it.
+2. `assertEvidenceMatchesPolicy(verified, policy)` refuses a signed url, body,
+   `geoLocation` or `proxySessionId` that carries a `{{param}}` template (see
+   [Building the request](dapp-integration.md#building-the-request)), checks
+   the attested URL against the host allowlist, requires the witness-signed
+   `responseMatches` and `responseRedactions` to equal the policy's canonical
+   disclosure rules, and requires every required slot to be certifiable.
+   `responseText` is not witness-signed, so no check reads it.
 3. `assertObservationInWindow({ claim, verified })` requires the witness's
    observation time to fall inside the proposed window, bounds included. The
    contract bounds the window's length and checks it against block time.
