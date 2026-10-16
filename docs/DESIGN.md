@@ -136,11 +136,15 @@ sequenceDiagram
     Note over Contract: run predicate
 ```
 
-1. In zkFetch the client fetches once per attestor, each through that
-   attestor's witness, and keeps only what the witnesses agree on.
-2. Each attestor verifies its own witness's evidence, derives the claim
-   itself, and signs it. The client checks every signature and places it at
-   the attestor's registry slot, which the app assigned in its trusted set.
+1. In zkFetch the client fixes the holder and window, then fetches once per
+   attestor, each through that attestor's witness, which signs the
+   [claim context](../CONTEXT.md#the-claim) digest with its evidence
+   ([ADR 0011](adr/0011-evidence-binds-the-claim-context.md)). The client
+   keeps only what the witnesses agree on.
+2. Each attestor verifies its own witness's evidence, checks that it signed
+   the proposal's holder and window, derives the claim itself, and signs it.
+   The client checks every signature and places it at the attestor's registry
+   slot, which the app assigned in its trusted set.
 3. The contract verifies, in-circuit, the version, the policy hash, at least N
    valid signatures each against its own registry slot, the absent slots, the
    holder secret, the window and replay. The

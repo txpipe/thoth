@@ -16,9 +16,11 @@ import { claimToMessage } from '@thoth/core/claim';
 import {
   assertEvidenceMatchesPolicy,
   parsedEvidenceView,
+  ZK_FETCH_CLAIM_CONTEXT_KEY,
   type ZkFetchDefinition,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
+  zkFetchClaimContextDigestOf,
   zkFetchClaimSchema,
   zkFetchEvidenceSchema,
   zkFetchPolicyHashOf,
@@ -28,6 +30,7 @@ import { verifyZkFetchProof, zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import {
   addressFromWitnessId,
   toCanonicalEvidence,
+  type ZkFetchAttestorFailure,
   type ZkFetchProver,
   type ZkFetchRequest,
   zkFetchClient,
@@ -312,10 +315,14 @@ describe('zkFetch attestor + client', () => {
       provers: overrides.provers ?? provers,
     });
 
-  const options = () => ({
-    holder: new Uint8Array(32).fill(0xc1),
+  /** The holder and window a claim is proved for. */
+  const binding = (holder = new Uint8Array(32).fill(0xc1)) => ({
+    holder,
     windowStart: BigInt(BASE_TIMESTAMP_S),
     windowEnd: BigInt(BASE_TIMESTAMP_S + 60),
+  });
+  const options = () => ({
+    ...binding(),
     expiresAt: Date.now() + 60_000,
     threshold: 2,
     attestorTimeoutMs: 5_000,
@@ -471,8 +478,7 @@ describe('zkFetch attestor + client', () => {
         }),
       });
       const divergent = { ...collectionRequest, ...rules };
-      const holder = new Uint8Array(32).fill(0xc1);
-      await expect(client.proveReq(divergent, holder)).rejects.toThrow(pattern);
+      await expect(client.proveReq(divergent, binding())).rejects.toThrow(pattern);
       await expect(client.collect(divergent, options())).rejects.toMatchObject({
         name: 'ZkFetchThresholdError',
         reason: 'invalid-options',
@@ -491,7 +497,7 @@ describe('zkFetch attestor + client', () => {
         },
       }),
     });
-    await client.proveReq(collectionRequest, new Uint8Array(32).fill(0xc1));
+    await client.proveReq(collectionRequest, binding());
     expect(seen.request?.responseMatches).toEqual(policy().responseMatches);
     expect(seen.request?.responseRedactions).toEqual(policy().responseRedactions);
 
@@ -503,7 +509,7 @@ describe('zkFetch attestor + client', () => {
         responseMatches: supplied.responseMatches,
         responseRedactions: supplied.responseRedactions,
       },
-      new Uint8Array(32).fill(0xc1),
+      binding(),
     );
     expect(explicit.claim.values).toHaveLength(3);
   });
@@ -622,7 +628,7 @@ describe('zkFetch attestor + client', () => {
     await expect(
       client.proveReq(
         { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
-        new Uint8Array(32).fill(0xc1),
+        binding(),
       ),
     ).rejects.toThrow(/secret header value/);
   });
@@ -850,7 +856,7 @@ describe('zkFetch attestor + client', () => {
     };
     const proof = await clientWith({ transport: broken }).proveReq(
       { url: 'https://api.github.com/repos/x', method: 'GET' },
-      new Uint8Array(32).fill(0xc1),
+      binding(),
     );
     await expect(proof.attest()).rejects.toMatchObject({ reason: 'signature' });
   });
@@ -864,16 +870,13 @@ describe('zkFetch attestor + client', () => {
     };
     const proof = await clientWith({ transport: broken }).proveReq(
       { url: 'https://api.github.com/repos/x', method: 'GET' },
-      new Uint8Array(32).fill(0xc1),
+      binding(),
     );
     await expect(proof.attest()).rejects.toMatchObject({ reason: 'claim' });
   });
 
   const prove = () =>
-    clientWith().proveReq(
-      { url: 'https://api.github.com/repos/x', method: 'GET' },
-      new Uint8Array(32).fill(0xc1),
-    );
+    clientWith().proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' }, binding());
 
   const evidenceOf = (
     evidences: Readonly<Record<string, ZkFetchEvidence>>,
@@ -914,10 +917,7 @@ describe('zkFetch attestor + client', () => {
     const [first, second] = await Promise.all(
       [trustedWith([0, 1, 2]), trustedWith([4, 0, 2], 5)].map((set) =>
         clientWith({ trusted: set })
-          .proveReq(
-            { url: 'https://api.github.com/repos/x', method: 'GET' },
-            new Uint8Array(32).fill(0xc1),
-          )
+          .proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' }, binding())
           .then((proof) => proof.attest('attestor-0', 'attestor-1')),
       ),
     );
@@ -950,34 +950,19 @@ describe('zkFetch attestor + client', () => {
   it('refuses when the policy does not fit the evidence (host)', async () => {
     const hostile = clientWith({ policy: { ...policy(), allowedHosts: ['evil.example'] } });
     await expect(
-      hostile.proveReq(
-        { url: 'https://api.github.com/x', method: 'GET' },
-        new Uint8Array(32).fill(0xc1),
-      ),
+      hostile.proveReq({ url: 'https://api.github.com/x', method: 'GET' }, binding()),
     ).rejects.toThrow(/not in allowlist/);
   });
 
-  it('binds the evidence to the requested URL origin (same origin, other path)', async () => {
-    const attestedUrl = 'https://api.github.com/repos/reclaimprotocol/attestor-core';
-    const requests: Record<string, ZkFetchRequest> = {};
+  it('refuses evidence for the requested origin but another path', async () => {
     const client = clientWith({
       provers: proversWith({
-        url: () => attestedUrl,
-        onProve: (id, request) => {
-          requests[id] = request;
-        },
+        url: () => 'https://api.github.com/repos/reclaimprotocol/attestor-core',
       }),
     });
-    const proof = await client.proveReq(
-      { url: 'https://api.github.com/repos/x', method: 'GET' },
-      new Uint8Array(32).fill(0xc1),
-    );
-    const expected = await observe(bobWitness, requestOf(requests, 'attestor-1'), {
-      url: attestedUrl,
-    });
-    expect(evidenceOf(proof.evidences, 'attestor-1').claim.identifier).toBe(
-      expected.claim.identifier,
-    );
+    await expect(
+      client.proveReq({ url: 'https://api.github.com/repos/x', method: 'GET' }, binding()),
+    ).rejects.toThrow(/another method, path or body/);
   });
 
   it('refuses evidence for a different origin than requested', async () => {
@@ -985,10 +970,7 @@ describe('zkFetch attestor + client', () => {
       provers: proversWith({ url: () => 'https://api.github.com/repos/x' }),
     });
     await expect(
-      client.proveReq(
-        { url: 'https://other.example/x', method: 'GET' },
-        new Uint8Array(32).fill(0xc1),
-      ),
+      client.proveReq({ url: 'https://other.example/x', method: 'GET' }, binding()),
     ).rejects.toThrow(/not the requested/);
   });
 
@@ -1058,7 +1040,7 @@ describe('zkFetch attestor + client', () => {
     await expect(
       clientWith().proveReq(
         { url: 'https://api.github.com/repos/x', method: 'GET' },
-        new Uint8Array(31),
+        binding(new Uint8Array(31)),
       ),
     ).rejects.toThrow(/expected 32 bytes/);
   });
@@ -1067,7 +1049,7 @@ describe('zkFetch attestor + client', () => {
     const holder = new Uint8Array(32).fill(0xc2);
     const proof = await clientWith().proveReq(
       { url: 'https://api.github.com/repos/x', method: 'GET' },
-      holder,
+      binding(holder),
     );
     expect(proof.claim.holder).toEqual(holder);
     const attestment = await proof.attest();
@@ -1085,20 +1067,14 @@ describe('zkFetch attestor + client', () => {
     }
   });
 
-  it('proposes the window spanning every observation to every attestor', async () => {
+  it("proposes the caller's window to every attestor", async () => {
     const offsets: Record<string, number> = { 'attestor-0': 0, 'attestor-1': 3, 'attestor-2': 6 };
     const staggered = proversWith({
       timestampS: (id) => BASE_TIMESTAMP_S + (offsets[id] ?? 0),
     });
-    const proof = await clientWith({ provers: staggered }).proveReq(
-      {
-        url: 'https://api.github.com/repos/x',
-        method: 'GET',
-      },
-      new Uint8Array(32).fill(0xc1),
-    );
+    const proof = await clientWith({ provers: staggered }).proveReq(collectionRequest, binding());
     expect(proof.claim.windowStart).toBe(BigInt(BASE_TIMESTAMP_S));
-    expect(proof.claim.windowEnd).toBe(BigInt(BASE_TIMESTAMP_S + 6));
+    expect(proof.claim.windowEnd).toBe(BigInt(BASE_TIMESTAMP_S + 60));
     const attestment = await proof.attest();
     expect(attestment.collected.length).toBe(3);
     for (const collected of attestment.collected) {
@@ -1123,13 +1099,13 @@ describe('zkFetch attestor + client', () => {
           url: 'https://api.github.com/repos/x',
           method: 'GET',
         },
-        new Uint8Array(32).fill(0xc1),
+        binding(),
       ),
     ).rejects.toThrow(/witnesses disagree/);
     expect(calls).toBe(0);
   });
 
-  it('preserves caller context without adding replay randomness', async () => {
+  it("signs the claim context digest into every witness's context beside the caller's", async () => {
     const requests: Record<string, ZkFetchRequest> = {};
     const client = clientWith({
       provers: proversWith({
@@ -1138,16 +1114,114 @@ describe('zkFetch attestor + client', () => {
         },
       }),
     });
-    await client.proveReq(
-      {
-        url: 'https://api.github.com/repos/x',
-        method: 'GET',
-        context: { label: 'commute' },
-      },
-      new Uint8Array(32).fill(0xc1),
-    );
+    await client.proveReq({ ...collectionRequest, context: { label: 'commute' } }, binding());
+    const digest = zkFetchClaimContextDigestOf({
+      policy: policy(),
+      request: collectionRequest,
+      ...binding(),
+    });
     for (const id of ids) {
-      expect(requestOf(requests, id).context).toEqual({ label: 'commute' });
+      expect(requestOf(requests, id).context).toEqual({
+        label: 'commute',
+        [ZK_FETCH_CLAIM_CONTEXT_KEY]: digest,
+      });
+    }
+  });
+
+  it('refuses a request whose context already sets the claim context digest', async () => {
+    const probe = { called: 0 };
+    const client = clientWith({
+      provers: proversWith({
+        onProve: () => {
+          probe.called += 1;
+        },
+      }),
+    });
+    const preset = { ...collectionRequest, context: { [ZK_FETCH_CLAIM_CONTEXT_KEY]: 'ab' } };
+    await expect(client.proveReq(preset, binding())).rejects.toThrow(ZK_FETCH_CLAIM_CONTEXT_KEY);
+    await expect(client.collect(preset, options())).rejects.toMatchObject({
+      reason: 'invalid-options',
+    });
+    expect(probe.called).toBe(0);
+  });
+
+  it('gets no claim for another holder from evidence signed for this one', async () => {
+    const proof = await prove();
+    const thief = clientWith({
+      provers: Object.fromEntries(
+        ids.map((id) => [id, { prove: async () => evidenceOf(proof.evidences, id) }]),
+      ),
+    });
+    const refused = thief.collect(collectionRequest, {
+      ...options(),
+      holder: new Uint8Array(32).fill(0xc2),
+    });
+    await expect(refused).rejects.toMatchObject({ reason: 'threshold' });
+    const { failures } = await refused.catch(
+      (error: { failures: ZkFetchAttestorFailure[] }) => error,
+    );
+    expect([...failures].sort((a, b) => a.registryIndex - b.registryIndex)).toEqual(
+      ids.map((_, registryIndex) => ({ registryIndex, reason: 'attestation' })),
+    );
+  });
+
+  it('refuses evidence observed outside the window before contacting any attestor', async () => {
+    let calls = 0;
+    const counting: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> = {
+      async request(attestor, input) {
+        calls += 1;
+        return transport.request(attestor, input);
+      },
+    };
+    const late = clientWith({
+      transport: counting,
+      provers: proversWith({ timestampS: () => BASE_TIMESTAMP_S + 61 }),
+    });
+    await expect(late.proveReq(collectionRequest, binding())).rejects.toThrow(
+      /outside the claim window/,
+    );
+    const refused = late.collect(collectionRequest, options());
+    await expect(refused).rejects.toMatchObject({ reason: 'threshold' });
+    const { failures } = await refused.catch(
+      (error: { failures: ZkFetchAttestorFailure[] }) => error,
+    );
+    expect([...failures].sort((a, b) => a.registryIndex - b.registryIndex)).toEqual(
+      ids.map((_, registryIndex) => ({ registryIndex, reason: 'evidence' })),
+    );
+    expect(calls).toBe(0);
+  });
+
+  it("keeps the claim context digest a prover deletes from its own request out of the others'", async () => {
+    const requests: Record<string, ZkFetchRequest> = {};
+    const recording = proversWith({
+      onProve: (id, request) => {
+        requests[id] = request;
+      },
+    });
+    const client = clientWith({
+      provers: {
+        ...recording,
+        'attestor-0': {
+          // Deletes the digest before the other provers are called, after signing its own copy.
+          prove: (request) => {
+            const signed = { ...request, context: { ...request.context } };
+            delete (request.context as Record<string, unknown>)[ZK_FETCH_CLAIM_CONTEXT_KEY];
+            return observe(aliceWitness, signed);
+          },
+        },
+      },
+    });
+    const digest = zkFetchClaimContextDigestOf({
+      policy: policy(),
+      request: collectionRequest,
+      ...binding(),
+    });
+    const attestment = await (await client.proveReq(collectionRequest, binding())).attest();
+    expect(attestment.collected.length).toBe(3);
+    const collected = await client.collect(collectionRequest, options());
+    expect(slots(collected)).toEqual([0, 1]);
+    for (const id of ['attestor-1', 'attestor-2']) {
+      expect(requestOf(requests, id).context).toEqual({ [ZK_FETCH_CLAIM_CONTEXT_KEY]: digest });
     }
   });
 });

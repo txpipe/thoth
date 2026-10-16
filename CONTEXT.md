@@ -99,7 +99,7 @@ The claim the client sends an attestor with the evidence. The attestor signs the
 _Avoid_: Draft, request.
 
 **Claim context**:
-The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` hashes it to identify it; nothing signs the digest. The app id is not part of it: each attestor takes the app id from the claim proposal.
+The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` hashes it. The witness signs that digest with its evidence and the attestor recomputes it from the claim proposal, so evidence signed for one holder and window yields no claim for another (ADR 0011). The app id is not part of it: each attestor takes the app id from the claim proposal.
 _Avoid_: Intent, request, session.
 
 **Observation**:

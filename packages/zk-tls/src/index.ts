@@ -4,8 +4,9 @@ import type { AttestationInput } from '@thoth/core';
 import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema, CLAIM_VERSION } from '@thoth/core/claim';
 import type { CanonicalValue } from '@thoth/core/claim-context';
-import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
+import { claimContextDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
+import { bytesToHex } from './hex.js';
 
 /** The zkFetch kind's law tag, also its kind identifier. */
 export const ZK_FETCH_LAW = 'zk-fetch@1';
@@ -388,6 +389,40 @@ export const zkFetchSubjectOf = (request: ZkFetchSubjectRequest): ZkFetchSubject
 export const zkFetchSubjectHashOf = (request: ZkFetchSubjectRequest): Uint8Array => {
   const { method, host, path, body } = zkFetchSubjectOf(request);
   return subjectHashOf([method, host, path, body]);
+};
+
+/** The key under which every witness signs the claim context digest into its context. */
+export const ZK_FETCH_CLAIM_CONTEXT_KEY = 'thothClaimContext';
+
+/**
+ * The claim context digest a witness signs, as lowercase hex without a prefix:
+ * `claimContextDigestOf` over the policy hash, the request's subject hash, the
+ * holder and the window (ADR 0011).
+ *
+ * @throws if the policy fails {@link zkFetchPolicySchema}, the URL does not
+ *   parse, the holder is not 32 bytes, or a window bound is negative.
+ */
+export const zkFetchClaimContextDigestOf = (options: {
+  policy: ZkFetchPolicy;
+  /** The request the witness signs. */
+  request: ZkFetchSubjectRequest;
+  /** Per-claim holder commitment, 32 bytes. */
+  holder: Uint8Array;
+  /** Unix seconds. */
+  windowStart: bigint;
+  /** Unix seconds. */
+  windowEnd: bigint;
+}): string => {
+  const { policy, request, holder, windowStart, windowEnd } = options;
+  return bytesToHex(
+    claimContextDigestOf({
+      policyHash: zkFetchPolicyHashOf(policy),
+      subjectHash: zkFetchSubjectHashOf(request),
+      holder,
+      windowStart,
+      windowEnd,
+    }),
+  );
 };
 
 const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => {
@@ -858,4 +893,24 @@ export const assertEvidenceMatchesPolicy = (
     }
   }
   return host;
+};
+
+/**
+ * Require the witness's observation time to fall inside the proposed window,
+ * bounds included (ADR 0005). The contract bounds the window's length and
+ * checks it against block time.
+ *
+ * @throws if the witness observed outside the window.
+ */
+export const assertObservationInWindow = (options: {
+  claim: Claim<number, number>;
+  verified: VerifiedEvidence;
+}): void => {
+  const { claim, verified } = options;
+  const observedAt = BigInt(verified.claim.timestampS);
+  if (observedAt < claim.windowStart || observedAt > claim.windowEnd) {
+    throw new Error(
+      `witness observation ${observedAt} is outside the claim window [${claim.windowStart}, ${claim.windowEnd}]`,
+    );
+  }
 };

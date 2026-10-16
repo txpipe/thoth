@@ -14,14 +14,20 @@ import {
   parseDisclosedValue,
   parsedEvidenceView,
   type VerifiedEvidence,
+  ZK_FETCH_CLAIM_CONTEXT_KEY,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
   type ZkFetchSlot,
+  zkFetchClaimContextDigestOf,
   zkFetchPolicyHashOf,
   zkFetchPolicySchema,
   zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
-import { assertClaimMatchesDisclosures, assertClaimMatchesSubject } from '@thoth/zk-tls/attestor';
+import {
+  assertClaimMatchesContext,
+  assertClaimMatchesDisclosures,
+  assertClaimMatchesSubject,
+} from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
 import { DISCLOSURE_RULES } from './helpers/helper.js';
 
@@ -349,6 +355,42 @@ describe('assertClaimMatchesSubject', () => {
         verified,
       }),
     ).toThrow(/subjectHash does not match/);
+  });
+});
+
+describe('assertClaimMatchesContext', () => {
+  const policy: ZkFetchPolicy = {
+    allowedHosts: ['api.github.com'],
+    slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+    ...DISCLOSURE_RULES,
+  };
+  const window = { holder: new Uint8Array(32).fill(7), windowStart: 10n, windowEnd: 20n };
+  const claim = window as never;
+  const digestUnder = (signedPolicy: ZkFetchPolicy) =>
+    zkFetchClaimContextDigestOf({ policy: signedPolicy, request: REQUEST, ...window });
+  const verifiedWith = (context: unknown) => verifiedOf(claimWith(REQUEST, context), {});
+
+  it('accepts evidence that signed the claim context digest', () => {
+    const verified = verifiedWith({ [ZK_FETCH_CLAIM_CONTEXT_KEY]: digestUnder(policy) });
+    assertClaimMatchesContext({ claim, verified, policy });
+  });
+
+  it('rejects a digest signed under another policy', () => {
+    const other = { ...policy, allowedHosts: ['example.com'] };
+    const verified = verifiedWith({ [ZK_FETCH_CLAIM_CONTEXT_KEY]: digestUnder(other) });
+    expect(() => assertClaimMatchesContext({ claim, verified, policy })).toThrow(
+      /does not carry this claim's claim context digest/,
+    );
+  });
+
+  it('rejects a null, array or non-JSON context', () => {
+    for (const context of [null, []]) {
+      expect(() =>
+        assertClaimMatchesContext({ claim, verified: verifiedWith(context), policy }),
+      ).toThrow(/does not carry/);
+    }
+    const verified = verifiedOf({ ...claimWith(REQUEST, {}), context: 'not json' }, {});
+    expect(() => assertClaimMatchesContext({ claim, verified, policy })).toThrow(/not valid JSON/);
   });
 });
 

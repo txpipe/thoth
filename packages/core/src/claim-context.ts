@@ -25,7 +25,8 @@ export type CanonicalValue =
 
 /**
  * The shared part of one attestation. Attestors given the same context and
- * the same observation derive the same claim.
+ * the same observation derive the same claim. A kind binds it to its evidence
+ * through {@link claimContextDigestOf} (ADR 0011).
  */
 export interface ClaimContext {
   /** From {@link policyHashOf}. 32 bytes. */
@@ -161,8 +162,8 @@ export function holderCommitmentOf(secret: Uint8Array): Uint8Array {
 }
 
 /**
- * Identify a claim context: SHA-256 of the canonical serialization of
- * `['thoth:claim-context', context]`.
+ * Hash a claim context for a witness to sign: SHA-256 of the canonical
+ * serialization of `['thoth:claim-context', context]`.
  *
  * @throws if a byte field is not 32 bytes or a window bound is negative.
  */

@@ -7,8 +7,8 @@ import type {
 import { attestorIdsOf, memberOf } from '@thoth/client';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { bytes32Schema, claimToMessage } from '@thoth/core/claim';
-import type { z } from 'zod';
+import { claimToMessage } from '@thoth/core/claim';
+import { z } from 'zod';
 import type {
   ProviderClaimData,
   ZkFetchDefinition,
@@ -24,7 +24,15 @@ import type {
   ZkFetchThresholdOptions,
 } from './collect.js';
 import { collectThreshold, ZkFetchThresholdError } from './collect.js';
-import { attestWith, bindRequestToPolicy, buildClaimProposal, proveWith } from './proposal.js';
+import {
+  attestWith,
+  bindRequestToClaimContext,
+  bindRequestToPolicy,
+  buildClaimProposal,
+  proveOptionsShape,
+  proveWith,
+  windowInOrder,
+} from './proposal.js';
 
 export type { ZkFetchAttestorFailure, ZkFetchThresholdAttestment, ZkFetchThresholdOptions };
 export { ZkFetchThresholdError };
@@ -39,8 +47,8 @@ const sameMessage = (a: FlatMessage, b: FlatMessage): boolean =>
 /**
  * What to fetch and which of its fields the evidence reveals.
  *
- * Public headers are visible to whoever verifies the evidence; secret headers
- * and context are not.
+ * Public headers and context are visible to whoever verifies the evidence;
+ * only secret headers are not.
  */
 export interface ZkFetchRequest {
   /** The HTTPS URL to fetch. */
@@ -61,7 +69,11 @@ export interface ZkFetchRequest {
   responseMatches?: readonly ZkFetchResponseMatch[];
   /** Slices of the response revealed to the witness. The policy's, like `responseMatches`. */
   responseRedactions?: readonly ZkFetchResponseRedaction[];
-  /** Arbitrary context signed into the claim, such as a label. */
+  /**
+   * Arbitrary context the witness signs, such as a label. The client adds the
+   * claim context digest under `ZK_FETCH_CLAIM_CONTEXT_KEY`, so a request that
+   * sets that key is refused.
+   */
   context?: Readonly<Record<string, unknown>>;
 }
 
@@ -182,29 +194,50 @@ export interface ZkFetchClientProof<V extends number, PK, S> {
   attest(...ids: string[]): Promise<Attestment<V, PK, S>>;
 }
 
+/** The holder and window one claim is for, fixed before any witness signs. */
+export interface ZkFetchProveOptions {
+  /**
+   * Per-claim commitment from `holderCommitmentOf(secret)`, 32 bytes. Keep the
+   * secret for the contract witness; use a fresh one per claim.
+   */
+  readonly holder: Uint8Array;
+  /** Inclusive start of the signed observation window, Unix seconds. */
+  readonly windowStart: bigint;
+  /** Inclusive end of the signed observation window, Unix seconds. */
+  readonly windowEnd: bigint;
+}
+
+const proveOptionsSchema = z.object(proveOptionsShape).refine(windowInOrder, {
+  message: 'windowStart must not be after windowEnd',
+});
+
 /** The client, ready to prove a request. */
 export interface ZkFetchClient<V extends number, PK, S> {
   /**
    * Fetch through every attestor's witness and require them to agree on one
-   * claim before any attestor is contacted.
+   * claim before any attestor is contacted. Every witness signs the holder and
+   * window through the claim context digest.
    *
-   * @param holder — per-claim commitment from `holderCommitmentOf(secret)`,
-   *   32 bytes. Keep the secret for the contract witness; use a fresh one per claim.
-   * @throws `ZodError` if the holder is not 32 bytes or a prover returns malformed evidence.
+   * @throws `ZodError` if the holder is not 32 bytes, the window is out of range or
+   *   inverted, or a prover returns malformed evidence.
    * @throws `SecretHeaderError` if evidence carries a secret header value.
-   * @throws `Error` if the request carries disclosure rules other than the policy's, a
-   *   prover fails or answers for another origin, evidence fails the policy or does not
-   *   fit the slot counts, or the witnesses disagree.
+   * @throws `Error` if the request carries disclosure rules other than the policy's or
+   *   sets the claim context key, a prover fails or answers for another origin, method,
+   *   path or body, evidence fails the policy or does not fit the slot counts, or the
+   *   witnesses disagree.
    */
-  proveReq(request: ZkFetchRequest, holder: Uint8Array): Promise<ZkFetchClientProof<V, PK, S>>;
+  proveReq(
+    request: ZkFetchRequest,
+    options: ZkFetchProveOptions,
+  ): Promise<ZkFetchClientProof<V, PK, S>>;
   /**
    * Prove with each attestor's own witness and collect a threshold over one
    * message, under a window and holder fixed up front.
    *
    * @returns the first message to reach the threshold, attestations sorted by registry slot.
    * @throws {@link ZkFetchThresholdError} if the options are invalid, the
-   *   request carries disclosure rules other than the policy's, the deadline
-   *   expires, or no message reaches the threshold.
+   *   request carries disclosure rules other than the policy's or sets the
+   *   claim context key, the deadline expires, or no message reaches the threshold.
    */
   collect(
     request: ZkFetchRequest,
@@ -229,7 +262,10 @@ export interface ZkFetchClient<V extends number, PK, S> {
  *     'attestor-b': zkFetchProver({ witnessUrl: witnessB }),
  *   },
  * });
- * const proved = await client.proveReq({ url, method, publicHeaders }, holder);
+ * const proved = await client.proveReq(
+ *   { url, method, publicHeaders },
+ *   { holder, windowStart, windowEnd }, // Unix seconds
+ * );
  * const attestment = await proved.attest('attestor-a', 'attestor-b');
  * ```
  */
@@ -267,9 +303,14 @@ export const zkFetchClient = {
     return {
       collect: (request, options) =>
         collectThreshold({ ...config, policy: checkedPolicy }, request, options),
-      proveReq: async (request, holder): Promise<ZkFetchClientProof<V, PK, S>> => {
-        const checkedHolder = bytes32Schema.parse(holder).slice();
-        const signedRequest = bindRequestToPolicy(request, checkedPolicy);
+      proveReq: async (request, options): Promise<ZkFetchClientProof<V, PK, S>> => {
+        const parsed = proveOptionsSchema.parse(options);
+        const binding = { ...parsed, holder: parsed.holder.slice() };
+        const signedRequest = bindRequestToClaimContext(
+          bindRequestToPolicy(request, checkedPolicy),
+          checkedPolicy,
+          binding,
+        );
         const entries = await Promise.all(
           trusted.attestors.map(async ({ attestor }) => {
             const evidence = await proveWith(provers, attestor, signedRequest);
@@ -280,22 +321,15 @@ export const zkFetchClient = {
         for (const [id, evidence] of entries) {
           evidences[id] = evidence;
         }
-        // The window spans every witness's observation, so each attestor
-        // finds its own inside it (ADR 0005).
-        const observedAt = entries.map(([, evidence]) => evidence.claim.timestampS);
-        const windowStart = BigInt(Math.min(...observedAt));
-        const windowEnd = BigInt(Math.max(...observedAt));
         const proposals = await Promise.all(
           entries.map(async ([id, evidence]) => {
             const claim = await buildClaimProposal({
               evidence,
               policy: checkedPolicy,
               appId,
-              holder: checkedHolder,
               valueSlots,
               byteSlots,
-              windowStart,
-              windowEnd,
+              ...binding,
             });
             return { id, claim, message: claimToMessage(claim) };
           }),

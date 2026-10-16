@@ -5,33 +5,74 @@ import type { TrustedAttestor } from '@thoth/client';
 import { resolveAttestation } from '@thoth/client';
 import type { AttestorDescriptor } from '@thoth/core';
 import type { Claim } from '@thoth/core/claim';
-import { claimSchema } from '@thoth/core/claim';
-import type { ZkFetchDefinition, ZkFetchEvidence, ZkFetchPolicy } from '../index.js';
+import { bytes32Schema, claimSchema } from '@thoth/core/claim';
+import { z } from 'zod';
+import type {
+  ZkFetchDefinition,
+  ZkFetchEvidence,
+  ZkFetchPolicy,
+  ZkFetchSubjectRequest,
+} from '../index.js';
 import {
   assertEvidenceMatchesPolicy,
+  assertObservationInWindow,
+  claimRequestOf,
   claimUrl,
   deriveClaimFromEvidence,
   parsedEvidenceView,
+  ZK_FETCH_CLAIM_CONTEXT_KEY,
+  zkFetchClaimContextDigestOf,
   zkFetchEvidenceSchema,
+  zkFetchSubjectHashOf,
 } from '../index.js';
 import type {
   ZkFetchAttestationInput,
   ZkFetchClientConfig,
   ZkFetchCollectedAttestation,
+  ZkFetchProveOptions,
   ZkFetchRequest,
 } from './index.js';
 
+/** The fields of {@link ZkFetchProveOptions}, shared with the `collect` options schema. */
+export const proveOptionsShape = {
+  holder: bytes32Schema,
+  windowStart: z.bigint().nonnegative(),
+  windowEnd: z.bigint().max(2n ** 64n - 1n),
+};
+
+/** Whether a window starts no later than it ends. */
+export const windowInOrder = (window: { windowStart: bigint; windowEnd: bigint }): boolean =>
+  window.windowStart <= window.windowEnd;
+
+/** The subject a prover signs for `request`: method and body default the way it sends them. */
+const signedSubjectOf = (request: ZkFetchRequest): ZkFetchSubjectRequest => ({
+  method: request.method ?? 'GET',
+  url: request.url,
+  body: request.body ?? '',
+});
+
 /**
- * Require the evidence to attest the origin (scheme, host, port) the request
- * asked for. A redirect or a different path still passes.
+ * Require the evidence to attest the request asked for: its origin (scheme,
+ * host, port) and its subject (method, path, query, body). The claim context
+ * digest covers the subject, so evidence for another one would be refused by
+ * every attestor.
  *
- * @throws if the evidence attests another origin.
+ * @throws if the evidence attests another origin or subject, or its signed
+ *   parameters carry no request.
  */
 const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetchRequest): void => {
   const asked = new URL(request.url).origin;
   const attested = new URL(claimUrl(evidence.claim)).origin;
   if (asked !== attested) {
     throw new Error(`prover returned evidence for ${attested}, not the requested ${asked}`);
+  }
+  if (
+    !isDeepStrictEqual(
+      zkFetchSubjectHashOf(claimRequestOf(evidence.claim)),
+      zkFetchSubjectHashOf(signedSubjectOf(request)),
+    )
+  ) {
+    throw new Error('prover returned evidence for another method, path or body than requested');
   }
 };
 
@@ -42,8 +83,8 @@ const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetc
  * attestor signs and `resolveAttestation` can check each answer against it.
  * The client does not re-verify the witness signature; each attestor does.
  *
- * @throws if the evidence is invalid, fails the policy, or does not fit the
- *   requested slot counts.
+ * @throws if the evidence is invalid, fails the policy, was observed outside
+ *   the window, or does not fit the requested slot counts.
  */
 export const buildClaimProposal = async <V extends number>(options: {
   evidence: ZkFetchEvidence;
@@ -83,13 +124,19 @@ export const buildClaimProposal = async <V extends number>(options: {
     windowStart,
     windowEnd,
   });
+  // Every attestor refuses it anyway; checking here fails before any attestor is contacted.
+  assertObservationInWindow({ claim: derived, verified });
   return claimSchema(valueSlots, byteSlots).parse(derived);
 };
 
-/** Shallow-copy a request with its own `secretHeaders`, so a holder cannot change the original's. */
+/**
+ * Shallow-copy a request with its own `secretHeaders` and `context`, so a
+ * holder cannot change the original's secrets or claim context digest.
+ */
 export const copyRequest = (request: ZkFetchRequest): ZkFetchRequest => ({
   ...request,
   secretHeaders: { ...request.secretHeaders },
+  context: request.context && { ...request.context },
 });
 
 /**
@@ -122,13 +169,39 @@ export const bindRequestToPolicy = (
 };
 
 /**
+ * Return the request with the claim context digest in its context, so every
+ * witness signs the holder and window its evidence is for.
+ *
+ * @throws if the request's context already sets {@link ZK_FETCH_CLAIM_CONTEXT_KEY}, or its
+ *   URL does not parse.
+ */
+export const bindRequestToClaimContext = (
+  request: ZkFetchRequest,
+  policy: ZkFetchPolicy,
+  binding: ZkFetchProveOptions,
+): ZkFetchRequest => {
+  if (request.context !== undefined && Object.hasOwn(request.context, ZK_FETCH_CLAIM_CONTEXT_KEY)) {
+    throw new Error(`request context cannot set ${ZK_FETCH_CLAIM_CONTEXT_KEY}`);
+  }
+  const { holder, windowStart, windowEnd } = binding;
+  const digest = zkFetchClaimContextDigestOf({
+    policy,
+    request: signedSubjectOf(request),
+    holder,
+    windowStart,
+    windowEnd,
+  });
+  return { ...request, context: { ...request.context, [ZK_FETCH_CLAIM_CONTEXT_KEY]: digest } };
+};
+
+/**
  * Prove `request` with the attestor's own witness and check the evidence.
  *
  * The prover gets its own copy, so it cannot change the request that other
  * provers or the secret header check read.
  *
  * @throws if the attestor has no prover, the evidence is invalid or for
- *   another origin, or it carries a secret header value
+ *   another origin or subject, or it carries a secret header value
  *   ({@link SecretHeaderError}).
  */
 export const proveWith = async <PK>(

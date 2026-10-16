@@ -4,21 +4,24 @@
 import type { TrustedAttestor, TrustedSet } from '@thoth/client';
 import { attestorIdsOf, memberOf } from '@thoth/client';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { bytes32Schema } from '@thoth/core/claim';
 import { z } from 'zod';
 import type { ZkFetchDefinition } from '../index.js';
 import type {
   Attestment,
   ZkFetchClientConfig,
   ZkFetchCollectedAttestation,
+  ZkFetchProveOptions,
   ZkFetchRequest,
 } from './index.js';
 import {
   attestWith,
+  bindRequestToClaimContext,
   bindRequestToPolicy,
   buildClaimProposal,
+  proveOptionsShape,
   proveWith,
   SecretHeaderError,
+  windowInOrder,
 } from './proposal.js';
 
 /** Why one attestor's attempt was dropped. Carries no remote error text. */
@@ -60,13 +63,7 @@ export class ZkFetchThresholdError extends Error {
 }
 
 /** The claim inputs and limits shared by every attestor in one `collect` call. */
-export interface ZkFetchThresholdOptions {
-  /** Per-claim holder commitment, 32 bytes. */
-  readonly holder: Uint8Array;
-  /** Inclusive start of the signed observation window, Unix seconds. */
-  readonly windowStart: bigint;
-  /** Inclusive end of the signed observation window, Unix seconds. */
-  readonly windowEnd: bigint;
+export interface ZkFetchThresholdOptions extends ZkFetchProveOptions {
   /** Local deadline for the whole call, Unix milliseconds. Not signed. */
   readonly expiresAt: number;
   /** Distinct registry slots that must sign the same message. */
@@ -79,9 +76,7 @@ export interface ZkFetchThresholdOptions {
 
 const optionsSchema = z
   .object({
-    holder: bytes32Schema,
-    windowStart: z.bigint().nonnegative(),
-    windowEnd: z.bigint().max(2n ** 64n - 1n),
+    ...proveOptionsShape,
     expiresAt: z.number().int(),
     threshold: z.number().int().positive(),
     // `setTimeout` fires immediately past 2^31 - 1 ms.
@@ -92,7 +87,7 @@ const optionsSchema = z
       .max(2 ** 31 - 1),
     attestorIds: z.array(z.string()).optional(),
   })
-  .refine(({ windowStart, windowEnd }) => windowStart <= windowEnd);
+  .refine(windowInOrder);
 
 type Options = z.output<typeof optionsSchema>;
 type FailureReason = ZkFetchAttestorFailure['reason'];
@@ -211,8 +206,8 @@ const runAttempt = async <V extends number, PK, S>(
  *
  * @returns the first message to reach the threshold, attestations sorted by registry slot.
  * @throws {@link ZkFetchThresholdError} if the options are invalid, the request
- *   carries disclosure rules other than the policy's, the deadline expires,
- *   or the candidates run out.
+ *   carries disclosure rules other than the policy's or sets the claim context
+ *   key, the deadline expires, or the candidates run out.
  */
 export const collectThreshold = async <V extends number, PK, S>(
   config: ZkFetchClientConfig<V, PK, S>,
@@ -220,12 +215,16 @@ export const collectThreshold = async <V extends number, PK, S>(
   supplied: ZkFetchThresholdOptions,
 ): Promise<ZkFetchThresholdAttestment<V, PK, S>> => {
   const { options, candidates } = parseOptions(config.trusted, supplied);
-  // A snapshot bound to the policy's disclosure rules, so the caller cannot
-  // change the secret headers mid-call or drive witnesses with other rules.
-  // An unbound request is invalid input, like invalid options.
+  // A snapshot bound to the policy's disclosure rules and the claim context,
+  // so the caller cannot change the secret headers mid-call or drive witnesses
+  // with other rules. An unbound request is invalid input, like invalid options.
   let snapshot: ZkFetchRequest;
   try {
-    snapshot = bindRequestToPolicy(request, config.policy);
+    snapshot = bindRequestToClaimContext(
+      bindRequestToPolicy(request, config.policy),
+      config.policy,
+      options,
+    );
   } catch (error) {
     throw new ZkFetchThresholdError('invalid-options', [], { cause: error });
   }
