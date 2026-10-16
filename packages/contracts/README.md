@@ -217,11 +217,12 @@ assert(c.bytePresent[0] && c.bytePresent[1], "byte value 0 must have been measur
 Because presence is part of the signed message, a claim whose `present[i]`
 flag disagrees with an asserted predicate can never pass signature verification.
 
-Honest claims always give a byte value's two halves the same flag (the attestor
-law derives them from a single disclosure), but the module does **not** enforce
-the pairing: the absent-slot law checks each half only against zero. A predicate
-that must hold against a colluding threshold should require both flags or
-compare the reassembled value.
+Honest attestors always give a byte value's two halves the same flag
+(`claimToMessage` writes the slot's one flag on both), so an unpaired claim
+carries at least `#N` dishonest signatures. The module does **not** enforce the
+pairing — the absent-slot law checks each half only against zero — and does
+not need to: colluding attestors can sign any well-formed claim anyway, and are out
+of scope (ADR 0003).
 
 ## Deploy wiring
 
