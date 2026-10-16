@@ -7,8 +7,12 @@ Thoth turns an off-chain fact into a claim a Midnight contract can predicate ove
 ### Roles
 
 **Attestor**:
-An entity that verifies evidence under a policy and signs a claim if satisfied. Its signature is the attestation.
+An entity that verifies evidence under a policy and signs a claim if satisfied. Its signature is the attestation. `Attestor` in code is one deployed instance: a law paired with a signing key.
 _Avoid_: Notary, oracle, signer.
+
+**Descriptor**:
+The public view of an attestor that a dApp pins: its id, its law and its public key, without the signing key (`AttestorDescriptor` in code).
+_Avoid_: Attestor info, handle.
 
 **Witness**:
 The entity that runs the fetch and signs the evidence behind a claim. Each attestor trusts one witness. Not a Compact `witness` function, which is how the contract reads private input.
@@ -17,6 +21,10 @@ _Avoid_: Prover, node.
 **Prover**:
 The client-side component that obtains evidence from a witness.
 _Avoid_: Witness, attestor.
+
+**Evidence**:
+What a prover obtains from a witness and an attestor verifies before signing, such as a zkFetch proof of an HTTPS fetch. The claim does not commit to it (ADR 0007).
+_Avoid_: Proof.
 
 ### Kinds
 
@@ -46,6 +54,10 @@ _Avoid_: Scope, contract id.
 The rules an attestor enforced to produce an attestation, for example which hosts it accepts. The claim commits to it by hash.
 _Avoid_: Rules, config.
 
+**Slot map**:
+The part of a policy that says which value slot each extracted field fills and the parse rule that turns the field's string into the slot's value (`slots` in a zkFetch policy).
+_Avoid_: Schema, field map.
+
 **Disclosure rules**:
 The zkFetch policy's response patterns and reveal whitelist (`responseMatches` and `responseRedactions`): the exact extraction the witness executed and signed into the claim. The attestor requires the signed rules to equal the policy's, and the policy hash commits to them, so a claim slot cannot be pointed at a different field than the policy intends.
 _Avoid_: Extraction plan, reveal plan.
@@ -67,19 +79,19 @@ A per-claim commitment, not a user id. Only the owner of that claim's secret can
 _Avoid_: Owner, user, account, identity.
 
 **Window**:
-When the attestor observed the claim, not when the underlying fact happened. The contract checks it against its own clock; a fact's own time travels as a value.
+When the attestor's witness observed, in Unix seconds, not when the underlying fact happened. It is not the exact fetch time: a zkFetch witness's observation time (`timestampS`) comes from the request, and Reclaim rejects it only if it is more than 10 minutes in the future, with no lower bound. So the window shows the fetch happened no earlier than about 10 minutes before `windowStart`. Freshness still holds on-chain, because post-dating is capped. The contract checks the window against its own clock; a fact's own time travels as a value (ADR 0005).
 _Avoid_: Timestamp, event time.
 
 **present**:
-The mask marking which value slots were measured, one flag per slot, numeric slots first and byte slots after. In the signed message each byte slot's flag is carried on both of its 16-byte halves. `present[i]` true means slot i was measured, even when its value is zero. An absent slot must carry zero.
+The mask marking which value slots were measured, one flag per slot, numeric slots first and byte slots after. `present[i]` true means slot i was measured, even when its value is zero. An absent slot must carry zero.
 _Avoid_: Valid, filled.
 
 **Values**:
-The measured values of a claim, one per value slot: numbers in the numeric slots, fixed-width byte strings in the byte slots. Zero is a valid measured value; read `present` to know whether a slot was measured. What each slot means is the policy's slot map, not the claim's.
+The measured values of a claim, one per value slot: numbers in the numeric slots, fixed-width byte strings in the byte slots. Zero is a valid measured value; read `present` to know whether a slot was measured. What each slot means is the policy's slot map.
 _Avoid_: Data, payload.
 
 **Byte slot**:
-A value slot carrying a fixed-width byte string, for facts that are not numbers, such as identifiers. A policy's parse rule canonicalizes a source's string into the slot: `bytes` keeps its UTF-8 bytes, `hex` and `base64` decode it, and an optional `length` pins the exact byte count. Normalization only folds representations that carry no data (hex case, an optional `0x` marker, the base64 alphabet, base64 padding) — separators and whitespace are data (ADR 0010). The slot is exactly its bytes; equality is byte equality. The signed message splits it into two adjacent 16-byte halves and repeats the slot's flag on each, so a predicate reassembles the halves in-circuit.
+A value slot carrying a 32-byte string, for facts that are not numbers, such as identifiers (ADR 0009). A parse rule canonicalizes a source's string into the slot, zero-padded: `bytes` keeps its UTF-8 bytes, `hex` and `base64` decode it, and an optional `length` pins the exact byte count. Decoding folds only representations that carry no data, such as hex case; separators and whitespace are data (ADR 0010). The slot is exactly its bytes, and equality is byte equality. In the message and the contract's `Claim` it occupies two 16-byte byte halves (`byteHalves`), which a predicate reassembles in-circuit; the wire layout places them.
 _Avoid_: Blob, string slot.
 
 **Claim proposal**:
@@ -87,7 +99,7 @@ The claim the client sends an attestor with the evidence. The attestor signs the
 _Avoid_: Draft, request.
 
 **Claim context**:
-The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` hashes it; nothing signs the digest. The app id is not part of it: no witness signs it, and each attestor takes it from the claim proposal.
+The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` hashes it to identify it; nothing signs the digest. The app id is not part of it: each attestor takes the app id from the claim proposal.
 _Avoid_: Intent, request, session.
 
 **Observation**:
@@ -102,6 +114,10 @@ _Avoid_: Claim id, nonce.
 The stable subject an observation is about, which could be observed again later, such as an account balance or a given event.
 _Avoid_: Truth, data.
 
+**Predicate**:
+The app's own circuit logic over an accepted claim, such as "at least 100 stars". Attestors certify the fact; the predicate decides what the app does with it.
+_Avoid_: Rule, condition, check.
+
 ### Signing and collection
 
 **Message**:
@@ -109,7 +125,7 @@ The flat list of field values the attestors sign and the contract rebuilds.
 _Avoid_: Payload, digest.
 
 **Wire layout**:
-The order and encoding of the message's fields: a byte value takes two adjacent fields, each half carrying the slot's flag, and the header signs the byte-half count so the layout is bound, not just the length. The `attestation.compact` header and the table in [docs/DESIGN.md](docs/DESIGN.md#wire-order) write it out; `buildMessage` defines it and `claimToMessage` mirrors it.
+The order and encoding of the message's fields. The [`attestation.compact`](packages/contracts/attestation.compact) header and the table in [docs/DESIGN.md](docs/DESIGN.md#wire-order) write it out; `buildMessage` defines it and `claimToMessage` mirrors it.
 _Avoid_: Format, serialization.
 
 **Attestation**:
@@ -147,11 +163,11 @@ The N in N-of-M: how many registry keys must sign the same message.
 _Avoid_: Quorum, majority.
 
 **Nullifier**:
-The hash of the observation identity. The contract stores it so the same observation is not accepted twice, whatever the holder.
+The hash of the observation identity. The contract stores it so the same observation is not accepted twice, whatever the holder. It is public and unsalted, so anyone who can guess a claim's values can confirm the guess by recomputing it (ADR 0009).
 _Avoid_: Replay marker, nonce.
 
 **Claims vault**:
-The store of accepted claims, keyed by a commitment. Claim values are never stored on-chain.
+The store of accepted claims, keyed by a commitment. It does not store claim values on-chain, though the nullifier still lets anyone confirm a guessed value.
 _Avoid_: Vault, storage.
 
 ## Relationships
