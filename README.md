@@ -1,125 +1,132 @@
 # Thoth
 
+Private N-of-M attestation for Midnight: your contract accepts an off-chain fact only when N of the M attestors it pinned have signed it, and the fact stays private.
+
 > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
-
-Private N-of-M attestation for Midnight.
-
-Thoth is a plugin layer that lets Midnight contracts accept externally attested
-information with ZK privacy: the same attested value can prove different
-predicates, and the underlying data never leaves the user's machine.
 
 ## What it is
 
-Three pieces:
+Thoth is a set of Compact modules and TypeScript packages. Your Midnight
+contract embeds the modules, and your dApp uses the packages to collect
+signatures from independent [attestors](CONTEXT.md#roles) and hand them to the
+contract as private input.
 
-- **Contract module**: An embeddable Compact module set: each app
-  carries its own pinned attestor registry, verifies a fixed threshold of
-  independent signatures over a canonical claim, checks when it was observed,
-  and composes optional policy circuits per contract.
-- **Attestor SDK**: A library that provides the types and functions that
-  attestors need to provide the service. Includes different packages to adapt
-  for different sources and types of attestation (zkFetch, price band, …)
-  It powers a shared network of independent attestors.
-- **Client SDK**: For apps and users: build claims, collect
-  signatures, call the contract, manage private state.
+Thoth fits your app if:
+
+- your contract needs a fact from outside the chain, such as a value from a
+  web API;
+- you want several independent operators to vouch for it, not one;
+- your contract should test the fact in-circuit without publishing it.
+
+It does not fit if a single authority's signature is enough, if you need a
+vote or a judgment rather than an observed fact, or if you need verifiable
+computation. [docs/DESIGN.md](docs/DESIGN.md#out-of-scope) lists what is out
+of scope and why.
 
 ## How it works
 
-1. The client obtains **evidence** from a data source — e.g. a third-party API
-   via Reclaim Protocol's ZkFetch, producing a zero-knowledge proof that the
-   connection took place and the data wasn't forged.
-2. The client sends that evidence to the attestors in its app's trusted set.
-   Each attestor verifies it and **signs a canonical claim** derived from it
-   with its own key — its signature is the attestation.
-3. The client submits the claim with N signatures to the Midnight contract as
-   **private witness data**. The contract verifies, in zero knowledge: each
-   signature is valid and from a **distinct** attestor in the app's pinned
-   registry; the claim is under a policy the app accepts; absent slots carry
-   zero; the caller knows the secret behind the claim's holder; the observation
-   hasn't been submitted before (no replay); and the claim satisfies the app's
-   observation and freshness windows. The full list is in
-   [`docs/DESIGN.md`](docs/DESIGN.md#the-contract).
-4. Only if those checks pass does the app's **predicate** run over the claim
-   values. Claim values are never stored on-chain — only their commitments and
-   the predicate outcome — and, depending on the app's configuration, which
-   attestors vouched may be hidden too.
+1. Your dApp obtains evidence of a fact. With the zkFetch kind, that is a
+   Reclaim zkFetch proof of an HTTPS response.
+2. Each attestor in your app's [trusted set](CONTEXT.md#signing-and-collection)
+   checks the evidence and signs a canonical [claim](CONTEXT.md#the-claim)
+   derived from it.
+3. Your dApp submits the claim and N signatures to your contract as private
+   witness data. The contract checks the signatures against its pinned
+   registry, the policy, the window, the holder and replay
+   ([full list](packages/contracts/README.md#guarantees-and-limits)).
+4. Your contract's predicate runs over the claim values.
 
-Attestors certify facts: a claim is a canonical statement of what
-was observed, and the application defines the predicate over it.
+Attestors certify facts, not decisions: a claim states what was observed, and
+your app defines the predicate over it.
 
-## Repository layout
+Claim values are private witness data and are not stored on-chain; the
+contract stores only commitments and the nullifier. They are not hidden from
+guessing, though: the nullifier is a public hash of the observation, so anyone
+can confirm a guessed value by recomputing it. This is an open security issue
+(ADR 0009).
 
-```
-thoth/
-├── packages/                   # @thoth/* npm workspace packages
-│   ├── attestor/              # @thoth/attestor — host: key boundary, instances, helpers
-│   ├── client/                # @thoth/client — dApp-side seam: TrustedSet, transport, primitives
-│   ├── contracts/             # @thoth/contracts — Compact on-chain modules
-│   │   ├── attestation.compact     # N-of-M verification, replay/window control, claims vault
-│   │   ├── attestor_registry.compact  # pinned attestor keys + signature counting
-│   │   ├── examples/example_app.compact  # 2-of-3 example embedding
-│   │   ├── test/                   # simulator tests + helpers
-│   │   └── README.md               # how to embed the modules in your own contract
-│   ├── core/                  # @thoth/core — keyless claim/envelope types
-│   └── zk-tls/                # @thoth/zk-tls — zkFetch kind: shared logic + attestor + client
-├── docs/
-│   ├── DESIGN.md               # design overview, the claim and its wire order
-│   ├── kind-author-guide.md    # how to add a new attestor kind
-│   └── adr/                    # architecture decision records
-├── examples/demo-attestation/  # recorded zkFetch evidence fixture
-├── CONTEXT.md                  # domain glossary
-├── tsconfig.base.json          # shared TypeScript compiler options for all packages
-└── package.json                # repo root: npm workspace + shared scripts, CI
-```
+## Which package to use
 
-The repo is an npm workspace monorepo: the active `@thoth/*` packages — `core`,
-`attestor`, `client`, `contracts`, and `zk-tls` — live under `packages/` and are
-wired into the root `workspaces`.
+| Package | Use it to |
+|---------|-----------|
+| [`@thoth/contracts`](packages/contracts/README.md) | Embed N-of-M verification in your Midnight contract |
+| [`@thoth/zk-tls`](packages/zk-tls/README.md) | Attest a web fact with zkFetch, as a dApp or as an attestor operator |
+| [`@thoth/client`](packages/client/README.md) | Write a kind's client: the trusted set and the attestation checks |
+| [`@thoth/attestor`](packages/attestor/README.md) | Write a kind's attestor: pair its law with a signing key |
+| [`@thoth/core`](packages/core/README.md) | Write a kind's law against the shared claim types |
 
-## The contracts
+If you are building a dApp on web data, start with `@thoth/contracts` and
+`@thoth/zk-tls`. To add a new kind of attestor, follow
+[docs/kind-author-guide.md](docs/kind-author-guide.md).
 
-Two embeddable Compact modules plus a top-level example (`packages/contracts/README.md`):
+## Quickstart
 
-| File | Module | Role |
-|------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #B, #N, #M>` | Verifies N-of-M signatures over a flat signed message, controls replay (`nullifiers`) and the observation window (`maxWindow`, `freshnessWindow`), stores a `claimsVault` entry keyed by `persistentCommit(claim, rand)` |
-| `attestor_registry.compact` | `attestor_registry<#M, #K>` | `initRegistry` seals the M pinned attestor keys at deploy and rejects duplicates; `countValidSignatures` via the stdlib `jubjubSchnorrVerify` — counts only, no threshold |
-| `examples/example_app.compact` | top-level | Example app embedding `Attestation<22, 3, 2, 2, 3>` (2-of-3) |
-
-## Development
-
-Requirements: Node.js 24 (`.nvmrc`), the Compact CLI (compiler 0.34.0).
+No deploy script ships yet. The closest thing to a quickstart is
+[`packages/contracts/test/acceptance.test.ts`](packages/contracts/test/acceptance.test.ts):
+it runs two zkFetch attestors, collects a 2-of-3 claim, and submits it to the
+contract simulator. Run it with the [dev setup](CONTRIBUTING.md#dev-setup) in
+place:
 
 ```bash
 npm install
-npm test          # compiles the mock contracts, then runs vitest
-npm run check     # biome format/lint + compact format check
+npm test -- acceptance
 ```
 
-CI (`.github/workflows/`) runs compact compilation, type checks (`npm run types`),
-vitest, and biome on every push/PR.
+The path it covers, in short:
 
-## Docs
+```ts
+// 1. Each operator runs an attestor that trusts its own Reclaim witness.
+const attestors = [
+  zkFetchAttestor({ id: 'attestor-0', keyPair: keyPair0, witnessAddress: witness0 }),
+  zkFetchAttestor({ id: 'attestor-1', keyPair: keyPair1, witnessAddress: witness1 }),
+];
 
-- `docs/DESIGN.md` — design overview, the claim, and its wire order
-- `docs/kind-author-guide.md` — how to add a new attestor kind
-- `CONTEXT.md` — the domain glossary
-- `docs/adr/` — the design decisions and their reasons
-- `AGENTS.md` — guide for AI coding agents working in this repo
-- `packages/core/README.md` — the keyless internal law (`@thoth/core/claim`)
-- `packages/attestor/README.md` — the host: key boundary, instances, helpers
-- `packages/client/README.md` — the dApp-side base: trusted set, transport, resolution
-- `packages/contracts/README.md` — the on-chain Compact modules: semantics, module parameters, deploy wiring
-- `packages/zk-tls/README.md` — the concrete zkFetch kind: shared logic, attestor, client
+// 2. You deploy your contract: its registry pins the attestors' public keys
+//    (seedKeys) and it seals zkFetchPolicyHashOf(policy) (policyHashes).
 
-## Name origin
+// 3. Your dApp collects 2 signatures and places each at its registry slot.
+const client = zkFetchClient.init({
+  trusted: buildTrustedSet({
+    registrySize: 3,
+    attestors: attestors.map((a, registryIndex) => ({ attestor: descriptorOf(a), registryIndex })),
+  }),
+  transport, verifier: jubjubVerifier, policy, appId, valueSlots: 3, byteSlots: 1, provers,
+});
+const { claim, collected } = await client.collect(request, {
+  holder: holderCommitmentOf(holderSecret),
+  windowStart, windowEnd, expiresAt, threshold: 2, attestorTimeoutMs: 5_000,
+});
 
-Thoth — Egyptian god of writing and records; the recorder and verifier of attestations.
+// 4. Your contract's getAttestationWitness returns toContractClaim(claim), the
+//    signatures by slot and a commitment randomness; getHolderSecret returns
+//    holderSecret. Then you call verifyAttestation.
+```
 
-## Origin
+[`examples/example_app.compact`](packages/contracts/examples/example_app.compact)
+is a 2-of-3 contract with a predicate; the
+[dApp guide](packages/zk-tls/docs/dapp-integration.md) and the
+[attestor guide](packages/zk-tls/docs/attestor-guide.md) cover each side in
+full.
 
-Extracted from Witness Fitness — 2nd place, open track, Midnight Buenos Aires hackathon.
+## Midnight City demo
 
-## License
+Midnight City is a proof of concept built on Thoth, preserved on the
+[`midnight-city-demo`](https://github.com/txpipe-shop/thoth/tree/midnight-city-demo)
+branch. It is a demo, not supported code. It is pinned to an older Thoth that
+parses identifiers with a temporary `bytes8` rule, which the byte value slots
+replace.
 
-MIT
+## Roadmap
+
+- [`v0`](https://github.com/txpipe-shop/thoth/milestone/1): the work before the first tag.
+- [`Next`](https://github.com/txpipe-shop/thoth/milestone/2): what comes after.
+- [`frozen`](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+label%3Afrozen): ideas for later.
+
+## Links
+
+- [docs/DESIGN.md](docs/DESIGN.md): the architecture, the claim and its wire order
+- [docs/kind-author-guide.md](docs/kind-author-guide.md): how to add an attestor kind
+- [docs/adr/](docs/adr/): the design decisions and their reasons
+- [CONTEXT.md](CONTEXT.md): the glossary
+- [CONTRIBUTING.md](CONTRIBUTING.md): dev setup, repo layout and commands
+- License: [MIT](LICENSE)

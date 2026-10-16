@@ -26,23 +26,8 @@ add an attestor kind, follow [`docs/kind-author-guide.md`](docs/kind-author-guid
 
 ## Commands
 
-Run everything from the repo root (npm workspace):
-
-- `npm install` — install all workspaces
-- `npm run types` — typecheck every package (`tsc --noEmit` per workspace)
-- `npm test` — compiles the mock contracts and builds the packages (via
-  `pretest`), then runs vitest (contract simulator, core, and zk-tls kind tests)
-- `npm run check` — biome format/lint + `compact format -c` check
-- `npm run check:fix` — auto-fix biome + compact formatting
-- `npm run build` — build all packages that have a `build` script (`tsc`),
-  producing `dist/`
-- `npm run compact` / `npm run compact:no-zk` — compile the mock top-level
-  contracts (with/without PLONK key generation)
-
-Per-package: `npm run <script> --workspace=packages/<name>`.
-
-CI (`.github/workflows/`) runs compact compilation, type checks, vitest, and
-biome on every push/PR.
+Run everything from the repo root (npm workspace). The commands, dev setup
+and CI are listed in [`CONTRIBUTING.md`](CONTRIBUTING.md#commands).
 
 ## Gotchas
 
@@ -57,27 +42,9 @@ biome on every push/PR.
 
 ## Repository layout
 
-```
-thoth/
-├── packages/
-│   ├── attestor/       # @thoth/attestor  — host: key boundary, instances, helpers
-│   ├── client/         # @thoth/client    — dApp-side seam: TrustedSet, transport, primitives
-│   ├── contracts/      # @thoth/contracts — Compact modules (+ tests)
-│   ├── core/           # @thoth/core      — keyless claim/envelope types
-│   │   ├── src/claim.ts                   — claim types served at @thoth/core/claim
-│   │   └── src/claim-context.ts           — claim-context hashes at @thoth/core/claim-context
-│   └── zk-tls/         # @thoth/zk-tls    — zkFetch kind: attestor law + client (fixture-backed tests)
-├── docs/
-│   ├── DESIGN.md       # design overview, the claim and its wire order
-│   ├── kind-author-guide.md  # how to add an attestor kind
-│   ├── adr/            # architecture decision records
-│   └── agents/         # agent skill configuration
-├── CONTRIBUTING.md     # dev setup, repo layout, commands
-├── examples/demo-attestation/  # recorded zkFetch evidence fixture
-├── CONTEXT.md          # domain glossary
-├── README.md           # human-oriented overview
-└── AGENTS.md           # this file
-```
+See [`CONTRIBUTING.md`](CONTRIBUTING.md#repository-layout). In addition,
+`docs/agents/` holds the agent skill configuration and `AGENTS.md` is this
+file.
 
 ## Package invariants
 
@@ -208,7 +175,7 @@ READMEs don't repeat it.
   `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.
 - After changing Compact sources, recompile before running tests:
   `npm run compact:no-zk` (the `pretest` hook does this automatically).
-- `packages/contracts/test/acceptance.test.ts` is the cross-seam check (zk-tls
+- `packages/contracts/test/acceptance.test.ts` is the end-to-end check (zk-tls
   witnesses → attestors → client → simulator); its header explains the setup.
 - `packages/zk-tls/test/live.test.ts` is an opt-in live check against two real
   witnesses; it skips unless `WITNESS_URLS` names them, so `npm test` and CI
