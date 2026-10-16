@@ -201,9 +201,8 @@ export interface AttestationVerifier<PK, S, Msg = FlatMessage> {
  * is accepted), the returned key is the pinned key, the message equals
  * `expectedMessage` when given, the claim equals `expectedClaim`, the message
  * is `definition.message(expectedClaim)`, and the signature verifies. A
- * verifier that throws rejects the signature. Vetting before collection keeps
- * a forged signature from failing on-chain and costing fees; see the README's
- * "Design decisions".
+ * verifier that throws rejects the signature. The README's "Design decisions"
+ * says why it vets before collection.
  *
  * @throws {@link AttestorNotInTrustedSetError} if `member` is not in `trusted`.
  * @throws {@link AttestationMismatchError} if a check fails; `reason` names it.

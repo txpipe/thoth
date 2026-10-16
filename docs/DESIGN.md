@@ -24,8 +24,8 @@ can feed any number of predicates within the app it was signed for (its
 `appId`).
 
 One attestor alone would be almost no assurance, so each app pins M attestors
-and requires N of them to sign the same claim. Colluding attestors are out of
-scope ([ADR 0003](adr/0003-colluding-attestors-out-of-scope.md)).
+and requires N of them to sign the same claim. Colluding attestors are
+[out of scope](#out-of-scope).
 
 ### Kinds
 
@@ -44,11 +44,9 @@ kind needs no contract change. To add one, see
 - **The evidence** goes to the attestors. It shows the disclosed values the
   claim is derived from, not the credentials or anything the fetch redacted.
 - **The claim values** are private witness data in the contract and are not
-  stored on-chain; only commitments, the nullifier and the predicate outcome
-  are. They are not hidden from guessing, though: the nullifier is a public,
-  unsalted hash of the observation, so anyone can confirm a guessed value by
-  recomputing it. This is easy for an enumerable identifier in a byte slot,
-  and it is an open security issue ([ADR 0009](adr/0009-byte-value-slots-in-the-claim.md)).
+  stored on-chain, but the public nullifier lets anyone confirm a guessed
+  value; the [`@thoth/contracts` README](../packages/contracts/README.md#guarantees-and-limits)
+  says what the ledger makes public.
 
 Matching values alone do not prove where they came from. An app that needs
 source binding recomputes `subjectHash` in-circuit from private subject fields
@@ -73,10 +71,7 @@ The terms are defined in [`CONTEXT.md`](../CONTEXT.md#the-claim).
 | `byteValues` | `W` positional 32-byte measurements (identifiers, strings) ([ADR 0009](adr/0009-byte-value-slots-in-the-claim.md)) |
 
 The window is when the attestor's witness looked, not when the fact happened,
-and it is not exact. A zkFetch witness takes its timestamp from the request,
-and Reclaim rejects it only when it is more than 10 minutes in the future. So
-the window shows the fetch happened no earlier than about 10 minutes before
-`windowStart`. Freshness still holds on-chain, because post-dating is capped.
+and it is not the exact fetch time ([Window](../CONTEXT.md#the-claim)).
 
 An absent slot must carry zero; a present slot may be zero. There is no nonce
 and no kind code: the contract derives replay protection from the observation
@@ -154,9 +149,8 @@ sequenceDiagram
 
 ## Out of scope
 
-- **Colluding attestors**: N or more pinned attestors can sign a claim under a
-  policy they do not enforce, and nothing on-chain can stop it. The threshold
-  assumes the pinned operators are honest and independent ([ADR 0003](adr/0003-colluding-attestors-out-of-scope.md)).
+- **Colluding attestors**: the threshold assumes the pinned operators are
+  honest and independent ([ADR 0003](adr/0003-colluding-attestors-out-of-scope.md)).
 - **Org or 1-of-1 attestation**: with a single authority, the registry and the
   threshold are redundant; a plain signature checked in a witness function
   does the whole job.

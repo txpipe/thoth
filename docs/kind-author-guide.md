@@ -26,8 +26,8 @@ hash (ADR 0002, ADR 0008).
 | Instance builder | attestor | `buildAttestor` | `zkFetchAttestor` |
 | Client | dApp | `@thoth/client` | `zkFetchClient` |
 
-Put shared logic at the package root, so a client-only app never imports the
-attestor host. Give the attestor and the client their own subpath entries, as
+Put shared logic at the package root, so a client-only app never imports
+`@thoth/attestor`. Give the attestor and the client their own subpath entries, as
 `@thoth/zk-tls/attestor` and `@thoth/zk-tls/client` do.
 
 ## 1. Name the law
@@ -50,14 +50,11 @@ Never bake an app's policy into an attestor instance.
   Policies that mean the same thing must hash the same, or two honest
   attestors sign different messages and never reach the threshold together.
 - Each slot declares how its disclosed string is interpreted. `int` or `float`
-  feeds a numeric slot. The byte rules fill a 32-byte slot: `bytes` keeps the
-  string's UTF-8 bytes (not injective — trailing NULs and unpaired surrogates
-  collapse into the padding), `hex` decodes case-insensitive hex with an
-  optional `0x` prefix, and `base64` decodes the standard or URL-safe alphabet
-  with optional `=` padding. A value that does not fit, or misses a declared
-  `length`, is not certifiable. Decoding never deletes a character — separators
-  and whitespace are data (ADR 0010). Numeric rules must target numeric slots;
-  byte rules must target byte slots.
+  feeds a numeric slot; the byte rules `bytes`, `hex` and `base64` fill a
+  32-byte slot, as the [Byte slot](../CONTEXT.md#the-claim) entry describes
+  (ADR 0010). A value that does not fit, or misses a declared `length`, is not
+  certifiable. Numeric rules must target numeric slots; byte rules must target
+  byte slots.
 - Keep per-operator trust anchors out of the policy. Which witness an attestor
   trusts is instance configuration (zkFetch's `witnessAddress`), not law.
 - Pin the hash of one fixed policy to its bytes in a test, as
@@ -106,13 +103,12 @@ decides only the header fields that come from the evidence and the values:
 - `byteValues` are 32-byte values (identifiers, strings), positional, one per
   byte slot. The policy's byte rule canonicalizes a disclosed string into the
   32-byte slot, zero-padding shorter values; a value that does not fit is not
-  certifiable and its slot stays unpresent. The kind layer carries one flag
-  per byte slot (`present[V + i]`); `claimToMessage` and
-  the contract split each value into two adjacent 16-byte halves and repeat the
-  flag on both halves. The contract's witness takes that split shape too, so a
-  dApp returns `toContractClaim(claim)` (from `@thoth/core/claim`) from
-  `getAttestationWitness`, never the kind-facing claim itself, even with
-  `W = 0`, whose empty `bytePresent`/`byteHalves` the contract still requires.
+  certifiable and its slot stays unpresent. Your claim carries one flag per
+  byte slot (`present[V + i]`); the message and the contract use the split
+  shape in the [wire order](DESIGN.md#wire-order). So a dApp returns
+  `toContractClaim(claim)` (from `@thoth/core/claim`) from
+  `getAttestationWitness`, never your claim itself, even with `W = 0`, whose
+  empty `bytePresent`/`byteHalves` the contract still requires.
 - `appId` and `holder` come from the claim proposal. The attestor signs them
   but cannot check them. The contract checks `holder` against the caller's
   secret; `appId` is compared by the app's own predicate, not by the module.
@@ -157,8 +153,10 @@ The [`@thoth/attestor` README](../packages/attestor/README.md#usage) signs the
 parsed proposal to stay short; a real kind signs the claim it derived, as
 `zkFetchAttestor` does.
 
-The instance has no registry slot or fixed slot counts, so one instance and
-signing key can serve apps with different claim layouts. Each consuming contract
+The instance has no registry slot
+([why](../packages/attestor/README.md#design-decisions)) and no fixed slot
+counts, so one instance and signing key can serve apps with different claim
+layouts. Each consuming contract
 enforces its own fixed `#V` and `#B`.
 
 Infer the requested counts from `claim.values.length` and

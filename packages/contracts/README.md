@@ -5,11 +5,6 @@ in-circuit, for dApp developers who consume Thoth claims on-chain.
 
 > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
-| File | Module | Role |
-|------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
-| `attestor_registry.compact` | `attestor_registry<#M, #K>` | Seals the `M` pinned attestor keys at deploy and counts the signatures that verify, each against its own slot. |
-
 ## Install
 
 The package is not on npm. Use the modules from a checkout of this repo: point
@@ -17,10 +12,14 @@ The package is not on npm. Use the modules from a checkout of this repo: point
 `attestor_registry.compact` unchanged into your project (they import each
 other as siblings). Compile with Compact `0.34.0` and pin
 `@midnight-ntwrk/compact-runtime` to `0.19.0` in the driver: the off-chain
-message encoder matches the circuit only at that version. The npm name may
-change until the npm scope is settled.
+message encoder matches the circuit only at that version.
 
 ## Usage
+
+| File | Module | Role |
+|------|--------|------|
+| `attestation.compact` | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
+| `attestor_registry.compact` | `attestor_registry<#M, #K>` | Seals the `M` pinned attestor keys at deploy and counts the signatures that verify, each against its own slot. |
 
 Embed both modules in your top-level contract, seal the deploy-time values in
 the constructor, and export `verifyAttestation` as the entry point:
@@ -68,14 +67,14 @@ export circuit requireStars(id: Bytes<32>, min: Uint<64>): [] {
 ```
 
 [`examples/example_app.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/examples/example_app.compact)
-is this contract in full; the mocks in `test/mocks/` show more predicates,
+is this contract without the predicate; the mocks in `test/mocks/` show more predicates,
 including source binding and reading a byte value.
 
 The module parameters, fixed when you embed:
 
 - `#V` numeric value slots and `#B` byte halves, two per 32-byte byte value,
   so `#B` is even (`B = 0` is the numeric-only layout).
-- `#K`, the signed-message length; the header below gives the formula.
+- `#K`, the signed-message length; the `attestation.compact` header gives the formula.
 - `#N` of `#M` signatures must verify; `#M` is also the registry's key count.
 
 The header of
@@ -92,7 +91,7 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
   the signed statement, with its `policyHash`, `subjectHash`, `holder`,
   window, `present` mask, numeric values and byte slots.
 - [Registry](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain)
-  and registry slot: the pinned keys, checked positionally; `signatures[i]`
+  and [registry slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the pinned keys, checked positionally; `signatures[i]`
   is verified against `keys[i]`.
 - [Threshold](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
   the `N` in N-of-M.
@@ -141,17 +140,16 @@ What the module does not check, and what your app does itself:
   with unpaired flags carries at least `N` dishonest signatures, which are out
   of scope (ADR 0003).
 - The window is when the attestor's witness looked, not when the fact
-  happened, and it is not exact: a zkFetch witness takes its timestamp from the
-  request, and Reclaim rejects it only when it is more than 10 minutes in the
-  future. The window shows the fetch happened no earlier than about 10 minutes
-  before `windowStart`. Freshness still holds on-chain because post-dating is
-  capped. Do not read the window as the time of the fact; a fact's own time
-  travels as a value (ADR 0005).
+  happened, and a zkFetch fetch may precede `windowStart` by about 10 minutes.
+  Do not read it as the time of the fact
+  ([Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim)
+  explains why).
 - Claim values stay private witness data, but they are not hidden from
   guessing: the nullifier is a public, unsalted hash of the observation whose
   other inputs are public or guessable, so anyone can confirm a guessed value
-  by recomputing it. This is easy for an enumerable identifier in a byte slot
-  (ADR 0009).
+  by recomputing it. This is easy for an enumerable identifier in a byte slot,
+  and it is one of the [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). The ledger also stores
+  each claim's commitment, holder pseudonym and window in public.
 - Holder secrets are not checked for freshness. Use a fresh, high-entropy
   secret per claim and keep it to open that claim; reusing one links its
   commitments and vault entries.

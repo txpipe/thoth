@@ -7,11 +7,15 @@ signing key and turn verified evidence into a signed claim.
 
 ## Install
 
+The package is not on npm yet. Build it from a checkout of this repo and install it by path:
+
 ```bash
-npm install @thoth/attestor
+git clone https://github.com/txpipe-shop/thoth && cd thoth
+npm install && npm run build
+cd /path/to/your-app && npm install /path/to/thoth/packages/attestor
 ```
 
-The npm name may change until the npm scope is settled.
+It will publish as `@thoth/attestor`; that name may change until the npm scope is settled.
 
 ## Usage
 
@@ -99,9 +103,10 @@ is the reference kind.
 - **Composition, not inheritance.** A kind is a keyless law, a key boundary
   and an instance, not one class. The law stays plain and serializable, and one
   law serves many deployed instances.
-- **`KeyPair` is a host shape, not a wire shape.** The key producer lives in
-  the kind package, which instantiates `PK` and `S` with the scheme's wire types
-  (for example `JubjubPoint` from `@midnight-ntwrk/compact-runtime`).
+- **`KeyPair` holds a live signer, not serializable key data.** The key
+  producer lives in the kind package, which instantiates `PK` and `S` with the
+  scheme's wire types (for example `JubjubPoint` from
+  `@midnight-ntwrk/compact-runtime`).
 - **`attest` belongs to the kind.** This package fixes only the contract:
   parse, `verify`, sign; throw to reject.
 - **An instance carries no registry slot.** The signed message binds none, so

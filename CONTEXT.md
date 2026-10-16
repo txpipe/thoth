@@ -116,7 +116,7 @@ _Avoid_: Truth, data.
 
 **Predicate**:
 The app's own circuit logic over an accepted claim, such as "at least 100 stars". Attestors certify the fact; the predicate decides what the app does with it.
-_Avoid_: Rule, condition, check.
+_Avoid_: Condition.
 
 ### Signing and collection
 
@@ -163,11 +163,11 @@ The N in N-of-M: how many registry keys must sign the same message.
 _Avoid_: Quorum, majority.
 
 **Nullifier**:
-The hash of the observation identity. The contract stores it so the same observation is not accepted twice, whatever the holder. It is public and unsalted, so anyone who can guess a claim's values can confirm the guess by recomputing it (ADR 0009).
+The hash of the observation identity. The contract stores it so the same observation is not accepted twice, whatever the holder. It is public and unsalted, so anyone who can guess a claim's values can confirm the guess by recomputing it ([details](packages/contracts/README.md#guarantees-and-limits)).
 _Avoid_: Replay marker, nonce.
 
 **Claims vault**:
-The store of accepted claims, keyed by a commitment. It does not store claim values on-chain, though the nullifier still lets anyone confirm a guessed value.
+The store of accepted claims, keyed by a commitment. It does not store claim values on-chain; the nullifier entry says what a guess can still confirm.
 _Avoid_: Vault, storage.
 
 ## Relationships

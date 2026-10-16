@@ -25,7 +25,7 @@
 //
 // Module parameters (import "attestation"<K, V, B, N, M>), fixed when a
 // contract embeds the module:
-//   #K — signed-message length in fields: 12 + 2*V + 2*B, per the layout above.
+//   #K — signed-message length in fields, per the layout above.
 //   #V — number of numeric value slots (Claim.values: Vector<V, Uint<64>>).
 //   #B — number of byte halves (Claim.byteHalves: Vector<B, Bytes<16>>): two
 //        adjacent halves per 32-byte byte value, so B = 2W and B must be even.
@@ -48,7 +48,7 @@ module attestation<#K, #V, #B, #N, #M> {
   }
 
   export struct Claim {
-    version: Uint<8>; // schema version (1)
+    version: Uint<8>; // wire version (1)
     appId: Bytes<32>; // the app the claim is for
     policyHash: Bytes<32>; // hash of the policy the attestors enforced
     windowStart: Uint<32>; // Unix seconds the attestor's observation began (ADR 0005)

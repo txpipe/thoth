@@ -1,16 +1,20 @@
 # @thoth/zk-tls
 
-The zkFetch attestor kind for Thoth: it turns a [Reclaim](https://github.com/reclaimprotocol/attestor-core) zkFetch proof of an HTTPS fetch into a claim a Midnight contract can verify. For dApp developers who need an attested web fact, and for operators who run an attestor.
+The zkFetch attestor kind for Thoth, which turns [Reclaim](https://github.com/reclaimprotocol/attestor-core) evidence of an HTTPS fetch into a claim a Midnight contract can verify, for dApp developers who need an attested web fact and for the operators who run its attestors.
 
 > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
 ## Install
 
+The package is not on npm yet. Build it from a checkout of this repo and install it by path:
+
 ```bash
-npm install @thoth/zk-tls
+git clone https://github.com/txpipe-shop/thoth && cd thoth
+npm install && npm run build
+cd /path/to/your-app && npm install /path/to/thoth/packages/zk-tls
 ```
 
-The npm name may change until the npm scope is settled.
+It will publish as `@thoth/zk-tls`; that name may change until the npm scope is settled.
 
 ## Usage
 
@@ -100,14 +104,14 @@ What the attestor checks before signing:
 
 What the client checks:
 
-- Every witness agrees on one claim before any attestor is contacted; otherwise `proveReq` and `collect` fail with `witnesses disagree`.
+- `proveReq` requires every witness to yield one claim before any attestor is contacted, or fails with `witnesses disagree`. `collect` proves and attests per attestor and counts only signatures over one exact message, so disagreeing witnesses end in `ZkFetchThresholdError` with reason `threshold`.
 - Each attestation's key is the pinned one, its claim is the proposal, its message encodes that claim, and its signature verifies. A forged response fails before submission.
 - `collect` counts one signature per registry slot inside one exact-message group, starts `threshold` attempts, and contacts a spare only when the attempts in flight cannot reach the threshold any more. A spare that is never needed does not receive the request. Set `expiresAt` to at least twice `attestorTimeoutMs` after the start, so a spare can still prove after one attestor hangs.
 - Evidence that carries a secret header value, as written, percent-encoded, or JSON-escaped, is refused before it reaches an attestor. A very short secret can match unrelated text and drop a healthy attestor as `secret`.
 
 What it does not check, and what your app must do:
 
-- The window is not the exact fetch time. The witness's `timestampS` comes from the request, and Reclaim rejects it only if it is more than 10 minutes in the future; it has no lower bound. So the window shows the fetch happened no earlier than about 10 minutes before `windowStart`. Freshness still holds on-chain because post-dating is capped. Do not read the window as the time of the fact (ADR 0005).
+- The window is not the exact fetch time: the fetch happened no earlier than about 10 minutes before `windowStart`. Do not read it as the time of the fact ([Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) explains why).
 - The client does not re-verify the witness signature; each attestor does, and the contract enforces the threshold.
 - `responseText` is the transcript as the client saw it. The witness does not sign it, and no check reads it.
 - The secret header check cannot recognize every transformation of a secret. The prover must still redact.
@@ -124,11 +128,11 @@ What it does not check, and what your app must do:
 - **The subject keeps the host as its own hashed field.** Your circuit can bind the source host while the path, which may name an account, stays private ([ADR 0001](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0001-source-binding-by-in-circuit-subject-hash.md)).
 - **The window is when the witnesses observed.** `proveReq` spans it from the earliest to the latest witness observation; `collect` takes it from you and keeps it fixed across spares, because widening it would change the signed message and discard earlier signatures ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
 - **The claim does not commit to the Reclaim evidence.** You cannot audit a claim against its transcript offline; the claim commits to the values your app reads ([ADR 0007](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0007-no-evidence-commitment.md)).
-- **Byte rules decode the representation.** `hex` and `base64` fold case, the `0x` marker, the alphabet and padding; nothing else, so separators and whitespace are data ([ADR 0010](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0010-encoded-byte-rules.md)).
+- **Byte rules decode the representation.** `hex` and `base64` fold only what carries no data, so separators and whitespace stay data; the [Byte slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) entry has the rules ([ADR 0010](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0010-encoded-byte-rules.md)).
 - **The disclosure rules are part of the policy.** The client proves with the policy's rules, the attestor requires the signed rules to equal them, and the policy hash commits to them. A rule cannot use `{{param}}` templates, because the witness would sign the template and run the substitution.
 - **One policy per trusted set.** N-of-M means N attestors signed the same message, so every attestor must enforce the same policy; different readings produce different messages and never count together. Which witness an attestor trusts is per instance, not part of the policy.
-- **One attestor instance serves any contract.** The slot counts come from each proposal, and the registry slot from each dApp's trusted set.
-- **The prover is its own entry point.** `@thoth/zk-tls/prover` loads the Reclaim client stack lazily, so a client-only build never pulls it. `@thoth/zk-tls/client` imports neither the Reclaim stack nor `@thoth/attestor`.
+- **One attestor instance serves any contract.** The slot counts come from each proposal, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
+- **The prover is its own entry point.** `@thoth/zk-tls/prover` loads the Reclaim client libraries lazily, so a client-only build never pulls them. `@thoth/zk-tls/client` imports neither those libraries nor `@thoth/attestor`.
 
 ## Links
 

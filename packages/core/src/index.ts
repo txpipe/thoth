@@ -59,9 +59,8 @@ export interface AttestorDefinition<
  * The client-side view of an attestor: what a dApp needs to address it and
  * check its signatures, with no key material.
  *
- * It carries no registry slot: the signed message binds no registry, so one
- * attestor can serve many registries, and each app assigns the slot in its
- * trusted set (`@thoth/client`).
+ * It carries no registry slot; each app assigns one in its trusted set
+ * (`@thoth/client`).
  */
 export interface AttestorDescriptor<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,

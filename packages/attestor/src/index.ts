@@ -65,9 +65,8 @@ export interface KeyPair<PK, S, Msg = FlatMessage> {
  * A deployable attestor instance: the kind's shareable law, its key boundary,
  * and the public key it attests under.
  *
- * It carries no registry slot. The signed message binds none, so one instance
- * serves any number of registries; each app assigns the slot in its trusted
- * set (`@thoth/client`).
+ * It carries no registry slot; each app assigns one in its trusted set
+ * (`@thoth/client`).
  */
 export interface Attestor<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,

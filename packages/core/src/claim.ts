@@ -70,7 +70,7 @@ export interface ClaimInput<V extends number, W extends number = 0> {
   byteValues?: readonly Uint8Array[];
 }
 
-/** The claim wire version {@link claimSchema} applies when a raw payload omits `version`. */
+/** The claim wire version {@link claimSchema} applies when a raw input omits `version`. */
 export const CLAIM_VERSION = 1n;
 
 /** Zod schema for the claim's 32-byte fields (`appId`, `policyHash`, `subjectHash`, `holder`). */
@@ -136,8 +136,8 @@ export function claimSchema<V extends number = number, W extends number = 0>(
 
 const UINT128_MAX = (1n << 128n) - 1n;
 
-// Each 16-byte half is read little-endian, the runtime's `convertBytesToUint`
-// convention, so it equals the in-circuit cast in `attestation.compact`'s `splitBytes`.
+// Must equal the in-circuit cast in `attestation.compact`'s `splitBytes`; its
+// header gives the byte order.
 function splitBytes(bytes: Uint8Array): [bigint, bigint] {
   if (bytes.length !== 32) {
     throw new Error(`expected 32 bytes, got ${bytes.length}`);
@@ -189,9 +189,8 @@ export function claimToMessage<V extends number, W extends number = 0>(
 
 /**
  * The `Claim` struct of `attestation.compact`, field for field: the shape a
- * dApp's `getAttestationWitness` returns. Each byte value is two adjacent
- * 16-byte halves with the slot's flag on each, so `bytePresent` and
- * `byteHalves` both have length `B = 2W` (ADR 0009).
+ * dApp's `getAttestationWitness` returns. Its byte fields are split as the wire
+ * layout in the `attestation.compact` header shows (ADR 0009).
  */
 export interface ContractClaim {
   version: bigint;

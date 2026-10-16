@@ -6,11 +6,15 @@ The keyless types a kind of attestor implements and the claim its attestors sign
 
 ## Install
 
+The package is not on npm yet. Build it from a checkout of this repo and install it by path, with `zod`:
+
 ```bash
-npm install @thoth/core zod
+git clone https://github.com/txpipe-shop/thoth && cd thoth
+npm install && npm run build
+cd /path/to/your-app && npm install /path/to/thoth/packages/core zod
 ```
 
-The npm name may change until the npm scope is settled.
+It will publish as `@thoth/core`; that name may change until the npm scope is settled.
 
 ## Usage
 
@@ -108,5 +112,5 @@ What your app must do:
 - [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md): the claim and its wire order
 - [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md): how to add an attestor kind
 - [CONTEXT.md](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md): the glossary
-- [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor): the host that pairs a definition with a key
+- [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor): pairs a definition with a signing key
 - [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the Compact modules the claim mirrors
