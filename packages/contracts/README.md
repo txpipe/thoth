@@ -39,10 +39,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//            K=17 msg fields  V=3 values  B=0 byte halves  N=2 threshold  M=3 signatures
-import "node_modules/@thoth/contracts/attestation"<17, 3, 0, 2, 3> prefix A_;
+//            K=18 msg fields  V=3 values  B=0 byte halves  N=2 threshold  M=3 signatures
+import "node_modules/@thoth/contracts/attestation"<18, 3, 0, 2, 3> prefix A_;
 
-import "node_modules/@thoth/contracts/attestor_registry"<3, 17> prefix R_;
+import "node_modules/@thoth/contracts/attestor_registry"<3, 18> prefix R_;
 ```
 
 If the package is hoisted elsewhere by your package manager, add the package
@@ -53,8 +53,8 @@ export COMPACT_PATH="$(node -p 'require.resolve("@thoth/contracts/package.json")
 ```
 
 ```compact
-import "attestation"<17, 3, 0, 2, 3> prefix A_;
-import "attestor_registry"<3, 17> prefix R_;
+import "attestation"<18, 3, 0, 2, 3> prefix A_;
+import "attestor_registry"<3, 18> prefix R_;
 ```
 
 See `examples/example_app.compact` for a complete top-level embedding that
@@ -71,9 +71,9 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//            K=17 msg fields  V=3 values  B=0 byte halves  N=2 threshold  M=3 signatures
-import "attestation"<17, 3, 0, 2, 3> prefix A_;
-import "attestor_registry"<3, 17> prefix R_;
+//            K=18 msg fields  V=3 values  B=0 byte halves  N=2 threshold  M=3 signatures
+import "attestation"<18, 3, 0, 2, 3> prefix A_;
+import "attestor_registry"<3, 18> prefix R_;
 
 witness seedPolicies(): Vector<1, Bytes<32>>;
 
@@ -102,14 +102,15 @@ constructor() {
 
 `attestation<#K, #V, #B, #N, #M>` — embed as `import "attestation"<K, V, B, N, M>`:
 
-- `#K` — signed-message length in fields (`K` must equal `2*V + 2*B + 11`)
+- `#K` — signed-message length in fields (`K` must equal `2*V + 2*B + 12`)
 - `#V` — number of numeric claim value slots (`Claim.values: Vector<V, Uint<64>>`)
 - `#B` — number of byte halves (`Claim.byteHalves: Vector<B, Bytes<16>>`). Must be
   even (`B = 2W` for `W` 32-byte byte values, each two adjacent halves); `B = 0`
-  reproduces the numeric-only layout exactly. The compiler cannot check this, so
+  is the numeric-only layout. `B` is also signed in the message header, so a
+  claim signed for another `(V, B)` of the same `K` is rejected. The compiler cannot check this, so
   `#B` even is an embedder invariant. `#B` is the only count in halves: `#V`
   and the client's `byteSlots` count slots, so `byteSlots: 1` pairs with
-  `#B = 2` (`import "attestation"<21, 3, 2, 2, 3>`). An odd `#B` compiles but
+  `#B = 2` (`import "attestation"<22, 3, 2, 2, 3>`). An odd `#B` compiles but
   then rejects every claim
 - `#N` — the app's N-of-M threshold
 - `#M` — number of attestor signatures supplied / registry key slots
@@ -128,7 +129,7 @@ message (same order, sizes, presence-flag semantics, and the split of each
 `Vector<V, Boolean>` with one flag per numeric slot, and `bytePresent` is a
 `Vector<B, Boolean>` with one flag per byte half — both halves of a byte value
 share the flag. `values` and `byteHalves` sit between them. The message length
-is `K = 2*V + 2*B + 11` (11 header fields, V numeric flags, B byte flags, V
+is `K = 2*V + 2*B + 12` (12 header fields, the last being `B`, V numeric flags, B byte flags, V
 values, B halves) — fixed when a contract embeds the module.
 
 `verifyAttestation` rejects a claim with a false flag over a non-zero value —

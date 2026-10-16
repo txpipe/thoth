@@ -214,15 +214,18 @@ function splitBytes(bytes: Uint8Array): [bigint, bigint] {
  * Encode a parsed {@link Claim} into the flat signed-message field vector.
  *
  * The canonical default for kinds whose `message` is exactly the canonical
- * `Claim` shape: an 11-field header (version, then `appId` and `policyHash`
+ * `Claim` shape: a 12-field header (version, then `appId` and `policyHash`
  * each split into two 16-byte halves, `windowStart`, `windowEnd`, then
- * `subjectHash`, and `holder` split the same way, exactly as `attestation.compact`'s
- * `buildMessage` does), followed by the `present` flags (`1`/`0`), each byte
+ * `subjectHash`, and `holder` split the same way, then the byte-half count
+ * `2W`, exactly as `attestation.compact`'s `buildMessage` does), followed by the `present` flags (`1`/`0`), each byte
  * slot's flag repeated for its two halves, the `values`, and each byte value's
  * two halves (`bytes 0–15`, then `bytes 16–31`, in value order).
  *
- * The result has length `2*V + 4*W + 11`, which is the signed-message length
- * `K` the target contract is specialized with (`K = 11 + 2V + 2B`, `B = 2W`).
+ * The result has length `2*V + 4*W + 12`, which is the signed-message length
+ * `K` the target contract is specialized with (`K = 12 + 2V + 2B`, `B = 2W`).
+ * `K` alone does not fix the layout (`V = 3, W = 2` and `V = 1, W = 3` share
+ * one), so the header signs `2W`; the contract writes its own `#B` there, and a
+ * message signed under another layout fails verification.
  *
  * Kinds that extend the claim or use a different layout keep their own
  * `message()`; a kind whose `message` is exactly the canonical shape may
@@ -256,6 +259,7 @@ export function claimToMessage<V extends number, W extends number = 0>(
     claim.windowEnd,
     ...splitBytes(claim.subjectHash),
     ...splitBytes(claim.holder),
+    BigInt(2 * byteCount),
     ...flags.slice(0, numericCount),
     ...byteFlags,
     ...claim.values,

@@ -35,12 +35,12 @@ describe('mock attestation', () => {
   });
 
   describe('buildMessage (frozen wire shape)', () => {
-    it('returns exactly K=17 fields in the frozen order', () => {
+    it('returns exactly K=18 fields in the frozen order', () => {
       const claim = makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] });
       const msg = pureCircuits.message(claim);
-      expect(msg).toHaveLength(17);
+      expect(msg).toHaveLength(18);
       // [version, appId0, appId1, policyHash0, policyHash1, windowStart, windowEnd,
-      //  subjectHash0, subjectHash1, holder0, holder1, p0, p1, p2, v0, v1, v2]
+      //  subjectHash0, subjectHash1, holder0, holder1, B, p0, p1, p2, v0, v1, v2]
       // APP_ID is 32 × 0xa1 and POLICY_A 32 × 0xb1, so each half repeats the byte.
       const half = (byte: string): bigint => BigInt(`0x${byte.repeat(16)}`);
       expect(msg.slice(0, 7)).toEqual([
@@ -52,7 +52,8 @@ describe('mock attestation', () => {
         claim.windowStart,
         claim.windowEnd,
       ]);
-      expect(msg.slice(11)).toEqual([1n, 1n, 1n, 100n, 200n, 300n]);
+      // B = 0: the numeric-only layout signs a zero byte-half count.
+      expect(msg.slice(11)).toEqual([0n, 1n, 1n, 1n, 100n, 200n, 300n]);
     });
 
     it('pins each 16-byte half to its slot (little-endian)', () => {
@@ -95,7 +96,7 @@ describe('mock attestation', () => {
       const absent = makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] });
       const presentZero = makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] });
       expect(pureCircuits.message(absent)).not.toEqual(pureCircuits.message(presentZero));
-      expect(pureCircuits.message(presentZero)[11]).toBe(1n);
+      expect(pureCircuits.message(presentZero)[12]).toBe(1n);
     });
   });
 

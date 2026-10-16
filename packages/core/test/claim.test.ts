@@ -82,25 +82,27 @@ describe('claimToMessage', () => {
   it('duplicates the byte flag per half and splits each value into adjacent halves', () => {
     const value = fullSpan();
     const message = claimToMessage(claimSchema(3, 1).parse(byteBase));
-    // header(11) + present(3) + bytePresent(2) + values(3) + halves(2) = 21
-    expect(message).toHaveLength(11 + 2 * 3 + 2 * 2);
+    // header(12) + present(3) + bytePresent(2) + values(3) + halves(2) = 22
+    expect(message).toHaveLength(12 + 2 * 3 + 2 * 2);
+    // the header's last field is the byte-half count B = 2W
+    expect(message[11]).toBe(2n);
     // numeric flags, then the byte slot's flag once per half
-    expect(message.slice(11, 16)).toEqual([1n, 0n, 1n, 1n, 1n]);
-    expect(message.slice(16, 19)).toEqual([7n, 0n, 9n]);
+    expect(message.slice(12, 17)).toEqual([1n, 0n, 1n, 1n, 1n]);
+    expect(message.slice(17, 20)).toEqual([7n, 0n, 9n]);
     // bytes 0–15 then bytes 16–31, each as its little-endian value; the two
     // differ, so a swapped or reversed half would fail this.
     const low = le(value.slice(0, 16));
     const high = le(value.slice(16));
     expect(low).not.toBe(high);
-    expect(message.slice(19, 21)).toEqual([low, high]);
+    expect(message.slice(20, 22)).toEqual([low, high]);
   });
 
   it('keeps the numeric-only layout when W = 0', () => {
     const claim: Claim<3, 0> = claimSchema(3).parse(numericBase);
     const message = claimToMessage(claim);
-    expect(message).toHaveLength(2 * 3 + 11);
-    expect(message.slice(11, 14)).toEqual([1n, 0n, 1n]);
-    expect(message.slice(14, 17)).toEqual([7n, 0n, 9n]);
+    expect(message).toHaveLength(2 * 3 + 12);
+    expect(message.slice(11, 15)).toEqual([0n, 1n, 0n, 1n]);
+    expect(message.slice(15, 18)).toEqual([7n, 0n, 9n]);
   });
 
   it('interleaves flags and halves across two byte slots (W = 2)', () => {
@@ -113,14 +115,15 @@ describe('claimToMessage', () => {
       byteValues: [first, second],
     });
     const message = claimToMessage(claim);
-    // header(11) + present(2) + bytePresent(4) + values(2) + halves(4) = 23
-    expect(message).toHaveLength(11 + 2 * 2 + 2 * 4);
+    // header(12) + present(2) + bytePresent(4) + values(2) + halves(4) = 24
+    expect(message).toHaveLength(12 + 2 * 2 + 2 * 4);
+    expect(message[11]).toBe(4n);
     // numeric flags, then each byte slot's flag duplicated once per half
-    expect(message.slice(11, 13)).toEqual([0n, 1n]);
-    expect(message.slice(13, 17)).toEqual([1n, 1n, 0n, 0n]);
-    expect(message.slice(17, 19)).toEqual([0n, 0n]);
+    expect(message.slice(12, 14)).toEqual([0n, 1n]);
+    expect(message.slice(14, 18)).toEqual([1n, 1n, 0n, 0n]);
+    expect(message.slice(18, 20)).toEqual([0n, 0n]);
     // halves in value order, each value bytes 0–15 / 16–31 as LE Uint<128>
-    expect(message.slice(19, 23)).toEqual([
+    expect(message.slice(20, 24)).toEqual([
       le(first.slice(0, 16)),
       le(first.slice(16)),
       le(second.slice(0, 16)),

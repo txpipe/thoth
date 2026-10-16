@@ -115,7 +115,7 @@ the observation identity (ADR 0006), and the policy hash binds the kind.
 ### Wire order
 
 Attestors sign, and the contract rebuilds, a flat vector of
-`K = 2*V + 2*B + 11` fields (`B = 2*W` is the number of byte halves).
+`K = 2*V + 2*B + 12` fields (`B = 2*W` is the number of byte halves).
 `buildMessage` in
 [`attestation.compact`](../packages/contracts/attestation.compact) defines it;
 `claimToMessage` in `@thoth/core/claim` mirrors it, and a parity test keeps the
@@ -132,13 +132,17 @@ two equal. Each 32-byte field is split into two 16-byte halves, each read as a
 | 6 | `windowEnd` | Unix seconds |
 | 7, 8 | `subjectHash` | two halves |
 | 9, 10 | `holder` | two halves |
-| 11 … 10+V | `present[0]` … `present[V-1]` | `1` measured, `0` absent |
-| 11+V … 10+V+B | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
-| 11+V+B … 10+V+B+V | `values[0]` … `values[V-1]` | the value; `0` when absent |
-| 11+V+B+V … 10+V+B+V+B | `byteHalves[0]` … `byteHalves[B-1]` | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]` |
+| 11 | `B` | the byte-half count `2W`; the contract writes its own `#B` |
+| 12 … 11+V | `present[0]` … `present[V-1]` | `1` measured, `0` absent |
+| 12+V … 11+V+B | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
+| 12+V+B … 11+V+B+V | `values[0]` … `values[V-1]` | the value; `0` when absent |
+| 12+V+B+V … 11+V+B+V+B | `byteHalves[0]` … `byteHalves[B-1]` | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]` |
 
-With `W = 0` every byte row disappears and the table is the numeric-only
-`K = 2*V + 11` layout exactly.
+`K` alone fixes only `2*V + 2*B`, so two layouts can share a length (`V = 3,
+W = 2` and `V = 1, W = 3` both give `K = 26`). Index 11 signs the layout: the
+contract rebuilds it from its own `#B`, so a message signed under another
+layout fails verification. With `W = 0` every byte row disappears and index 11
+is `0`.
 
 ## The contract
 

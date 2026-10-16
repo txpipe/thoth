@@ -36,13 +36,14 @@
 // honest claims: the attestor law derives them from a single disclosure. The
 // module does not check the pairing: the absent-slot law is per half.
 //
-// Wire layout (buildMessage), K = 11 + 2*V + 2*B fields:
+// Wire layout (buildMessage), K = 12 + 2*V + 2*B fields:
 //   [ version,
 //     appId[0..16] as Uint<128>, appId[16..32] as Uint<128>,
 //     policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
 //     windowStart, windowEnd,
 //     subjectHash[0..16] as Uint<128>, subjectHash[16..32] as Uint<128>,
 //     holder[0..16] as Uint<128>, holder[16..32] as Uint<128>,
+//     B as Field,
 //     present[0] as Field, ..., present[V-1] as Field,
 //     bytePresent[0] as Field, ..., bytePresent[B-1] as Field,
 //     values[0] as Field, ..., values[V-1] as Field,
@@ -51,11 +52,14 @@
 // is split in two halves so every byte is signed; each 16-byte half is read
 // little-endian (byte 0 least significant) when cast to Uint<128>/Field, the
 // runtime's `convertBytesToUint` convention. `claimToMessage` uses the same
-// primitive, so the two encoders agree field-for-field.
+// primitive, so the two encoders agree field-for-field. The header's last
+// field is the module's own B: K alone fixes only 2*V + 2*B, so two layouts
+// (e.g. V=3, B=4 and V=1, B=6) could share a message length; signing B pins V
+// too, and a message signed under another layout fails verification here.
 //
 // Module parameters (import "attestation"<K, V, B, N, M>):
-//   #K — signed-message length in fields. Must equal 11 + 2*V + 2*B (the
-//        11-field header in buildMessage, the V numeric presence fields, the B
+//   #K — signed-message length in fields. Must equal 12 + 2*V + 2*B (the
+//        12-field header in buildMessage, the V numeric presence fields, the B
 //        byte-half presence fields, the V value fields, and the B half fields).
 //        This is what the registry's countValidSignatures verifies over.
 //   #V — number of numeric claim value slots (Claim.values: Vector<V, Uint<64>>).
@@ -143,14 +147,15 @@ module attestation<#K, #V, #B, #N, #M> {
     return (h as Uint<128>) as Field;
   }
 
-  /// Reconstruct the flat signed message: an 11-field fixed header (version,
+  /// Reconstruct the flat signed message: a 12-field fixed header (version,
   /// appId and policyHash each as two 16-byte halves, windowStart, windowEnd,
   /// then subjectHash as two 16-byte halves, then the holder commitment
-  /// as two halves) followed by the `present` flags, the per-half
+  /// as two halves, then the module's byte-half count B, which binds the slot
+  /// layout) followed by the `present` flags, the per-half
   /// `bytePresent` flags, the values mapped to `Field`, and the byte halves.
   /// Tuple/vector spread (`...`) appends each section, so at specialization
   /// `[header..., present..., bytePresent..., values..., byteHalves...]` has
-  /// length 11 + 2*V + 2*B; a mismatch with K is a static error at
+  /// length 12 + 2*V + 2*B; a mismatch with K is a static error at
   /// specialization, so the compiler checks it.
   /// This is the single wire shape the attestor must mirror.
   export pure circuit buildMessage(c: Claim): Vector<K, Field> {
@@ -158,7 +163,7 @@ module attestation<#K, #V, #B, #N, #M> {
     const policyHash = splitBytes(c.policyHash);
     const subjectHash = splitBytes(c.subjectHash);
     const holder = splitBytes(c.holder);
-    const header: Vector<11, Field> =
+    const header: Vector<12, Field> =
             [c.version as Field,
              appId[0],
              appId[1],
@@ -169,7 +174,8 @@ module attestation<#K, #V, #B, #N, #M> {
              subjectHash[0],
              subjectHash[1],
              holder[0],
-             holder[1],];
+             holder[1],
+             B as Field,];
     const presentFields: Vector<V, Field> = map((p: Boolean) => p as Field, c.present);
     const bytePresentFields: Vector<B, Field> = map((p: Boolean) => p as Field, c.bytePresent);
     const valuesFields: Vector<V, Field> = map((v: Uint<64>) => v as Field, c.values);

@@ -109,7 +109,7 @@ The flat list of field values the attestors sign and the contract rebuilds.
 _Avoid_: Payload, digest.
 
 **Wire layout**:
-The order and encoding of the message's fields, `K = 11 + 2V + 2B` of them (`B = 2W` byte halves): a byte value takes two adjacent fields, each half carrying the slot's flag. `buildMessage` in `attestation.compact` defines it and `claimToMessage` mirrors it.
+The order and encoding of the message's fields, `K = 12 + 2V + 2B` of them (`B = 2W` byte halves): a byte value takes two adjacent fields, each half carrying the slot's flag, and the header signs `B` so the layout is bound, not just the length. `buildMessage` in `attestation.compact` defines it and `claimToMessage` mirrors it.
 _Avoid_: Format, serialization.
 
 **Attestation**:

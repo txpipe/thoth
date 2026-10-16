@@ -104,7 +104,7 @@ describe('test-key witness', () => {
       expect(attestation.claim.values.slice(2)).toEqual(Array<bigint>(size - 2).fill(0n));
       expect(attestation.claim.present.slice(2)).toEqual(Array<boolean>(size - 2).fill(false));
       expect(attestation.signature).toBe(`sig:${attestation.message.join(',')}`);
-      expect(attestation.message).toHaveLength(11 + 2 * size);
+      expect(attestation.message).toHaveLength(12 + 2 * size);
     }
   });
 
@@ -138,7 +138,7 @@ describe('test-key witness', () => {
     });
     expect(attestation.claim.present).toEqual([true, true, false]);
     expect(attestation.claim.values).toEqual([0n, 8n, 0n]);
-    expect(attestation.message.slice(11)).toEqual([1n, 1n, 0n, 0n, 8n, 0n]);
+    expect(attestation.message.slice(11)).toEqual([0n, 1n, 1n, 0n, 0n, 8n, 0n]);
     expect(attestation.signature).toBe(`sig:${attestation.message.join(',')}`);
   });
 
