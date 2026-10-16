@@ -104,8 +104,9 @@ and the values:
   unmeasured slot is `present[i] = false` with value `0`; the contract rejects
   anything else. Do not guess a value you could not read.
 - `byteValues` are 32-byte values (identifiers, strings), positional, one per
-  byte slot. Canonicalize a disclosed string by zero-padding its UTF-8 bytes to
-  32; a longer string is not certifiable and its slot stays unpresent. The kind
+  byte slot. The policy's byte rule canonicalizes a disclosed string into the
+  32-byte slot, zero-padding shorter values; a value that does not fit is not
+  certifiable and its slot stays unpresent. The kind
   layer carries one flag per byte slot (`present[V + i]`); `claimToMessage` and
   the contract split each value into two adjacent 16-byte halves and repeat the
   flag on both halves.

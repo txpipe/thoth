@@ -101,7 +101,7 @@ prover that the client can use to obtain evidence:
     and `byteValues.length`. The claim schema requires one presence flag per
     value slot (`values` plus `byteValues`); verification rejects policy slot
     indices outside the requested counts, or targeting the wrong region
-    (numeric rule on a byte slot, or `'bytes'` on a numeric slot), before
+    (a numeric rule on a byte slot, or a byte rule on a numeric slot), before
     checking the proof. Unused positions are derived as absent and zero-valued,
     regardless of their proposed contents. One instance and signing key can
     serve contracts with different slot counts. Each consuming contract enforces
