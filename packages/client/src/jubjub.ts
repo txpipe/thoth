@@ -1,4 +1,4 @@
-// Jubjub verification matching the contracts' pinned Compact runtime.
+// Jubjub Schnorr verification over flat messages, on the Compact runtime the contracts pin.
 import {
   CompactTypeField,
   CompactTypeVector,
@@ -10,9 +10,9 @@ import type { FlatMessage } from '@thoth/core/claim';
 import type { AttestationVerifier } from './index.js';
 
 /**
- * Verify flat-message Jubjub Schnorr signatures with Compact runtime 0.19.0.
- * Malformed keys, messages, or signatures fail verification.
- * @see AttestationVerifier
+ * Verify flat-message Jubjub Schnorr signatures with Compact runtime 0.19.0,
+ * the version the contracts pin. A malformed key, message or signature fails
+ * verification instead of throwing.
  */
 export const jubjubVerifier: AttestationVerifier<JubjubPoint, JubjubSchnorrSignature, FlatMessage> =
   {
