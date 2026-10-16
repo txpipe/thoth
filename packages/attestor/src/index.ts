@@ -11,11 +11,22 @@ import type { z } from 'zod';
 /**
  * Type-checking identity for an attestor definition.
  *
- * Keeps `kind` and the exact schema types as literals inferred from the object
- * literal, so a kind can be referenced by its precise type elsewhere.
+ * Keeps `kind` and the schema types as the literals inferred from the object
+ * literal, so the kind can be named by its exact type elsewhere.
  *
- * @param definition — an object literal satisfying {@link AttestorDefinition}.
- * @returns the same object, unchanged (identity function).
+ * @example
+ * ```ts
+ * const law = defineAttestor({
+ *   kind: 'my-kind@1',
+ *   policy: myPolicySchema,
+ *   evidence: myEvidenceSchema,
+ *   claim: claimSchema<8>(8),
+ *   verify: async (input) => {
+ *     if (!accepts(input)) throw new Error('rejected');
+ *   },
+ *   message: (claim) => claimToMessage(claim),
+ * });
+ * ```
  */
 export function defineAttestor<
   const D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
@@ -24,82 +35,60 @@ export function defineAttestor<
 }
 
 /**
- * The key-boundary type: a minimal contract for whoever holds the signing key.
+ * The key boundary: whoever holds the private key implements `sign`.
  *
- * Implementations never share the key itself — it stays behind this interface
- * (e.g. captured in a closure). The message shape is fixed per scheme (`Msg`);
- * only the signature type `S` is scheme-agnostic.
+ * The key never crosses this interface; an implementation keeps it in a
+ * closure or behind a hardware module.
  *
- * @typeParam S — the signature scheme type produced by `sign`.
  * @typeParam Msg — the signed-message type; defaults to {@link FlatMessage}.
  */
 export interface AttestorSigner<S, Msg = FlatMessage> {
-  /**
-   * Sign a message with the held private key.
-   *
-   * @param message — the message to commit to (a kind's `message(claim)` output).
-   * @returns the signature, or a promise resolving to it.
-   */
+  /** Sign a kind's `message(claim)` output with the held private key. */
   sign(message: Msg): S | Promise<S>;
 }
 
 /**
- * The key-material contract: the public key and its signing boundary together.
+ * A public key paired with the signer that holds the matching private key.
  *
- * A concrete crypto/key package implements this per signature scheme, pairing
- * the exposed `publicKey` with the `signer` that holds the matching private
- * key. Binding the two at construction makes it impossible to pair a signer
- * with a *different* public key; the DESIGN decision only caught such
- * mismatches at N-of-M verification time.
+ * The kind's key package builds both from one private key. Binding them at
+ * construction makes a signer with a mismatched public key impossible to
+ * express, so no such mismatch reaches N-of-M verification.
  *
- * @typeParam PK — the public-key type (scheme-specific).
- * @typeParam S — the signature scheme type produced by `signer.sign`.
  * @typeParam Msg — the signed-message type; defaults to {@link FlatMessage}.
  */
 export interface KeyPair<PK, S, Msg = FlatMessage> {
-  /** The public key derived from the same private key the signer holds. */
   readonly publicKey: PK;
-  /** The key boundary that signs with the matching private key. */
   readonly signer: AttestorSigner<S, Msg>;
 }
 
 /**
- * A deployable, identifiable attestor instance: the kind's law (shareable
- * `definition`), the key boundary (`signer`), and the single public key under
- * which it attests.
+ * A deployable attestor instance: the kind's shareable law, its key boundary,
+ * and the public key it attests under.
  *
- * The public key is the value the client maps to a slot in the on-chain
- * attestor registry. `attest` is the module-owned lifecycle hook.
- *
- * @typeParam D — the attestor's definition type.
- * @typeParam PK — the public-key type.
- * @typeParam S — the signature scheme type.
+ * It carries no registry slot. The signed message binds none, so one instance
+ * serves any number of registries; each app assigns the slot in its trusted
+ * set (`@thoth/client`).
  */
 export interface Attestor<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
   PK,
   S,
 > {
-  /** Stable identifier for this deployable instance (non-cryptographic). */
+  /** Stable, non-cryptographic identifier for client-side addressing. */
   id: string;
-  /** The kind's shareable law: schemas, `verify`, `message`. */
   definition: D;
-  /** The key boundary — holds the private key; never exposes it. */
   signer: AttestorSigner<S, MessageOf<D>>;
-  /** The public key under which this instance attests. */
+  /** The key the app maps to a registry slot. */
   publicKey: PK;
 
   /**
-   * Run the attestation lifecycle for this instance: parse the raw input with
-   * the definition's schemas, authorize via `verify`, then sign the kind's
-   * `message(claim)`.
+   * Run the attestation lifecycle: parse the raw input with the definition's
+   * schemas, `verify`, then sign `message(claim)`.
    *
-   * Module-owned: each kind's package implements this. Implementations must
-   * call `verify` before `sign` and throw to reject.
+   * Each kind's package implements it and must call `verify` before signing.
    *
-   * @param input — raw (unparsed) policy/evidence/claim values, per the
-   *   definition's `z.input` schemas.
-   * @returns the signed {@link Attestation} artifact.
+   * @param input — raw values, per the definition's `z.input` schemas.
+   * @throws to reject the input.
    */
   attest(
     input: AttestationInput<z.input<D['policy']>, z.input<D['evidence']>, z.input<D['claim']>>,
@@ -109,11 +98,7 @@ export interface Attestor<
 /**
  * Project an {@link Attestor} to its client-facing {@link AttestorDescriptor}.
  *
- * Drops the key-bearing machinery (`signer`, `attest`) so the descriptor is
- * safe to share with clients.
- *
- * @param attestor — the attestor instance to project.
- * @returns the client-addressable descriptor for the same instance.
+ * Drops `signer` and `attest`, so the result is safe to share with clients.
  */
 export function descriptorOf<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
@@ -130,31 +115,38 @@ export function descriptorOf<
 /**
  * Build an {@link Attestor} from its parts.
  *
- * A consistency-preserving constructor: `publicKey` and `signer` are taken
- * from a single {@link KeyPair}, so the instance cannot pair a signer with a
- * mismatched public key. The `attest` lifecycle stays module-owned — each
- * kind's package supplies its own implementation, and the returned instance
- * merely ties it to the instance fields.
+ * `publicKey` and `signer` come from one {@link KeyPair}; the kind supplies
+ * `attest`, which the instance calls with its own definition and signer.
  *
- * @param parts — the id, shareable definition, key pair, and the kind's
- *   `attest` lifecycle implementation.
- * @returns an `Attestor` whose `attest` delegates to the supplied lifecycle.
+ * @example
+ * ```ts
+ * const attestor = buildAttestor({
+ *   id: 'my-kind-operator-1',
+ *   definition: law,
+ *   keyPair, // from the kind's key package
+ *   attest: async (definition, signer, input) => {
+ *     const parsed = {
+ *       policy: definition.policy.parse(input.policy),
+ *       evidence: definition.evidence.parse(input.evidence),
+ *       claim: definition.claim.parse(input.claim),
+ *     };
+ *     await definition.verify(parsed);
+ *     const message = definition.message(parsed.claim);
+ *     const signature = await signer.sign(message);
+ *     return { claim: parsed.claim, message, publicKey: keyPair.publicKey, signature };
+ *   },
+ * });
+ * ```
  */
 export function buildAttestor<
   const D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
   PK,
   S,
 >(parts: {
-  /** Stable identifier for this deployable instance. */
   id: string;
-  /** The kind's shareable law: schemas, `verify`, `message`. */
   definition: D;
-  /** The key material: public key plus the matching signing boundary. */
   keyPair: KeyPair<PK, S, MessageOf<D>>;
-  /**
-   * The kind's lifecycle: parse `input` with `definition`'s schemas,
-   * authorize via `verify`, then sign `definition.message(claim)`.
-   */
+  /** The kind's {@link Attestor.attest}, given the instance's definition and signer. */
   attest: (
     definition: D,
     signer: AttestorSigner<S, MessageOf<D>>,
