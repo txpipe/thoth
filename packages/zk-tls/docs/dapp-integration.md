@@ -51,8 +51,8 @@ const trusted = buildTrustedSet({
   ],
 });
 
-// toJson and fromJson tag bigint and bytes, which plain JSON drops; they are
-// defined in the @thoth/client README, and the attestor's server uses the same pair.
+// JSON carries neither bigint nor bytes, so toJson and fromJson (defined in the
+// @thoth/client README) tag them; your attestor's server must decode with the same pair.
 const transport: AttestorTransport<ZkFetchDefinition, PublicKey, Signature> = {
   async request(attestor, input) {
     const res = await fetch(`https://${attestor.id}/attest`, {

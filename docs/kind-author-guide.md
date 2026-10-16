@@ -156,8 +156,7 @@ parsed proposal to stay short; a real kind signs the claim it derived, as
 The instance has no registry slot
 ([why](../packages/attestor/README.md#design-decisions)) and no fixed slot
 counts, so one instance and signing key can serve apps with different claim
-layouts. Each consuming contract
-enforces its own fixed `#V` and `#B`.
+layouts. Each consuming contract enforces its own fixed `#V` and `#B`.
 
 Infer the requested counts from `claim.values.length` and
 `claim.byteValues.length`, as `zkFetchAttestor` does. Derive the authoritative

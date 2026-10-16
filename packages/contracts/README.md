@@ -91,8 +91,9 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
   the signed statement, with its `policyHash`, `subjectHash`, `holder`,
   window, `present` mask, numeric values and byte slots.
 - [Registry](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain)
-  and [registry slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the pinned keys, checked positionally; `signatures[i]`
-  is verified against `keys[i]`.
+  and [registry slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection):
+  the pinned keys, checked positionally; `signatures[i]` is verified against
+  `keys[i]`.
 - [Threshold](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
   the `N` in N-of-M.
 - [Nullifier](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
@@ -148,8 +149,10 @@ What the module does not check, and what your app does itself:
   guessing: the nullifier is a public, unsalted hash of the observation whose
   other inputs are public or guessable, so anyone can confirm a guessed value
   by recomputing it. This is easy for an enumerable identifier in a byte slot,
-  and it is one of the [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). The ledger also stores
-  each claim's commitment, holder pseudonym and window in public.
+  and it is one of the
+  [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity).
+  The ledger also stores each claim's commitment, vault pseudonym (derived
+  from the holder secret) and window in public.
 - Holder secrets are not checked for freshness. Use a fresh, high-entropy
   secret per claim and keep it to open that claim; reusing one links its
   commitments and vault entries.

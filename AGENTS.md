@@ -137,8 +137,9 @@ would be empty):
 1. `# @thoth/<name>`, then one sentence saying what it is and who it's for.
 2. The status line, identical in every README and the root:
    > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
-3. `## Install`: how to install it today and its npm name, plus one line
-   saying the name may change until the npm scope is settled.
+3. `## Install`: how to install or use it today. A package with an npm name
+   gives it, plus one line saying the name may change until the npm scope is
+   settled; a private package skips both.
 4. `## Usage`: the shortest working example of the main task. For `core`,
    `attestor` and `client` the reader is a kind author, so the example is from
    their side.
@@ -155,9 +156,9 @@ Where decisions live: a decision that changes how you use a package goes in
 that package's "Design decisions", written as its consequence for the reader.
 A decision that spans packages is an ADR in `docs/adr/`, linked from every
 README it affects. A decision that is local to one package and has no ADR
-lives only in that package's README. `docs/kind-author-guide.md` spans packages: update it when
-an interface a kind implements changes (`@thoth/core`, `@thoth/attestor`,
-`@thoth/client`, or the claim).
+lives only in that package's README. `docs/kind-author-guide.md` spans
+packages: update it when an interface a kind implements changes
+(`@thoth/core`, `@thoth/attestor`, `@thoth/client`, or the claim).
 
 The roadmap lives in GitHub: the `v0` and `Next` milestones and the `frozen`
 label. The root README's Roadmap section only links those three; package

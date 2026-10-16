@@ -6,7 +6,7 @@ The dApp side of Thoth, for kind authors writing a kind's client and for apps th
 
 ## Install
 
-The package is not on npm yet. Build it from a checkout of this repo and install it by path:
+The package is not on npm. Build it from a checkout of this repo and install it by path:
 
 ```bash
 git clone https://github.com/txpipe-shop/thoth && cd thoth
@@ -14,7 +14,7 @@ npm install && npm run build
 cd /path/to/your-app && npm install /path/to/thoth/packages/client
 ```
 
-It will publish as `@thoth/client`; that name may change until the npm scope is settled.
+Its package name is `@thoth/client`; that name may change until the npm scope is settled.
 
 ## Usage
 
@@ -34,7 +34,7 @@ const trusted = buildTrustedSet({
   ],
 }); // throws InvalidTrustedSetError
 
-// JSON carries neither bigint nor bytes, so tag them; the attestor's server uses the same pair.
+// JSON carries neither bigint nor bytes, so tag them; the attestor's server must use the same pair.
 const toJson = (value: unknown): string =>
   JSON.stringify(value, (_, v) =>
     typeof v === 'bigint' ? { $bigint: v.toString() } : v instanceof Uint8Array ? { $bytes: [...v] } : v,

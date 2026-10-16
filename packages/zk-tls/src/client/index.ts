@@ -219,6 +219,7 @@ export interface ZkFetchClient<V extends number, PK, S> {
  * @example
  * ```ts
  * import { zkFetchClient } from '@thoth/zk-tls/client';
+ * import { zkFetchProver } from '@thoth/zk-tls/prover';
  *
  * // `trusted` pins attestor-a and attestor-b; each needs its own prover.
  * const client = zkFetchClient.init({

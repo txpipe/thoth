@@ -6,7 +6,7 @@ The zkFetch attestor kind for Thoth, which turns [Reclaim](https://github.com/re
 
 ## Install
 
-The package is not on npm yet. Build it from a checkout of this repo and install it by path:
+The package is not on npm. Build it from a checkout of this repo and install it by path:
 
 ```bash
 git clone https://github.com/txpipe-shop/thoth && cd thoth
@@ -14,7 +14,7 @@ npm install && npm run build
 cd /path/to/your-app && npm install /path/to/thoth/packages/zk-tls
 ```
 
-It will publish as `@thoth/zk-tls`; that name may change until the npm scope is settled.
+Its package name is `@thoth/zk-tls`; that name may change until the npm scope is settled.
 
 ## Usage
 
