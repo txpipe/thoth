@@ -1,5 +1,7 @@
 # Thoth
 
+> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
+
 Private N-of-M attestation for Midnight.
 
 Thoth is a plugin layer that lets Midnight contracts accept externally attested

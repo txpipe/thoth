@@ -1,5 +1,7 @@
 # @thoth/core
 
+> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
+
 Core types and definitions for the Thoth N-of-M attestation system.
 
 Thoth lets Midnight contracts accept externally attested information with ZK

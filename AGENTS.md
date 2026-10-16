@@ -72,6 +72,7 @@ thoth/
 │   ├── kind-author-guide.md  # how to add an attestor kind
 │   ├── adr/            # architecture decision records
 │   └── agents/         # agent skill configuration
+├── CONTRIBUTING.md     # dev setup, repo layout, commands
 ├── examples/demo-attestation/  # recorded zkFetch evidence fixture
 ├── CONTEXT.md          # domain glossary
 ├── README.md           # human-oriented overview
@@ -112,37 +113,88 @@ thoth/
   - 100-column line width, single quotes, semicolons.
 - **Compact**: `pragma language_version >= 0.22`; follow the style in
   `packages/contracts/*.compact`; module params are uppercase (`<#K, #V, #N, #M>`).
-  Metadata in `attestation.compact`'s header comment is load-bearing — keep the
-  wire-layout doc synchronized with `buildMessage`, `claimToMessage`, and the
-  wire-order table in `docs/DESIGN.md`.
+  A module header covers purpose, wire layout and module parameters, and skips
+  prose that restates the asserts below it.
   The claim's `version` stays `1` until a layout is deployed; pre-launch,
   change the wire layout freely and keep `version = 1`.
-- **Public API style**: every export is documented with JSDoc (block-comment
-  `/** … */`) — `@param`, `@returns`, `@typeParam`, `@see` where relevant.
-  The file header line uses `//` for file-level notes.
+- **The wire layout is written out in exactly two places**: the
+  `attestation.compact` header (canonical, next to `buildMessage`) and the
+  table in `docs/DESIGN.md` (the reader's view). `claimToMessage`, the `#K`
+  doc, `buildMessage`'s doc and `CONTEXT.md` link to them instead of restating
+  it. A layout change edits both places in the same PR.
+- **JSDoc is the API reference** (there is no generated site): it is what
+  callers see on hover and in the shipped `.d.ts`. Every export gets a summary
+  sentence; interface fields and simple types can stop there. `@throws` on
+  every function that can throw, naming the error type when there is one.
+  `@param` only when it adds what the type can't: units (claim windows are
+  Unix seconds), ranges, valid values, ownership. `@returns` and `@typeParam`
+  only when not obvious from the name and signature. `@example` on each
+  package's main entry points (`defineAttestor`, `buildAttestor`,
+  `buildTrustedSet`, `zkFetchProver`). Block comments `/** … */`; file headers
+  are 1–2 `//` lines (plus the wire layout in `attestation.compact`).
+- **Comments explain why**: invariants, security reasons, non-obvious
+  constraints. The code says what. History, ticket and PR numbers stay out of
+  source; cite decisions as `ADR 000N`.
 
 ## Docs conventions
 
-- Per-package `README.md` (npm convention): what it is, install, types/concepts,
-  and links. A `usage` section belongs when the package is consumed directly;
-  the packages that exist as a **base for kind-specific implementations**
-  (`core`, `attestor`, `client`) document the *implementer* seam instead — e.g.
-  `packages/client/README.md` "For kind SDK authors" — and may drop a usage
-  section entirely (`core` does). Written for humans; do not dump APIs (JSDoc
-  covers that).
-- Design decisions and their rationale live in the **package README that owns
-  them** (e.g. `packages/attestor/README.md` "Design rationale"). If a decision
-  changes the public surface, update the affected package READMEs together.
-  `docs/DESIGN.md` keeps only the architecture overview, the claim and its wire
-  order, flow, and out-of-scope. Cross-package decisions are ADRs in
-  `docs/adr/`; code comments cite them as `ADR 000N`.
-- Domain terms come from `CONTEXT.md`; do not use a synonym it lists under
-  _Avoid_. Add a term there when a new concept appears.
-- `docs/kind-author-guide.md` is the one guide that spans packages. Update it
-  when a seam a kind implements changes (`@thoth/core`, `@thoth/attestor`,
-  `@thoth/client`, or the claim).
-- JSDoc lives inline in source; there is no generated API doc site (TypeDoc
-  intentionally deferred — packages are small).
+Who reads what:
+
+| Doc | Reader | Contains |
+|-----|--------|----------|
+| `README.md` | someone evaluating Thoth | what it is, status, how it works, which package to use, the demo, roadmap links |
+| `packages/*/README.md` | a developer using that package (it is the npm page) | the package README template below |
+| `docs/kind-author-guide.md`, `packages/zk-tls/docs/*` | a developer building a kind or integrating a dApp | step-by-step guides |
+| `docs/DESIGN.md` | anyone who wants the architecture | overview, the claim and its wire order, flow, out of scope; links the ADRs and never restates them |
+| `docs/adr/` | maintainers | one decision each with its full reasoning; the only place for history and ticket references |
+| `CONTEXT.md` | everyone | the glossary |
+| `CONTRIBUTING.md` | contributors | dev setup, repo layout, commands |
+
+Voice, for every doc and comment:
+
+- Write to the reader as "you", in the present tense, one idea per sentence.
+  Prefer a code example to a paragraph.
+- Say what the code does today. History ("previously", "no longer", "we
+  changed"), review notes and issue/PR numbers belong only in ADRs. A check or
+  feature is documented once it lands.
+- One term per concept, from `CONTEXT.md`; define or link a domain term on its
+  first use in each README. Internal shorthand that is not in the glossary
+  becomes plain words or a glossary entry.
+- Spellings: `dApp`, `zkFetch`; `zk-tls` only as the package name.
+- Bold only as the lead-in of a list item; no emphasis mid-sentence.
+- One explanation, one place: explain a concept where it is owned and link to
+  it from everywhere else.
+
+Package README template, headings in this order (skip a section only if it
+would be empty):
+
+1. `# @thoth/<name>`, then one sentence saying what it is and who it's for.
+2. The status line, identical in every README and the root:
+   > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
+3. `## Install`: the current npm name, plus one line saying it may change until
+   the npm scope is settled.
+4. `## Usage`: the shortest working example of the main task. For `core`,
+   `attestor` and `client` the reader is a kind author, so the example is from
+   their side.
+5. `## Concepts`: only the terms needed to use the package, each linked to
+   `CONTEXT.md`.
+6. `## Guarantees and limits`: what the package checks, what it doesn't, and
+   what the app must do itself.
+7. `## Design decisions`: each entry is a bold one-line decision, then 1–3
+   sentences on what it means for the reader, then the ADR link when there is
+   one. Open questions become issues, not README text.
+8. `## Links`
+
+Where decisions live: a decision that changes how you use a package goes in
+that package's "Design decisions", written as its consequence for the reader.
+A decision that spans packages is an ADR in `docs/adr/`, linked from every
+README it affects. `docs/kind-author-guide.md` spans packages: update it when
+an interface a kind implements changes (`@thoth/core`, `@thoth/attestor`,
+`@thoth/client`, or the claim).
+
+The roadmap lives in GitHub: the `v0` and `Next` milestones and the `frozen`
+label. The root README's Roadmap section only links those three; package
+READMEs don't repeat it.
 
 ## Testing
 

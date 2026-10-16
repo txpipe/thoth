@@ -1,5 +1,7 @@
 # @thoth/zk-tls
 
+> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
+
 A concrete implementation of a kind for Thoth's N-of-M attestation system, named zk-tls.
 
 Thoth lets Midnight contracts accept externally attested information with ZK

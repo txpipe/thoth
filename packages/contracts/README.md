@@ -1,5 +1,7 @@
 # @thoth/contracts
 
+> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
+
 The Thoth Compact on-chain layer: the embeddable Compact module set that
 verifies N-of-M attestations in-circuit. This is the on-chain counterpart to
 the TypeScript packages — `@thoth/core` defines the claim law this layer
