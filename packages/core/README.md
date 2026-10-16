@@ -25,7 +25,7 @@ The package exposes three entry points:
   - `Attestation<C, PK, S>` — the signed artifact an attestor produces and a client collects
 - **`@thoth/core/claim`**:
   - `Claim<V, W>` / `ClaimInput<V, W>` — the canonical claim: header (version, appId, policyHash, windowStart, windowEnd, subjectHash, holder), a `present` mask (`V` numeric slots then `W` byte slots), `V` numeric `values`, and `W` 32-byte `byteValues`. `W` defaults to `0`
-  - `claimSchema<V, W>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape (`W` defaults to `0`; an omitted `byteValues` defaults to `[]`). Call it with no arguments when `V`/`W` are unknown at parse time: the exact-length constraints are then skipped
+  - `claimSchema<V, W>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape (`W` defaults to `0`; an omitted `byteValues` defaults to `[]`). Call it with no arguments when `V`/`W` are unknown at parse time: the exact-length constraints are then skipped, but `present` must still have one flag per value
   - `bytes32Schema` — a zod schema for the claim's 32-byte `appId`, `policyHash` and `subjectHash`
   - `claimToMessage` — encode a parsed `Claim` into the exact `FlatMessage` the contract's `buildMessage` verifies
   - `toContractClaim` / `ContractClaim` — convert a parsed `Claim` into the contract's `Claim` struct, the shape a dApp's `getAttestationWitness` returns

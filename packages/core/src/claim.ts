@@ -132,17 +132,16 @@ export const bytes32Schema = z
  *
  * Called without `v`, it is the kind's size-agnostic schema: the claim type an
  * attestor's definition needs to typecheck a claim of any size. In that form no
- * length or mask-relation constraint is applied — `present`, `values`, and
- * `byteValues` are all unconstrained, and the caller derives the counts from
- * the arrays. Where an actual claim exists — a fixed `v`/`w`, or
- * `zkFetchClaimSchema` — the one-flag-per-slot relation
- * (`present.length === values.length + byteValues.length`) is enforced, and
+ * exact-length constraint is applied, and the caller derives the counts from
+ * the arrays. Every form enforces the one-flag-per-slot relation
+ * (`present.length === values.length + byteValues.length`), and
  * {@link claimToMessage} re-checks it before encoding.
  *
  * @typeParam V — the number of numeric value slots; `number` when omitted.
  * @typeParam W — the number of byte value slots; defaults to `0`.
  * @param v — the number of numeric value slots, or omit when the count is
- *   unknown at parse time. Omitted, every exact-length constraint is skipped.
+ *   unknown at parse time. Omitted, every exact-length constraint is skipped,
+ *   but the mask must still cover `values` plus `byteValues`.
  * @param w — the number of 32-byte byte value slots; constrains `byteValues`
  *   and the mask's tail. Defaults to `0`; read only when `v` is given.
  * @returns a schema whose output is a {@link Claim}: validates the fixed shape,
@@ -172,6 +171,10 @@ export function claimSchema<V extends number = number, W extends number = 0>(
         v === undefined
           ? z.array(bytes32Schema).default([])
           : z.array(bytes32Schema).length(byteCount).prefault([]),
+    })
+    .refine((input) => input.present.length === input.values.length + input.byteValues.length, {
+      message: 'present must have one flag per value: values.length + byteValues.length',
+      path: ['present'],
     })
     .transform((input) => ({
       version: BigInt(input.version),

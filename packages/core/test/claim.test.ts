@@ -60,6 +60,12 @@ describe('claimSchema', () => {
     expect(claimSchema().parse(numericBase).byteValues).toEqual([]);
   });
 
+  it('requires one flag per slot even without counts', () => {
+    expect(() => claimSchema().parse({ ...byteBase, present: [true] })).toThrow(
+      /one flag per value/,
+    );
+  });
+
   it('rejects a byteValues array of the wrong length when W is given', () => {
     expect(() => claimSchema(3, 1).parse({ ...byteBase, byteValues: [] })).toThrow();
     expect(() => claimSchema(3, 1).parse(numericBase)).toThrow();
