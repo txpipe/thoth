@@ -259,3 +259,81 @@ export function claimToMessage<V extends number, W extends number = 0>(
     ...claim.byteValues.flatMap((bytes) => splitBytes(bytes)),
   ];
 }
+
+/**
+ * The contract-facing form of a {@link Claim}: the shape `attestation.compact`'s
+ * `Claim` struct takes as witness data. Each byte slot's flag appears once per
+ * half in `bytePresent`, and each byte value as two adjacent 16-byte
+ * `byteHalves`, so `bytePresent` and `byteHalves` both have length `B = 2W`.
+ *
+ * @see attestation.compact — the `Claim` struct this matches field for field.
+ */
+export interface ContractClaim {
+  /** Schema version of the claim format. */
+  version: bigint;
+  /** The app the claim is for. 32 bytes. */
+  appId: Uint8Array;
+  /** Hash of the policy the attestors enforced. 32 bytes. */
+  policyHash: Uint8Array;
+  /** Unix seconds at which the attestor's observation began. */
+  windowStart: bigint;
+  /** Unix seconds at which the attestor's observation ended. */
+  windowEnd: bigint;
+  /** Circuit hash of what the claim is about. 32 bytes. */
+  subjectHash: Uint8Array;
+  /** Per-claim commitment of the caller secret. 32 bytes. */
+  holder: Uint8Array;
+  /** Numeric presence mask, exactly `V` flags. */
+  present: boolean[];
+  /** Byte-half presence mask, exactly `B = 2W` flags: each byte slot's flag twice. */
+  bytePresent: boolean[];
+  /** Positional numeric claim values, exactly `V` of them. */
+  values: bigint[];
+  /** Byte values as 16-byte halves (`bytes 0–15`, then `bytes 16–31`), exactly `B`. */
+  byteHalves: Uint8Array[];
+}
+
+/**
+ * Convert a parsed {@link Claim} into the contract's witness shape.
+ *
+ * The struct counterpart of {@link claimToMessage}: it splits `present` at `V`,
+ * repeats each byte slot's flag for its two halves, and splits each byte value
+ * into `bytes 0–15` / `bytes 16–31`, so the contract's `buildMessage` over the
+ * result equals `claimToMessage(claim)`. A dApp's `getAttestationWitness`
+ * returns this, not the kind-facing claim.
+ *
+ * @typeParam V — the number of numeric value slots.
+ * @typeParam W — the number of byte value slots.
+ * @param claim — a parsed {@link Claim}.
+ * @returns the claim in the contract's `Claim` struct shape.
+ * @throws if `present` does not have length `V + W`, or any `claim.byteValues[i]`
+ *   is not exactly 32 bytes.
+ */
+export function toContractClaim<V extends number, W extends number = 0>(
+  claim: Claim<V, W>,
+): ContractClaim {
+  const numericCount = claim.values.length;
+  if (claim.present.length !== numericCount + claim.byteValues.length) {
+    throw new Error(
+      `present must have length ${numericCount + claim.byteValues.length}, got ${claim.present.length}`,
+    );
+  }
+  return {
+    version: claim.version,
+    appId: claim.appId,
+    policyHash: claim.policyHash,
+    windowStart: claim.windowStart,
+    windowEnd: claim.windowEnd,
+    subjectHash: claim.subjectHash,
+    holder: claim.holder,
+    present: claim.present.slice(0, numericCount),
+    bytePresent: claim.present.slice(numericCount).flatMap((present) => [present, present]),
+    values: [...claim.values],
+    byteHalves: claim.byteValues.flatMap((bytes) => {
+      if (bytes.length !== 32) {
+        throw new Error(`expected 32 bytes, got ${bytes.length}`);
+      }
+      return [bytes.slice(0, 16), bytes.slice(16, 32)];
+    }),
+  };
+}

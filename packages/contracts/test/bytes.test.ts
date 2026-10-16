@@ -4,7 +4,7 @@
 // the halves, and the unchanged W = 0 layout.
 import { randomBytes } from 'node:crypto';
 import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
-import { claimToMessage } from '@thoth/core/claim';
+import { claimToMessage, toContractClaim } from '@thoth/core/claim';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits as mockPureCircuits } from '../artifacts/mock_attestation/contract/index.js';
@@ -22,7 +22,6 @@ import {
   mergeHalves,
   padded32,
   splitHalves,
-  toBytesClaim,
 } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
@@ -96,7 +95,8 @@ describe('bytes claim wire', () => {
   it('round-trips a core claim through the contract shape', () => {
     const claim = makeByteClaim({ byteValue: fullSpan() });
     const core = coreOf(claim);
-    expect(toBytesClaim(core)).toEqual(claim);
+    expect(toContractClaim(core)).toEqual(claim);
+    expect(pureCircuits.message(toContractClaim(core))).toEqual(claimToMessage(core));
   });
 
   it('encodes a full-span value as little-endian bytes 0–15 / 16–31 halves', () => {

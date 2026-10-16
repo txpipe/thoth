@@ -12,6 +12,7 @@ import type { KeyPair } from '@thoth/attestor';
 import { descriptorOf } from '@thoth/attestor';
 import { buildTrustedSet } from '@thoth/client';
 import { jubjubVerifier } from '@thoth/client/jubjub';
+import { toContractClaim } from '@thoth/core/claim';
 import { type ZkFetchPolicy, zkFetchPolicyHashOf, zkFetchSubjectHashOf } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { type ZkFetchRequest, zkFetchClient } from '@thoth/zk-tls/client';
@@ -29,7 +30,6 @@ import {
   POLICY_B,
   padded32,
   splitHalves,
-  toBytesClaim,
 } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
@@ -136,7 +136,7 @@ const collectSubmission = async (): Promise<Submission> => {
       collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
       DUMMY_SIGNATURE,
   );
-  return { claim: toBytesClaim(claim), signatures, commitRand: randomBytes(32) };
+  return { claim: toContractClaim(claim), signatures, commitRand: randomBytes(32) };
 };
 
 // A fresh ledger that seals the policy the attestors enforced, with its block

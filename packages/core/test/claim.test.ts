@@ -1,7 +1,8 @@
 // Unit tests for the canonical claim shape (`@thoth/core/claim`): the schema's
 // length validation and `claimToMessage`'s wire encoding, including the
-// per-half byte flag duplication and the adjacent 16-byte halves.
-import { type Claim, claimSchema, claimToMessage } from '@thoth/core/claim';
+// per-half byte flag duplication and the adjacent 16-byte halves, and
+// `toContractClaim`'s mask guard (its parity lives in the contracts tests).
+import { type Claim, claimSchema, claimToMessage, toContractClaim } from '@thoth/core/claim';
 import { describe, expect, it } from 'vitest';
 
 const bytes32 = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
@@ -119,5 +120,14 @@ describe('claimToMessage', () => {
       le(second.slice(0, 16)),
       le(second.slice(16)),
     ]);
+  });
+});
+
+describe('toContractClaim', () => {
+  it('rejects a mask without one flag per slot', () => {
+    const claim = claimSchema().parse(byteBase);
+    expect(() => toContractClaim({ ...claim, present: [true] })).toThrow(
+      /present must have length 4/,
+    );
   });
 });

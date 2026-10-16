@@ -9,7 +9,6 @@ import {
   jubjubSchnorrVerifyingKey,
   sampleJubjubSchnorrSk,
 } from '@midnight-ntwrk/compact-runtime';
-import type { Claim } from '@thoth/core/claim';
 import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
 import type { B_Claim } from '../../artifacts/mock_attestation_bytes/contract/index.js';
@@ -111,52 +110,6 @@ export const makeByteClaim = ({
     values: [12345n, 0n, 0n],
     byteHalves: [low, high],
     ...overrides,
-  };
-};
-
-/** The header fields every claim shape shares. */
-type ClaimHeader = {
-  version: bigint;
-  appId: Uint8Array;
-  policyHash: Uint8Array;
-  windowStart: bigint;
-  windowEnd: bigint;
-  subjectHash: Uint8Array;
-  holder: Uint8Array;
-};
-
-const headerOf = (claim: ClaimHeader) => ({
-  version: claim.version,
-  appId: claim.appId,
-  policyHash: claim.policyHash,
-  windowStart: claim.windowStart,
-  windowEnd: claim.windowEnd,
-  subjectHash: claim.subjectHash,
-  holder: claim.holder,
-});
-
-/** Convert a core claim into the numeric-only mock's contract shape (`B = 0`). */
-export const toMockClaim = (claim: Claim<number, number>): A_Claim => ({
-  ...headerOf(claim),
-  present: [...claim.present],
-  bytePresent: [],
-  byteHalves: [],
-  values: [...claim.values],
-});
-
-/**
- * Convert a core claim into the bytes mock's contract shape: split `present`
- * at `V`, duplicate each byte flag for its two halves, and split each byte
- * value into `bytes 0–15` / `bytes 16–31`.
- */
-export const toBytesClaim = (claim: Claim<number, number>): B_Claim => {
-  const numericSlots = claim.values.length;
-  return {
-    ...headerOf(claim),
-    present: claim.present.slice(0, numericSlots),
-    bytePresent: claim.present.slice(numericSlots).flatMap((present) => [present, present]),
-    values: [...claim.values],
-    byteHalves: claim.byteValues.flatMap((value) => splitHalves(value)),
   };
 };
 
