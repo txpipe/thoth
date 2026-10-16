@@ -25,7 +25,7 @@ can feed any number of predicates within the app it was signed for (its
 
 One attestor alone would be almost no assurance, so each app pins M attestors
 and requires N of them to sign the same claim. Colluding attestors are out of
-scope (ADR 0003).
+scope ([ADR 0003](adr/0003-colluding-attestors-out-of-scope.md)).
 
 ### Kinds
 
@@ -33,7 +33,7 @@ Attestors come in kinds, one per way of checking evidence. zkFetch, shipped as
 [`@thoth/zk-tls`](../packages/zk-tls/README.md), checks a Reclaim zkFetch
 proof that an HTTPS response was fetched and not forged; in that kind each
 attestor trusts its own Reclaim witness. The contract knows nothing about
-kinds: the claim's `policyHash` stands in for the kind (ADR 0002), so a new
+kinds: the claim's `policyHash` stands in for the kind ([ADR 0002](adr/0002-no-kind-on-chain-policy-hash.md)), so a new
 kind needs no contract change. To add one, see
 [kind-author-guide.md](kind-author-guide.md).
 
@@ -48,11 +48,11 @@ kind needs no contract change. To add one, see
   are. They are not hidden from guessing, though: the nullifier is a public,
   unsalted hash of the observation, so anyone can confirm a guessed value by
   recomputing it. This is easy for an enumerable identifier in a byte slot,
-  and it is an open security issue (ADR 0009).
+  and it is an open security issue ([ADR 0009](adr/0009-byte-value-slots-in-the-claim.md)).
 
 Matching values alone do not prove where they came from. An app that needs
 source binding recomputes `subjectHash` in-circuit from private subject fields
-and pins only the fields it needs, such as the host (ADR 0001).
+and pins only the fields it needs, such as the host ([ADR 0001](adr/0001-source-binding-by-in-circuit-subject-hash.md)).
 
 ## The claim
 
@@ -64,13 +64,13 @@ The terms are defined in [`CONTEXT.md`](../CONTEXT.md#the-claim).
 |-------|------------|
 | `version` | Wire version, `1` until a layout is deployed |
 | `appId` | The app the claim is for |
-| `policyHash` | Hash of the policy the attestors enforced; stands in for the kind (ADR 0002) |
-| `windowStart`, `windowEnd` | When the attestor observed, in Unix seconds (ADR 0005) |
-| `subjectHash` | Circuit hash of what the claim is about (ADR 0001) |
-| `holder` | Per-claim commitment of the caller's secret (ADR 0004) |
+| `policyHash` | Hash of the policy the attestors enforced; stands in for the kind ([ADR 0002](adr/0002-no-kind-on-chain-policy-hash.md)) |
+| `windowStart`, `windowEnd` | When the attestor observed, in Unix seconds ([ADR 0005](adr/0005-window-is-when-the-attestor-observed.md)) |
+| `subjectHash` | Circuit hash of what the claim is about ([ADR 0001](adr/0001-source-binding-by-in-circuit-subject-hash.md)) |
+| `holder` | Per-claim commitment of the caller's secret ([ADR 0004](adr/0004-holder-is-per-claim-not-an-identity.md)) |
 | `present` | One flag per value slot: `V` numeric slots, then `W` byte slots |
 | `values` | `V` positional `Uint<64>` measurements |
-| `byteValues` | `W` positional 32-byte measurements (identifiers, strings) (ADR 0009) |
+| `byteValues` | `W` positional 32-byte measurements (identifiers, strings) ([ADR 0009](adr/0009-byte-value-slots-in-the-claim.md)) |
 
 The window is when the attestor's witness looked, not when the fact happened,
 and it is not exact. A zkFetch witness takes its timestamp from the request,
@@ -80,7 +80,7 @@ the window shows the fetch happened no earlier than about 10 minutes before
 
 An absent slot must carry zero; a present slot may be zero. There is no nonce
 and no kind code: the contract derives replay protection from the observation
-identity (ADR 0006).
+identity ([ADR 0006](adr/0006-nullifier-keys-on-the-observation-identity.md)).
 
 ### Wire order
 
@@ -156,7 +156,7 @@ sequenceDiagram
 
 - **Colluding attestors**: N or more pinned attestors can sign a claim under a
   policy they do not enforce, and nothing on-chain can stop it. The threshold
-  assumes the pinned operators are honest and independent (ADR 0003).
+  assumes the pinned operators are honest and independent ([ADR 0003](adr/0003-colluding-attestors-out-of-scope.md)).
 - **Org or 1-of-1 attestation**: with a single authority, the registry and the
   threshold are redundant; a plain signature checked in a witness function
   does the whole job.
