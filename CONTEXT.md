@@ -87,7 +87,7 @@ The claim the client sends an attestor with the evidence. The attestor signs the
 _Avoid_: Draft, request.
 
 **Claim context**:
-The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` hashes it for a witness to sign. The app id is not part of it: no witness signs it, and each attestor takes it from the claim proposal.
+The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` hashes it; nothing signs the digest. The app id is not part of it: no witness signs it, and each attestor takes it from the claim proposal.
 _Avoid_: Intent, request, session.
 
 **Observation**:
@@ -109,7 +109,7 @@ The flat list of field values the attestors sign and the contract rebuilds.
 _Avoid_: Payload, digest.
 
 **Wire layout**:
-The order and encoding of the message's fields, `K = 12 + 2V + 2B` of them (`B = 2W` byte halves): a byte value takes two adjacent fields, each half carrying the slot's flag, and the header signs `B` so the layout is bound, not just the length. `buildMessage` in `attestation.compact` defines it and `claimToMessage` mirrors it.
+The order and encoding of the message's fields: a byte value takes two adjacent fields, each half carrying the slot's flag, and the header signs the byte-half count so the layout is bound, not just the length. The `attestation.compact` header and the table in [docs/DESIGN.md](docs/DESIGN.md#wire-order) write it out; `buildMessage` defines it and `claimToMessage` mirrors it.
 _Avoid_: Format, serialization.
 
 **Attestation**:

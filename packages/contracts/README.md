@@ -75,7 +75,7 @@ The module parameters, fixed when you embed:
 
 - `#V` numeric value slots and `#B` byte halves, two per 32-byte byte value,
   so `#B` is even (`B = 0` is the numeric-only layout).
-- `#K = 12 + 2*V + 2*B`, the signed-message length.
+- `#K`, the signed-message length; the header below gives the formula.
 - `#N` of `#M` signatures must verify; `#M` is also the registry's key count.
 
 The header of

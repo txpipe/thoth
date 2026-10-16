@@ -212,7 +212,7 @@ READMEs don't repeat it.
   witnesses → attestors → client → simulator); its header explains the setup.
 - `packages/zk-tls/test/live.test.ts` is an opt-in live check against two real
   witnesses; it skips unless `WITNESS_URLS` names them, so `npm test` and CI
-  stay offline. See the package README's "Live check".
+  stay offline. See "Live check" in `packages/zk-tls/docs/attestor-guide.md`.
 - Never skip the `present` mask semantics: `present[i] = true` means slot `i`
   was measured (value may still be `0`).
 

@@ -203,7 +203,7 @@ const runAttempt = async <V extends number, PK, S>(
  * Collect a threshold of attestations over one exact message.
  *
  * Starts `threshold` attempts at once, and a spare only when the attempts in
- * flight can no longer bring any message to the threshold.
+ * flight cannot bring any message to the threshold any more.
  *
  * @returns the first message to reach the threshold, attestations sorted by registry slot.
  * @throws {@link ZkFetchThresholdError} if the options are invalid, the request
