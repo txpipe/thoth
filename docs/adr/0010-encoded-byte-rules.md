@@ -2,7 +2,7 @@
 
 Status: accepted
 
-The policy's byte rules fill a 32-byte claim slot from the disclosed string (ADR 0009). Alongside the literal `bytes` rule, `hex` and `base64` decode the string into its bytes, so representations of the same information certify one claim value: hex case, an optional `0x`/`0X` marker, the base64 standard and URL-safe alphabets, and optional base64 `=` padding all fold together. Padding-only and trailing-bit-invalid encodings are rejected rather than folded, so a lenient decoder-favorite like `AB==` cannot collapse into `AA==`.
+The policy's byte rules fill a 32-byte claim slot from the disclosed string (ADR 0009). Alongside the literal `bytes` rule, `hex` and `base64` decode the string into its bytes, so representations of the same information certify one claim value: hex case, an optional `0x`/`0X` marker, the base64 standard and URL-safe alphabets, and optional base64 `=` padding all fold together. Padding-only and trailing-bit-invalid encodings are rejected rather than folded, so a leniently decoded `AB==` cannot collapse into `AA==`.
 
 Decoding is deterministic — client and attestors share the law — and never deletes a character. Separators, whitespace and punctuation are part of the value: a hyphenated identifier is not its unhyphenated form, `AA:BB` is not hex, and a wrapped encoding is invalid rather than normalized. This rejected separator stripping deliberately: for identifiers the separator may carry the meaning.
 
