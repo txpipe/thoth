@@ -1,39 +1,28 @@
-// Attestor registry module for Thoth.
+// Thoth attestor registry module: the app's M pinned attestor public keys and
+// `countValidSignatures` over a `Vector<K, Field>` message. It counts the
+// signatures that verify; the attestation module that embeds it defines the
+// message and applies the threshold.
 //
-// Holds the app's pinned set of `M` attestor public keys and provides
-// `countValidSignatures` over an arbitrary `Vector<K, Field>` signed message.
-// This module only COUNTS signature validity — it never interprets the
-// message contents (the message shape is defined by the Attestation module
-// that embeds this one), and it does NOT enforce a threshold (the Attestation
-// module applies its own `#N`).
-//
-// Registry keys are a *sealed* ledger: `initRegistry` sets them exactly once
-// at deploy time and they cannot change afterwards. The ledger is deliberately
-// NOT exported, and embedders must not re-export `initRegistry`: a sealed field
-// cannot be written by code reachable from an exported circuit, so exposing the
-// init circuit is a compile error.
-// The `initialized` flag backs this at runtime: a second `initRegistry` call
-// fails even from within the constructor.
+// The keys are a sealed, unexported ledger that only `initRegistry` writes,
+// once, at deploy. Do not re-export `initRegistry`: a sealed field cannot be
+// written from an exported circuit, so that is a compile error. `initialized`
+// makes a second call fail inside the constructor too.
 pragma language_version >= 0.22;
 
 module attestor_registry<#M, #K> {
   import CompactStandardLibrary;
 
-  /// The M attestor public keys, pinned at deploy by `initRegistry`.
-  /// Not exported: the module's own init circuit is the only writer.
+  /// The M pinned attestor public keys.
   sealed ledger keys: Vector<M, JubjubPoint>;
 
-  /// Whether `initRegistry` has run. Unexported and unsealed, written only by
-  /// `initRegistry`, which refuses a second call.
+  /// Whether `initRegistry` has run.
   ledger initialized: Boolean;
 
   /// Deploy-time witness providing the M attestor public keys.
   witness seedKeys(): Vector<M, JubjubPoint>;
 
-  /// Initialize the registry from the `seedKeys` witness and seal the keys.
-  /// The sole registry constructor: refuses a second call, then asserts the
-  /// pinned keys are pairwise distinct (empty slots exempt), so the N-of-M
-  /// threshold holds against exactly the keys the app pinned.
+  /// Pin the keys from the `seedKeys` witness. Rejects a second call and
+  /// duplicate keys (empty slots exempt), so the threshold counts distinct keys.
   export circuit initRegistry(): [] {
     assert(!initialized, "Registry already initialized");
     initialized = true;
@@ -55,8 +44,8 @@ module attestor_registry<#M, #K> {
     return jubjubSchnorrVerify<K>(msg, sig, pk);
   }
 
-  /// Number of the M signatures that verify against their corresponding
-  /// registry slot (signature i is checked against keys[i]).
+  /// Number of the M signatures that verify against their own slot:
+  /// `sigs[i]` against `keys[i]`.
   export circuit countValidSignatures(
                    msg: Vector<K, Field>,
                    sigs: Vector<M, JubjubSchnorrSignature>
@@ -80,9 +69,8 @@ module attestor_registry<#M, #K> {
                 ks);
   }
 
-  /// Whether the M registry keys are pairwise distinct, empty slots exempt:
-  /// true iff every non-empty key occupies exactly one slot. `initRegistry`
-  /// asserts this at deploy so the check costs nothing per claim.
+  /// Whether every non-empty key occupies exactly one slot. Checked once at
+  /// deploy, so it costs nothing per claim.
   export circuit keysDistinct(ks: Vector<M, JubjubPoint>): Boolean {
     return fold((distinct: Boolean, k: JubjubPoint) =>
                 distinct && (k == default<JubjubPoint> || keyCount(ks, k) == 1),

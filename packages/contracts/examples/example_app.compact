@@ -1,19 +1,8 @@
-// Example: embedding the Thoth Attestation module into a top-level contract.
-//
-// The app fixes, at embed time:
-//   #V = 3 value slots, #B = 2 byte halves (one 32-byte byte value),
-//   #K = 22 signed-message fields (must equal 2*V + 2*B + 12),
-//   #M = 3 attestor signature slots, #N = 2 (2-of-3 threshold).
-//
-// The top-level constructor initializes the registry through the module's
-// `initRegistry` (which seals and de-duplicates the keys), and seals the
-// accepted policy hashes, the freshness window and the maximum observation
-// window exactly once at deploy.
-//
-// To expose the module's types, ledgers, and pure circuits to the app's
-// TypeScript driver, re-export them at the top level (see the `export { ... }`
-// lines). The `message` pure circuit gives the app/attestor the exact flat
-// `Vector<K, Field>` a signature commits to — golden-vector testable.
+// Example top-level contract embedding the attestation module: V=3 value
+// slots, B=2 byte halves (one byte value), K=22 message fields, 2-of-3.
+// The constructor seals the policy hashes, the windows and the registry keys
+// once at deploy; the `export { ... }` lines expose the module's types and
+// ledgers to the app's TypeScript driver.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
@@ -27,27 +16,20 @@ export { A_Claim, A_ClaimEntry };
 
 export { A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
 
-// Registry seals are read by the registry module, not re-exported here; the
-// app's driver typically does not need direct access to the key vector.
-
-// Attestation entry point — verifies signatures, replay, the window, vaults.
 export circuit verifyAttestation(): [] {
   A_verifyAttestation();
 }
 
-// The exact flat signed message for a claim — exported pure so the
-// off-chain / attestor side and tests can reproduce it byte-for-byte.
+// The signed message, exported pure so the attestor side and tests can
+// reproduce it.
 export pure circuit message(a: A_Claim): Vector<22, Field> {
   return A_buildMessage(a);
 }
 
-// Presence is now per-slot and natively readable: an app predicate over a
-// vaulted claim simply reads `c.present[i]` (true = values[i] was measured,
-// even if the value itself is 0). Compose this inside your own circuits over
-// `A_openClaim` — see test/mocks/MockAttestation.compact for a demo.
+// App predicates open a vaulted claim with `A_openClaim` inside their own
+// circuits; see test/mocks/MockAttestation.compact.
 
-// Deploy-time witness providing the policy hashes the app accepts, one per
-// policy (kind) it serves. Size the vector to the number of policies.
+// The policy hashes the app accepts, one per policy it serves.
 witness seedPolicies(): Vector<1, Bytes<32>>;
 
 constructor() {

@@ -1,9 +1,5 @@
-// Test mock: a thin deployable wrapper around the attestation + registry
-// modules, specialized to V=3 values, B=0 byte halves, K=18 message fields,
-// M=3 signatures, N=2 threshold (2-of-3). Exists only to give the modules a
-// top-level shell to compile against and to re-export the pure parity surface
-// (`message`, `computeId`, `holderOf`, `holderCommitment`, `subjectHash`) plus
-// types and ledger fields the simulator/tests need.
+// Test mock: the modules specialized to V=3, B=0, K=18, 2-of-3, with the pure
+// circuits, types and ledgers the simulator tests read.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
@@ -17,9 +13,8 @@ export { A_Claim, A_ClaimEntry };
 
 export { A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
 
-// Parity surface for the claim context: a struct of four Bytes<32> fields, so
-// a test can check the compiled `persistentHash<Subject>` against the
-// off-chain `@thoth/core/claim-context` subject hash.
+// A four-field subject, so a test can check `persistentHash<Subject>` against
+// the off-chain subject hash in `@thoth/core/claim-context`.
 export struct Subject {
   method: Bytes<32>;
   host: Bytes<32>;
@@ -55,36 +50,31 @@ export pure circuit keysDistinct(ks: Vector<3, JubjubPoint>): Boolean {
   return R_keysDistinct(ks);
 }
 
-// App-predicate demo: open a vaulted claim in-circuit and read several value
-// slots in one shot. `openClaim` is intentionally NOT re-exported at the top
-// level (its tainted return would force a disclosing reveal); apps compose
-// predicates over it inside their own circuits instead.
+// App-predicate demo: open a vaulted claim and read two value slots.
+// `openClaim` is not re-exported: its tainted return would force a disclose.
 export circuit openAndRead(id: Bytes<32>, e0: Uint<64>, e1: Uint<64>): [] {
   const c = A_openClaim(id);
   assert(c.values[0] == e0, "value[0] mismatch");
   assert(c.values[1] == e1, "value[1] mismatch");
 }
 
-// App-predicate demo: read per-slot presence directly off a vaulted claim.
-// `present` is `Vector<V, Boolean>`, so slots are checked without witnesses.
+// App-predicate demo: read per-slot presence off a vaulted claim.
 export circuit openAndReadPresence(id: Bytes<32>, p0: Boolean, p1: Boolean): [] {
   const c = A_openClaim(id);
   assert(c.present[0] == p0, "present[0] mismatch");
   assert(c.present[1] == p1, "present[1] mismatch");
 }
 
-// App-predicate demo: a predicate that REQUIRES metric 0 to be present before
-// consuming its value. Fixed index — Compact requires literal/loop-constant
-// vector subscripts.
+// App-predicate demo: require slot 0 to be present before reading it. The
+// index is fixed because Compact requires constant vector subscripts.
 export circuit openAndRequireMetric0(id: Bytes<32>, expected: Uint<64>): [] {
   const c = A_openClaim(id);
   assert(c.present[0], "metric 0 not present");
   assert(c.values[0] == expected, "value[0] mismatch");
 }
 
-// App-predicate demo: source binding (ADR 0001). The caller supplies the
-// subject privately; the circuit recomputes its hash against the vaulted
-// claim's `subjectHash` and pins only the host, so the path stays private.
+// App-predicate demo: source binding (ADR 0001). The subject is private
+// input; the circuit recomputes its hash and pins only the host.
 export circuit openAndBindHost(id: Bytes<32>, s: Subject, host: Bytes<32>): [] {
   const c = A_openClaim(id);
   assert(persistentHash<Subject>(s) == c.subjectHash, "Subject mismatch");
