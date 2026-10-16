@@ -46,7 +46,7 @@ jobs:
           compact update 0.34.0
 
       - name: Compile contract artifacts
-        run: compact compile --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation
+        run: npm run compact:no-zk
 
       - name: Build
         run: npm run build

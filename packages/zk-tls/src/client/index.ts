@@ -223,6 +223,11 @@ export interface ZkFetchClientConfig<V extends number, PK, S> {
   /** The claim's value-slot count (the target contract's `#V`). */
   readonly valueSlots: V;
   /**
+   * The claim's byte value-slot count (the target contract stores each value
+   * as two halves, so its `#B` is twice this). Defaults to `0` (numeric-only).
+   */
+  readonly byteSlots?: number;
+  /**
    * Evidence source per attestor id. Each one points at that attestor's own
    * witness (e.g. `zkFetchProver({ witnessUrl })`); the dApp supplies the
    * URLs.
@@ -328,13 +333,14 @@ export const zkFetchClient = {
    *   provers.
    * @returns a client ready to `proveReq` or `collect`.
    * @throws if the policy is invalid, the appId is not 32 bytes, a policy slot
-   *   exceeds `valueSlots`, or the prover map does not match the trusted set
-   *   exactly.
+   *   exceeds the requested slot counts or targets the wrong region, or the
+   *   prover map does not match the trusted set exactly.
    */
   init: <const V extends number, PK, S>(
     config: ZkFetchClientConfig<V, PK, S>,
   ): ZkFetchClient<V, PK, S> => {
     const { trusted, transport, verifier, policy, appId, valueSlots, provers } = config;
+    const byteSlots = config.byteSlots ?? 0;
     const checkedPolicy = zkFetchPolicySchema.parse(policy);
     if (appId.length !== APP_ID_BYTES) {
       throw new Error(`appId must be ${APP_ID_BYTES} bytes, got ${appId.length}`);
@@ -352,7 +358,7 @@ export const zkFetchClient = {
     }
     // Same guard `deriveClaimFromEvidence` enforces later — fail at init
     // instead of on the first `attest()`.
-    assertPolicySlotsInRange(checkedPolicy, valueSlots);
+    assertPolicySlotsInRange(checkedPolicy, valueSlots, byteSlots);
     return {
       collect: (request, options) =>
         collectThreshold({ ...config, policy: checkedPolicy }, request, options),
@@ -382,6 +388,7 @@ export const zkFetchClient = {
               appId,
               holder: checkedHolder,
               valueSlots,
+              byteSlots,
               windowStart,
               windowEnd,
             });

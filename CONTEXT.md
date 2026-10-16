@@ -31,7 +31,7 @@ _Avoid_: Driver, plugin.
 ### The claim
 
 **Claim**:
-The canonical statement of what was observed, and the thing attestors sign. It carries the version, the app id, the policy hash, the observation window, the subject hash, the holder, the present mask, and the measured values. It carries no nonce and no kind.
+The canonical statement of what was observed, and the thing attestors sign. It carries the version, the app id, the policy hash, the observation window, the subject hash, the holder, the present mask, and the measured values (numeric and byte). It carries no nonce and no kind.
 _Avoid_: Assertion, statement.
 
 **Version**:
@@ -71,15 +71,19 @@ When the attestor observed the claim, not when the underlying fact happened. The
 _Avoid_: Timestamp, event time.
 
 **present**:
-The mask marking which value slots were measured. `present[i]` true means slot i was measured, even when its value is zero. An absent slot must carry zero.
+The mask marking which value slots were measured, one flag per slot, numeric slots first and byte slots after. In the signed message each byte slot's flag is carried on both of its 16-byte halves. `present[i]` true means slot i was measured, even when its value is zero. An absent slot must carry zero.
 _Avoid_: Valid, filled.
 
 **Values**:
-The measured numbers of a claim, one per value slot. Zero is a valid measured value; read `present` to know whether a slot was measured. What each slot means is the policy's slot map, not the claim's.
+The measured values of a claim, one per value slot: numbers in the numeric slots, fixed-width byte strings in the byte slots. Zero is a valid measured value; read `present` to know whether a slot was measured. What each slot means is the policy's slot map, not the claim's.
 _Avoid_: Data, payload.
 
+**Byte slot**:
+A value slot carrying a fixed-width byte string, for facts that are not numbers, such as identifiers. A policy's parse rule canonicalizes a source's string into the slot: `bytes` keeps its UTF-8 bytes, `hex` and `base64` decode it, and an optional `length` pins the exact byte count. Normalization only folds representations that carry no data (hex case, an optional `0x` marker, the base64 alphabet, base64 padding) — separators and whitespace are data (ADR 0010). The slot is exactly its bytes; equality is byte equality. The signed message splits it into two adjacent 16-byte halves and repeats the slot's flag on each, so a predicate reassembles the halves in-circuit.
+_Avoid_: Blob, string slot.
+
 **Claim proposal**:
-The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder, window and requested value-slot count from the proposal.
+The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder, window and the requested numeric and byte value-slot counts from the proposal.
 _Avoid_: Draft, request.
 
 **Claim context**:
@@ -91,7 +95,7 @@ One attested session: the single fetch or event read the witnesses signed. Uniqu
 _Avoid_: Request, session.
 
 **Observation identity**:
-The fields that make an observation unique: app id, policy hash, subject hash, window, values, and present. It excludes holder and version.
+The fields that make an observation unique: app id, policy hash, subject hash, window, numeric values, byte values, and present. It excludes holder and version.
 _Avoid_: Claim id, nonce.
 
 **Fact**:
@@ -105,7 +109,7 @@ The flat list of field values the attestors sign and the contract rebuilds.
 _Avoid_: Payload, digest.
 
 **Wire layout**:
-The order and encoding of the message's fields, `K = 2*V + 11` of them. `buildMessage` in `attestation.compact` defines it and `claimToMessage` mirrors it.
+The order and encoding of the message's fields, `K = 12 + 2V + 2B` of them (`B = 2W` byte halves): a byte value takes two adjacent fields, each half carrying the slot's flag, and the header signs `B` so the layout is bound, not just the length. `buildMessage` in `attestation.compact` defines it and `claimToMessage` mirrors it.
 _Avoid_: Format, serialization.
 
 **Attestation**:

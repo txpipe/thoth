@@ -18,7 +18,10 @@ while preserving the privacy. From this stem two requirements that must hold at 
   values the claim is derived from, but not the credentials and not anything the
   fetch redacted.
 - **The claim values** are private witness data in the Midnight contract — they never
-  appear on-chain; only the predicate outcome and any commitments do.
+  appear on-chain; only the predicate outcome and any commitments do. They are not
+  hidden from guessing, though: the replay nullifier is an unsalted hash over the
+  observation, so anyone can confirm a guessed value — easy for an enumerable
+  identifier in a byte slot (ADR 0009).
 
 To establish that a claim is true, the client obtains evidence from a *data source* —
 e.g. a third-party API — via a protocol such as Reclaim Protocol's ZkFetch, which
@@ -95,20 +98,30 @@ behind them are the ADRs in [`adr/`](adr/).
 | `windowStart`, `windowEnd` | When the attestor observed, in Unix seconds (ADR 0005) |
 | `subjectHash` | Circuit hash of what the claim is about (ADR 0001) |
 | `holder` | Per-claim commitment of the caller's secret (ADR 0004) |
-| `present` | One flag per value slot: was it measured |
+| `present` | One flag per value slot: `V` numeric slots, then `W` byte slots |
 | `values` | `V` positional `Uint<64>` measurements |
+| `byteValues` | `W` positional 32-byte measurements (identifiers, strings) |
+
+A byte value travels exactly as its 32 bytes; the contract stores each one as
+two adjacent 16-byte halves and carries the byte slot's flag on both halves
+(honest claims; the module does not check that the two flags agree). The
+absent law is one-directional: an absent slot must carry zero, while a present
+slot may be zero — including a short value whose zero-padding leaves a half all
+zeros.
 
 There is no nonce and no kind code. The contract derives replay protection from
 the observation identity (ADR 0006), and the policy hash binds the kind.
 
 ### Wire order
 
-Attestors sign, and the contract rebuilds, a flat vector of `K = 2*V + 11`
-fields. `buildMessage` in
+Attestors sign, and the contract rebuilds, a flat vector of
+`K = 2*V + 2*B + 12` fields (`B = 2*W` is the number of byte halves).
+`buildMessage` in
 [`attestation.compact`](../packages/contracts/attestation.compact) defines it;
 `claimToMessage` in `@thoth/core/claim` mirrors it, and a parity test keeps the
 two equal. Each 32-byte field is split into two 16-byte halves, each read as a
-`Uint<128>`, so every byte is signed.
+`Uint<128>` little-endian (byte 0 least significant — the runtime's
+`convertBytesToUint` convention), so every byte is signed.
 
 | Index | Field | Encoding |
 |-------|-------|----------|
@@ -119,8 +132,17 @@ two equal. Each 32-byte field is split into two 16-byte halves, each read as a
 | 6 | `windowEnd` | Unix seconds |
 | 7, 8 | `subjectHash` | two halves |
 | 9, 10 | `holder` | two halves |
-| 11 … 10+V | `present[0]` … `present[V-1]` | `1` measured, `0` absent |
-| 11+V … 10+2V | `values[0]` … `values[V-1]` | the value; `0` when absent |
+| 11 | `B` | the byte-half count `2W`; the contract writes its own `#B` |
+| 12 … 11+V | `present[0]` … `present[V-1]` | `1` measured, `0` absent |
+| 12+V … 11+V+B | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
+| 12+V+B … 11+V+B+V | `values[0]` … `values[V-1]` | the value; `0` when absent |
+| 12+V+B+V … 11+V+B+V+B | `byteHalves[0]` … `byteHalves[B-1]` | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]` |
+
+`K` alone fixes only `2*V + 2*B`, so two layouts can share a length (`V = 3,
+W = 2` and `V = 1, W = 3` both give `K = 26`). Index 11 signs the layout: the
+contract rebuilds it from its own `#B`, so a message signed under another
+layout fails verification. With `W = 0` every byte row disappears and index 11
+is `0`.
 
 ## The contract
 

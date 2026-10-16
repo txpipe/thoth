@@ -1,5 +1,7 @@
 // Parity between the off-chain message encoder (`@thoth/core/claim`'s
 // `claimToMessage`) and the contract's own `buildMessage` (`pureCircuits.message`).
+// `toContractClaim` is held to the same encoder: its witness shape must build
+// the message `claimToMessage` signs.
 //
 // Level 1 asserts the encoders are field-for-field identical across a spread of
 // claims. Level 2 signs over `claimToMessage`'s output and submits to the
@@ -7,7 +9,7 @@
 // `buildMessage(claim)` in-circuit, so acceptance is only possible if the
 // off-chain encoder is byte-identical to the contract's own.
 import { randomBytes } from 'node:crypto';
-import { claimToMessage } from '@thoth/core/claim';
+import { claimToMessage, toContractClaim } from '@thoth/core/claim';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import {
@@ -44,7 +46,16 @@ describe('claimToMessage parity', () => {
   describe('field-for-field equality (level 1)', () => {
     it('matches the contract buildMessage for every claim shape', () => {
       for (const claim of claims) {
-        expect(claimToMessage(claim)).toEqual(pureCircuits.message(claim));
+        expect(claimToMessage({ ...claim, byteValues: [] })).toEqual(pureCircuits.message(claim));
+      }
+    });
+
+    it('converts a numeric-only core claim into the contract witness shape', () => {
+      for (const claim of claims) {
+        const core = { ...claim, byteValues: [] };
+        const contractClaim = toContractClaim(core);
+        expect(contractClaim).toEqual(claim);
+        expect(pureCircuits.message(contractClaim)).toEqual(claimToMessage(core));
       }
     });
   });
@@ -53,7 +64,7 @@ describe('claimToMessage parity', () => {
     it('accepts signatures made over claimToMessage output', async () => {
       const commitRand = randomBytes(32);
       const claim = makeClaim({ values: [111n, 222n, 333n], present: [true, true, true] });
-      const msg = claimToMessage(claim);
+      const msg = claimToMessage({ ...claim, byteValues: [] });
 
       // Sign the off-chain encoder's message directly with the first two keys.
       const signatures = [

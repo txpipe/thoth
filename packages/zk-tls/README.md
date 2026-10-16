@@ -35,18 +35,29 @@ prover that the client can use to obtain evidence:
     to equal the policy's canonical disclosure rules. Required slots must be
     certifiable, meaning disclosed and parseable; optional slots may be absent
     and are signed unpresent.
-  - `deriveClaimFromEvidence({ verified, policy, appId, holder, valueSlots, windowStart, windowEnd })`
-    derives the canonical `Claim` the attestor signs: values/present from the
-    disclosed values, `zkFetchSubjectHashOf` the signed
-    request as `subjectHash`, and `zkFetchPolicyHashOf(policy)` as
-    `policyHash`.
+  - `deriveClaimFromEvidence({ verified, policy, appId, holder, valueSlots, byteSlots, windowStart, windowEnd })`
+    derives the canonical `Claim` the attestor signs: values/byte values and
+    their presence flags from the disclosed values, `zkFetchSubjectHashOf` the
+    signed request as `subjectHash`, and `zkFetchPolicyHashOf(policy)` as
+    `policyHash`. `byteSlots` defaults to `0`.
   - `claimRequestOf(claim)` reads the method, URL and body the witness signed
     into the Reclaim claim's parameters: the request the subject hash is over.
   - `parsedEvidenceView(evidence)` returns the parsed evidence view claim
     derivation runs on, without a signature check; the caller decides trust.
-  - `parseDisclosedValue(value, rule)` applies the parse law: a disclosed string
-    becomes the claim's numeric slot value, or `null` when unparseable or out
-    of the wire's `Uint<64>` range.
+  - `parseDisclosedValue(value, rule)` applies the parse law: `int`/`float` turn
+    a disclosed string into a numeric slot value; `bytes` keeps the string's
+    UTF-8 bytes; `hex` decodes hex digits, case-insensitively, with an optional
+    `0x`/`0X` prefix; `base64` decodes the standard (`+/`) or URL-safe (`-_`)
+    alphabet, with optional trailing `=` padding. All three byte rules fill a
+    32-byte slot, and `null` means unparseable — out of the wire's `Uint<64>`
+    range, not a valid encoding, or longer than 32 bytes. Decoding never deletes
+    a character: separators, whitespace and punctuation are data, so only hex
+    case, the `0x` marker, the base64 alphabet and base64 padding fold together
+    (ADR 0010). The `bytes` mapping is not injective: trailing NUL bytes merge
+    into the padding and unpaired surrogates normalize to U+FFFD, so equality is
+    over the padded bytes. `parseSlotValue(slot, value)` is the slot-aware
+    variant that also applies a slot's exact `length` pin, and `isByteRule(rule)`
+    separates the numeric rules from the byte rules.
   - `claimUrl(claim)` returns the URL a signed claim attests, decoded from its
     parameters.
   - `normalizePolicy(policy)` parses a policy, fills its defaults, lowercases,
@@ -86,12 +97,15 @@ prover that the client can use to obtain evidence:
   - `zkFetchAttestor({ id, keyPair, witnessAddress })` returns a
     deployable instance: a specialization of `@thoth/attestor`'s `buildAttestor`
     that knows the kind, accepts evidence only from the witness `witnessAddress`
-    names, and signs the attestor-derived claim at the proposed `values.length`.
-    The claim schema requires `present` and `values` to have equal lengths;
-    verification rejects policy slot indices outside that length before checking
-    the proof. Unused positions are derived as absent and zero-valued, regardless
-    of their proposed contents. One instance and signing key can serve contracts
-    with different slot counts. Each consuming contract enforces its own fixed `#V`.
+    names, and signs the attestor-derived claim at the proposed `values.length`
+    and `byteValues.length`. The claim schema requires one presence flag per
+    value slot (`values` plus `byteValues`); verification rejects policy slot
+    indices outside the requested counts, or targeting the wrong region
+    (a numeric rule on a byte slot, or a byte rule on a numeric slot), before
+    checking the proof. Unused positions are derived as absent and zero-valued,
+    regardless of their proposed contents. One instance and signing key can
+    serve contracts with different slot counts. Each consuming contract enforces
+    its own fixed `#V` and `#B`.
 - **`@thoth/zk-tls/client`.** The dApp side: `zkFetchClient`,
   `toCanonicalEvidence`, `addressFromWitnessId`, and the prover/config types.
   `init` validates the policy, its slot map, and the prover map, once;
@@ -225,10 +239,12 @@ WITNESS_URLS=ws://localhost:8001/ws,ws://localhost:8002/ws \
 The clone is pinned to `attestor-core` `7d8b90c` (5.1.4) so the check does not
 drift with upstream; `WITNESS_REF`, `WITNESS_CLONE_DIR`, `WITNESS_PORT_A/B`, and
 `WITNESS_KEY_A/B` override the defaults. The test reveals only the
-`stargazers_count` field of `https://api.github.com/repos/txpipe/dolos`
-(override with `LIVE_URL`), asserts that both witnesses derive the same
-identifier and message, and that the star count is present. It is not part of
-`npm test`.
+`stargazers_count` and `full_name` fields of
+`https://api.github.com/repos/txpipe/dolos` (override with `LIVE_URL`). It
+derives one numeric-only claim and one mixed claim carrying a byte value, and
+for each asserts that both witnesses derive the same identifier and message,
+with the star count present and the byte slot equal to the zero-padded UTF-8 of
+the disclosed `full_name`. It is not part of `npm test`.
 
 All operators in one trusted set must use the same witness version and behavior.
 Re-run this check against candidate witnesses after any witness change and before
@@ -244,7 +260,7 @@ The kind sits in the middle of the Thoth layering:
         │  evidence (ProviderClaimData + signature + address)
         ▼
   @thoth/zk-tls attestor — verify own witness's signature → policy → disclosures
-        │  signs Claim (numeric slots + present + subjectHash), Jubjub-Schnorr
+        │  signs Claim (numeric + byte slots + present + subjectHash), Jubjub-Schnorr
         ▼
   N-of-M of these → @thoth/contracts registry (Midnight)
 ```

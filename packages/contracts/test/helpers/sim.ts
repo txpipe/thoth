@@ -2,94 +2,150 @@ import {
   type ChargedState,
   type CircuitContext,
   type CircuitResults,
+  type ConstructorContext,
   createCircuitContext,
   createConstructorContext,
   dummyContractAddress,
   type Effects,
   type JubjubPoint,
+  type JubjubSchnorrSignature,
   type StateValue,
 } from '@midnight-ntwrk/compact-runtime';
-import { Contract, type Ledger, ledger } from '../../artifacts/mock_attestation/contract/index.js';
+import {
+  type A_Claim,
+  Contract as MockContract,
+  type Ledger as MockLedger,
+  ledger as mockLedger,
+} from '../../artifacts/mock_attestation/contract/index.js';
+import {
+  type B_Claim,
+  Contract as BytesContract,
+  type Ledger as BytesLedger,
+  ledger as bytesLedger,
+} from '../../artifacts/mock_attestation_bytes/contract/index.js';
 import type { PrivateState } from './private-state.js';
 import { type DeploySeals, makeWitnesses } from './witnesses.js';
 
 const ADDR = dummyContractAddress();
 const COIN_PK = '0'.repeat(64);
 
-export class MockAttestationSim {
-  private lastEffects: Effects | null = null;
-  private lastSigs: PrivateState['signatures'] | null = null;
+type SimState = StateValue | ChargedState;
 
-  // Block-time override (seconds). Leave null to use the runtime default;
-  // set it (e.g. to the claim window ± offsets) to test the window checks.
-  now: number | null = null;
+/** The parts of a generated `Contract` class the simulator drives. */
+type ContractLike<PS> = {
+  circuits: Record<string, unknown>;
+  initialState(context: ConstructorContext<PS>): Promise<{
+    currentContractState: { data: SimState };
+  }>;
+};
 
-  readonly contract: Contract<PrivateState>;
-  private state: StateValue | ChargedState;
-
-  private constructor(contract: Contract<PrivateState>, state: StateValue | ChargedState) {
-    this.contract = contract;
-    this.state = state;
-  }
-
-  // Deploy is async under runtime 0.19 (`initialState` returns a Promise), so
-  // construction goes through this factory.
-  static async create(
-    privateState: PrivateState,
+/**
+ * Build a simulator class for one mock artifact.
+ *
+ * @typeParam PS — the artifact's private-state type (`PrivateState<Claim>`).
+ * @typeParam L — the artifact's ledger view type.
+ * @param options — how to construct the artifact's contract and read its ledger.
+ * @returns a class whose `create` deploys the mock and whose `call` runs circuits.
+ */
+const makeSimClass = <PS extends { signatures: JubjubSchnorrSignature[] }, L>(options: {
+  newContract: (
+    privateState: PS,
     registryKeys: JubjubPoint[],
-    seals: DeploySeals = {},
-  ): Promise<MockAttestationSim> {
-    const contract = new Contract<PrivateState>(makeWitnesses(registryKeys, seals));
-    const deploy = await contract.initialState(createConstructorContext(privateState, COIN_PK));
-    return new MockAttestationSim(contract, deploy.currentContractState.data);
-  }
+    seals: DeploySeals,
+  ) => ContractLike<PS>;
+  ledgerOf: (state: SimState) => L;
+}) => {
+  const { newContract, ledgerOf } = options;
+  return class MockSim {
+    // Internal simulator bookkeeping (kept public so the factory's class type
+    // can be exported; tests should use effects()/lastSignatures()).
+    lastEffects: Effects | null = null;
+    lastSigs: JubjubSchnorrSignature[] | null = null;
 
-  async call(name: string, ps: PrivateState, ...args: unknown[]): Promise<unknown> {
-    const ctx = createCircuitContext(
-      name,
-      ADDR,
-      COIN_PK,
-      this.state,
-      ps,
-      undefined, // stateProvider
-      undefined, // gasLimit
-      undefined, // costModel
-      this.now ?? undefined,
-    );
-    const circuit = (
-      this.contract.circuits as Record<
-        string,
-        (
-          c: CircuitContext<PrivateState>,
-          ...a: unknown[]
-        ) => Promise<CircuitResults<PrivateState, unknown>>
-      >
-    )[name];
-    if (!circuit) {
-      throw new Error(`no circuit named '${name}'`);
+    // Block-time override (seconds). Leave null to use the runtime default;
+    // set it (e.g. to the claim window ± offsets) to test the window checks.
+    now: number | null = null;
+
+    readonly contract: ContractLike<PS>;
+    state: SimState;
+
+    constructor(contract: ContractLike<PS>, state: SimState) {
+      this.contract = contract;
+      this.state = state;
     }
-    const res = await circuit(ctx, ...args);
-    this.state = res.context.callContext.currentQueryContext.state;
-    this.lastEffects = res.context.callContext.currentQueryContext.effects;
-    this.lastSigs = ps.signatures;
-    return res.result;
-  }
 
-  effects(): Effects {
-    if (!this.lastEffects) {
-      throw new Error('no circuit call executed yet');
+    // Deploy is async under runtime 0.19 (`initialState` returns a Promise), so
+    // construction goes through this factory.
+    static async create(
+      privateState: PS,
+      registryKeys: JubjubPoint[],
+      seals: DeploySeals = {},
+    ): Promise<MockSim> {
+      const contract = newContract(privateState, registryKeys, seals);
+      const deploy = await contract.initialState(createConstructorContext(privateState, COIN_PK));
+      return new MockSim(contract, deploy.currentContractState.data);
     }
-    return this.lastEffects;
-  }
 
-  lastSignatures(): PrivateState['signatures'] {
-    if (!this.lastSigs) {
-      throw new Error('no circuit call executed yet');
+    async call(name: string, ps: PS, ...args: unknown[]): Promise<unknown> {
+      const ctx = createCircuitContext(
+        name,
+        ADDR,
+        COIN_PK,
+        this.state,
+        ps,
+        undefined, // stateProvider
+        undefined, // gasLimit
+        undefined, // costModel
+        this.now ?? undefined,
+      );
+      const circuit = this.contract.circuits[name] as
+        | ((
+            context: CircuitContext<PS>,
+            ...args: unknown[]
+          ) => Promise<CircuitResults<PS, unknown>>)
+        | undefined;
+      if (!circuit) {
+        throw new Error(`no circuit named '${name}'`);
+      }
+      const res = await circuit(ctx, ...args);
+      this.state = res.context.callContext.currentQueryContext.state;
+      this.lastEffects = res.context.callContext.currentQueryContext.effects;
+      this.lastSigs = ps.signatures;
+      return res.result;
     }
-    return this.lastSigs;
-  }
 
-  ledgerView(): Ledger {
-    return ledger(this.state);
-  }
-}
+    effects(): Effects {
+      if (!this.lastEffects) {
+        throw new Error('no circuit call executed yet');
+      }
+      return this.lastEffects;
+    }
+
+    lastSignatures(): JubjubSchnorrSignature[] {
+      if (!this.lastSigs) {
+        throw new Error('no circuit call executed yet');
+      }
+      return this.lastSigs;
+    }
+
+    ledgerView(): L {
+      return ledgerOf(this.state);
+    }
+  };
+};
+
+/** Simulator for the numeric-only mock (`MockAttestation.compact`). */
+export const MockAttestationSim = makeSimClass<PrivateState<A_Claim>, MockLedger>({
+  newContract: (_privateState, registryKeys, seals) =>
+    new MockContract<PrivateState<A_Claim>>(makeWitnesses<A_Claim>(registryKeys, seals)),
+  ledgerOf: mockLedger,
+});
+export type MockAttestationSim = InstanceType<typeof MockAttestationSim>;
+
+/** Simulator for the byte-slot mock (`MockAttestationBytes.compact`). */
+export const MockAttestationBytesSim = makeSimClass<PrivateState<B_Claim>, BytesLedger>({
+  newContract: (_privateState, registryKeys, seals) =>
+    new BytesContract<PrivateState<B_Claim>>(makeWitnesses<B_Claim>(registryKeys, seals)),
+  ledgerOf: bytesLedger,
+});
+export type MockAttestationBytesSim = InstanceType<typeof MockAttestationBytesSim>;

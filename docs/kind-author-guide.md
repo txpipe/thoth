@@ -49,6 +49,15 @@ Never bake an app's policy into an attestor instance.
 - Hash the normalized form: `policyHashOf(law, normalized, claimVersion)`.
   Policies that mean the same thing must hash the same, or two honest
   attestors sign different messages and never reach the threshold together.
+- Each slot declares how its disclosed string is interpreted. `int` or `float`
+  feeds a numeric slot. The byte rules fill a 32-byte slot: `bytes` keeps the
+  string's UTF-8 bytes (not injective — trailing NULs and unpaired surrogates
+  collapse into the padding), `hex` decodes case-insensitive hex with an
+  optional `0x` prefix, and `base64` decodes the standard or URL-safe alphabet
+  with optional `=` padding. A value that does not fit, or misses a declared
+  `length`, is not certifiable. Decoding never deletes a character — separators
+  and whitespace are data (ADR 0010). Numeric rules must target numeric slots;
+  byte rules must target byte slots.
 - Keep per-operator trust anchors out of the policy. Which witness an attestor
   trusts is instance configuration (zkFetch's `witnessAddress`), not law.
 - Pin the hash of one fixed policy to its bytes in a test, as
@@ -81,19 +90,29 @@ let it drive a policy decision.
 
 ## 5. The claim
 
-Use the canonical claim: `claimSchema(V)` for the schema and `claimToMessage`
-for `message`. Your kind decides only the header fields that come from the
-evidence and the values:
+Use the canonical claim: `claimSchema(V, W)` for the schema and
+`claimToMessage` for `message` (omit `W` for a numeric-only kind). Your kind decides only the header fields that come from the evidence
+and the values:
 
 - `policyHash` is your policy hash and `subjectHash` is your subject hash.
 - `windowStart` and `windowEnd` are the window the client proposed. Sign it
   only if your source's observation falls inside it. When the
   fact itself happened, such as a block height or event time, is a value, not
   the window (ADR 0005).
-- `values` are `Uint<64>`, positional, one per slot of the policy's slot map.
-  Set `present[i]` for every measured slot, even when its value is zero. An
+- `values` are `Uint<64>`, positional, one per numeric slot of the policy's slot
+  map. Set `present[i]` for every measured slot, even when its value is zero. An
   unmeasured slot is `present[i] = false` with value `0`; the contract rejects
   anything else. Do not guess a value you could not read.
+- `byteValues` are 32-byte values (identifiers, strings), positional, one per
+  byte slot. The policy's byte rule canonicalizes a disclosed string into the
+  32-byte slot, zero-padding shorter values; a value that does not fit is not
+  certifiable and its slot stays unpresent. The kind
+  layer carries one flag per byte slot (`present[V + i]`); `claimToMessage` and
+  the contract split each value into two adjacent 16-byte halves and repeat the
+  flag on both halves. The contract's witness takes that split shape too, so a
+  dApp returns `toContractClaim(claim)` (from `@thoth/core/claim`) from
+  `getAttestationWitness`, never the kind-facing claim itself — even with
+  `W = 0`, whose empty `bytePresent`/`byteHalves` the contract still requires.
 - `appId` and `holder` come from the claim proposal. The attestor signs them
   but cannot check them. The contract checks `holder` against the caller's
   secret; `appId` is compared by the app's own predicate, not by the module.
@@ -105,15 +124,16 @@ or app must rely on has to be a field of the signed message.
 
 `defineAttestor({ kind, policy, evidence, claim, verify, message })` is the
 keyless, shareable law. `verify` receives parsed input and throws to reject.
-Validate that `values` and `present` have equal lengths and that every policy
-slot fits within the requested count before proof verification. Then:
+Validate that `present` has one flag per value slot (`values` plus `byteValues`)
+and that every policy slot fits within the requested numeric and byte counts and
+targets the matching region before proof verification. Then:
 
 1. verify the evidence's own signature;
 2. check the evidence against the policy;
 3. check that the observation falls inside the proposed window;
 4. check that the proposed `subjectHash` is the one of what the evidence signed;
-5. check that the proposed values and `present` say exactly what the evidence
-   showed.
+5. check that the proposed values, byte values, and `present` say exactly what
+   the evidence showed.
 
 `message` is `claimToMessage(claim)`. A kind that needs a different message
 shape can return another type, but then it needs its own contract module.
@@ -128,19 +148,20 @@ In your `attest`:
 - check per-instance trust anchors, such as "the evidence was signed by *my*
   witness";
 - **derive the claim yourself** from the verified evidence and sign that, not
-  the proposal. Take `appId`, `holder`, the window and the requested count from
-  the proposal, but derive every value and present flag;
+  the proposal. Take `appId`, `holder`, the window and the requested numeric and
+  byte counts from the proposal, but derive every value and present flag;
 - sign `definition.message(claim)` and return the claim, message, public key
   and signature.
 
-The instance has no registry slot or fixed value-slot count, so one instance
-and signing key can serve apps with different claim layouts. Each consuming
-contract enforces its own fixed `#V`.
+The instance has no registry slot or fixed slot counts, so one instance and
+signing key can serve apps with different claim layouts. Each consuming contract
+enforces its own fixed `#V` and `#B`.
 
-Infer the requested count from `claim.values.length`, as `zkFetchAttestor`
-does. Derive the authoritative claim at that count, filling unused positions
-with `present = false` and `value = 0`. The dApp client configures its count
-for the consuming contract; the attestor instance needs no `valueSlots` field.
+Infer the requested counts from `claim.values.length` and
+`claim.byteValues.length`, as `zkFetchAttestor` does. Derive the authoritative
+claim at those counts, filling unused positions with `present = false` and a
+zero value. The dApp client configures its counts for the consuming contract;
+the attestor instance needs no `valueSlots`/`byteSlots` field.
 
 ## 8. The client
 

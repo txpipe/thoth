@@ -298,6 +298,7 @@ describe('zkFetch attestor + client', () => {
       provers?: Record<string, ZkFetchProver>;
       appId?: Uint8Array;
       trusted?: typeof trusted;
+      byteSlots?: number;
     } = {},
   ) =>
     zkFetchClient.init({
@@ -307,6 +308,7 @@ describe('zkFetch attestor + client', () => {
       policy: overrides.policy ?? policy(),
       appId: overrides.appId ?? APP_ID,
       valueSlots: 3,
+      byteSlots: overrides.byteSlots ?? 0,
       provers: overrides.provers ?? provers,
     });
 
@@ -333,6 +335,108 @@ describe('zkFetch attestor + client', () => {
     };
     return { seen, watched };
   };
+
+  describe("the 'bytes' slot through the client", () => {
+    // The shared disclosure rules expose one extracted value (`data`); the
+    // byte slot consumes it. V = 3 numeric slots, then one byte value at 3.
+    const bytePolicy = (optional = false): ZkFetchPolicy => ({
+      allowedHosts: ['api.github.com'],
+      slots: [{ slot: 3, name: 'data', parse: 'bytes', optional }],
+      ...DISCLOSURE_RULES,
+    });
+
+    const padded = (value: string): Uint8Array => {
+      const out = new Uint8Array(32);
+      out.set(new TextEncoder().encode(value));
+      return out;
+    };
+
+    const withData = (value: string | undefined, optional = false) =>
+      clientWith({
+        policy: bytePolicy(optional),
+        byteSlots: 1,
+        provers: proversWith({
+          values: () => (value === undefined ? {} : { data: value }),
+        }),
+      });
+
+    it('derives the same byte value across attestors and collects a threshold', async () => {
+      const { claim, collected } = await withData('abc').collect(collectionRequest, options());
+      expect(collected).toHaveLength(2);
+      expect(claim.present).toEqual([false, false, false, true]);
+      expect(claim.byteValues[0]).toEqual(padded('abc'));
+    });
+
+    it('derives distinct byte values for distinct identifiers', async () => {
+      const a = await withData('abc').collect(collectionRequest, options());
+      const b = await withData('xyz').collect(collectionRequest, options());
+      expect(a.claim.byteValues[0]).not.toEqual(b.claim.byteValues[0]);
+    });
+
+    it('rejects an over-long identifier for a required byte slot', async () => {
+      await expect(withData('a'.repeat(33)).collect(collectionRequest, options())).rejects.toThrow(
+        /threshold not reached/,
+      );
+    });
+
+    it('signs an absent optional byte slot unpresent', async () => {
+      const { claim } = await withData(undefined, true).collect(collectionRequest, options());
+      expect(claim.present).toEqual([false, false, false, false]);
+      expect(claim.byteValues[0]).toEqual(new Uint8Array(32));
+    });
+
+    it('derives two byte values at byteSlots = 2 and collects a threshold', async () => {
+      const twoBytePolicy: ZkFetchPolicy = {
+        allowedHosts: ['api.github.com'],
+        slots: [
+          { slot: 3, name: 'first', parse: 'bytes' },
+          { slot: 4, name: 'second', parse: 'bytes' },
+        ],
+        ...DISCLOSURE_RULES,
+      };
+      const { claim, collected } = await clientWith({
+        policy: twoBytePolicy,
+        byteSlots: 2,
+        provers: proversWith({ values: () => ({ first: 'abc', second: 'xyz' }) }),
+      }).collect(collectionRequest, options());
+      expect(collected).toHaveLength(2);
+      expect(claim.present).toEqual([false, false, false, true, true]);
+      expect(claim.byteValues[0]).toEqual(padded('abc'));
+      expect(claim.byteValues[1]).toEqual(padded('xyz'));
+    });
+
+    it('decodes a hex slot and collects a threshold', async () => {
+      const hexPolicy: ZkFetchPolicy = {
+        allowedHosts: ['api.github.com'],
+        slots: [{ slot: 3, name: 'data', parse: 'hex', length: 2 }],
+        ...DISCLOSURE_RULES,
+      };
+      const { claim, collected } = await clientWith({
+        policy: hexPolicy,
+        byteSlots: 1,
+        provers: proversWith({ values: () => ({ data: '0xABCD' }) }),
+      }).collect(collectionRequest, options());
+      expect(collected).toHaveLength(2);
+      expect(claim.present).toEqual([false, false, false, true]);
+      expect(claim.byteValues[0]?.slice(0, 2)).toEqual(Uint8Array.from([0xab, 0xcd]));
+      expect(claim.byteValues[0]?.slice(2)).toEqual(new Uint8Array(30));
+    });
+
+    it('rejects a required slot that misses its pinned length', async () => {
+      const pinnedPolicy: ZkFetchPolicy = {
+        allowedHosts: ['api.github.com'],
+        slots: [{ slot: 3, name: 'data', parse: 'hex', length: 3 }],
+        ...DISCLOSURE_RULES,
+      };
+      await expect(
+        clientWith({
+          policy: pinnedPolicy,
+          byteSlots: 1,
+          provers: proversWith({ values: () => ({ data: 'abcd' }) }),
+        }).collect(collectionRequest, options()),
+      ).rejects.toThrow(/threshold not reached/);
+    });
+  });
 
   it('collects a threshold of distinct registry slots in one call', async () => {
     const result = await clientWith().collect(collectionRequest, options());

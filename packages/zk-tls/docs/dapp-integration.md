@@ -7,7 +7,7 @@ See the [package README](../README.md) for what the package exports and
 
 ## Client setup
 
-Seven things go into `zkFetchClient.init`:
+These go into `zkFetchClient.init`:
 
 - **`trusted`.** The attestors your app pins, assembled with `@thoth/client`'s
   `buildTrustedSet({ registrySize, attestors })`. `registrySize` is your
@@ -25,8 +25,11 @@ Seven things go into `zkFetchClient.init`:
   the consuming contract must seal that hash in its `policyHashes` set at
   deploy, or it rejects the claim.
 - **`appId`.** The 32 bytes naming your app, signed into every claim.
-- **`valueSlots`.** The value-slot count of the contract that consumes the
-  claim, its `#V`.
+- **`valueSlots`.** The numeric value-slot count of the contract that consumes
+  the claim, its `#V`.
+- **`byteSlots`.** Optional: the byte value-slot count of the contract, its
+  `#B / 2` (the contract stores each 32-byte value as two 16-byte halves).
+  Defaults to `0`, a numeric-only claim.
 - **`provers`.** Where evidence comes from, keyed by attestor id. Each entry
   points at that attestor's own witness: `zkFetchProver({ witnessUrl })`, or any
   object with a `prove(request)` method. Every attestor in `trusted` needs an
@@ -213,6 +216,31 @@ value to a JavaScript double: `9007199254740993` stays `9007199254740993`, and
 `0.49999999999999999999` rounds to zero. A required slot whose value is missing
 or unparseable rejects the evidence; an `optional` slot is signed unpresent.
 
+Byte rules fill a 32-byte slot and reject a value that does not fit:
+
+- `bytes` keeps the value's UTF-8 bytes — the rule for text. The limit counts
+  bytes, not characters. Not injective: trailing NUL bytes collapse into the
+  padding and unpaired surrogates normalize to U+FFFD, so equality is over the
+  padded bytes, not the source string.
+- `hex` decodes hex digits, case-insensitively, with an optional `0x`/`0X`
+  prefix. A 64-character hex key is 32 bytes; a 40-character address is 20.
+- `base64` decodes the standard or URL-safe alphabet, with optional trailing
+  `=` padding.
+
+Decoding normalizes only the representations that carry no data — hex case, the
+`0x` marker, the base64 alphabet and padding. It never deletes a character:
+separators, whitespace and punctuation are part of the value, so `AA:BB`,
+`AA-BB`, and `AABB` are three different strings (only the last is valid hex),
+and a hyphenated identifier is never its unhyphenated form (ADR 0010).
+
+A slot may pin the value's exact byte length (`length`, 1–32: the UTF-8 length
+for `bytes`, the decoded length for `hex`/`base64`); a mismatch makes the
+disclosure not certifiable. A required slot with an unparseable, over-long, or
+wrongly-sized value rejects the evidence; an optional one is signed unpresent.
+A numeric rule (`int`/`float`) must target a numeric slot and a byte rule a
+byte slot; the client and the attestor reject a policy that crosses the
+regions.
+
 `responseText`, when present in evidence or prover output, is untrusted,
 client-supplied transport output. The witness signature does not authenticate
 it. The policy therefore has no response-size bound; `maxResponseBytes` has
@@ -235,7 +263,17 @@ witness.
 is its flat encoding; each `attestment.collected[i]` carries the `registryIndex`
 your trusted set assigned to the attestor that signed it. Place each signature
 at its slot in the contract's fixed signature vector and call
-`verifyAttestation` with the claim.
+`verifyAttestation`, with the claim converted to the contract's shape: the
+witness takes each byte value as two 16-byte halves with a flag per half, so
+pass `toContractClaim(attestment.claim)`, not `attestment.claim` itself (this
+holds for numeric-only claims too).
+
+```ts
+import { toContractClaim } from '@thoth/core/claim';
+
+// In getAttestationWitness:
+const claim = toContractClaim(attestment.claim);
+```
 See `@thoth/contracts` for the circuit and the registry wiring.
 
 Each attestor operator runs their own Reclaim witness and builds the attestor

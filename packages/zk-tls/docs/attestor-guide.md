@@ -45,16 +45,18 @@ with access to the witness key can alternatively run
 resulting address to the attestor. Do not load the witness key from the
 attestor's environment; configure each instance with its own public address.
 
-The requested value-slot count is implicit in each claim's `values.length`.
-`present` must have the same length, and every policy slot index must fit within
-that count. These checks run before proof verification. Claim derivation uses
-this requested count and fills unused positions with `present = false` and
-`value = 0`, regardless of their proposed contents.
+The requested slot counts are implicit in each claim: the numeric count in
+`values.length` and the byte count in `byteValues.length`. `present` must carry
+one flag per value slot (numeric plus byte), every policy slot index must fit
+its rule's region, and these checks run before proof verification. Claim
+derivation uses the requested counts and fills unused positions with
+`present = false` and a zero value, regardless of their proposed contents.
 
 One attestor instance and signing key can serve contracts with different slot
-counts. Each dApp configures its client for its contract's `#V`, and that contract
-enforces the fixed layout it accepts. Attestor instances take no `valueSlots`
-configuration; standalone definitions use `createZkFetchDefinition()`.
+counts. Each dApp configures its client for its contract's `#V` and `#B`, and
+that contract enforces the fixed layout it accepts. Attestor instances take no
+`valueSlots`/`byteSlots` configuration; standalone definitions use
+`createZkFetchDefinition()`.
 
 ## The attest flow
 
@@ -83,9 +85,9 @@ check before signing:
 
 After those checks, `attestor.attest` also rejects evidence whose signing
 witness is not the instance's own `witnessAddress`. Only then does it sign the
-attestor-derived claim: values and present bits from the disclosed values,
-the signed request's subject hash as `subjectHash`, and the hash of its own
-policy as `policyHash`. It takes `appId`, the window, and the per-claim holder
+attestor-derived claim: values (numeric and byte) and their present bits from
+the disclosed values, the signed request's subject hash as `subjectHash`, and
+the hash of its own policy as `policyHash`. It takes `appId`, the window, and the per-claim holder
 commitment from the proposal.
 
 The attestor derives its own claim rather than trusting the proposal, so a

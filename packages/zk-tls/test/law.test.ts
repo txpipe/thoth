@@ -11,10 +11,12 @@ import {
   claimRequestOf,
   deriveClaimFromEvidence,
   type ProviderClaimData,
+  parseDisclosedValue,
   parsedEvidenceView,
   type VerifiedEvidence,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
+  type ZkFetchSlot,
   zkFetchPolicyHashOf,
   zkFetchPolicySchema,
   zkFetchSubjectHashOf,
@@ -384,6 +386,30 @@ describe('assertClaimMatchesDisclosures', () => {
       }),
     ).toThrow(/does not match the disclosed value/);
   });
+
+  it('checks a hex byte slot against its decoded disclosure', () => {
+    const slots: ZkFetchPolicy['slots'] = [{ slot: 1, name: 'id', parse: 'hex' }];
+    assertClaimMatchesDisclosures({
+      claim: {
+        values: [0n],
+        present: [false, true],
+        byteValues: [parseDisclosedValue('abcd', 'hex')],
+      } as never,
+      disclosures: { id: '0xABCD' },
+      policy: policy(slots),
+    });
+    expect(() =>
+      assertClaimMatchesDisclosures({
+        claim: {
+          values: [0n],
+          present: [false, true],
+          byteValues: [new Uint8Array(32)],
+        } as never,
+        disclosures: { id: 'abcd' },
+        policy: policy(slots),
+      }),
+    ).toThrow(/does not match the disclosed value/);
+  });
 });
 
 describe('assertEvidenceMatchesPolicy', () => {
@@ -481,5 +507,167 @@ describe('assertEvidenceMatchesPolicy', () => {
       {},
     );
     expect(assertEvidenceMatchesPolicy(missing, optional)).toBe('api.github.com');
+  });
+});
+
+describe('byte value parse rules', () => {
+  const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
+    allowedHosts: ['api.github.com'],
+    slots,
+    ...DISCLOSURE_RULES,
+  });
+
+  const padded = (value: string): Uint8Array => {
+    const out = new Uint8Array(32);
+    out.set(new TextEncoder().encode(value));
+    return out;
+  };
+
+  const pad32 = (bytes: Uint8Array): Uint8Array => {
+    const out = new Uint8Array(32);
+    out.set(bytes);
+    return out;
+  };
+
+  const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
+
+  const PARAMS = { ...REQUEST, extractedParameters: { id: 'abc' } };
+
+  const derive = (slots: ZkFetchPolicy['slots'], id: string) =>
+    deriveClaimFromEvidence({
+      verified: verifiedOf(claimWith(PARAMS, {}), { id }),
+      policy: policy(slots),
+      appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
+      valueSlots: 1,
+      byteSlots: 1,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
+    });
+
+  it('parses a disclosed string into its UTF-8 bytes, zero-padded to 32', () => {
+    expect(parseDisclosedValue('abc', 'bytes')).toEqual(padded('abc'));
+    expect(parseDisclosedValue('', 'bytes')).toEqual(new Uint8Array(32));
+    // The limit counts bytes, not characters.
+    const accented = parseDisclosedValue('é', 'bytes');
+    expect(accented?.slice(0, 2)).toEqual(new Uint8Array([0xc3, 0xa9]));
+    expect(accented?.slice(2)).toEqual(new Uint8Array(30));
+  });
+
+  it('rejects a string longer than 32 bytes and accepts exactly 32', () => {
+    expect(parseDisclosedValue('a'.repeat(33), 'bytes')).toBeNull();
+    expect(parseDisclosedValue('a'.repeat(32), 'bytes')).toHaveLength(32);
+  });
+
+  it('derives the byte value and its flag into the byte region', () => {
+    const claim = derive([{ slot: 1, name: 'id', parse: 'bytes' }], 'abc');
+    expect(claim.present).toEqual([false, true]);
+    expect(claim.values).toEqual([0n]);
+    expect(claim.byteValues[0]).toEqual(padded('abc'));
+  });
+
+  it('leaves an over-long disclosure unpresent, like an unparseable number', () => {
+    const claim = derive([{ slot: 1, name: 'id', parse: 'bytes', optional: true }], 'a'.repeat(33));
+    expect(claim.present).toEqual([false, false]);
+    expect(claim.byteValues[0]).toEqual(new Uint8Array(32));
+  });
+
+  it('rejects a rule that targets the wrong region', () => {
+    expect(() => derive([{ slot: 0, name: 'id', parse: 'bytes' }], 'abc')).toThrow(
+      /targets a numeric slot/,
+    );
+    expect(() => derive([{ slot: 0, name: 'id', parse: 'hex' }], 'abcd')).toThrow(
+      /targets a numeric slot/,
+    );
+    expect(() => derive([{ slot: 1, name: 'id', parse: 'int' }], 'abc')).toThrow(
+      /targets a byte slot/,
+    );
+  });
+
+  it('is pinned by the policy hash', () => {
+    const intPolicy = policy([{ slot: 0, name: 'id', parse: 'int' }]);
+    const bytesPolicy = policy([{ slot: 0, name: 'id', parse: 'bytes' }]);
+    const pinnedPolicy = policy([{ slot: 0, name: 'id', parse: 'bytes', length: 32 }]);
+    expect(hex(zkFetchPolicyHashOf(bytesPolicy))).not.toEqual(hex(zkFetchPolicyHashOf(intPolicy)));
+    expect(hex(zkFetchPolicyHashOf(pinnedPolicy))).not.toEqual(
+      hex(zkFetchPolicyHashOf(bytesPolicy)),
+    );
+  });
+
+  it('collapses trailing NULs and unpaired surrogates (the mapping is not injective)', () => {
+    expect(parseDisclosedValue('a\u0000', 'bytes')).toEqual(parseDisclosedValue('a', 'bytes'));
+    const lone = parseDisclosedValue('\uD800', 'bytes');
+    // TextEncoder replaces an unpaired surrogate with U+FFFD (EF BF BD).
+    expect(lone?.slice(0, 3)).toEqual(new Uint8Array([0xef, 0xbf, 0xbd]));
+    expect(lone?.slice(3)).toEqual(new Uint8Array(29));
+    expect(lone).toEqual(parseDisclosedValue('\uFFFD', 'bytes'));
+  });
+
+  it('decodes hex case-insensitively with an optional 0x prefix', () => {
+    const expected = Uint8Array.from([0xab, 0xcd]);
+    for (const form of ['abcd', 'ABCD', 'AbCd', '0xabcd', '0XABCD', '0xAbCd']) {
+      expect(parseDisclosedValue(form, 'hex')?.slice(0, 2)).toEqual(expected);
+      expect(parseDisclosedValue(form, 'hex')?.slice(2)).toEqual(new Uint8Array(30));
+    }
+  });
+
+  it('rejects hex separators, whitespace, and other non-data characters', () => {
+    const forms = ['', '0x', 'abc', 'ab:cd', 'ab-cd', 'ab cd', 'ab,cd', 'ab.cd', 'abcd\n', 'abcz'];
+    for (const form of forms) {
+      expect(parseDisclosedValue(form, 'hex')).toBeNull();
+    }
+  });
+
+  it('decodes base64 across padding and alphabet variants', () => {
+    for (const bytes of [Uint8Array.from([0xfb]), Uint8Array.from([0xfb, 0xef, 0xbe])]) {
+      const std = Buffer.from(bytes).toString('base64');
+      const url = Buffer.from(bytes).toString('base64url');
+      expect(std).not.toBe(url); // the alphabets differ, so the mapping is exercised
+      for (const form of [std, url, std.replace(/=+$/, '')]) {
+        expect(parseDisclosedValue(form, 'base64')).toEqual(pad32(bytes));
+      }
+    }
+  });
+
+  it('rejects wrapped, partially padded, or non-canonical base64', () => {
+    const forms = ['', 'YQ=', 'YQ\n', 'Y Q==', 'YQ== ', 'A', 'AB==', '====', 'YQ!='];
+    for (const form of forms) {
+      expect(parseDisclosedValue(form, 'base64')).toBeNull();
+    }
+  });
+
+  it('pins the exact decoded length when the slot declares one', () => {
+    const exact = derive([{ slot: 1, name: 'id', parse: 'hex', length: 2 }], 'abcd');
+    expect(exact.present).toEqual([false, true]);
+    expect(exact.byteValues[0]?.slice(0, 2)).toEqual(Uint8Array.from([0xab, 0xcd]));
+    const short = derive(
+      [{ slot: 1, name: 'id', parse: 'hex', length: 1, optional: true }],
+      'abcd',
+    );
+    expect(short.present).toEqual([false, false]);
+    expect(short.byteValues[0]).toEqual(new Uint8Array(32));
+  });
+
+  it('pins the exact UTF-8 length of a bytes slot', () => {
+    const exact = derive([{ slot: 1, name: 'id', parse: 'bytes', length: 3 }], 'abc');
+    expect(exact.present).toEqual([false, true]);
+    const short = derive(
+      [{ slot: 1, name: 'id', parse: 'bytes', length: 4, optional: true }],
+      'abc',
+    );
+    expect(short.present).toEqual([false, false]);
+  });
+
+  it('rejects a length pin on a numeric rule or outside 1..32', () => {
+    const policyWith = (slot: ZkFetchSlot): ZkFetchPolicy =>
+      zkFetchPolicySchema.parse({
+        allowedHosts: ['api.github.com'],
+        slots: [slot],
+        ...DISCLOSURE_RULES,
+      });
+    expect(() => policyWith({ slot: 0, name: 'id', parse: 'int', length: 4 })).toThrow(/length/);
+    expect(() => policyWith({ slot: 1, name: 'id', parse: 'hex', length: 0 })).toThrow();
+    expect(() => policyWith({ slot: 1, name: 'id', parse: 'hex', length: 33 })).toThrow();
+    expect(policyWith({ slot: 1, name: 'id', parse: 'hex', length: 32 }).slots[0]?.length).toBe(32);
   });
 });

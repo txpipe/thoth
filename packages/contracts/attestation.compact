@@ -14,7 +14,8 @@
 //     the source recomputes it in-circuit from private subject fields and
 //     compares it to `claim.subjectHash` (ADR 0001);
 //   - require the caller secret to match the signed per-claim holder commitment;
-//   - require every absent value slot to carry zero;
+//   - require every absent value slot to carry zero — numeric slots and byte
+//     halves alike;
 //   - reject observation replay via the nullifiers set;
 //   - check the observation window (ADR 0005), unconditionally: it must not be
 //     inverted nor longer than the sealed `maxWindow`, the block time must be
@@ -29,31 +30,54 @@
 // (#N) lives here. The message shape (order+sizes) is the single thing the
 // attestor must mirror, per the documented wire layout below.
 //
-// Wire layout (buildMessage), K = 2*V + 11 fields:
+// Byte value slots: a byte value is 32 bytes carried as two adjacent
+// 16-byte halves (`byteHalves: Vector<B, Bytes<16>>`, B = 2W) with one presence
+// flag per half (`bytePresent`). Both halves of one value carry the same flag in
+// honest claims: the attestor law derives them from a single disclosure. The
+// module does not check the pairing: the absent-slot law is per half.
+//
+// Wire layout (buildMessage), K = 12 + 2*V + 2*B fields:
 //   [ version,
 //     appId[0..16] as Uint<128>, appId[16..32] as Uint<128>,
 //     policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
 //     windowStart, windowEnd,
 //     subjectHash[0..16] as Uint<128>, subjectHash[16..32] as Uint<128>,
 //     holder[0..16] as Uint<128>, holder[16..32] as Uint<128>,
+//     B as Field,
 //     present[0] as Field, ..., present[V-1] as Field,
-//     values[0] as Field, ..., values[V-1] as Field ]
+//     bytePresent[0] as Field, ..., bytePresent[B-1] as Field,
+//     values[0] as Field, ..., values[V-1] as Field,
+//     byteHalves[0] as Field, ..., byteHalves[B-1] as Field ]
 // Byte ranges are half-open (appId[0..16] is bytes 0-15). Each 32-byte field
-// is split in two halves so every byte is signed.
+// is split in two halves so every byte is signed; each 16-byte half is read
+// little-endian (byte 0 least significant) when cast to Uint<128>/Field, the
+// runtime's `convertBytesToUint` convention. `claimToMessage` uses the same
+// primitive, so the two encoders agree field-for-field. The header's last
+// field is the module's own B: K alone fixes only 2*V + 2*B, so two layouts
+// (e.g. V=3, B=4 and V=1, B=6) could share a message length; signing B pins V
+// too, and a message signed under another layout fails verification here.
 //
-// Module parameters (import "attestation"<K, V, N, M>):
-//   #K — signed-message length in fields. Must equal 2*V + 11 (the 11-field
-//        header in buildMessage, the V `present` fields, and the V value
-//        fields). This is what the registry's countValidSignatures verifies
-//        over.
-//   #V — number of claim value slots (Claim.values: Vector<V, Uint<64>>).
+// Module parameters (import "attestation"<K, V, B, N, M>):
+//   #K — signed-message length in fields. Must equal 12 + 2*V + 2*B (the
+//        12-field header in buildMessage, the V numeric presence fields, the B
+//        byte-half presence fields, the V value fields, and the B half fields).
+//        This is what the registry's countValidSignatures verifies over.
+//   #V — number of numeric claim value slots (Claim.values: Vector<V, Uint<64>>).
+//   #B — number of byte halves (Claim.byteHalves: Vector<B, Bytes<16>>). Must be
+//        even: B = 2W for W 32-byte byte value slots, each carried as two
+//        adjacent halves. B = 0 is valid and reproduces the numeric-only layout
+//        exactly. Compact cannot assert evenness (no static assert, and a vector
+//        size cannot be B/2), so B even is the embedder's invariant. #B is the
+//        only count in halves: the client's byteSlots counts slots, so
+//        byteSlots: 1 pairs with #B = 2. An odd #B compiles, then rejects
+//        every claim.
 //   #N — the app's N-of-M threshold: at least #N of the #M signatures must
 //        verify for a claim to be accepted.
 //   #M — number of attestor signatures supplied / registry key slots.
 // All parameters are fixed when a contract embeds the module.
 pragma language_version >= 0.22;
 
-module attestation<#K, #V, #N, #M> {
+module attestation<#K, #V, #B, #N, #M> {
   import CompactStandardLibrary;
   import "attestor_registry"<M, K> prefix Registry_;
 
@@ -72,7 +96,9 @@ module attestation<#K, #V, #N, #M> {
     subjectHash: Bytes<32>; // circuit hash of what the claim is about (ADR 0001)
     holder: Bytes<32>; // per-claim commitment of the caller secret (ADR 0004)
     present: Vector<V, Boolean>; // present[i] = values[i] was populated (measured), even if 0
-    values: Vector<V, Uint<64>>; // positional numeric claim values last; 0 IS a valid value
+    bytePresent: Vector<B, Boolean>; // bytePresent[j] = byteHalves[j] was measured; one flag per half
+    values: Vector<V, Uint<64>>; // positional numeric claim values; 0 IS a valid value
+    byteHalves: Vector<B, Bytes<16>>; // interleaved halves: [b0[0..16], b0[16..32], b1[0..16], ...]
   }
 
   // Observation identity (ADR 0006). Holder and version do not distinguish facts.
@@ -83,7 +109,9 @@ module attestation<#K, #V, #N, #M> {
     windowStart: Uint<32>;
     windowEnd: Uint<32>;
     values: Vector<V, Uint<64>>;
+    byteHalves: Vector<B, Bytes<16>>;
     present: Vector<V, Boolean>;
+    bytePresent: Vector<B, Boolean>;
   }
 
   /// Freshness window (seconds), sealed at deploy by the top-level
@@ -114,21 +142,28 @@ module attestation<#K, #V, #N, #M> {
     return [(slice<16>(b, 0) as Uint<128>) as Field, (slice<16>(b, 16) as Uint<128>) as Field];
   }
 
-  /// Reconstruct the flat signed message: an 11-field fixed header (version,
+  /// Cast one 16-byte half to a Field for the signed message.
+  circuit halfAsField(h: Bytes<16>): Field {
+    return (h as Uint<128>) as Field;
+  }
+
+  /// Reconstruct the flat signed message: a 12-field fixed header (version,
   /// appId and policyHash each as two 16-byte halves, windowStart, windowEnd,
   /// then subjectHash as two 16-byte halves, then the holder commitment
-  /// as two halves) followed by the `present`
-  /// flags and the values mapped to `Field`. Tuple/vector spread
-  /// (`...`) appends the flags and values, so at specialization
-  /// `[header..., present..., values...]` has length 11 + 2*V, which must equal
-  /// K (enforced by the embedder). This is the single wire shape the attestor
-  /// must mirror.
+  /// as two halves, then the module's byte-half count B, which binds the slot
+  /// layout) followed by the `present` flags, the per-half
+  /// `bytePresent` flags, the values mapped to `Field`, and the byte halves.
+  /// Tuple/vector spread (`...`) appends each section, so at specialization
+  /// `[header..., present..., bytePresent..., values..., byteHalves...]` has
+  /// length 12 + 2*V + 2*B; a mismatch with K is a static error at
+  /// specialization, so the compiler checks it.
+  /// This is the single wire shape the attestor must mirror.
   export pure circuit buildMessage(c: Claim): Vector<K, Field> {
     const appId = splitBytes(c.appId);
     const policyHash = splitBytes(c.policyHash);
     const subjectHash = splitBytes(c.subjectHash);
     const holder = splitBytes(c.holder);
-    const header: Vector<11, Field> =
+    const header: Vector<12, Field> =
             [c.version as Field,
              appId[0],
              appId[1],
@@ -139,10 +174,13 @@ module attestation<#K, #V, #N, #M> {
              subjectHash[0],
              subjectHash[1],
              holder[0],
-             holder[1],];
+             holder[1],
+             B as Field,];
     const presentFields: Vector<V, Field> = map((p: Boolean) => p as Field, c.present);
+    const bytePresentFields: Vector<B, Field> = map((p: Boolean) => p as Field, c.bytePresent);
     const valuesFields: Vector<V, Field> = map((v: Uint<64>) => v as Field, c.values);
-    return [...header, ...presentFields, ...valuesFields];
+    const byteFields: Vector<B, Field> = map(halfAsField, c.byteHalves);
+    return [...header, ...presentFields, ...bytePresentFields, ...valuesFields, ...byteFields];
   }
 
   /// Claim id = persistentCommit(claim, rand) — must match the id
@@ -185,6 +223,15 @@ module attestation<#K, #V, #N, #M> {
            "Absent slot has nonzero value"
            );
 
+    const zeroHalf = pad(16, "");
+    const validHalves =
+            map((present: Boolean, half: Bytes<16>) => present || half == zeroHalf,
+                claim.bytePresent,
+                claim.byteHalves);
+    assert(fold((valid: Boolean, slot: Boolean) => valid && slot, true, validHalves),
+           "Absent slot has nonzero value"
+           );
+
     assert(claim.windowStart <= claim.windowEnd, "Window inverted");
     assert(claim.windowEnd - claim.windowStart <= maxWindow, "Window too long");
     assert(blockTimeGte(disclose(claim.windowStart as Uint<64>)), "Window in the future");
@@ -201,7 +248,9 @@ module attestation<#K, #V, #N, #M> {
                             windowStart: claim.windowStart,
                             windowEnd: claim.windowEnd,
                             values: claim.values,
-                            present: claim.present }
+                            byteHalves: claim.byteHalves,
+                            present: claim.present,
+                            bytePresent: claim.bytePresent }
               );
     assert(!nullifiers.member(disclose(nullifier)), "Observation replay");
     nullifiers.insert(disclose(nullifier));
@@ -217,7 +266,9 @@ module attestation<#K, #V, #N, #M> {
   }
 
   /// Prove the caller owns a vaulted claim and re-hydrate it in-circuit
-  /// iReturns the claim so app predicates can read `values` directly.
+  /// Returns the claim so app predicates can read `values` and `byteHalves`
+  /// directly (reassemble a byte value with
+  /// `Bytes[...c.byteHalves[2 * i], ...c.byteHalves[2 * i + 1]]`).
   /// Consumes no nullifier, so opening is repeatable (apps that need
   /// "use once" enforce it with their own holder-keyed state — see README).
   /// Never re-export this as a top-level contract entry point: its return
