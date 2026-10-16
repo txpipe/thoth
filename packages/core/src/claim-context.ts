@@ -1,6 +1,5 @@
-// The claim context: the hashes that tie a claim to its policy, its subject,
-// and the context every witness signs. Keyless and kind-agnostic; each kind
-// supplies its own policy and subject structs.
+// The claim-context hashes: policy, subject, holder and the claim-context digest.
+// Keyless and kind-agnostic; each kind supplies its own policy and subject structs.
 
 import { createHash } from 'node:crypto';
 import {
@@ -25,30 +24,27 @@ export type CanonicalValue =
   | { readonly [key: string]: CanonicalValue | undefined };
 
 /**
- * The shared context of one attestation.
- *
- * Every witness signs {@link claimContextDigestOf} of this context, so every
- * attestor derives the same claim from it.
+ * The shared part of one attestation. Attestors given the same context and
+ * the same observation derive the same claim.
  */
 export interface ClaimContext {
-  /** The policy the attestors enforce (see {@link policyHashOf}). 32 bytes. */
+  /** From {@link policyHashOf}. 32 bytes. */
   policyHash: Uint8Array;
-  /** What the claim is about (see {@link subjectHashOf}). 32 bytes. */
+  /** From {@link subjectHashOf}. 32 bytes. */
   subjectHash: Uint8Array;
-  /** The per-claim holder commitment. 32 bytes. */
+  /** From {@link holderCommitmentOf}. 32 bytes. */
   holder: Uint8Array;
-  /** Start of the observation window, Unix seconds. */
+  /** Unix seconds. */
   windowStart: bigint;
-  /** End of the observation window, Unix seconds. */
+  /** Unix seconds. */
   windowEnd: bigint;
 }
 
-/** Domain tag that prefixes the canonical claim context. */
 const CLAIM_CONTEXT_TAG = 'thoth:claim-context';
 
 const HASH_BYTES = 32;
 
-/** Domain tag of the holder commitment, zero-padded like the circuit's `pad(32, …)`. */
+// Zero-padded like the circuit's `pad(32, …)`, so the hash matches in-circuit.
 const HOLDER_COMMITMENT_TAG = (() => {
   const tag = new Uint8Array(HASH_BYTES);
   tag.set(new TextEncoder().encode('thoth:holder-commitment:v1'));
@@ -56,16 +52,12 @@ const HOLDER_COMMITMENT_TAG = (() => {
 })();
 
 /**
- * Serialize a value canonically.
+ * Serialize a value canonically: JSON with object keys sorted by UTF-16 code
+ * unit and no whitespace, a `bigint` as a quoted decimal string, a `Uint8Array`
+ * as quoted lowercase hex without a prefix.
  *
- * JSON with object keys sorted by UTF-16 code unit and no whitespace. A
- * `bigint` becomes a quoted decimal string, a `Uint8Array` a quoted lowercase
- * hex string without a prefix. Numbers must be finite.
- *
- * @param value — the value to serialize.
- * @returns the canonical JSON text.
- * @throws if the value holds a non-finite number or anything that is not
- *   plain data.
+ * @throws if the value holds a non-finite number, a sparse array, or anything
+ *   that is not plain data.
  */
 const canonicalJson = (value: CanonicalValue): string => {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') {
@@ -103,12 +95,6 @@ const canonicalJson = (value: CanonicalValue): string => {
   return `{${members.join(',')}}`;
 };
 
-/**
- * SHA-256 of a value's canonical serialization.
- *
- * @param value — the value to hash.
- * @returns the 32-byte digest.
- */
 const canonicalSha256 = (value: CanonicalValue): Uint8Array =>
   new Uint8Array(createHash('sha256').update(canonicalJson(value), 'utf-8').digest());
 
@@ -119,17 +105,11 @@ const assertHashBytes = (name: string, bytes: Uint8Array): void => {
 };
 
 /**
- * Hash a kind's policy.
+ * Hash a kind's policy: SHA-256 of the canonical serialization of
+ * `[law, version, policy]`, so the same policy under another law or wire
+ * version hashes differently.
  *
- * SHA-256 of the canonical serialization of `[law, version, policy]`, so the
- * same policy under another law or wire version hashes differently. The
- * contract only compares this hash, so it need not be a circuit hash.
- *
- * @param law — the kind's law tag, e.g. `zk-fetch@1`.
- * @param policy — the kind's policy, as plain data.
- * @param version — the claim wire version the policy signs under. Defaults to
- *   {@link CLAIM_VERSION}.
- * @returns the 32-byte policy hash.
+ * @param law — the kind's law tag, such as `zk-fetch@1`.
  * @throws if the policy has no canonical serialization.
  */
 export function policyHashOf(
@@ -143,13 +123,10 @@ export function policyHashOf(
 /**
  * Hash what a claim is about.
  *
- * The kind's subject is a Compact struct whose fields are all `Bytes<32>`;
- * `fields` lists them in declaration order. The result equals the circuit's
- * `persistentHash<Subject>(subject)`, so an app can recompute it in-circuit
- * from private fields.
+ * `fields` are the kind's subject struct's `Bytes<32>` fields in declaration
+ * order. The result equals the circuit's `persistentHash<Subject>(subject)`, so
+ * an app can recompute it in-circuit from private fields (ADR 0001).
  *
- * @param fields — the subject struct's fields, 32 bytes each.
- * @returns the 32-byte subject hash.
  * @throws if there are no fields or a field is not 32 bytes.
  */
 export function subjectHashOf(fields: readonly Uint8Array[]): Uint8Array {
@@ -170,13 +147,10 @@ export function subjectHashOf(fields: readonly Uint8Array[]): Uint8Array {
  * Equals the circuit's `holderCommitment(secret)`:
  * `persistentHash<Vector<2, Bytes<32>>>([pad(32, 'thoth:holder-commitment:v1'), secret])`.
  * The tag keeps it apart from the vault pseudonym the contract derives from
- * the same secret. A fresh secret per claim gives a fresh holder, so claims
- * are unlinkable by default.
+ * the same secret. Use a fresh secret per claim (ADR 0004).
  *
- * @param secret — the holder secret. 32 bytes.
- * @returns the 32-byte holder commitment, the claim context's `holder`.
+ * @param secret — 32 bytes.
  * @throws if the secret is not 32 bytes.
- * @see ClaimContext.holder
  */
 export function holderCommitmentOf(secret: Uint8Array): Uint8Array {
   assertHashBytes('holder secret', secret);
@@ -187,12 +161,9 @@ export function holderCommitmentOf(secret: Uint8Array): Uint8Array {
 }
 
 /**
- * Digest a claim context for the witness context.
+ * Identify a claim context: SHA-256 of the canonical serialization of
+ * `['thoth:claim-context', context]`.
  *
- * SHA-256 of the canonical serialization of `['thoth:claim-context', context]`.
- *
- * @param context — the claim context.
- * @returns the 32-byte context digest.
  * @throws if a byte field is not 32 bytes or a window bound is negative.
  */
 export function claimContextDigestOf(context: ClaimContext): Uint8Array {
