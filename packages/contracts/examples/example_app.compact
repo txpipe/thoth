@@ -1,8 +1,5 @@
-// Example top-level contract embedding the attestation module: V=3 value
-// slots, B=2 byte halves (one byte value), K=22 message fields, 2-of-3.
-// The constructor seals the policy hashes, the windows and the registry keys
-// once at deploy; the `export { ... }` lines expose the module's types and
-// ledgers to the app's TypeScript driver.
+// Example top-level contract embedding the attestation module: V=3 value slots,
+// B=2 byte halves (one byte value), K=22 message fields, 2-of-3, no predicate.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;

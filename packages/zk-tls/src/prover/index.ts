@@ -1,6 +1,5 @@
-// The zkFetch kind's live evidence source: runs the Reclaim client protocol
-// against a caller-chosen witness. Imports the Reclaim stack lazily, so loading
-// this module has no side effects and a bundler can target any environment.
+// The zkFetch kind's live evidence source, run against a caller-chosen witness.
+// It imports the Reclaim client libraries lazily, so loading it has no side effects.
 import type {
   IAttestorClientInitParams,
   PrepareZKProofsBaseOpts,
@@ -34,7 +33,7 @@ export interface ZkFetchProverConfig {
 let corePromise: Promise<AttestorCore> | undefined;
 
 /**
- * Import the Reclaim client stack once and install the WebCrypto TLS backend,
+ * Import the Reclaim client libraries once and install the WebCrypto TLS backend,
  * which `@reclaimprotocol/tls` leaves empty by default.
  */
 const loadCore = (): Promise<AttestorCore> => {

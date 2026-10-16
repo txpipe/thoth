@@ -1,6 +1,5 @@
-// Test mock: the modules specialized to V=3, B=2 (one byte value), K=22,
-// 2-of-3, with the pure circuits and byte-value predicates the simulator
-// tests read.
+// Test mock: the modules at V=3, B=2 (one byte value), K=22, 2-of-3, with the
+// pure circuits and byte-value predicates the simulator tests read.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;

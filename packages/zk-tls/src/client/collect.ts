@@ -42,7 +42,11 @@ export class ZkFetchThresholdError extends Error {
   /** Attestors that failed before `collect` stopped. */
   readonly failures: readonly ZkFetchAttestorFailure[];
 
-  /** @param options — `cause` is a local error only, never remote error text. */
+  /**
+   * Build the error from its reason and the failures so far.
+   *
+   * @param options — `cause` is a local error only, never remote error text.
+   */
   constructor(
     reason: ZkFetchThresholdError['reason'],
     failures: readonly ZkFetchAttestorFailure[] = [],

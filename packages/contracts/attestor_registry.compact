@@ -5,8 +5,7 @@
 //
 // The keys are a sealed, unexported ledger that only `initRegistry` writes,
 // once, at deploy. Do not re-export `initRegistry`: a sealed field cannot be
-// written from an exported circuit, so that is a compile error. `initialized`
-// makes a second call fail inside the constructor too.
+// written from an exported circuit, so that is a compile error.
 pragma language_version >= 0.22;
 
 module attestor_registry<#M, #K> {
