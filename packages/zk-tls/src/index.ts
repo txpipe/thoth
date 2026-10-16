@@ -786,11 +786,11 @@ const decodeByteValue = (value: string, rule: ByteRule): Uint8Array | null => {
  * numeric rule accepts whitespace, grouping separators, or a leading sign.
  * The byte rules are described in {@link ZkFetchParseRule}; decoding folds
  * only representations that carry no data (hex case, the `0x` marker, the
- * base64 alphabet and padding), never deleting a character. A slot's `length`
- * pin is not applied here — use {@link parseSlotValue} for that.
+ * base64 alphabet and padding), never deleting a character.
  *
- * Exported for the attestor side's disclosure cross-check
- * (`assertClaimMatchesDisclosures`); claim derivation uses it internally.
+ * For a policy slot, call {@link parseSlotValue} instead: it also applies the
+ * slot's `length` pin, which this function skips. Internally only the numeric
+ * branch is used, via {@link parseSlotValue}.
  *
  * @param value — the disclosed string value.
  * @param rule — how to interpret it.
