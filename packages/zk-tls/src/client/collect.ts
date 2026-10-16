@@ -29,13 +29,7 @@ export interface ZkFetchAttestorFailure {
   readonly reason: 'evidence' | 'secret' | 'attestation' | 'timeout';
 }
 
-/**
- * An attestment that reached the threshold, plus the attestors that failed.
- *
- * @typeParam V — the claim's value-slot count.
- * @typeParam PK — the signature scheme's public-key type.
- * @typeParam S — the signature scheme's signature type.
- */
+/** An attestment that reached the threshold, plus the attestors that failed. */
 export interface ZkFetchThresholdAttestment<V extends number, PK, S> extends Attestment<V, PK, S> {
   /** Attestors that failed. Valid signatures over another message are not failures. */
   readonly failures: readonly ZkFetchAttestorFailure[];
@@ -48,13 +42,7 @@ export class ZkFetchThresholdError extends Error {
   /** Attestors that failed before `collect` stopped. */
   readonly failures: readonly ZkFetchAttestorFailure[];
 
-  /**
-   * @param reason — why no threshold was reached.
-   * @param failures — attestors that failed.
-   * @param options — standard error options; the bind catch passes the local
-   *   `cause` for diagnostics. Never carries request, evidence, or remote
-   *   error text.
-   */
+  /** @param options — `cause` is a local error only, never remote error text. */
   constructor(
     reason: ZkFetchThresholdError['reason'],
     failures: readonly ZkFetchAttestorFailure[] = [],
@@ -146,9 +134,8 @@ const parseOptions = <PK>(
  * Prove, check, and attest with one attestor, within its time limit.
  *
  * An attempt that times out keeps running in the background, because
- * Reclaim's `createClaimOnAttestor` takes no abort signal (see the README's
- * "Collecting a threshold"). It stops at its next step, so a late result is
- * never forwarded or counted.
+ * Reclaim's `createClaimOnAttestor` takes no abort signal. It stops at its
+ * next step, so a late result is never forwarded or counted.
  */
 const runAttempt = async <V extends number, PK, S>(
   config: ZkFetchClientConfig<V, PK, S>,
@@ -218,15 +205,9 @@ const runAttempt = async <V extends number, PK, S>(
  * Starts `threshold` attempts at once, and a spare only when the attempts in
  * flight can no longer bring any message to the threshold.
  *
- * @typeParam V — the claim's value-slot count.
- * @typeParam PK — the signature scheme's public-key type.
- * @typeParam S — the signature scheme's signature type.
- * @param config — the client config, with its checked policy.
- * @param request — the request each attestor's witness proves.
- * @param supplied — the caller's holder, window, and limits.
  * @returns the first message to reach the threshold, attestations sorted by registry slot.
  * @throws {@link ZkFetchThresholdError} if the options are invalid, the request
- *   carries disclosure rules different from the policy's, the deadline expires,
+ *   carries disclosure rules other than the policy's, the deadline expires,
  *   or the candidates run out.
  */
 export const collectThreshold = async <V extends number, PK, S>(

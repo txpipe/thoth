@@ -11,44 +11,35 @@ import { z } from 'zod';
 export const ZK_FETCH_LAW = 'zk-fetch@1';
 
 /**
- * The claim a Reclaim witness signs: a canonical, JSON-stringified record of
- * the fetch it witnessed (what was requested, matched, and redacted).
+ * The record a Reclaim witness signs over the fetch it witnessed.
  *
- * Mirror of `@reclaimprotocol/attestor-core`'s `proto.ProviderClaimData`, kept
- * local so this package's schema is its own type source rather than an import
- * from the SDK's generated protobuf namespace.
+ * Mirrors `proto.ProviderClaimData` from `@reclaimprotocol/attestor-core`.
  */
 export interface ProviderClaimData {
-  /** Name of the provider that generated the claim (e.g. `http`). */
+  /** The Reclaim provider, `http` for a fetch. */
   provider: string;
-  /** Canonically JSON-stringified provider parameters (url, method, headers, responseMatches, responseRedactions, …). */
+  /** Canonical JSON of the request: url, method, headers, body and the disclosure rules. */
   parameters: string;
-  /** Owner of the claim — the public key/address that requested it. */
+  /** The public key or address that requested the claim. */
   owner: string;
-  /** Unix seconds at which the claim was made. */
+  /** When the witness observed, Unix seconds. */
   timestampS: number;
-  /** Canonically JSON-stringified context (extractedParameters and friends). */
+  /** Canonical JSON of the context, including `extractedParameters`. */
   context: string;
-  /** Identifier of the claim: hash of (provider, parameters, context). */
+  /** Hash of provider, parameters and context. */
   identifier: string;
-  /** Legacy V1 beacon epoch number. */
+  /** Legacy Reclaim beacon epoch. */
   epoch: number;
 }
 
-/**
- * The canonical evidence shape this kind verifies.
- *
- * Produced by the zkFetch client SDK; this package requires it as-is. Both
- * sides of the kind treat evidence in any other shape as invalid.
- */
+/** The one evidence shape this kind accepts, as the prover produces it. */
 export interface ZkFetchEvidence {
-  /** The signed claim data. */
   claim: ProviderClaimData;
-  /** Hex-encoded ECDSA signature (65 bytes) over the claim. */
+  /** Hex-encoded 65-byte ECDSA signature over the claim. */
   signatureHex: string;
-  /** The attestor address whose key produced the signature; `0x` + 40 hex. */
+  /** The witness address whose key signed, `0x` + 40 hex. */
   attestorAddress: string;
-  /** Untrusted, client-supplied HTTP transcript (headers + body); not witness-signed. */
+  /** The HTTP transcript as the client saw it. Not witness-signed. */
   responseText?: string;
 }
 
@@ -62,13 +53,7 @@ const claimDataSchema = z.object({
   epoch: z.number(),
 });
 
-/**
- * Runtime validator + type source for the canonical {@link ZkFetchEvidence}.
- *
- * Unknown fields (e.g. the raw zkFetch transform shell) are stripped, so a
- * non-canonical payload either fails or normalizes to the canonical shape it
- * already carries.
- */
+/** Runtime validator for {@link ZkFetchEvidence}. Unknown fields are stripped. */
 export const zkFetchEvidenceSchema = z.object({
   claim: claimDataSchema,
   signatureHex: z.string(),
@@ -79,10 +64,9 @@ export const zkFetchEvidenceSchema = z.object({
 /**
  * The zkFetch kind's claim schema.
  *
- * Mirror of `@thoth/core/claim`'s `claimSchema` minus the exact-length
- * constraints (see issue #26). The value count is requested implicitly by
- * `values.length`; the byte-value count by `byteValues.length` (default `[]`);
- * `present` must have one flag per value slot.
+ * `claimSchema` from `@thoth/core/claim` without the fixed lengths: the slot
+ * counts are `values.length` and `byteValues.length` (default `[]`), and
+ * `present` needs one flag per slot.
  */
 export const zkFetchClaimSchema: z.ZodType<
   Claim<number, number>,
@@ -121,170 +105,96 @@ export const zkFetchClaimSchema: z.ZodType<
 >;
 
 /**
- * The zkFetch kind's definition type, as produced by the attestor-side
- * `createZkFetchDefinition`. Owned here — the client only needs the *type*
- * (for its trusted set, transport, and collected-attestation types), and it
- * must be importable without pulling in the attestor's host machinery.
+ * The zkFetch kind's definition, the value `createZkFetchDefinition` returns.
  *
- * @see attestor `createZkFetchDefinition` — the value that satisfies this type.
+ * Declared here so the client can import the type without the attestor's
+ * dependencies.
  */
 export interface ZkFetchDefinition {
   /** The kind identifier, `zk-fetch@1`. */
   readonly kind: typeof ZK_FETCH_LAW;
-  /** Runtime schema for the policy. */
   readonly policy: typeof zkFetchPolicySchema;
-  /** Runtime schema for the evidence. */
   readonly evidence: typeof zkFetchEvidenceSchema;
-  /** Runtime schema for the claim. */
   readonly claim: typeof zkFetchClaimSchema;
-  /**
-   * The kind's check: verify the evidence, check it against the policy, and
-   * enforce the proposed claim matches the disclosures. Throws to reject.
-   */
+  /** The kind's check. Throws to reject. */
   verify(
     input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number, number>>,
   ): Promise<void>;
-  /** The wire law: encode the parsed claim into the flat signed message. */
+  /** Encode the parsed claim into the flat signed message. */
   message(claim: Claim<number, number>): FlatMessage;
 }
 
-/**
- * The parsed view of evidence, used for claim derivation and policy checks.
- *
- * Everything claim derivation needs from {@link ZkFetchEvidence} — the
- * disclosed values, the canonical hash, the identifier — with none of the
- * ECDSA signature work (this builder performs no signature check; the caller
- * decides what trust to place in the result). The attestor calls it after
- * {@link verifyZkFetchProof}; the client calls it to build the deterministic
- * expected claim that its attestor responses are cross-checked against.
- */
+/** The parsed view of {@link ZkFetchEvidence} that claim derivation and policy checks read. */
 export interface VerifiedEvidence {
-  /** The claim data. */
   claim: ProviderClaimData;
-  /** The address that signed the claim (lowercased). */
+  /** The address that signed the claim, lowercased. */
   attestorAddress: string;
-  /** Untrusted, client-supplied HTTP transcript; not authenticated by proof verification. */
+  /** The HTTP transcript as the client saw it. Not witness-signed. */
   responseText?: string;
-  /**
-   * The values the witness extracted from the response it saw, keyed by named
-   * regex group. The witness computes them over the redacted transcript and the
-   * claim signature covers them, so they are certifiable as they are.
-   */
+  /** The values the witness extracted, keyed by named regex group. The claim signature covers them. */
   disclosedValues: Readonly<Record<string, string>>;
-  /** Claim identifier. */
   identifier: string;
-  /** SHA-256 (hex) over the canonical serialization of the evidence artifacts. */
+  /** SHA-256 hex over the canonical serialization of the evidence. */
   canonicalHash: string;
 }
 
 /**
- * How a disclosed string is interpreted. `int` accepts digits only; `float`
- * accepts unsigned decimals with optional signed base-10 exponents and rounds
- * exactly to the nearest integer, with halves rounded up. Both require
- * `Uint<64>`. The byte rules — `bytes`, `hex`, `base64` — fill a 32-byte slot
- * and reject a value that does not fit:
+ * How a disclosed string becomes a claim value.
  *
- * - `bytes` keeps the string's UTF-8 bytes. Not injective: trailing NUL bytes
- *   collapse into the padding and unpaired surrogates normalize to U+FFFD.
- * - `hex` decodes hex digits, case-insensitively, with an optional `0x`/`0X`
- *   prefix. Every other character — separators, whitespace, punctuation — is
- *   data, not formatting: `AA:BB` and `AA-BB` are not hex.
- * - `base64` decodes the standard (`+/`) or URL-safe (`-_`) alphabet, with
- *   optional trailing `=` padding.
- *
- * Decoding normalizes only the representations that carry no data: hex case,
- * the `0x` marker, the base64 alphabet, and base64 padding. It never deletes
- * a character, so strings that differ in separators or whitespace stay
- * distinct (ADR 0010).
+ * `int` takes decimal digits; `float` takes an unsigned decimal with an
+ * optional exponent and rounds halves up; both must fit `Uint<64>`. `bytes`,
+ * `hex` and `base64` fill a 32-byte slot (ADR 0010). The dApp guide's
+ * "Building the policy" section lists what each rule accepts.
  */
 export type ZkFetchParseRule = 'int' | 'float' | 'bytes' | 'hex' | 'base64';
 
-/** The parse rules that fill a 32-byte claim slot (see {@link ZkFetchParseRule}). */
+/** The parse rules that fill a 32-byte claim slot. */
 export type ByteRule = 'bytes' | 'hex' | 'base64';
 
-/**
- * Whether a parse rule targets a byte value slot rather than a numeric one.
- *
- * @param rule — the parse rule.
- * @returns `true` for `bytes`, `hex`, and `base64`.
- */
+/** Whether a parse rule targets a byte slot rather than a numeric one. */
 export const isByteRule = (rule: ZkFetchParseRule): rule is ByteRule =>
   rule === 'bytes' || rule === 'hex' || rule === 'base64';
 
-/**
- * One claim-slot binding: which extracted (disclosed) value feeds which
- * claim slot, and how its string form is interpreted.
- *
- * `slot` becomes the index into the claim's value slots — numeric slots are
- * `0..V-1` and byte value slots are `V..V+W-1` — and `name` is a named regex
- * group from the proof's `responseMatches`, as disclosed by the verified
- * evidence. A numeric rule MUST target a numeric slot; a byte rule (`bytes`,
- * `hex`, `base64`) MUST target a byte slot.
- */
+/** One claim-slot binding: which disclosed value feeds which slot, and how it is parsed. */
 export interface ZkFetchSlot {
   /** Index into the claim's value slots: numeric `0..V-1`, byte `V..V+W-1`. */
   slot: number;
-  /** The extracted-parameter name (named regex group) to read. */
+  /** The named regex group to read from the disclosed values. */
   name: string;
-  /** How the disclosed string is converted to the claim value. */
   parse: ZkFetchParseRule;
   /**
-   * Exact byte length the value must have, for byte rules only: the UTF-8
-   * length for `bytes`, the decoded length for `hex`/`base64` (1–32). Omitted,
-   * any length that fits the 32-byte slot is accepted. A mismatch makes the
-   * disclosure not certifiable.
+   * Exact byte length the value must have, 1–32, byte rules only: the UTF-8
+   * length for `bytes`, the decoded length for `hex` and `base64`.
    */
   length?: number;
-  /**
-   * Whether the slot must be certifiable for the evidence to be attested.
-   * A required (default) slot needs its disclosure present AND parseable; an
-   * optional slot is simply signed unpresent when absent or unparseable.
-   */
+  /** When true, an absent or unparseable disclosure is signed unpresent instead of rejected. */
   optional?: boolean;
 }
 
-/**
- * One response pattern the witness applies, whose named groups become the
- * disclosed values keyed by group name.
- */
+/** One response pattern the witness applies; its named groups become disclosed values. */
 export interface ZkFetchResponseMatch {
-  /** How the pattern is matched: `regex`, or `contains` as a plain guard. */
+  /** `regex` extracts named groups; `contains` only guards the response. */
   type: 'regex' | 'contains';
-  /** The pattern itself. */
   value: string;
 }
 
-/**
- * One slice of the response revealed to the witness — Reclaim's reveal
- * whitelist; everything not selected stays hidden from the proof.
- */
+/** One slice of the response revealed to the witness. Everything not selected stays hidden. */
 export interface ZkFetchResponseRedaction {
-  /** Reveal the slice matching this regex. */
   regex?: string;
-  /** Reveal the slice at this JSON path. */
   jsonPath?: string;
-  /** Reveal the slice at this XPath. */
   xPath?: string;
 }
 
-/**
- * The policy under which a zkFetch attestor attests.
- *
- * The rule for "this evidence may be attested": only evidence whose host is
- * allowlisted, whose witness-signed disclosure rules are exactly the policy's,
- * and whose signed disclosures cover every required slot.
- */
+/** The policy a zkFetch attestor enforces. */
 export interface ZkFetchPolicy {
-  /** Hosts the attested URL may target; exact or any subdomain suffix. */
+  /** Hosts the attested URL may target: exact, or any subdomain of one. */
   allowedHosts: readonly string[];
-  /** Map extracted (disclosed) values onto claim slots. */
   slots: readonly ZkFetchSlot[];
-  /** The response patterns the witness must have applied, in the signed disclosure rules. */
+  /** The response patterns the witness must have signed. */
   responseMatches: readonly ZkFetchResponseMatch[];
-  /** The reveal whitelist the witness must have applied, in the signed disclosure rules. */
+  /** The reveal whitelist the witness must have signed. */
   responseRedactions: readonly ZkFetchResponseRedaction[];
-  /** Claim schema version the attestor signs; must match the contract's.
-   * Defaults to 1. */
+  /** The claim version the attestor signs. Defaults to 1. */
   claimVersion?: bigint;
 }
 
@@ -294,14 +204,10 @@ const noTemplate = (rule: string): boolean => !/\{\{[^{}]+\}\}/.test(rule);
 const TEMPLATE_ERROR = 'disclosure rules cannot use {{param}} templates';
 
 /**
- * Runtime validator + type source for {@link ZkFetchPolicy}.
+ * Runtime validator for {@link ZkFetchPolicy}.
  *
- * Both sides parse the shared policy through it: the client at `init`, the
- * attestor before running its checks. Rule entries are strict — Reclaim's
- * `invert`/`hash` are refused, not silently dropped — and their texts must be
- * `{{param}}`-free: the witness substitutes templates from caller-chosen
- * `paramValues` before matching while the signed rules keep the template
- * text, so a templated policy would not bind the rules it hashed.
+ * Rule entries are strict, so Reclaim's `invert` and `hash` are refused, and
+ * rule texts cannot carry `{{param}}` templates.
  */
 export const zkFetchPolicySchema = z.object({
   allowedHosts: z.array(z.string()).min(1),
@@ -344,12 +250,7 @@ export const zkFetchPolicySchema = z.object({
   claimVersion: z.bigint().optional(),
 });
 
-/**
- * Sort an array of disclosure-rule entries by their canonical serialization.
- *
- * Plain JSON entries with an order-independent meaning sort stably; two plans
- * whose arrays differ only in order then compare and hash the same.
- */
+/** Sort rule entries by their canonical JSON, so array order never changes a hash. */
 const sortCanonical = <T>(entries: readonly T[]): T[] =>
   [...entries].sort((a, b) => {
     const left = canonicalJson(a);
@@ -358,18 +259,11 @@ const sortCanonical = <T>(entries: readonly T[]): T[] =>
   });
 
 /**
- * The one canonical form every disclosure-rules comparison and hash reads.
+ * The canonical form every disclosure-rules comparison and hash reads.
  *
- * Folds what Reclaim itself folds: an absent rules array is empty, a
- * redaction's absent `regex`/`jsonPath`/`xPath` are empty strings, and the
- * entries are sorted (see {@link sortCanonical}) — so plans spelled
- * differently (array order, empty redaction keys, absent-vs-`[]`) compare and
- * hash the same. Every other field is preserved exactly as present, so a plan
- * carrying fields the policy cannot declare (Reclaim's `invert`, `hash`)
- * still mismatches and rejects.
- *
- * @param rules — the signed plan's or policy's disclosure rules.
- * @returns the canonical form, with both arrays always present.
+ * Folds only what Reclaim folds: an absent array is empty, a redaction's absent
+ * keys are empty strings, and entries are sorted. Every other field is kept,
+ * so a signed rule carrying `invert` or `hash` still mismatches the policy.
  */
 const normalizedRulesOf = (rules: {
   responseMatches?: unknown;
@@ -397,17 +291,10 @@ const normalizedRulesOf = (rules: {
 };
 
 /**
- * Parse and normalize a zkFetch policy into the form every hash and check
- * reads.
+ * Parse a policy into the form every hash and check reads: defaults filled,
+ * hosts lowercased, deduplicated and sorted, slots sorted by index, and the
+ * disclosure rules canonicalized.
  *
- * So that policies that mean the same thing agree: unknown keys are dropped,
- * defaults are filled in, hosts are lowercased, deduplicated and sorted,
- * slots are sorted by index and have `optional` filled, and the disclosure
- * rules are canonicalized (see {@link normalizedRulesOf}) — array order,
- * empty redaction keys and absent-vs-`[]` rules never change the hash.
- *
- * @param policy — the policy to normalize.
- * @returns the parsed, normalized policy.
  * @throws if the policy fails {@link zkFetchPolicySchema}.
  */
 export const normalizePolicy = (policy: ZkFetchPolicy) => {
@@ -425,64 +312,50 @@ export const normalizePolicy = (policy: ZkFetchPolicy) => {
 };
 
 /**
- * Hash a zkFetch policy under the `zk-fetch@1` law.
+ * Hash a policy under the `zk-fetch@1` law and its `claimVersion`.
  *
- * The policy is normalized first (see {@link normalizePolicy}), so policies
- * that mean the same thing hash the same. The wire version is the policy's
- * `claimVersion` (default 1).
+ * Policies that normalize the same hash the same (see {@link normalizePolicy}).
  *
- * @param policy — the policy to hash.
- * @returns the 32-byte policy hash.
  * @throws if the policy fails {@link zkFetchPolicySchema}.
- * @see policyHashOf
  */
 export const zkFetchPolicyHashOf = (policy: ZkFetchPolicy): Uint8Array => {
   const normalized = normalizePolicy(policy);
   return policyHashOf(ZK_FETCH_LAW, normalized, normalized.claimVersion);
 };
 
-/**
- * SHA-256 of a string, raw bytes.
- *
- * @param data — the input string.
- * @returns the 32-byte digest.
- */
+/** SHA-256 of a UTF-8 string, raw bytes. */
 const sha256 = (data: string): Uint8Array =>
   new Uint8Array(createHash('sha256').update(data, 'utf-8').digest());
 
-/** The request identity a zkFetch claim is about: the method, URL and body. */
+/** The request a zkFetch claim is about. */
 export interface ZkFetchSubjectRequest {
-  /** The HTTP method. */
   method: string;
-  /** The requested URL. */
   url: string;
-  /** The request body; absent means empty. */
+  /** Absent means empty. */
   body?: string;
 }
 
 /**
- * The zkFetch subject struct: one SHA-256 digest per part of the request.
+ * The zkFetch subject: one SHA-256 per request part, mirroring a Compact
+ * `struct { method, host, path, body: Bytes<32> }`.
  *
- * Mirrors a Compact `struct { method, host, path, body: Bytes<32> }`. Keeping
- * the host apart lets an app bind the source host in-circuit while the path,
- * which may name an account, stays private.
+ * The host is its own field so an app can bind the source host in-circuit
+ * while the path, which may name an account, stays private (ADR 0001).
  */
 export interface ZkFetchSubject {
   /** SHA-256 of the uppercased method. */
   method: Uint8Array;
-  /** SHA-256 of the URL host, lowercased, with any non-default port. */
+  /** SHA-256 of the lowercased host, with any non-default port. */
   host: Uint8Array;
-  /** SHA-256 of the URL path and query, without the fragment. */
+  /** SHA-256 of the path and query, without the fragment. */
   path: Uint8Array;
   /** SHA-256 of the body. */
   body: Uint8Array;
 }
 
 /**
- * Build the zkFetch subject struct of a request.
+ * Build the subject of a request.
  *
- * @param request — the request identity.
- * @returns the subject struct.
  * @throws if the URL does not parse.
  */
 export const zkFetchSubjectOf = (request: ZkFetchSubjectRequest): ZkFetchSubject => {
@@ -496,10 +369,8 @@ export const zkFetchSubjectOf = (request: ZkFetchSubjectRequest): ZkFetchSubject
 };
 
 /**
- * Hash the subject of a zkFetch request.
+ * Hash the subject of a request.
  *
- * @param request — the request identity.
- * @returns the 32-byte subject hash of {@link zkFetchSubjectOf} the request.
  * @throws if the URL does not parse.
  */
 export const zkFetchSubjectHashOf = (request: ZkFetchSubjectRequest): Uint8Array => {
@@ -515,16 +386,10 @@ const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => 
 };
 
 /**
- * Parse a claim's signed parameters and validate the field both callers need.
+ * Parse the signed parameters of a claim. Only `url` is validated; each caller
+ * validates the fields it uses.
  *
- * The witness signs the `method`, `url`, `body` and disclosure rules it
- * fetched; this is the one place that parses them, so the JSON handling and
- * the `url` check stay consistent. `method`, `body` and the rules come back
- * raw — each caller validates the ones it uses.
- *
- * @param claim — the signed claim data.
- * @returns the parsed parameters, with a non-empty `url` guaranteed.
- * @throws if the parameters are not JSON, or carry no non-empty `url`.
+ * @throws if the parameters are not JSON or carry no non-empty `url`.
  */
 const claimParametersOf = (
   claim: ProviderClaimData,
@@ -560,25 +425,18 @@ const claimParametersOf = (
 };
 
 /**
- * Decode the URL a claim attests from its signed parameters.
+ * The URL a claim attests, from its signed parameters.
  *
- * @param claim — the signed claim data.
- * @returns the attested URL.
- * @throws if the parameters are not JSON, or carry no non-empty `url`.
+ * @throws if the parameters are not JSON or carry no non-empty `url`.
  */
 export const claimUrl = (claim: ProviderClaimData): string => claimParametersOf(claim).url;
 
 /**
- * Read the request a claim attests from its signed parameters.
+ * The request a claim attests, from its signed parameters. The subject hash
+ * is taken over it (see {@link zkFetchSubjectHashOf}).
  *
- * The witness signs the `method`, `url` and `body` it fetched; this is the
- * request the claim's subject hash is taken over (see
- * {@link zkFetchSubjectHashOf}).
- *
- * @param claim — the signed claim data.
- * @returns the attested request; an absent body is left out.
- * @throws if the parameters are not JSON, or do not carry a non-empty `url`
- *   and `method`, or carry a `body` that is not a string.
+ * @throws if the parameters are not JSON, lack a non-empty `url` or `method`,
+ *   or carry a `body` that is not a string.
  */
 export const claimRequestOf = (claim: ProviderClaimData): ZkFetchSubjectRequest => {
   const { url, method, body } = claimParametersOf(claim);
@@ -592,16 +450,10 @@ export const claimRequestOf = (claim: ProviderClaimData): ZkFetchSubjectRequest 
 };
 
 /**
- * Read the values the witness extracted from the response it saw.
+ * The values the witness extracted, from the signed context. Reclaim redacts
+ * client-side, so these are the witness's own reading of the revealed slices.
  *
- * The signature already binds `claim.context`; this parser only interprets it.
- * Reclaim redacts client-side — `responseRedactions` selects the slices the
- * witness sees and the rest of the response never reaches it — so the extracted
- * values are the witness's own computation over the redacted transcript.
- * Nothing is dropped here: the reveal whitelist already did the hiding.
- *
- * @param claim — signed claim data whose context carries `extractedParameters`.
- * @returns the certifiable disclosed values.
+ * @throws if the context is not JSON.
  */
 const disclosedValuesOf = (claim: ProviderClaimData): Readonly<Record<string, string>> => {
   let context: Readonly<{ extractedParameters?: Readonly<Record<string, string>> }>;
@@ -615,12 +467,7 @@ const disclosedValuesOf = (claim: ProviderClaimData): Readonly<Record<string, st
   return context.extractedParameters ?? {};
 };
 
-/**
- * Canonically serialize a value for hashing.
- *
- * Deterministic for the plain data evidence carries; `bigint` and `Uint8Array`
- * survive so future evidence shapes hash stably too. Rejects cycles.
- */
+/** Deterministic JSON for hashing; `bigint` and `Uint8Array` survive. Rejects cycles. */
 const canonicalJson = (value: unknown): string => {
   const seen = new WeakSet<object>();
   return JSON.stringify(value, (_key, v) => {
@@ -640,12 +487,7 @@ const canonicalJson = (value: unknown): string => {
   }) as string;
 };
 
-/**
- * SHA-256 of a string, hex-encoded.
- *
- * @param data — the input string.
- * @returns the lower-hex digest.
- */
+/** SHA-256 of a UTF-8 string, lower hex. */
 const sha256Hex = (data: string): string => Buffer.from(sha256(data)).toString('hex');
 
 /** The contract's value type is `Uint<64>`; only non-negative values below 2^64 are certifiable. */
@@ -686,12 +528,8 @@ const parseDecimalUint64 = (value: string): bigint | null => {
 const BYTE_VALUE_BYTES = 32;
 
 /**
- * Decode `hex` text: case-insensitive digits with an optional `0x`/`0X`
- * prefix. Every other character is data, so separators, whitespace and
- * punctuation make the string invalid rather than being ignored.
- *
- * @param value — the disclosed string.
- * @returns the decoded bytes, or `null` when the string is not valid hex.
+ * Decode hex with an optional `0x`/`0X` prefix. Every other character is
+ * data, so separators and whitespace make the string invalid (ADR 0010).
  */
 const decodeHex = (value: string): Uint8Array | null => {
   const digits = value.replace(/^0[xX]/, '');
@@ -709,16 +547,9 @@ const decodeHex = (value: string): Uint8Array | null => {
 };
 
 /**
- * Decode `base64` text: the standard (`+/`) or URL-safe (`-_`) alphabet with
- * optional trailing `=` padding.
- *
- * Whitespace and other characters are invalid (never ignored), partial padding
- * is invalid, and an encoding whose trailing bits are not canonical is
- * invalid, so a lenient decoder-favorite like `AB==` cannot fold into the same
- * value as `AA==`.
- *
- * @param value — the disclosed string.
- * @returns the decoded bytes, or `null` when the string is not valid base64.
+ * Decode standard or URL-safe base64 with optional `=` padding. Partial
+ * padding and non-canonical trailing bits are invalid, so `AB==` cannot fold
+ * into `AA==` (ADR 0010).
  */
 const decodeBase64 = (value: string): Uint8Array | null => {
   const match = /^([A-Za-z0-9+/_-]+)(=*)$/.exec(value);
@@ -752,14 +583,7 @@ const padTo32 = (bytes: Uint8Array): Uint8Array | null => {
   return padded;
 };
 
-/**
- * Decode a disclosed string into its bytes under a byte rule, unpadded.
- *
- * @param value — the disclosed string.
- * @param rule — the byte rule that interprets it.
- * @returns the decoded bytes, or `null` when the string is not a valid
- *   encoding under the rule.
- */
+/** Decode a disclosed string under a byte rule, unpadded; `null` when not a valid encoding. */
 const decodeByteValue = (value: string, rule: ByteRule): Uint8Array | null => {
   switch (rule) {
     case 'bytes':
@@ -772,29 +596,12 @@ const decodeByteValue = (value: string, rule: ByteRule): Uint8Array | null => {
 };
 
 /**
- * Parse a disclosed string value into the claim's slot value for its rule.
+ * Parse a disclosed string into a claim value under a rule.
  *
- * Returns `null` when the value cannot be interpreted under the rule — a
- * numeric reading outside the wire's `Uint<64>` range `[0, 2^64)`, or a byte
- * reading that is not a valid encoding or does not fit the 32-byte slot — so
- * such a disclosure is not certifiable and its slot stays unpresent, rather
- * than the attestor guessing a reading or signing a value the contract can
- * never verify.
- *
- * `float` accepts `[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?` as a whole
- * string. It rounds in decimal arithmetic, with halves rounded up. Neither
- * numeric rule accepts whitespace, grouping separators, or a leading sign.
- * The byte rules are described in {@link ZkFetchParseRule}; decoding folds
- * only representations that carry no data (hex case, the `0x` marker, the
- * base64 alphabet and padding), never deleting a character.
- *
- * For a policy slot, call {@link parseSlotValue} instead: it also applies the
- * slot's `length` pin, which this function skips. Internally only the numeric
- * branch is used, via {@link parseSlotValue}.
- *
- * @param value — the disclosed string value.
- * @param rule — how to interpret it.
- * @returns the numeric value or the 32-byte value, or `null` when unparseable.
+ * `null` means not certifiable: a numeric reading outside `[0, 2^64)`, or a
+ * byte reading that is not a valid encoding or does not fit 32 bytes. For a
+ * policy slot, use {@link parseSlotValue}, which also applies the slot's
+ * `length` pin.
  */
 export function parseDisclosedValue(value: string, rule: 'int' | 'float'): bigint | null;
 export function parseDisclosedValue(value: string, rule: ByteRule): Uint8Array | null;
@@ -826,13 +633,8 @@ export function parseDisclosedValue(
 }
 
 /**
- * Parse a disclosed string for one policy slot: the slot's rule, its exact
- * `length` pin (byte rules only), and the 32-byte slot width.
- *
- * @param slot — the policy slot declaring the rule and any length pin.
- * @param value — the disclosed string.
- * @returns the numeric value or the 32-byte value, or `null` when the string
- *   is unparseable, longer than 32 bytes, or off the pinned length.
+ * Parse a disclosed string for one policy slot: its rule and, for byte rules,
+ * its exact `length` pin. `null` means not certifiable.
  */
 export function parseSlotValue(
   slot: ZkFetchSlot & { parse: ByteRule },
@@ -855,17 +657,12 @@ export function parseSlotValue(slot: ZkFetchSlot, value: string): bigint | Uint8
 }
 
 /**
- * The parsed view of {@link ZkFetchEvidence} that claim derivation and policy
- * checks operate on.
+ * Build the parsed view of evidence without checking its signature.
  *
- * Everything needed — the disclosed values, the canonical hash, the
- * identifier — with none of the ECDSA signature work. This builder performs
- * no signature check itself: the attestor calls it *after*
- * `verifyZkFetchProof`; a caller that uses it without verifying is certifying
- * by derivation against attestors that each verified (see the client).
+ * The attestor calls this after `verifyZkFetchProof`; the client calls it to
+ * derive the claim it expects its attestors to sign.
  *
- * @param evidence — canonicalized proof artifacts.
- * @returns the verified-evidence view.
+ * @throws if the claim context is not JSON.
  */
 export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence => {
   const canonical = {
@@ -885,15 +682,10 @@ export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence 
 };
 
 /**
- * Require every policy slot index to fit within the requested claim size and
- * to match its region: numeric rules target `0..valueSlots-1`, byte rules
- * (`bytes`, `hex`, `base64`) target `valueSlots..valueSlots+byteSlots-1`.
+ * Require every policy slot to fit the requested claim size and its rule's
+ * region: numeric rules in `0..valueSlots-1`, byte rules after.
  *
- * @param policy — a parsed policy whose slot indices are nonnegative integers.
- * @param valueSlots — the requested number of numeric value slots.
- * @param byteSlots — the requested number of byte value slots.
- * @throws if a policy slot is outside the requested count or targets the wrong
- *   region for its rule.
+ * @throws if a slot is out of range or in the wrong region for its rule.
  */
 export function assertPolicySlotsInRange(
   policy: ZkFetchPolicy,
@@ -918,49 +710,31 @@ export function assertPolicySlotsInRange(
 }
 
 /**
- * Derive the canonical {@link Claim} the attestor signs from parsed evidence.
+ * Derive the claim the attestor signs from parsed evidence.
  *
- * The claim reflects the evidence, not the client's proposal. `values`/`present`
- * and `byteValues` come from the policy-declared disclosures, and `subjectHash`
- * is {@link zkFetchSubjectHashOf} the signed request ({@link claimRequestOf}),
- * so every witness that fetched the same request derives the same subject.
- * `version` comes from the policy's `claimVersion` (default 1) and
- * `policyHash` is {@link zkFetchPolicyHashOf} the policy; `appId` is the
- * caller's, as is the per-claim `holder` commitment (ADR 0004). The observation
- * window is the caller's `windowStart` and `windowEnd`, which the client
- * proposes and the law requires to contain the witness's own observation
- * (ADR 0005). A slot whose disclosure is absent stays unpresent. The evidence
- * carries only what the witness saw.
+ * Values and `present` come from the disclosed values, `subjectHash` from the
+ * signed request, `policyHash` and `version` from the policy; `appId`,
+ * `holder` and the window are the caller's (ADR 0004, ADR 0005). A slot whose
+ * disclosure is absent or unparseable stays unpresent.
  *
- * @typeParam V — the claim's numeric value-slot count.
- * @typeParam W — the claim's byte value-slot count.
- * @param options — the parsed evidence view, the policy, the app id, the holder
- *   commitment, the numeric and byte slot counts, and the observation window to
- *   sign.
- * @returns the derived claim.
- * @throws if a policy slot is out of the claim's value range or targets the
- *   wrong region, the policy fails {@link zkFetchPolicySchema}, or the signed
- *   parameters carry no request (see {@link claimRequestOf}).
+ * @throws if a policy slot is out of range or in the wrong region, the policy
+ *   fails {@link zkFetchPolicySchema}, or the signed parameters carry no
+ *   request (see {@link claimRequestOf}).
  */
 export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(options: {
-  /** The evidence view (see {@link parsedEvidenceView}). */
   verified: VerifiedEvidence;
-  /** The policy declaring the slot map. */
   policy: ZkFetchPolicy;
-  /** The app the claim is for, proposed by the client. 32 bytes. */
+  /** 32 bytes. */
   appId: Uint8Array;
-  /** Per-claim commitment of the caller secret, proposed by the client. 32 bytes. */
+  /** Per-claim holder commitment, 32 bytes. */
   holder: Uint8Array;
-  /** The claim's numeric value-slot count (the target contract's `#V`). */
+  /** The contract's `#V`. */
   valueSlots: V;
-  /**
-   * The claim's byte value-slot count (the target contract stores each value
-   * as two halves, so its `#B` is twice this). Defaults to `0`.
-   */
+  /** Half the contract's `#B`: each byte value takes two halves. Defaults to `0`. */
   byteSlots?: W;
-  /** Start of the observation window to sign, proposed by the client. Unix seconds. */
+  /** Unix seconds. */
   windowStart: bigint;
-  /** End of the observation window to sign, proposed by the client. Unix seconds. */
+  /** Unix seconds. */
   windowEnd: bigint;
 }): Claim<V, W> => {
   const { verified, policy, appId, holder, valueSlots, windowStart, windowEnd } = options;
@@ -1004,22 +778,13 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
 };
 
 /**
- * Check evidence against the policy.
+ * Check evidence against the policy: the attested URL is HTTPS on an allowed
+ * host, the signed disclosure rules equal the policy's canonical form, and
+ * every required slot is certifiable. `responseText` is not witness-signed and
+ * takes no part.
  *
- * Fails fast so the attestor does not waste work: the attested URL must be
- * HTTPS against an allowlisted host, the witness-signed disclosure rules must
- * equal the policy's canonical form (see {@link normalizedRulesOf} — array
- * order, empty redaction keys and absent-vs-`[]` rules are inert, every other
- * field must match, so a slot's group name cannot be pointed at a different
- * field), and every *required* policy slot's disclosure must be
- * certifiable (present and parseable — optional slots may be absent and are
- * signed unpresent). Captured response text is untrusted client output and
- * does not participate in policy checks.
- *
- * @param verified — the evidence view (see {@link parsedEvidenceView}).
- * @param policy — the policy.
- * @returns the lowercased attested host, on success.
- * @throws with a descriptive message if a policy check fails.
+ * @returns the lowercased attested host.
+ * @throws on the first failed check.
  */
 export const assertEvidenceMatchesPolicy = (
   verified: VerifiedEvidence,

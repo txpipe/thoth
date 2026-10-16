@@ -1,10 +1,6 @@
-// The zkFetch kind's concrete evidence source: runs the Reclaim client
-// protocol against a caller-chosen witness and returns canonical evidence.
-//
-// Environment-neutral by construction — no Node built-ins, and the Reclaim
-// client stack is imported (and its TLS crypto backend installed) lazily on the
-// first `prove`, so importing this module has no side effects and a bundler can
-// take the edge however its target needs.
+// The zkFetch kind's live evidence source: runs the Reclaim client protocol
+// against a caller-chosen witness. Imports the Reclaim stack lazily, so loading
+// this module has no side effects and a bundler can target any environment.
 import type {
   IAttestorClientInitParams,
   PrepareZKProofsBaseOpts,
@@ -16,47 +12,30 @@ import type { ZkFetchEvidence } from '../index.js';
 /** The lazily-imported Reclaim client module. */
 type AttestorCore = typeof import('@reclaimprotocol/attestor-core');
 
-/**
- * Configuration for {@link zkFetchProver}.
- */
+/** Configuration for {@link zkFetchProver}. */
 export interface ZkFetchProverConfig {
   /**
-   * WebSocket URL of the Reclaim witness that performs the TLS connection and
-   * signs the claim.
-   *
-   * Each attestor instance trusts one witness key, so point this at the
-   * witness that attestor trusts — one you run yourself, or one whose key the
-   * operator pinned.
+   * WebSocket URL of the Reclaim witness that opens the TLS connection and
+   * signs the claim. Point it at the witness the attestor trusts.
    */
   witnessUrl: string | URL;
   /**
-   * Auth for a witness running with `AUTHENTICATION_PUBLIC_KEY` set. A provider
-   * is called per `prove`, so a short-lived signed request stays fresh.
+   * Auth for a witness running with `AUTHENTICATION_PUBLIC_KEY` set. A
+   * provider function is called per `prove`, so a short-lived signed request
+   * stays fresh.
    */
   authRequest?: IAttestorClientInitParams['authRequest'];
-  /**
-   * ZK engine for redaction proofs. Defaults to `stwo`, whose assets ship in
-   * the package (unlike `snarkjs`, which needs a separate download).
-   */
+  /** ZK engine for redaction proofs. Defaults to `stwo`, whose assets ship in the package. */
   zkEngine?: PrepareZKProofsBaseOpts['zkEngine'];
-  /**
-   * ZK operators to use instead of the engine's default factory. Browser builds
-   * inject their own here — the published `stwo` entry is Node-only; see the
-   * README's browser recipe.
-   */
+  /** ZK operators in place of the engine's default factory; browser builds inject their own. */
   zkOperators?: PrepareZKProofsBaseOpts['zkOperators'];
 }
 
 let corePromise: Promise<AttestorCore> | undefined;
 
 /**
- * Import the Reclaim client stack once and install the WebCrypto TLS backend.
- *
- * `@reclaimprotocol/tls` starts with an empty crypto object, so the backend
- * must be installed before any claim runs. WebCrypto exists in Node 20+ and in
- * browsers, which is what keeps this path environment-neutral.
- *
- * @returns the attestor-core module.
+ * Import the Reclaim client stack once and install the WebCrypto TLS backend,
+ * which `@reclaimprotocol/tls` leaves empty by default.
  */
 const loadCore = (): Promise<AttestorCore> => {
   corePromise ??= (async () => {
@@ -74,16 +53,21 @@ const loadCore = (): Promise<AttestorCore> => {
 /**
  * Build the zkFetch kind's live prover.
  *
- * The returned `ZkFetchProver` runs the Reclaim zkFetch protocol over
- * WebSocket: the witness opens the TLS connection to the requested URL, the
- * client drives the transcript and redaction proofs, and the witness returns a
- * signed claim. The result is canonical {@link ZkFetchEvidence} — the one shape
- * `@thoth/zk-tls` attestors verify — with the witness address taken from the
- * tunnel response and the captured response body in `responseText`. That text
- * is untrusted, client-supplied transport output, not witness-signed content.
+ * It runs the Reclaim zkFetch protocol over WebSocket and returns the
+ * canonical {@link ZkFetchEvidence} the attestor verifies. `responseText` is
+ * the transcript as the client saw it, not witness-signed content.
  *
- * @param config — witness URL, witness auth, and ZK tuning.
- * @returns a `ZkFetchProver` for the client's `prover` slot.
+ * @example
+ * ```ts
+ * import { zkFetchProver } from '@thoth/zk-tls/prover';
+ *
+ * const prover = zkFetchProver({ witnessUrl: 'ws://localhost:8001/ws' });
+ * const evidence = await prover.prove({
+ *   url: 'https://api.github.com/repos/txpipe/dolos',
+ *   responseMatches: [{ type: 'regex', value: '"stargazers_count":\\s*(?<stars>\\d+)' }],
+ *   responseRedactions: [{ regex: '"stargazers_count":\\s*\\d+' }],
+ * });
+ * ```
  */
 export const zkFetchProver = (config: ZkFetchProverConfig): ZkFetchProver => {
   const ownerBytes = crypto.getRandomValues(new Uint8Array(32));
@@ -92,8 +76,6 @@ export const zkFetchProver = (config: ZkFetchProverConfig): ZkFetchProver => {
     /**
      * Fetch `request` through the configured witness.
      *
-     * @param request — what to fetch and which fields to reveal/redact.
-     * @returns canonical evidence the witness signed.
      * @throws if the witness reports an error or returns no signed claim.
      */
     prove: async (request: ZkFetchRequest): Promise<ZkFetchEvidence> => {

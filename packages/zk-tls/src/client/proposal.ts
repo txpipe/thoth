@@ -22,17 +22,10 @@ import type {
 } from './index.js';
 
 /**
- * The URL the signed evidence attests is the one the request asked for.
+ * Require the evidence to attest the origin (scheme, host, port) the request
+ * asked for. A redirect or a different path still passes.
  *
- * A prover returns canonical evidence for the interaction it witnessed; this
- * keeps that evidence honest against the caller's request before any
- * attestation is collected. Origin (scheme + host + port) is compared, so a
- * redirect or a differing path still passes, while a mismatched host is
- * caught early.
- *
- * @param evidence — canonical evidence from the prover.
- * @param request — what the caller asked the client to prove.
- * @throws if the evidence attests a different origin than requested.
+ * @throws if the evidence attests another origin.
  */
 const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetchRequest): void => {
   const asked = new URL(request.url).origin;
@@ -45,40 +38,27 @@ const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetc
 /**
  * Build the claim proposal the client sends to every attestor.
  *
- * Runs the policy check and derives the canonical claim. The client
- * deliberately does **not** re-verify the Reclaim ECDSA signature, and each
- * pinned attestor verifies the evidence before signing.
- * Because the claim is deterministic in the evidence, the
- * proposal is byte-identical to what each attestor will sign, so
- * `resolveAttestation` can vet each returned message against the message
- * derived from this claim.
+ * The claim is deterministic in the evidence, so the proposal is what each
+ * attestor signs and `resolveAttestation` can check each answer against it.
+ * The client does not re-verify the witness signature; each attestor does.
  *
- * @typeParam V — the claim's value-slot count (the dApp contract's `#V`).
- * @param options — the evidence, the shared policy, the app id, the slot
- *   counts, and the observation window every witness's evidence falls in.
- * @returns the claim to propose (and to submit, once collected).
  * @throws if the evidence is invalid, fails the policy, or does not fit the
- *   dApp's claim length.
+ *   requested slot counts.
  */
 export const buildClaimProposal = async <V extends number>(options: {
-  /** The evidence to attest (as produced by the prover). */
   evidence: ZkFetchEvidence;
-  /** The shared policy every attestor in the set enforces. */
   policy: ZkFetchPolicy;
-  /** The app the claim is for. */
+  /** 32 bytes. */
   appId: Uint8Array;
-  /** Per-claim holder commitment, supplied by the caller. */
+  /** Per-claim holder commitment, 32 bytes. */
   holder: Uint8Array;
-  /** The claim's value-slot count (the target contract's `#V`). */
+  /** The contract's `#V`. */
   valueSlots: V;
-  /**
-   * The claim's byte value-slot count (the target contract stores each value
-   * as two halves, so its `#B` is twice this). Defaults to `0`.
-   */
+  /** Half the contract's `#B`. Defaults to `0`. */
   byteSlots?: number;
-  /** Start of the window to sign: the earliest observation across the witnesses. */
+  /** Unix seconds. */
   windowStart: bigint;
-  /** End of the window to sign: the latest observation across the witnesses. */
+  /** Unix seconds. */
   windowEnd: bigint;
 }): Promise<Claim<V, number>> => {
   const {
@@ -106,30 +86,17 @@ export const buildClaimProposal = async <V extends number>(options: {
   return claimSchema(valueSlots, byteSlots).parse(derived);
 };
 
-/**
- * Copy a request so that whoever holds the copy cannot change the original's
- * secret headers.
- *
- * @param request — the request to copy.
- * @returns a shallow copy with its own `secretHeaders` record.
- */
+/** Shallow-copy a request with its own `secretHeaders`, so a holder cannot change the original's. */
 export const copyRequest = (request: ZkFetchRequest): ZkFetchRequest => ({
   ...request,
   secretHeaders: { ...request.secretHeaders },
 });
 
 /**
- * Bind a request to the policy's disclosure rules.
+ * Return the request with the policy's disclosure rules, so every witness
+ * signs the rules the policy hash commits to.
  *
- * The policy is the single source of the rules: a request that supplies its
- * own `responseMatches`/`responseRedactions` must carry exactly the policy's,
- * and the returned request always does — so every witness signs the policy's
- * rules verbatim and the attestor's equality check always passes honestly.
- *
- * @param request — the request to bind.
- * @param policy — the policy whose disclosure rules drive the fetch.
- * @returns the request with the policy's rules injected.
- * @throws if the request carries disclosure rules that differ from the policy's.
+ * @throws if the request carries disclosure rules other than the policy's.
  */
 export const bindRequestToPolicy = (
   request: ZkFetchRequest,
@@ -160,11 +127,6 @@ export const bindRequestToPolicy = (
  * The prover gets its own copy, so it cannot change the request that other
  * provers or the secret header check read.
  *
- * @typeParam PK — the signature scheme's public-key type.
- * @param provers — evidence source per attestor id.
- * @param attestor — whose witness to use.
- * @param request — what the caller asked the client to prove.
- * @returns canonical evidence for the requested origin.
  * @throws if the attestor has no prover, the evidence is invalid or for
  *   another origin, or it carries a secret header value
  *   ({@link SecretHeaderError}).
@@ -187,13 +149,6 @@ export const proveWith = async <PK>(
 /**
  * Ask one attestor to sign `claim` and vet the returned attestation.
  *
- * @typeParam V — the claim's value-slot count.
- * @typeParam PK — the signature scheme's public-key type.
- * @typeParam S — the signature scheme's signature type.
- * @param config — the trusted set, transport, verifier, and shared policy.
- * @param member — the trusted attestor to ask, at its app-assigned slot.
- * @param evidence — that attestor's witness evidence.
- * @param claim — the claim proposal it must sign.
  * @returns the attestation, tagged with the member's registry slot.
  * @throws `AttestationMismatchError` if the key, claim, message, or signature is wrong.
  */
@@ -204,9 +159,8 @@ export const attestWith = async <V extends number, PK, S>(
   claim: Claim<V>,
 ): Promise<ZkFetchCollectedAttestation<V, PK, S>> => {
   const { trusted, transport, verifier, policy } = config;
-  // The attestor is the law: it re-parses these with its own schemas, which
-  // accept the already-parsed (superset) shapes. The schemas' *input* types
-  // are the looser pre-parse form, so the payload is bridged here.
+  // The attestor re-parses these with its own schemas, which accept the
+  // already-parsed shapes; only the schemas' input types are looser.
   const input = { policy, evidence, claim } as unknown as ZkFetchAttestationInput;
   const attestation = await transport.request(member.attestor, input);
   return resolveAttestation({ trusted, member, attestation, verifier, expectedClaim: claim });
@@ -233,10 +187,7 @@ const containsSecret = (value: unknown, secrets: readonly string[]): boolean => 
   return false;
 };
 
-/**
- * The evidence carried a secret header value. Carries no value itself, so it
- * is safe to surface to a caller.
- */
+/** The evidence carried a secret header value. Carries no value itself. */
 export class SecretHeaderError extends Error {
   constructor() {
     super('evidence carries a secret header value');
@@ -245,14 +196,10 @@ export class SecretHeaderError extends Error {
 }
 
 /**
- * The evidence carries no secret header value, before it goes to an attestor.
+ * Refuse evidence that carries a secret header value as written,
+ * percent-encoded, or JSON-escaped. A prover must still redact; no check can
+ * recognize every transformation of a secret.
  *
- * Catches each value as written, percent-encoded (as echoed into a URL), and
- * JSON-escaped. A prover must still redact; no check can recognize every
- * transformation of a secret.
- *
- * @param evidence — canonical evidence from the prover.
- * @param request — the request whose `secretHeaders` must stay private.
  * @throws {@link SecretHeaderError} if the evidence carries a secret header value.
  */
 const assertNoSecretHeaders = (evidence: ZkFetchEvidence, request: ZkFetchRequest): void => {
