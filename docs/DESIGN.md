@@ -18,7 +18,10 @@ while preserving the privacy. From this stem two requirements that must hold at 
   values the claim is derived from, but not the credentials and not anything the
   fetch redacted.
 - **The claim values** are private witness data in the Midnight contract — they never
-  appear on-chain; only the predicate outcome and any commitments do.
+  appear on-chain; only the predicate outcome and any commitments do. They are not
+  hidden from guessing, though: the replay nullifier is an unsalted hash over the
+  observation, so anyone can confirm a guessed value — easy for an enumerable
+  identifier in a byte slot (ADR 0009).
 
 To establish that a claim is true, the client obtains evidence from a *data source* —
 e.g. a third-party API — via a protocol such as Reclaim Protocol's ZkFetch, which
