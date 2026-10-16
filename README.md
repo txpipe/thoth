@@ -131,5 +131,4 @@ replace.
 - [docs/adr/](docs/adr/): the design decisions and their reasons
 - [CONTEXT.md](CONTEXT.md): the glossary
 - [CONTRIBUTING.md](CONTRIBUTING.md): dev setup, repo layout and commands
-- Credit: extracted from Witness Fitness, 2nd place in the open track of the Midnight Buenos Aires hackathon.
 - License: [MIT](LICENSE)
