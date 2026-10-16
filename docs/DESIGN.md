@@ -44,8 +44,9 @@ kind needs no contract change. To add one, see
 - **The evidence** goes to the attestors. It shows the disclosed values the
   claim is derived from, not the credentials or anything the fetch redacted.
 - **The claim values** are private witness data in the contract and are not
-  stored on-chain, but the public nullifier lets anyone confirm a guessed
-  value; the [`@thoth/contracts` README](../packages/contracts/README.md#guarantees-and-limits)
+  stored on-chain. The public nullifier hashes them with a secret salt, so it
+  cannot confirm a guessed value ([ADR 0012](adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md));
+  the [`@thoth/contracts` README](../packages/contracts/README.md#guarantees-and-limits)
   says what the ledger makes public.
 
 Matching values alone do not prove where they came from. An app that needs
@@ -66,6 +67,7 @@ The terms are defined in [`CONTEXT.md`](../CONTEXT.md#the-claim).
 | `windowStart`, `windowEnd` | When the attestor observed, in Unix seconds ([ADR 0005](adr/0005-window-is-when-the-attestor-observed.md)) |
 | `subjectHash` | Circuit hash of what the claim is about ([ADR 0001](adr/0001-source-binding-by-in-circuit-subject-hash.md)) |
 | `holder` | Per-claim commitment of the caller's secret ([ADR 0004](adr/0004-holder-is-per-claim-not-an-identity.md)) |
+| `salt` | Secret the attestors derive from the evidence; the nullifier hashes it and the chain never sees it ([ADR 0012](adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)) |
 | `present` | One flag per value slot: `V` numeric slots, then `W` byte slots |
 | `values` | `V` positional `Uint<64>` measurements |
 | `byteValues` | `W` positional 32-byte measurements (identifiers, strings) ([ADR 0009](adr/0009-byte-value-slots-in-the-claim.md)) |
@@ -80,7 +82,7 @@ identity ([ADR 0006](adr/0006-nullifier-keys-on-the-observation-identity.md)).
 ### Wire order
 
 Attestors sign, and the contract rebuilds, a flat vector of
-`K = 2*V + 2*B + 12` fields (`B = 2*W` is the number of byte halves).
+`K = 2*V + 2*B + 14` fields (`B = 2*W` is the number of byte halves).
 `buildMessage` in
 [`attestation.compact`](../packages/contracts/attestation.compact) defines it;
 `claimToMessage` in `@thoth/core/claim` mirrors it, and a parity test keeps the
@@ -97,16 +99,17 @@ two equal. Each 32-byte field is split into two 16-byte halves, each read as a
 | 6 | `windowEnd` | Unix seconds |
 | 7, 8 | `subjectHash` | two halves |
 | 9, 10 | `holder` | two halves |
-| 11 | `B` | the byte-half count `2W`; the contract writes its own `#B` |
-| 12 … 11+V | `present[0]` … `present[V-1]` | `1` measured, `0` absent |
-| 12+V … 11+V+B | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
-| 12+V+B … 11+V+B+V | `values[0]` … `values[V-1]` | the value; `0` when absent |
-| 12+V+B+V … 11+V+B+V+B | `byteHalves[0]` … `byteHalves[B-1]` | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]` |
+| 11, 12 | `salt` | two halves |
+| 13 | `B` | the byte-half count `2W`; the contract writes its own `#B` |
+| 14 … 13+V | `present[0]` … `present[V-1]` | `1` measured, `0` absent |
+| 14+V … 13+V+B | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
+| 14+V+B … 13+V+B+V | `values[0]` … `values[V-1]` | the value; `0` when absent |
+| 14+V+B+V … 13+V+B+V+B | `byteHalves[0]` … `byteHalves[B-1]` | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]` |
 
 `K` alone fixes only `2*V + 2*B`, so two layouts can share a length (`V = 3,
-W = 2` and `V = 1, W = 3` both give `K = 26`). Index 11 signs the layout: the
+W = 2` and `V = 1, W = 3` both give `K = 28`). Index 13 signs the layout: the
 contract rebuilds it from its own `#B`, so a message signed under another
-layout fails verification. With `W = 0` every byte row disappears and index 11
+layout fails verification. With `W = 0` every byte row disappears and index 13
 is `0`. The contract does not check that a byte value's two flags agree.
 
 ## Flow
@@ -142,7 +145,8 @@ sequenceDiagram
    ([ADR 0011](adr/0011-evidence-binds-the-claim-context.md)). The client
    keeps only what the witnesses agree on.
 2. Each attestor verifies its own witness's evidence, checks that it signed
-   the proposal's holder and window, derives the claim itself, and signs it.
+   the proposal's holder and window, derives the claim itself, salt included,
+   and signs it.
    The client checks every signature and places it at the attestor's registry
    slot, which the app assigned in its trusted set.
 3. The contract verifies, in-circuit, the version, the policy hash, at least N

@@ -37,19 +37,25 @@ const APP_ID = new Uint8Array(32).fill(0xa1);
 /** The signed request parameters of a claim that only needs a subject. */
 const REQUEST = { url: 'https://api.github.com/repos/x', method: 'GET', body: '' };
 
-/** A signed-shape claim whose parameters/context are JSON I control. */
-const claimWith = (parameters: unknown, context: unknown): ProviderClaimData => ({
+/** The claim context digest every crafted claim's context carries. */
+const SIGNED_DIGEST = 'cd'.repeat(32);
+
+/**
+ * A signed-shape claim whose parameters/context are JSON I control. The context
+ * also carries {@link SIGNED_DIGEST}.
+ */
+const claimWith = (parameters: unknown, context: object): ProviderClaimData => ({
   provider: 'http',
   parameters: JSON.stringify(parameters),
   owner: '0x445541beb656e0f2359cae936fda3c404c409194',
   timestampS: 1_786_122_944,
-  context: JSON.stringify(context),
+  context: JSON.stringify({ [ZK_FETCH_CLAIM_CONTEXT_KEY]: SIGNED_DIGEST, ...context }),
   identifier: '0x1a36ab63aef0496c591235b96b84bac1553ac08752fa8f38e7d088c912c38bb9',
   epoch: 1,
 });
 
 /** The disclosed values `parsedEvidenceView` extracts for a crafted claim. */
-const disclosedOf = (parameters: unknown, context: unknown): Readonly<Record<string, string>> => {
+const disclosedOf = (parameters: unknown, context: object): Readonly<Record<string, string>> => {
   const evidence = {
     claim: claimWith(parameters, context),
     signatureHex: `0x${'00'.repeat(64)}`,
@@ -297,6 +303,38 @@ describe('deriveClaimFromEvidence', () => {
     expect(claim.subjectHash).toEqual(zkFetchSubjectHashOf(request));
   });
 
+  it('takes the salt from the claim context digest the witness signed', () => {
+    const verified = verifiedOf(claimWith(REQUEST, {}), {});
+    const claim = deriveClaimFromEvidence({
+      verified,
+      policy: policy([{ slot: 0, name: 'a', parse: 'int', optional: true }]),
+      appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
+      valueSlots: 1,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
+    });
+    expect(Buffer.from(claim.salt).toString('hex')).toBe(SIGNED_DIGEST);
+  });
+
+  it.each([
+    ['no digest', {}],
+    ['a digest that is not 32 bytes of hex', { [ZK_FETCH_CLAIM_CONTEXT_KEY]: 'cd' }],
+  ])('throws when the signed context carries %s', (_, context) => {
+    const claim = { ...claimWith(REQUEST, {}), context: JSON.stringify(context) };
+    expect(() =>
+      deriveClaimFromEvidence({
+        verified: verifiedOf(claim, {}),
+        policy: policy([{ slot: 0, name: 'a', parse: 'int', optional: true }]),
+        appId: APP_ID,
+        holder: new Uint8Array(32).fill(0xc1),
+        valueSlots: 1,
+        windowStart: 1_786_122_944n,
+        windowEnd: 1_786_122_944n,
+      }),
+    ).toThrow(/claim context digest/);
+  });
+
   it('throws when a policy slot exceeds the claim value count', () => {
     const verified = verifiedOf(claimWith(REQUEST, { extractedParameters: { a: '1' } }), {
       a: '1',
@@ -365,10 +403,10 @@ describe('assertClaimMatchesContext', () => {
     ...DISCLOSURE_RULES,
   };
   const window = { holder: new Uint8Array(32).fill(7), windowStart: 10n, windowEnd: 20n };
-  const claim = window as never;
   const digestUnder = (signedPolicy: ZkFetchPolicy, request: typeof REQUEST = REQUEST) =>
     zkFetchClaimContextDigestOf({ policy: signedPolicy, request, ...window });
-  const verifiedWith = (context: unknown) => verifiedOf(claimWith(REQUEST, context), {});
+  const claim = { ...window, salt: Buffer.from(digestUnder(policy), 'hex') } as never;
+  const verifiedWith = (context: object) => verifiedOf(claimWith(REQUEST, context), {});
 
   it('accepts evidence that signed the claim context digest', () => {
     const verified = verifiedWith({ [ZK_FETCH_CLAIM_CONTEXT_KEY]: digestUnder(policy) });
@@ -397,9 +435,13 @@ describe('assertClaimMatchesContext', () => {
 
   it('rejects a null, array or non-JSON context', () => {
     for (const context of [null, []]) {
-      expect(() =>
-        assertClaimMatchesContext({ claim, verified: verifiedWith(context), policy }),
-      ).toThrow(/does not carry/);
+      const verified = verifiedOf(
+        { ...claimWith(REQUEST, {}), context: JSON.stringify(context) },
+        {},
+      );
+      expect(() => assertClaimMatchesContext({ claim, verified, policy })).toThrow(
+        /carries no claim context digest/,
+      );
     }
     const verified = verifiedOf({ ...claimWith(REQUEST, {}), context: 'not json' }, {});
     expect(() => assertClaimMatchesContext({ claim, verified, policy })).toThrow(/not valid JSON/);

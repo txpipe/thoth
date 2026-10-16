@@ -102,6 +102,7 @@ What the attestor checks before signing:
 - Every required slot is certifiable: disclosed and parseable under its rule and `length` pin. An optional slot that is absent or unparseable is signed unpresent.
 - The witness's observation time falls inside the proposed window, bounds included.
 - The context the witness signed carries the [claim context](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) digest of the policy, the signed request's subject, and the proposed holder and window ([ADR 0011](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
+- The proposed [salt](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) is that digest.
 - The proposed `subjectHash` is the hash of the request the witness signed, and the proposed values are exactly what the evidence disclosed. The attestor then signs the claim it derived itself, so a client cannot have it certify a different reading.
 
 What the client checks:
@@ -124,14 +125,17 @@ What it does not check, and what your app must do:
 - `threshold` is yours to set; the client cannot read the contract's N.
 - The claim's values are not source-bound on-chain unless your circuit recomputes `subjectHash` from the subject fields (ADR 0001).
 - Reusing a holder secret links claims. Thoth promises no cross-claim unlinkability (ADR 0004).
+- Never disclose the salt or `claim.holder` in your own circuits: the holder is the salt's only secret input. Key holder state on the vault pseudonym (`holderOf`) instead.
+- The nullifier does not stop the same fact from being claimed again under a fresh holder, even in the same window: a new fetch gets a new salt. If your app needs one claim per fact, keep your own set ([contracts limits](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/README.md#guarantees-and-limits)).
 - Every attestor in a trusted set must run the same witness version and behavior; an upstream change can split the set. Run the attestor guide's [live check](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/attestor-guide.md#live-check) before rotating.
 
 ## Design decisions
 
-- **The attestor signs the claim it derives, not the one the client proposes.** The proposal only supplies `appId`, `holder`, the window and the slot counts; values and `subjectHash` come from the evidence ([ADR 0001](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0001-source-binding-by-in-circuit-subject-hash.md)).
+- **The attestor signs the claim it derives, not the one the client proposes.** The proposal only supplies `appId`, `holder`, the window and the slot counts; values, `subjectHash` and `salt` come from the evidence ([ADR 0001](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0001-source-binding-by-in-circuit-subject-hash.md)).
 - **The subject keeps the host as its own hashed field.** Your circuit can bind the source host while the path, which may name an account, stays private ([ADR 0001](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0001-source-binding-by-in-circuit-subject-hash.md)).
 - **The window is when the witnesses observed.** `collect` keeps it fixed across spares, because widening it would change the signed message and discard earlier signatures ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
 - **You fix the holder and window before proving.** `proveReq` and `collect` take them up front, because every witness signs them through the claim context digest; evidence then yields a claim only for them ([ADR 0011](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
+- **The salt is the claim context digest the witnesses signed.** It commits to your holder commitment, which never reaches the ledger, so the nullifier cannot confirm a guessed value. It follows the holder and window you bind before proving, and changing it takes new evidence ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
 - **The claim does not commit to the Reclaim evidence.** You cannot audit a claim against its transcript offline; the claim commits to the values your app reads ([ADR 0007](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0007-no-evidence-commitment.md)).
 - **Byte rules decode the representation.** `hex` and `base64` fold only what carries no data, so separators and whitespace stay data; the [Byte slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) entry has the rules ([ADR 0010](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0010-encoded-byte-rules.md)).
 - **The disclosure rules are part of the policy.** The client proves with the policy's rules, the attestor requires the signed rules to equal them, and the policy hash commits to them. A rule cannot use `{{param}}` templates, because the witness would sign the template and run the substitution.

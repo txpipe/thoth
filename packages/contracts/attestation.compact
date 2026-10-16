@@ -3,13 +3,14 @@
 // `persistentCommit(claim, rand)`. The registry counts the signatures that
 // verify; this module applies the threshold #N and defines the signed message.
 //
-// Wire layout (buildMessage), K = 12 + 2*V + 2*B fields:
+// Wire layout (buildMessage), K = 14 + 2*V + 2*B fields:
 //   [ version,
 //     appId[0..16] as Uint<128>, appId[16..32] as Uint<128>,
 //     policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
 //     windowStart, windowEnd,
 //     subjectHash[0..16] as Uint<128>, subjectHash[16..32] as Uint<128>,
 //     holder[0..16] as Uint<128>, holder[16..32] as Uint<128>,
+//     salt[0..16] as Uint<128>, salt[16..32] as Uint<128>,
 //     B as Field,
 //     present[0] as Field, ..., present[V-1] as Field,
 //     bytePresent[0] as Field, ..., bytePresent[B-1] as Field,
@@ -55,17 +56,21 @@ module attestation<#K, #V, #B, #N, #M> {
     windowEnd: Uint<32>; // Unix seconds the attestor's observation ended
     subjectHash: Bytes<32>; // circuit hash of what the claim is about (ADR 0001)
     holder: Bytes<32>; // per-claim commitment of the caller secret (ADR 0004)
+    salt: Bytes<32>; // secret the attestors derive from the evidence; keys the nullifier (ADR 0012)
     present: Vector<V, Boolean>; // present[i] = values[i] was measured, even if 0
     bytePresent: Vector<B, Boolean>; // one flag per half; an honest claim gives both halves of a value the same flag
     values: Vector<V, Uint<64>>; // positional numeric values; 0 is a valid measured value
     byteHalves: Vector<B, Bytes<16>>; // [b0[0..16], b0[16..32], b1[0..16], ...]
   }
 
-  // Observation identity (ADR 0006). Holder and version do not distinguish facts.
+  // Observation identity (ADR 0006). Holder and version are not hashed directly;
+  // the holder reaches it only through the kind's salt.
+  // The secret salt keeps the public nullifier from confirming guessed values (ADR 0012).
   struct Observation {
     appId: Bytes<32>;
     policyHash: Bytes<32>;
     subjectHash: Bytes<32>;
+    salt: Bytes<32>;
     windowStart: Uint<32>;
     windowEnd: Uint<32>;
     values: Vector<V, Uint<64>>;
@@ -113,7 +118,8 @@ module attestation<#K, #V, #B, #N, #M> {
     const policyHash = splitBytes(c.policyHash);
     const subjectHash = splitBytes(c.subjectHash);
     const holder = splitBytes(c.holder);
-    const header: Vector<12, Field> =
+    const salt = splitBytes(c.salt);
+    const header: Vector<14, Field> =
             [c.version as Field,
              appId[0],
              appId[1],
@@ -125,6 +131,8 @@ module attestation<#K, #V, #B, #N, #M> {
              subjectHash[1],
              holder[0],
              holder[1],
+             salt[0],
+             salt[1],
              B as Field,];
     const presentFields: Vector<V, Field> = map((p: Boolean) => p as Field, c.present);
     const bytePresentFields: Vector<B, Field> = map((p: Boolean) => p as Field, c.bytePresent);
@@ -194,6 +202,7 @@ module attestation<#K, #V, #B, #N, #M> {
               Observation { appId: claim.appId,
                             policyHash: claim.policyHash,
                             subjectHash: claim.subjectHash,
+                            salt: claim.salt,
                             windowStart: claim.windowStart,
                             windowEnd: claim.windowEnd,
                             values: claim.values,

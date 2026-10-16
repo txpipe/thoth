@@ -22,6 +22,10 @@ const APP_ID = new Uint8Array(32).fill(0xa1);
 /** The holder every claim in this suite is for. */
 const HOLDER = new Uint8Array(32).fill(0xc1);
 
+// Derivation reads the salt from this digest. No attestor runs here, so nothing
+// checks it against a holder or window.
+const SIGNED_DIGEST = { [ZK_FETCH_CLAIM_CONTEXT_KEY]: 'cd'.repeat(32) };
+
 const WITNESS_URLS = (process.env.WITNESS_URLS ?? '')
   .split(',')
   .map((url) => url.trim())
@@ -86,7 +90,7 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
     const request = {
       url: TARGET_URL,
       method: 'GET' as const,
-      context: { label: 'thoth-live-check' },
+      context: { label: 'thoth-live-check', ...SIGNED_DIGEST },
       // Reveal only the star count: whole responses carry per-request headers
       // (rate limits, dates, request ids) that make witnesses disagree.
       responseMatches: [RESPONSE_MATCH],
@@ -126,7 +130,7 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
     const request = {
       url: TARGET_URL,
       method: 'GET' as const,
-      context: { label: 'thoth-live-bytes-check' },
+      context: { label: 'thoth-live-bytes-check', ...SIGNED_DIGEST },
       responseMatches: [RESPONSE_MATCH, NAME_MATCH],
       responseRedactions: [RESPONSE_REDACTION, NAME_REDACTION],
     };

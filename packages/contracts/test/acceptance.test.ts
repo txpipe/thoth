@@ -16,6 +16,7 @@ import { type Claim, toContractClaim } from '@thoth/core/claim';
 import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
+  zkFetchClaimContextDigestOf,
   zkFetchPolicyHashOf,
   zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
@@ -199,6 +200,17 @@ describe('cross-seam acceptance', () => {
     expect(honest.signatures[2]).toBe(DUMMY_SIGNATURE);
   });
 
+  it('has every attestor sign the claim context digest the witnesses signed as the salt', () => {
+    const digest = zkFetchClaimContextDigestOf({
+      policy,
+      request: { method: 'GET', url: request.url, body: '' },
+      holder: pureCircuits.holderCommitment(holderSecret),
+      windowStart: BigInt(OBSERVED_AT),
+      windowEnd: WINDOW_END,
+    });
+    expect(Buffer.from(honest.claim.salt).toString('hex')).toBe(digest);
+  });
+
   it('accepts the honest claim end to end', async () => {
     const sim = await freshLedger();
     await submit(sim, honest);
@@ -257,6 +269,7 @@ describe('cross-seam acceptance', () => {
       mutate: (c: B_Claim) => ({ ...c, windowStart: c.windowStart + 1n }),
     },
     { name: 'the window end', mutate: (c: B_Claim) => ({ ...c, windowEnd: c.windowEnd + 1n }) },
+    { name: 'the salt', mutate: (c: B_Claim) => ({ ...c, salt: flip(c.salt, 0) }) },
     // The new caller knows the secret behind the substituted holder.
     {
       name: 'the holder',

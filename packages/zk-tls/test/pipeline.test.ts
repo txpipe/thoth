@@ -158,11 +158,12 @@ describe('assertEvidenceMatchesPolicy over the recorded fixture', () => {
 });
 
 describe('zkFetch claim schema', () => {
-  it('rejects an appId, policyHash subjectHash or holder that is not 32 bytes', () => {
+  it('rejects an appId, policyHash subjectHash, holder or salt that is not 32 bytes', () => {
     const claim = {
       version: 1,
       appId: APP_ID,
       holder: new Uint8Array(32).fill(0xc1),
+      salt: new Uint8Array(32).fill(0xcd),
       policyHash: new Uint8Array(32),
       windowStart: 1_786_122_944,
       windowEnd: 1_786_122_944,
@@ -179,6 +180,9 @@ describe('zkFetch claim schema', () => {
     expect(() => zkFetchClaimSchema.parse({ ...claim, holder: new Uint8Array(31) })).toThrow(
       /expected 32 bytes/,
     );
+    expect(() => zkFetchClaimSchema.parse({ ...claim, salt: new Uint8Array(31) })).toThrow(
+      /expected 32 bytes/,
+    );
     expect(() => zkFetchClaimSchema.parse({ ...claim, subjectHash: new Uint8Array(16) })).toThrow(
       /expected 32 bytes/,
     );
@@ -189,6 +193,7 @@ describe('zkFetch claim schema', () => {
       version: 1,
       appId: APP_ID,
       holder: new Uint8Array(32).fill(0xc1),
+      salt: new Uint8Array(32).fill(0xcd),
       policyHash: new Uint8Array(32),
       windowStart: 1_786_122_944,
       windowEnd: 1_786_122_944,

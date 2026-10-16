@@ -1,4 +1,4 @@
-// The claim-context hashes: policy, subject, holder and the claim-context digest.
+// The claim context hashes: policy, subject, holder and the claim context digest.
 // Keyless and kind-agnostic; each kind supplies its own policy and subject structs.
 
 import { createHash } from 'node:crypto';

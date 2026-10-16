@@ -42,8 +42,9 @@ of scope and why.
 Attestors certify facts, not decisions: a claim states what was observed, and
 your app defines the predicate over it.
 
-Claim values are private witness data and are not stored on-chain, but the
-public nullifier lets anyone confirm a guessed value; the contracts README
+Claim values are private witness data and are not stored on-chain. The public
+nullifier hashes them with a secret [salt](CONTEXT.md#the-claim), so it cannot
+confirm a guessed value; the contracts README
 [says what is public](packages/contracts/README.md#guarantees-and-limits).
 
 ## Which package to use

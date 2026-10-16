@@ -1,13 +1,13 @@
 // Example top-level contract embedding the attestation module: V=3 value slots,
-// B=2 byte halves (one byte value), K=22 message fields, 2-of-3, no predicate.
+// B=2 byte halves (one byte value), K=24 message fields, 2-of-3, no predicate.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=22 msg fields  V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
-import "../attestation"<22, 3, 2, 2, 3> prefix A_;
+//           K=24 msg fields  V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
+import "../attestation"<24, 3, 2, 2, 3> prefix A_;
 
-import "../attestor_registry"<3, 22> prefix R_;
+import "../attestor_registry"<3, 24> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
@@ -19,7 +19,7 @@ export circuit verifyAttestation(): [] {
 
 // The signed message, exported pure so the attestor side and tests can
 // reproduce it.
-export pure circuit message(a: A_Claim): Vector<22, Field> {
+export pure circuit message(a: A_Claim): Vector<24, Field> {
   return A_buildMessage(a);
 }
 

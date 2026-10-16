@@ -35,12 +35,12 @@ describe('mock attestation', () => {
   });
 
   describe('buildMessage (frozen wire shape)', () => {
-    it('returns exactly K=18 fields in the frozen order', () => {
+    it('returns exactly K=20 fields in the frozen order', () => {
       const claim = makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] });
       const msg = pureCircuits.message(claim);
-      expect(msg).toHaveLength(18);
+      expect(msg).toHaveLength(20);
       // [version, appId0, appId1, policyHash0, policyHash1, windowStart, windowEnd,
-      //  subjectHash0, subjectHash1, holder0, holder1, B, p0, p1, p2, v0, v1, v2]
+      //  subjectHash0, subjectHash1, holder0, holder1, salt0, salt1, B, p0, p1, p2, v0, v1, v2]
       // APP_ID is 32 × 0xa1 and POLICY_A 32 × 0xb1, so each half repeats the byte.
       const half = (byte: string): bigint => BigInt(`0x${byte.repeat(16)}`);
       expect(msg.slice(0, 7)).toEqual([
@@ -53,7 +53,7 @@ describe('mock attestation', () => {
         claim.windowEnd,
       ]);
       // B = 0: the numeric-only layout signs a zero byte-half count.
-      expect(msg.slice(11)).toEqual([0n, 1n, 1n, 1n, 100n, 200n, 300n]);
+      expect(msg.slice(13)).toEqual([0n, 1n, 1n, 1n, 100n, 200n, 300n]);
     });
 
     it('pins each 16-byte half to its slot (little-endian)', () => {
@@ -74,6 +74,13 @@ describe('mock attestation', () => {
       expect(msg.slice(9, 11)).toEqual([3n + (4n << 120n), 5n + (6n << 120n)]);
     });
 
+    it('signs the salt in the two header slots after the holder', () => {
+      const salt = new Uint8Array(32);
+      salt[0] = 7;
+      salt[16] = 8;
+      expect(pureCircuits.message(makeClaim({ salt })).slice(11, 13)).toEqual([7n, 8n]);
+    });
+
     it('distinguishes the window start from the window end', () => {
       const claim = makeClaim({ windowStart: 100n, windowEnd: 200n });
       const swapped = { ...claim, windowStart: 200n, windowEnd: 100n };
@@ -83,7 +90,7 @@ describe('mock attestation', () => {
     it('distinguishes a change to every byte of every 32-byte field', () => {
       const claim = makeClaim();
       const msg = pureCircuits.message(claim);
-      for (const field of ['appId', 'policyHash', 'subjectHash', 'holder'] as const) {
+      for (const field of ['appId', 'policyHash', 'subjectHash', 'holder', 'salt'] as const) {
         for (let i = 0; i < 32; i++) {
           expect(pureCircuits.message({ ...claim, [field]: flip(claim[field], i) })).not.toEqual(
             msg,
@@ -96,7 +103,7 @@ describe('mock attestation', () => {
       const absent = makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] });
       const presentZero = makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] });
       expect(pureCircuits.message(absent)).not.toEqual(pureCircuits.message(presentZero));
-      expect(pureCircuits.message(presentZero)[12]).toBe(1n);
+      expect(pureCircuits.message(presentZero)[14]).toBe(1n);
     });
   });
 
@@ -267,7 +274,7 @@ describe('mock attestation', () => {
   });
 
   describe('observation replay', () => {
-    it('rejects the same observation signed for a fresh holder', async () => {
+    it('rejects the same observation and salt signed for a fresh holder', async () => {
       const claim = makeClaim();
       await sim.call('verifyAttestation', ps(signClaim(claim, notaryKeys, randomBytes(32))));
       const freshSecret = randomBytes(32);
@@ -303,6 +310,7 @@ describe('mock attestation', () => {
       },
       { name: 'windowStart', mutate: (c: A_Claim) => ({ ...c, windowStart: c.windowStart + 1n }) },
       { name: 'windowEnd', mutate: (c: A_Claim) => ({ ...c, windowEnd: c.windowEnd - 1n }) },
+      { name: 'salt', mutate: (c: A_Claim) => ({ ...c, salt: flip(c.salt, 0) }) },
       ...[0, 1, 2].flatMap((slot) => [
         {
           name: `values[${slot}]`,

@@ -120,6 +120,17 @@ decides only the header fields that come from the evidence and the values:
   whoever sees the evidence can claim its observation under their own holder.
   zkFetch signs it into the witness's context (`assertClaimMatchesContext`,
   ADR 0011).
+- Derive `salt` from the evidence, and refuse a proposal whose salt differs.
+  The nullifier hashes the salt, so the public ledger cannot confirm a guessed
+  value. Keep it secret: never a public field or anything the ledger shows.
+  Include an input an outsider cannot guess or enumerate. A hash of public or
+  guessable evidence alone, such as an event's on-chain fields, hides nothing:
+  anyone can recompute it for each candidate. It must also be fixed by the
+  evidence: a salt the client can change without new evidence lets one
+  observation mint many claims (ADR 0012). Every attestor must derive the same
+  salt from its own evidence. zkFetch uses the claim context digest the witness
+  signed. Its secret input is the holder commitment, which never reaches the
+  ledger, so a new fetch under a fresh holder gets a new nullifier.
 
 The claim does not commit to the evidence (ADR 0007). Everything the contract
 or app must rely on has to be a field of the signed message.
@@ -137,7 +148,7 @@ targets the matching region before proof verification. Then:
 3. check that the observation falls inside the proposed window;
 4. check that the proposed `subjectHash` is the one of what the evidence signed;
 5. check that the evidence signed the claim context digest of the proposal's
-   holder and window;
+   holder and window, and that the proposed salt is the one the evidence fixes;
 6. check that the proposed values, byte values, and `present` say exactly what
    the evidence showed.
 
@@ -155,7 +166,8 @@ In your `attest`:
   witness";
 - derive the claim yourself from the verified evidence and sign that, not the
   proposal. Take `appId`, `holder`, the window and the requested numeric and
-  byte counts from the proposal, but derive every value and present flag;
+  byte counts from the proposal, but derive the salt, every value and present
+  flag;
 - sign `definition.message(claim)` and return the claim, message, public key
   and signature.
 
