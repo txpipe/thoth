@@ -2,93 +2,63 @@
 
 ## Overview
 
-Midnight contracts rely on private data that is provided by the user's machine when
-needed and it is not stored in-contract. Sometimes this data is expected to come
-from an external source, and it is desirable to be able to assure that it is legit,
-while preserving the privacy. From this stem two requirements that must hold at once:
+A Midnight contract reads private data from the user's machine as witness
+input. When that data is a fact from outside the chain, the contract needs two
+things at once: assurance that the fact is true, and the fact kept private.
 
-- ensuring that a certain claim is true
-- keeping selected data private
+Thoth splits the work across three roles (see [`CONTEXT.md`](../CONTEXT.md#roles)):
 
-"Private" is precise, and differs by piece of data:
+- **Client**: runs in the dApp on the user's machine. It obtains evidence of
+  the fact, collects the attestors' signatures, and submits them to the
+  contract.
+- **Attestor**: checks the evidence under a policy and, if satisfied, signs a
+  claim derived from it with its own key. An attestor holds no app's policy,
+  serves any app that reaches it, and never learns how a claim is used.
+- **Contract**: pins the app's attestor keys and threshold at deploy, verifies
+  the claim and its signatures in-circuit, and runs the app's predicate over
+  the claim values.
 
-- **Private credentials** (API keys, cookies, auth headers) never leave the user's
-  machine — the fetch mechanism redacts them.
-- **The evidence** (e.g. a zkFetch proof) is what the attestor sees: the *disclosed*
-  values the claim is derived from, but not the credentials and not anything the
-  fetch redacted.
-- **The claim values** are private witness data in the Midnight contract — they never
-  appear on-chain; only the predicate outcome and any commitments do. They are not
-  hidden from guessing, though: the replay nullifier is an unsalted hash over the
-  observation, so anyone can confirm a guessed value — easy for an enumerable
-  identifier in a byte slot (ADR 0009).
+Attestors certify facts, not decisions: a claim is a canonical statement of
+what was observed, and the app defines the predicate over it. The same claim
+can feed any number of predicates within the app it was signed for (its
+`appId`).
 
-To establish that a claim is true, the client obtains evidence from a *data source* —
-e.g. a third-party API — via a protocol such as Reclaim Protocol's ZkFetch, which
-fetches the data and generates a zero knowledge proof that the connection took place
-and that the data retrieved wasn't forged.
+One attestor alone would be almost no assurance, so each app pins M attestors
+and requires N of them to sign the same claim. Colluding attestors are out of
+scope (ADR 0003).
 
-The *attestor* is the entity that verifies such evidence: given evidence the client
-obtained, the attestor checks it and, if satisfied, signs a claim derived from it with
-its own key — its signature is the attestation. Attestors are defined by the *kind* of
-verification they can perform:
+### Kinds
 
-- **zkFetch** — verifies a client's fetch proof from a data source; this kind
-  ships as [`@thoth/zk-tls`](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls)
-- **effectStream** — certifies events observed on another blockchain
-- **band** — checks a client-proposed value against the attestor's own data source,
-  within a bound
-- **trusted hardware / devices** — further kinds, where the proof comes from hardware
-  or a device
+Attestors come in kinds, one per way of checking evidence. zkFetch, shipped as
+[`@thoth/zk-tls`](../packages/zk-tls/README.md), checks a Reclaim zkFetch
+proof that an HTTPS response was fetched and not forged; in that kind each
+attestor trusts its own Reclaim witness. The contract knows nothing about
+kinds: the claim's `policyHash` stands in for the kind (ADR 0002), so a new
+kind needs no contract change. To add one, see
+[kind-author-guide.md](kind-author-guide.md).
 
-The client calls the attestors whose kind matches how the claim was obtained.
+### What stays private
 
-**Band attestors.** When no client-side proof exists, the client proposes a value and
-the attestor checks it against its own data source, signing only that the value is
-valid within a bound. N band attestors agreeing on the same value give the app
-independent corroboration rather than cryptographic proof.
+- **Credentials** (API keys, cookies, auth headers) never leave the user's
+  machine; the fetch redacts them.
+- **The evidence** goes to the attestors. It shows the disclosed values the
+  claim is derived from, not the credentials or anything the fetch redacted.
+- **The claim values** are private witness data in the contract and are not
+  stored on-chain; only commitments, the nullifier and the predicate outcome
+  are. They are not hidden from guessing, though: the nullifier is a public,
+  unsalted hash of the observation, so anyone can confirm a guessed value by
+  recomputing it. This is easy for an enumerable identifier in a byte slot,
+  and it is an open security issue (ADR 0009).
 
-Attestors certify facts, not decisions: a claim is a canonical statement of what was
-observed, and the application defines the predicate over it. Attestors are generic
-infrastructure, shared across applications: an attestor holds no application's policy
-and accepts requests from any protocol that reaches it, as long as the evidence comes
-from the witness it trusts. Attestors never know how a claim is used, so the same
-attested value can feed different predicates in different applications.
-
-What makes a claim meaningful is the consuming contract. The app pins its trusted
-attestor set and threshold at deploy time, and its predicate decides which claims it
-accepts. A claim carries `policyHash`, which the contract checks against its sealed
-set, and `subjectHash`, a circuit hash of what the claim is about. Matching values do
-not by themselves prove where they came from: an app that needs source binding supplies
-the subject privately, recomputes `subjectHash` in-circuit, and pins only the fields
-its policy needs, such as the host.
-
-On the other side is the *client* — the component that runs on the user's machine,
-inside the dApp. It first obtains evidence of a fact. In the zkFetch kind that means
-one fetch per attestor in its trusted set, each through that attestor's own Reclaim
-witness; the client keeps only what the witnesses agree on. It then sends each
-attestor the evidence its own witness produced, collects the N signatures the dApp's
-deploy-time threshold requires, and hands the claim together with those signatures to
-the Midnight contract as private witness data. The contract's predicate runs over the
-attested values without any of them ever being revealed on-chain.
-
-Of course, relying on one single attestor would be almost the same as having no
-attestors at all, so our approach aims to create an *attestor network* that can be
-pinged by any dApp that needs to use external data in-contract. Each dApp chooses its
-own threshold at deployment time, meaning how many attestors'
-signatures are needed for a claim to be valid.
-
-Every claim is signed for one app: it carries the app's `appId`. Within one
-app, the same claim can feed any number of predicates.
-
-To add a kind, see [kind-author-guide.md](kind-author-guide.md).
+Matching values alone do not prove where they came from. An app that needs
+source binding recomputes `subjectHash` in-circuit from private subject fields
+and pins only the fields it needs, such as the host (ADR 0001).
 
 ## The claim
 
-The claim is the same object everywhere — client, attestors, and contract —
-and it is the whole signed message: anything the contract checks is a field of
-it. The terms are defined in [`CONTEXT.md`](../CONTEXT.md); the decisions
-behind them are the ADRs in [`adr/`](adr/).
+The claim is the same object everywhere (client, attestors, contract) and it
+is the whole signed message: anything the contract checks is a field of it.
+The terms are defined in [`CONTEXT.md`](../CONTEXT.md#the-claim).
 
 | Field | What it is |
 |-------|------------|
@@ -100,17 +70,17 @@ behind them are the ADRs in [`adr/`](adr/).
 | `holder` | Per-claim commitment of the caller's secret (ADR 0004) |
 | `present` | One flag per value slot: `V` numeric slots, then `W` byte slots |
 | `values` | `V` positional `Uint<64>` measurements |
-| `byteValues` | `W` positional 32-byte measurements (identifiers, strings) |
+| `byteValues` | `W` positional 32-byte measurements (identifiers, strings) (ADR 0009) |
 
-A byte value travels exactly as its 32 bytes; the contract stores each one as
-two adjacent 16-byte halves and carries the byte slot's flag on both halves
-(honest claims; the module does not check that the two flags agree). The
-absent law is one-directional: an absent slot must carry zero, while a present
-slot may be zero — including a short value whose zero-padding leaves a half all
-zeros.
+The window is when the attestor's witness looked, not when the fact happened,
+and it is not exact. A zkFetch witness takes its timestamp from the request,
+and Reclaim rejects it only when it is more than 10 minutes in the future. So
+the window shows the fetch happened no earlier than about 10 minutes before
+`windowStart`. Freshness still holds on-chain, because post-dating is capped.
 
-There is no nonce and no kind code. The contract derives replay protection from
-the observation identity (ADR 0006), and the policy hash binds the kind.
+An absent slot must carry zero; a present slot may be zero. There is no nonce
+and no kind code: the contract derives replay protection from the observation
+identity (ADR 0006).
 
 ### Wire order
 
@@ -120,7 +90,7 @@ Attestors sign, and the contract rebuilds, a flat vector of
 [`attestation.compact`](../packages/contracts/attestation.compact) defines it;
 `claimToMessage` in `@thoth/core/claim` mirrors it, and a parity test keeps the
 two equal. Each 32-byte field is split into two 16-byte halves, each read as a
-`Uint<128>` little-endian (byte 0 least significant — the runtime's
+`Uint<128>` little-endian (byte 0 least significant, the runtime's
 `convertBytesToUint` convention), so every byte is signed.
 
 | Index | Field | Encoding |
@@ -142,39 +112,7 @@ two equal. Each 32-byte field is split into two 16-byte halves, each read as a
 W = 2` and `V = 1, W = 3` both give `K = 26`). Index 11 signs the layout: the
 contract rebuilds it from its own `#B`, so a message signed under another
 layout fails verification. With `W = 0` every byte row disappears and index 11
-is `0`.
-
-## The contract
-
-The Midnight contract is where the attestation is finally consumed. It is deployed
-holding the app's *attestor registry* — the on-chain representation of the app's
-pinned trusted set — and with the app's N-of-M threshold fixed at deployment time.
-
-When the client submits a claim with N attestor signatures, the contract verifies,
-in zero knowledge, that:
-
-- the claim's `version` is `1`;
-- the claim's `policyHash` is in the app's sealed set of accepted policies;
-- each signature is valid and comes from a **distinct** attestor in the registry —
-  so the N-of-M threshold holds against exactly the attestors the app pinned;
-- every slot not marked `present` carries zero;
-- the caller knows the secret behind the claim's `holder`;
-- the attestors' observation window is not inverted and does not exceed the
-  app's sealed maximum, and the block time falls between its start and its end
-  plus the sealed freshness window. This check also applies when the freshness
-  window is zero;
-- the observation identity has not been submitted before — no replay;
-- the same claim, under the same commitment randomness, is not already in the
-  vault.
-
-Only if those checks pass does the app's predicate run over the claim values, as
-private witness data. The claim values are never stored on-chain — only their
-commitments and the predicate outcome are — and, depending on the app's
-configuration, which attestors vouched may be hidden too.
-
-A signature produced off-chain verifies on-chain, because the claim and the
-signature scheme are shared. Signatures are checked positionally: the client places each one at the
-registry slot its trusted set assigned the attestor.
+is `0`. The contract does not check that a byte value's two flags agree.
 
 ## Flow
 
@@ -185,39 +123,49 @@ sequenceDiagram
     participant Attestor
     participant Contract
 
-    Note over Client,API: Step 1 — evidence per attestor (zkFetch: through its own witness)
+    Note over Client,API: Step 1: evidence per attestor (zkFetch: through its own witness)
     loop for each attestor's witness
         Client->>API: zkFetch request
         API-->>Client: zkFetch response
     end
 
-    Note over Client,Attestor: Step 2 — request attestation (N-of-M)
+    Note over Client,Attestor: Step 2: request attestation (N-of-M)
     loop for each attestor in the dApp's trusted set
-        Client->>Attestor: policy + its witness's evidence + claim
-        Attestor-->>Client: signature over claim
+        Client->>Attestor: policy + its witness's evidence + claim proposal
+        Attestor-->>Client: signature over the claim
     end
 
-    Note over Client,Contract: Step 3 — submit to the contract
+    Note over Client,Contract: Step 3: submit to the contract
     Client->>Contract: claim + N signatures (private witness data)
     Note over Contract: verify
     Note over Contract: run predicate
 ```
+
+1. In zkFetch the client fetches once per attestor, each through that
+   attestor's witness, and keeps only what the witnesses agree on.
+2. Each attestor verifies its own witness's evidence, derives the claim
+   itself, and signs it. The client checks every signature and places it at
+   the attestor's registry slot, which the app assigned in its trusted set.
+3. The contract verifies, in-circuit, the version, the policy hash, at least N
+   valid signatures each against its own registry slot, the absent slots, the
+   holder secret, the window and replay. The
+   [`@thoth/contracts` README](../packages/contracts/README.md#guarantees-and-limits)
+   lists every check. Only then does the app's predicate run.
 
 ## Out of scope
 
 - **Colluding attestors**: N or more pinned attestors can sign a claim under a
   policy they do not enforce, and nothing on-chain can stop it. The threshold
   assumes the pinned operators are honest and independent (ADR 0003).
-- **Org / 1-of-1 attestation**: a single authority makes the registry, N-of-M, and
-  verifier redundant; a plain signature checked by a witness function does the whole
-  job.
-- **Judgment / voting / adjudication**: N attestors co-signing an opinion is consensus,
-  not attesting a fact. It becomes in-scope only if a trustworthy reference exists,
-  then it is corroboration against a source.
-- **Price oracle absolute truth**: an attestor never vouches "the price is X"; it
-  vouches a bounded predicate ("|given − my source| ≤ margin"). The band shape exists
-  precisely to avoid single-source absolute claims.
-- **Aggregation of partial attestations**: N attestors each covering a piece is
-  invalid: if each can be cheated on a small part, the whole claim is a cheat.
-- **Verifiable compute / computation results**: trusted-execution and zkProof
-  territory, outside an attestation layer.
+- **Org or 1-of-1 attestation**: with a single authority, the registry and the
+  threshold are redundant; a plain signature checked in a witness function
+  does the whole job.
+- **Judgment, voting, adjudication**: N attestors co-signing an opinion is
+  consensus, not attesting a fact. It becomes in scope only if a trustworthy
+  reference exists; then it is corroboration against a source.
+- **Absolute price truth**: an attestor never vouches "the price is X"; at
+  most it vouches a bounded predicate such as "|given − my source| ≤ margin".
+- **Aggregation of partial attestations**: N attestors each covering a piece
+  is invalid, because cheating on each small part cheats the whole claim.
+- **Verifiable computation**: trusted execution and general zero-knowledge
+  proofs, outside an attestation layer.
