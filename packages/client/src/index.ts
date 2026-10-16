@@ -16,19 +16,15 @@ import {
 /**
  * One pinned attestor and the registry slot this app assigned to it.
  *
- * The slot belongs to the app's deployed registry, not to the attestor:
- * `attestor_registry.compact` verifies `signatures[i]` against `keys[i]`
- * positionally, so `registryIndex` must be the index of `attestor.publicKey`
- * in that registry's key vector.
- *
- * @typeParam D — the attestor definition type.
- * @typeParam PK — the public-key type.
+ * `attestor_registry.compact` verifies `signatures[i]` against `keys[i]`, so
+ * `registryIndex` is the index of `attestor.publicKey` in the app's deployed
+ * registry. The app assigns it; the attestor does not know it.
  */
 export interface TrustedAttestor<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
   PK,
 > {
-  /** The attestor's client-facing descriptor. */
+  /** The attestor's descriptor. */
   readonly attestor: AttestorDescriptor<D, PK>;
   /** This app's registry slot for the attestor's key. */
   readonly registryIndex: number;
@@ -38,45 +34,44 @@ export interface TrustedAttestor<
 declare const checked: unique symbol;
 
 /**
- * The client's pinned set of attestors, each at the slot this app assigned it
- * in a registry of `registrySize` keys.
+ * The app's pinned attestors, each at its slot in a registry of `registrySize`
+ * keys.
  *
- * An unordered collection: the array carries no order — each
- * {@link TrustedAttestor} member's `registryIndex` is its on-chain registry
- * slot, never its position in this list. Only {@link buildTrustedSet} can
- * produce one, so every set has passed its checks and every member's slot is
- * valid.
- *
- * @typeParam D — the attestor definition type for every member.
- * @typeParam PK — the public-key type.
+ * The array carries no order: a member's `registryIndex` is its registry slot,
+ * never its position in the list. Only {@link buildTrustedSet} produces one.
  */
 export interface TrustedSet<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
   PK,
 > {
-  /** The on-chain registry's key count (`#M`); every slot is below it. */
+  /** The registry's key count (`#M`); every slot is below it. */
   readonly registrySize: number;
-  /** The attestors the client may query, each at its assigned slot. */
+  /** The pinned attestors, each at its assigned slot. */
   readonly attestors: readonly TrustedAttestor<D, PK>[];
   /** Type-only brand: an object literal cannot pose as a checked set. */
   readonly [checked]: true;
 }
 
 /**
- * Assemble a checked {@link TrustedSet} from app-assigned slots.
+ * Build a checked {@link TrustedSet} from app-assigned slots.
  *
- * Ensure a trusted set is well-formed by construction: it rejects a
- * `registrySize` that is not a positive integer, an empty set, two members
- * sharing an `id`, two members pinning the same public key, two members
- * assigned the same slot, and any slot that is not an integer in
- * `[0, registrySize)`. A key pinned under two ids would let one attestor fill
- * two slots of the threshold. The set may pin fewer attestors than the
- * registry holds. Uniqueness keeps downstream placement deterministic; see
- * {@link TrustedAttestor.registryIndex}.
+ * A set may pin fewer attestors than the registry holds. Members must have
+ * distinct ids, keys and slots: a key pinned twice would let one attestor fill
+ * two slots of the threshold.
  *
- * @param options — the registry size and slot-assigned attestors.
- * @returns the validated trusted set.
- * @throws {@link InvalidTrustedSetError} if a construction invariant fails.
+ * @throws {@link InvalidTrustedSetError} if `registrySize` is not a positive
+ *   integer, the set is empty, two members share an id, a key or a slot, or a
+ *   slot is outside `[0, registrySize)`; `reason` names the check.
+ * @example
+ * ```ts
+ * const trusted = buildTrustedSet({
+ *   registrySize: 3, // the contract's #M
+ *   attestors: [
+ *     { attestor: alice, registryIndex: 0 },
+ *     { attestor: bob, registryIndex: 2 },
+ *   ],
+ * });
+ * ```
  */
 export function buildTrustedSet<
   const D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
@@ -118,15 +113,8 @@ export function buildTrustedSet<
 }
 
 /**
- * Find a named attestor and its assigned slot in the trusted set.
+ * Find a named attestor and its slot in the trusted set.
  *
- * The seam's name→member resolution, so a kind SDK can support
- * string-named endpoints (`proof.attest("txpipeEndpoint", …)`) without
- * re-checking membership at every call site.
- *
- * @param trusted — the trusted set to search.
- * @param id — the attestor instance id (non-cryptographic).
- * @returns the member whose descriptor `id` matches.
  * @throws {@link AttestorNotInTrustedSetError} if no member has that `id`.
  * @see {@link attestorOf} for the descriptor alone.
  */
@@ -142,13 +130,9 @@ export function memberOf<
 }
 
 /**
- * Find the descriptor for a named attestor in the trusted set.
+ * Find the descriptor of a named attestor in the trusted set.
  *
- * @param trusted — the trusted set to search.
- * @param id — the attestor instance id (non-cryptographic).
- * @returns the descriptor whose `id` matches, without its slot.
  * @throws {@link AttestorNotInTrustedSetError} if no member has that `id`.
- * @see {@link memberOf} for the descriptor and its slot.
  */
 export function attestorOf<
   const D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
@@ -157,12 +141,7 @@ export function attestorOf<
   return memberOf(trusted, id).attestor;
 }
 
-/**
- * List the ids of every attestor in the trusted set.
- *
- * @param trusted — the trusted set to read.
- * @returns the member ids, in trusted-set order.
- */
+/** List the id of every attestor in the trusted set. */
 export function attestorIdsOf<
   const D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
   PK,
@@ -177,15 +156,10 @@ const isSlotOf = (registrySize: number, index: number): boolean =>
 /**
  * How the client reaches a remote attestor.
  *
- * The remote mirror of the host-side `Attestor.attest(input)`: both consume the
- * same raw {@link AttestationInput} shape and produce the same
- * {@link Attestation} artifact, agreeing purely through `@thoth/core` types.
- * This package provides only the seam — a kind SDK or the application supplies
- * a concrete transport (HTTP, in-process, mock).
- *
- * @typeParam D — the attestor definition type.
- * @typeParam PK — the public-key type.
- * @typeParam S — the signature scheme type.
+ * The client-side mirror of `Attestor.attest` in `@thoth/attestor`: both take
+ * the same raw {@link AttestationInput} and return the same
+ * {@link Attestation}. This package defines only the interface; the kind's
+ * client or the app supplies the transport (HTTP, in-process, mock).
  */
 export interface AttestorTransport<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
@@ -193,13 +167,11 @@ export interface AttestorTransport<
   S,
 > {
   /**
-   * Request an attestation from a specific attestor.
+   * Request an attestation from one attestor.
    *
-   * @param attestor — the attestor to reach.
-   * @param input — the raw (unparsed) policy/evidence/claim values; forwarded
-   *   as-is, the attestor is the law.
-   * @returns the signed attestation, or throws if the attestor cannot be
-   *   reached or rejects the request.
+   * @param input — raw, unparsed values, forwarded as-is; the attestor parses
+   *   them.
+   * @throws if the attestor cannot be reached or rejects the request.
    */
   request(
     attestor: AttestorDescriptor<D, PK>,
@@ -207,52 +179,34 @@ export interface AttestorTransport<
   ): Promise<Attestation<z.output<D['claim']>, PK, S, MessageOf<D>>>;
 }
 
-/**
- * One collected attestation paired with the registry slot it answered from.
- *
- * @typeParam C — the certified claim.
- * @typeParam PK — the attesting public key.
- * @typeParam S — the signature scheme type.
- * @typeParam Msg — the signed-message type; defaults to {@link FlatMessage}.
- */
+/** One collected attestation and the registry slot it answered from. */
 export interface CollectedAttestation<C, PK, S, Msg = FlatMessage> {
   /** The registry slot the attestation was collected from. */
   readonly registryIndex: number;
-  /** The attested artifact collected from that slot. */
+  /** The attestation collected from that slot. */
   readonly attestation: Attestation<C, PK, S, Msg>;
 }
 
-/**
- * Signature verification supplied by the application's signature scheme.
- * @typeParam PK - Public key type.
- * @typeParam S - Signature type.
- * @typeParam Msg - Signed message type.
- */
+/** Signature verification for the app's signature scheme. */
 export interface AttestationVerifier<PK, S, Msg = FlatMessage> {
-  /**
-   * Check a signature against the pinned key and message.
-   * @param publicKey - The trusted public key.
-   * @param message - The message to authenticate.
-   * @param signature - The returned signature.
-   * @returns true for a valid signature; false or throw to reject.
-   */
+  /** Check a signature against the pinned key and message; return `false` or throw to reject. */
   verify(publicKey: PK, message: Msg, signature: S): boolean | Promise<boolean>;
 }
 
 /**
- * Validate one attestation against its trusted member and tag it with the
- * member's slot.
+ * Vet one attestation against its trusted member and tag it with the member's
+ * slot.
  *
- * Checks trusted-set membership, the pinned key, expected claim, claim-to-message binding, and signature. When provided, `expectedMessage` must also match.
- * Verifier errors reject the signature. The caller supplies the parsed expected claim.
+ * Checks, in order: `member` is in `trusted` (by id, slot and key, so a copy
+ * is accepted), the returned key is the pinned key, the message equals
+ * `expectedMessage` when given, the claim equals `expectedClaim`, the message
+ * is `definition.message(expectedClaim)`, and the signature verifies. A
+ * verifier that throws rejects the signature. Vetting before collection keeps
+ * a forged signature from failing on-chain and costing fees; see the README's
+ * "Design decisions".
  *
- * @param options — the trusted set, the member that was asked, the returned
- *   attestation, verifier, expected parsed claim, and optional expected message.
- * @returns a promise of the slot-tagged {@link CollectedAttestation}.
- * @throws {@link AttestorNotInTrustedSetError} if no member of `trusted`
- *   has `member`'s id, slot, and public key.
- * @throws {@link AttestationMismatchError} if a check fails; the `reason`
- *   discriminates which one.
+ * @throws {@link AttestorNotInTrustedSetError} if `member` is not in `trusted`.
+ * @throws {@link AttestationMismatchError} if a check fails; `reason` names it.
  */
 export async function resolveAttestation<
   const D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
@@ -261,16 +215,13 @@ export async function resolveAttestation<
 >(options: {
   /** The trusted set the member must belong to. */
   readonly trusted: TrustedSet<D, PK>;
-  /**
-   * The trusted member that was asked, as returned by {@link memberOf}; its
-   * slot tags the result.
-   */
+  /** The member that was asked, as returned by {@link memberOf}; its slot tags the result. */
   readonly member: TrustedAttestor<D, PK>;
   /** The attestation returned for that attestor. */
   readonly attestation: Attestation<z.output<D['claim']>, PK, S, MessageOf<D>>;
   /** The scheme that verifies the returned signature. */
   readonly verifier: AttestationVerifier<PK, S, MessageOf<D>>;
-  /** The parsed claim the caller asked the attestor to certify. */
+  /** The parsed claim the attestor was asked to certify. */
   readonly expectedClaim: z.output<D['claim']>;
   /** The message the attestor was expected to sign; checked when provided. */
   readonly expectedMessage?: MessageOf<D>;
@@ -310,7 +261,7 @@ export async function resolveAttestation<
       attestation.signature,
     );
   } catch {
-    // Malformed signatures must fail vetting just like cryptographic mismatches.
+    // A malformed signature must fail vetting just like a cryptographic mismatch.
   }
   if (!validSignature) {
     throw new AttestationMismatchError(attestor.id, 'signature');
