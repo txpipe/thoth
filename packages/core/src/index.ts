@@ -2,57 +2,27 @@ import type { z } from 'zod';
 import type { FlatMessage } from './claim.js';
 
 /**
- * The signed-message type of an attestor definition.
- *
- * Derived from the definition object's `message()` return type, so the whole
- * host stack (signer, key pair, attestation) picks up a custom message type
- * from the definition automatically — the definition is the single source of
- * truth. For standard kinds this is the default `FlatMessage`.
- *
- * @typeParam D — an {@link AttestorDefinition}.
+ * The signed-message type of an attestor definition, taken from its `message()`
+ * return type so the signer, key pair and attestation agree with the definition.
  */
 export type MessageOf<D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>> =
   ReturnType<D['message']>;
 
-/**
- * The input submitted to an attestor for evaluation.
- *
- * @typeParam P — the policy value (see {@link AttestorDefinition.policy}).
- * @typeParam E — the evidence value.
- * @typeParam C — the claim value.
- */
+/** The input a dApp submits to an attestor. */
 export interface AttestationInput<P, E, C> {
-  /** The rules under which the attestation is produced. */
+  /** The rules the attestor enforces for this input. */
   policy: P;
-  /**
-   * The material the attestor uses to decide whether to attest (a zkFetch
-   * proof, an observed on-chain event, a device quote, …).
-   */
+  /** What the attestor judges: a zkFetch proof, an observed event, a device quote, … */
   evidence: E;
-  /** The value or values the attestor certifies; application-specific and
-   *  compatible with the Compact contracts. */
+  /** The claim proposal the attestor derives its signed claim from. */
   claim: C;
 }
 
 /**
- * The shareable contract a kind of attestor implements.
+ * The law a kind of attestor implements: zod schemas for the policy, evidence
+ * and claim, plus `verify` and `message`.
  *
- * `P`, `E`, and `C` are zod schemas: they double as runtime validators and as
- * the type source for the parsed values (`z.output<P>` etc.).
- *
- * A definition owns both halves of the attestor's law: how to decide whether an
- * input may be attested (`verify`) and how to encode the certified claim into
- * the flat message (`message`).
- *
- * This type carries no signing key. Key-holding attestor instances live in
- * `@thoth/attestor`.
- *
- * @typeParam K — the stable, versioned kind identifier.
- * @typeParam P — policy schema.
- * @typeParam E — evidence schema.
- * @typeParam C — claim schema.
- * @typeParam Msg — the signed-message type; defaults to {@link FlatMessage}.
- * @see @thoth/attestor — where a definition is instantiated alongside its key.
+ * It carries no signing key; `@thoth/attestor` pairs it with one.
  */
 export interface AttestorDefinition<
   K extends string,
@@ -61,84 +31,55 @@ export interface AttestorDefinition<
   C extends z.ZodType,
   Msg = FlatMessage,
 > {
-  /** Stable, versioned identifier for this kind of attestation. */
+  /** The kind's versioned law tag, such as `zk-fetch@1`. */
   readonly kind: K;
 
-  /** Runtime schema for the policy. */
   readonly policy: P;
 
-  /** Runtime schema for the evidence. */
   readonly evidence: E;
 
-  /** Runtime schema for the claim. */
   readonly claim: C;
 
   /**
-   * Decides whether the input may be attested.
+   * Decides whether the parsed input may be attested: return to authorize
+   * signing, throw to reject.
    *
-   * Values are already parsed by their zod schemas. Resolve to authorize
-   * signing; throw to reject the request.
-   *
-   * @param input — the parsed enforcement envelope.
-   * @returns nothing on success; throws to reject.
+   * @throws to reject the input.
    */
   verify(input: AttestationInput<z.output<P>, z.output<E>, z.output<C>>): void | Promise<void>;
 
   /**
-   * The kind's wire law: encode the parsed claim into the exact message shape
-   * the target contract's signature verifies over. Standard kinds produce a
-   * flat field vector ({@link FlatMessage}); a kind may opt into another
-   * message type via the definition's `Msg` parameter.
-   *
-   * @param claim — the parsed claim to encode.
-   * @returns the message the signer commits to.
+   * Encodes the parsed claim into the message the attestor signs and the
+   * contract verifies. Standard kinds delegate to `claimToMessage`.
    */
   message(claim: z.output<C>): Msg;
 }
 
 /**
- * The client-side face of an attestor instance: everything a client needs to
- * address the attestor and check its signatures, with none of the key-bearing
- * machinery of `@thoth/attestor`.
+ * The client-side view of an attestor: what a dApp needs to address it and
+ * check its signatures, with no key material.
  *
- * It carries no registry slot. The signed message binds no slot, registry, or
- * contract, so one attestor can serve many registries at different slots.
- * Each app assigns placement in its client-side trusted set.
- *
- * @typeParam D — the attestor's definition type.
- * @typeParam PK — the attestor's public-key type (scheme-specific).
+ * It carries no registry slot; each app assigns one in its trusted set
+ * (`@thoth/client`).
  */
 export interface AttestorDescriptor<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
   PK,
 > {
-  /** Stable identifier for the attestor instance (non-cryptographic). */
+  /** Non-cryptographic identifier of the attestor instance. */
   id: string;
-  /** The kind's shareable law: schemas, `verify`, `message`. */
   definition: D;
-  /** Public key this attestor attests under. */
   publicKey: PK;
 }
 
 /**
- * The artifact an attestor produces and a client collects: it ties the signed
- * `message` and `signature` together with the certified `claim` and the
- * `publicKey` that produced the signature. These are the values the client
- * later uses to submit the attestation to a contract.
- *
- * @typeParam C — the certified claim (the client-proposed claim that
- *   survived `verify` and was signed).
- * @typeParam PK — the attesting public key.
- * @typeParam S — the signature scheme type.
- * @typeParam Msg — the signed-message type; defaults to {@link FlatMessage}.
+ * The signed artifact one attestor returns: the claim it derived, the message
+ * it signed, and the public key and signature.
  */
 export interface Attestation<C, PK, S, Msg = FlatMessage> {
-  /** The parsed claim that was verified and is now certified. */
   claim: C;
-  /** The message the signature commits to (`definition.message(claim)`). */
+  /** `definition.message(claim)`, what `signature` commits to. */
   message: Msg;
-  /** The public key whose signature is attached. */
   publicKey: PK;
-  /** The signature over `message`, produced by the holder of `publicKey`. */
   signature: S;
 }

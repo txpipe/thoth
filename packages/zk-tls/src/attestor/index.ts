@@ -29,26 +29,15 @@ import {
 } from '../index.js';
 
 /**
- * Verify a zkFetch proof and extract the values it disclosed.
+ * Verify the witness's ECDSA signature over a zkFetch proof and return the
+ * parsed view with the values it disclosed.
  *
- * Re-verifies the Reclaim witness's ECDSA signature over the claim (65-byte
- * hex), then returns the parsed evidence view with the values it may certify
- * in {@link VerifiedEvidence.disclosedValues}.
+ * The signature covers an identifier the witness recomputes from provider,
+ * parameters and context, so `claim.identifier` is checked against that
+ * recomputation too. The evidence is left unchanged.
  *
- * The signature covers an identifier the witness recomputes from
- * provider/parameters/context, not the `claim.identifier` field itself, so the
- * field is checked against that recomputation here.
- *
- * Only the attestor (host) side needs the signature work: the client builds
- * its expected claim by derivation and relies on its pinned attestors having
- * verified (plus the on-chain N-of-M threshold).
- *
- * Verification leaves the caller's evidence unchanged, including its context encoding.
- *
- * @param evidence — canonicalized proof artifacts.
- * @returns the cryptographically verified evidence.
- * @throws if the signature is invalid, malformed, the claim identifier does
- *   not match its signed content, or the claim is uninterpretable.
+ * @throws if the signature is invalid or malformed, the identifier does not
+ *   match its signed content, or the claim context is not JSON.
  */
 export const verifyZkFetchProof = async (evidence: ZkFetchEvidence): Promise<VerifiedEvidence> => {
   const claimSignature = hexToBytes(evidence.signatureHex);
@@ -86,24 +75,17 @@ const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
 const ZERO_BYTES_32 = new Uint8Array(32);
 
 /**
- * Check a client-proposed claim against the disclosed values.
+ * Require a proposed claim to say exactly what the evidence disclosed: for
+ * every policy slot, the `present` flag and the value (numeric or byte, under
+ * the slot's rule and `length` pin) match the disclosure. An absent disclosure
+ * must be proposed unpresent.
  *
- * The client proposes claim values; the attestor only signs what the evidence
- * disclosed. For every policy slot this enforces that the proposal's `present`
- * flag and value match the disclosure exactly (an absent disclosure must be
- * proposed unpresent) — numeric slots against `values`, byte slots against
- * `byteValues` under the slot's rule and `length` pin — so a client cannot
- * have the attestor certify a different reading of the same evidence.
- *
- * @param options — the proposed claim, the disclosed values, and the policy.
- * @throws with a descriptive message on the first mismatch.
+ * @throws on the first mismatch.
  */
 export const assertClaimMatchesDisclosures = (options: {
-  /** The client-proposed claim. */
   claim: Claim<number, number>;
-  /** The disclosed values (redacted values excluded). */
+  /** The disclosed values, keyed by named regex group. */
   disclosures: Readonly<Record<string, string>>;
-  /** The policy declaring the slot map. */
   policy: ZkFetchPolicy;
 }): void => {
   const { claim, disclosures, policy } = options;
@@ -132,20 +114,14 @@ export const assertClaimMatchesDisclosures = (options: {
 };
 
 /**
- * Check a client-proposed claim's subject against the signed request.
+ * Require a proposed claim's `subjectHash` to be the hash of the request the
+ * witness signed, so a client cannot have the attestor certify another source
+ * (ADR 0001).
  *
- * The attestor derives the subject hash from the request its witness signed
- * ({@link claimRequestOf}) and requires the proposal to carry it, so a client
- * cannot have the attestor certify a claim about another source (ADR 0001).
- *
- * @param options — the proposed claim and the verified evidence.
- * @throws if the proposed `subjectHash` is not the signed request's, or the
- *   signed parameters carry no request.
+ * @throws if the subject hash differs, or the signed parameters carry no request.
  */
 export const assertClaimMatchesSubject = (options: {
-  /** The client-proposed claim. */
   claim: Claim<number, number>;
-  /** The verified evidence whose signed parameters name the request. */
   verified: VerifiedEvidence;
 }): void => {
   const { claim, verified } = options;
@@ -156,20 +132,14 @@ export const assertClaimMatchesSubject = (options: {
 };
 
 /**
- * Check a client-proposed claim's observation window against the witness.
+ * Require the witness's observation time to fall inside the proposed window,
+ * bounds included (ADR 0005). The contract bounds the window's length and
+ * checks it against block time.
  *
- * The window is when the attestor observed (ADR 0005), so the attestor
- * requires its own witness's observation time to fall inside the proposed
- * `[windowStart, windowEnd]`, bounds included. The contract bounds the
- * window's length and checks it against block time.
- *
- * @param options — the proposed claim and the verified evidence.
- * @throws if the witness observed outside the proposed window.
+ * @throws if the witness observed outside the window.
  */
 export const assertObservationInWindow = (options: {
-  /** The client-proposed claim. */
   claim: Claim<number, number>;
-  /** The verified evidence whose signed claim carries the observation time. */
   verified: VerifiedEvidence;
 }): void => {
   const { claim, verified } = options;
@@ -182,20 +152,11 @@ export const assertObservationInWindow = (options: {
 };
 
 /**
- * Create the zkFetch attestor kind's shareable definition.
+ * Create the zkFetch kind's shareable definition: the three schemas, a
+ * `verify` that runs every check in this module in order, and a `message`
+ * that encodes the claim with `claimToMessage`.
  *
- * The claim schema requires equal `values` and `present` lengths.
- * `verify` checks policy slot bounds at that requested size before verifying the evidence
- * ({@link verifyZkFetchProof}), checking it against the policy
- * ({@link assertEvidenceMatchesPolicy}), requiring the witness's own
- * observation to fall inside the client-proposed window
- * ({@link assertObservationInWindow}), and enforcing that the proposed claim matches the
- * signed request ({@link assertClaimMatchesSubject}) and the disclosed values
- * ({@link assertClaimMatchesDisclosures}). `message` encodes a
- * claim into its flat field vector via `claimToMessage`.
- *
- * @returns the shareable definition; instantiate it with `@thoth/attestor`'s
- *   `buildAttestor` (see {@link zkFetchAttestor}).
+ * Instantiate it with {@link zkFetchAttestor}.
  */
 export function createZkFetchDefinition(): ZkFetchDefinition {
   return defineAttestor({
@@ -226,26 +187,27 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
 }
 
 /**
- * Build a deployable zkFetch attestor instance.
+ * Build a deployable zkFetch attestor.
  *
- * Specialization of `@thoth/attestor`'s `buildAttestor` that knows the kind:
- * it accepts evidence only from the operator's own Reclaim witness, rejects
- * proposals that do not match the disclosures, derives the *authoritative*
- * claim from the verified evidence (request-bound subject hash)
- * sized to the proposed claim's values length, and signs `message(claim)` with
- * the key pair's signer.
+ * It accepts evidence only from the witness at `witnessAddress`, runs the
+ * definition's `verify`, then derives its own claim from the evidence, sized
+ * to the proposal's `values` and `byteValues` lengths, and signs that.
  *
- * @typeParam PK — the signature scheme's public key type.
- * @typeParam S — the signature scheme's signature type.
- * @param parts — instance id, key material, and witness address.
- * @returns a working `Attestor` for the kind.
+ * @example
+ * ```ts
+ * import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
+ *
+ * const attestor = zkFetchAttestor({
+ *   id: 'zkFetch-strava-1',
+ *   keyPair, // the attestor's signing key, not the witness's
+ *   witnessAddress: '0x…', // the public address of your Reclaim witness
+ * });
+ * ```
  */
 export function zkFetchAttestor<PK, S>(parts: {
-  /** Stable identifier for this deployable instance. */
   id: string;
-  /** The key material: public key plus the matching signing boundary. */
   keyPair: KeyPair<PK, S, FlatMessage>;
-  /** The operator's own Reclaim witness address (`0x` + 20-byte hex). */
+  /** The operator's own Reclaim witness address, `0x` + 40 hex. Compared case-insensitively. */
   witnessAddress: string;
 }): Attestor<ZkFetchDefinition, PK, S> {
   const { id, keyPair, witnessAddress } = parts;
@@ -260,14 +222,12 @@ export function zkFetchAttestor<PK, S>(parts: {
       const policy = definition.policy.parse(input.policy);
       const evidence = definition.evidence.parse(input.evidence);
       const proposed = definition.claim.parse(input.claim);
-      // One full check pass (ECDSA + policy + subject and disclosures cross-check).
       await definition.verify({ policy, evidence, claim: proposed });
       if (evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
         throw new Error(
           `evidence signed by witness ${evidence.attestorAddress}, not this attestor's witness ${trustedWitnessAddress}`,
         );
       }
-      // Claim derivation only needs the pure parsed view.
       const verified = parsedEvidenceView(evidence);
       const claim = deriveClaimFromEvidence({
         verified,

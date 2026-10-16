@@ -1,59 +1,46 @@
 # @thoth/attestor
 
-Attestor host types and helpers for the Thoth N-of-M attestation system.
+The attestor side of Thoth: the interfaces a kind author implements to hold a
+signing key and turn verified evidence into a signed claim.
 
-Thoth lets Midnight contracts accept externally attested information with ZK
-privacy. `@thoth/attestor` is the *host* side: the interfaces and helpers an
-attestor implements and consumes. It is where the signing key lives.
+> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
 ## Install
 
+The package is not on npm. Build it from a checkout of this repo and install it by path:
+
 ```bash
-npm install @thoth/attestor
+git clone https://github.com/txpipe-shop/thoth && cd thoth
+npm install && npm run build
+cd /path/to/your-app && npm install /path/to/thoth/packages/attestor
 ```
 
-## What's in it
-
-- `AttestorSigner<S>` — the **key boundary**: a minimal `sign(message)` contract
-  for whoever holds the private key. The key itself never leaves an
-  implementation (it can be captured in a closure).
-- `KeyPair<PK, S>` — the public key paired with its signing boundary, produced
-  together from the same private key so they can't be cross-wired.
-- `Attestor<D, PK, S>` — a deployable, identifiable instance: `id`, the kind's
-  shareable `definition`, its `signer`, its `publicKey`, and the `attest`
-  lifecycle that verifies then signs. It has no registry slot: the signed
-  message binds none, so one instance can serve any number of registries. Each
-  app assigns placement in its client-side `TrustedSet` (`@thoth/client`).
-- `defineAttestor` — keeps `kind` and the schema types as precise literals
-  inferred from the object literal.
-- `buildAttestor` — a consistency-preserving constructor: takes an `id`, a
-  definition, a `KeyPair`, and the kind's `attest` lifecycle, and returns the
-  `Attestor`.
-- `descriptorOf` — projects an `Attestor` to its client-facing
-  [`AttestorDescriptor`](https://github.com/txpipe-shop/thoth/tree/main/packages/core)
-  (drops `signer`/`attest`).
+Its package name is `@thoth/attestor`; that name may change until the npm scope is settled.
 
 ## Usage
 
-Concrete attestor kinds are built with `buildAttestor`:
+You write a kind in three pieces: the keyless law with `defineAttestor`, a
+`KeyPair` from your key package, and the instance with `buildAttestor`.
 
 ```ts
 import { buildAttestor, defineAttestor, descriptorOf } from '@thoth/attestor';
 import { claimSchema, claimToMessage } from '@thoth/core/claim';
 
-const kindLaw = defineAttestor({
-  kind: 'my-kind@1', // the kind's versioned law tag
-  policy: /* … */,
-  evidence: /* … */,
+const law = defineAttestor({
+  kind: 'my-kind@1', // the versioned law tag
+  policy: myPolicySchema,
+  evidence: myEvidenceSchema,
   claim: claimSchema<8>(8),
-  verify: async (input) => { /* throw to reject */ },
+  verify: async (input) => {
+    if (!accepts(input)) throw new Error('rejected');
+  },
   message: (claim) => claimToMessage(claim),
 });
 
 const attestor = buildAttestor({
   id: 'my-kind-operator-1',
-  definition: kindLaw,
-  keyPair,                        // produced by the kind's key package
+  definition: law,
+  keyPair, // from your key package: { publicKey, signer }
   attest: async (definition, signer, input) => {
     const parsed = {
       policy: definition.policy.parse(input.policy),
@@ -63,48 +50,74 @@ const attestor = buildAttestor({
     await definition.verify(parsed);
     const message = definition.message(parsed.claim);
     const signature = await signer.sign(message);
-    return {
-      claim: parsed.claim,
-      message,
-      publicKey: /* the key pair's public key */,
-      signature,
-    };
+    return { claim: parsed.claim, message, publicKey: keyPair.publicKey, signature };
   },
 });
 
-// Project to the client-safe descriptor:
-descriptorOf(attestor);
+// What you hand to dApps: no signer, no attest.
+const descriptor = descriptorOf(attestor);
 ```
 
-## Attest function
+`attest` is yours to write: parse, `verify`, then sign `message(claim)`. Throw
+to reject. [`@thoth/zk-tls`](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls)
+is the reference kind.
 
-The attestation lifecycle — parse schemas, `verify`, sign `message(claim)` — is
-owned by each kind's package: core and host declare only the interface contract
-(*verify before sign, throw to reject*), and each kind supplies its `attest`.
+## Concepts
 
-## Design rationale
+- [**Attestor**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles):
+  an entity that verifies evidence under a policy and signs a claim if
+  satisfied. `Attestor` is one deployable instance.
+- [**Kind** and **law**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#kinds):
+  a family of attestors sharing one law. The law is the keyless
+  `AttestorDefinition` from [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core);
+  many instances run it.
+- [**Claim** and **message**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim):
+  the claim is what the attestor signs; the message is its flat encoding,
+  produced by the law's `message(claim)`.
+- [**Attestation**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection):
+  what `attest` returns: the claim, the message, the public key and the
+  signature.
+- [**Registry slot**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection):
+  the position of an attestor's key in an app's registry. The app assigns it
+  in its trusted set ([`@thoth/client`](https://github.com/txpipe-shop/thoth/tree/main/packages/client));
+  the attestor never knows it.
 
-- **Composition, not inheritance.** A kind is three pieces — the keyless
-  `AttestorDefinition` law, the `AttestorSigner` key boundary, and the
-  deployable `Attestor` instance — instead of one inherited class. Definitions
-  stay plain, stubbable, and serializable, and a single law is reused by many
-  deployed instances.
-- **The instance and its public key.** The public key is the value the client
-  maps to an on-chain registry slot; the `id` is a separate, plain identifier
-  for client-side addressing. The keyed machinery (signer + public key) is
-  paired into one `KeyPair` at construction, so a wrong public-key pairing is
-  impossible rather than caught late at N-of-M verification.
-- **KeyPair is host-side; the producer lives in the kind.** `KeyPair<PK, S>`
-  describes how the attestor host is put together — it is not a wire shape.
-  The concrete key producer (`derivePublicKey`, the signer, `makeKeyPair(sk)`)
-  belongs to the attestor **kind** package, which instantiates these generics
-  with the scheme's wire types (e.g. `JubjubPoint` from
+## Guarantees and limits
+
+- The package runs no checks at runtime. Its one guarantee is by construction:
+  `buildAttestor` takes `publicKey` and `signer` from one `KeyPair`, so an
+  instance cannot sign under a key that is not its own.
+- `descriptorOf` drops `signer` and `attest`; the key material stays behind
+  `AttestorSigner.sign`.
+- Verifying evidence is the law's `verify`; calling it before signing is your
+  `attest`.
+- Key generation, storage and the signature scheme belong to the kind's key
+  package, not to this one.
+- An attestor is trusted individually. If N or more attestors in an app's
+  trusted set collude, nothing on-chain stops them
+  ([ADR 0003](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0003-colluding-attestors-out-of-scope.md)).
+  The app pins honest, independent operators.
+
+## Design decisions
+
+- **Composition, not inheritance.** A kind is a keyless law, a key boundary
+  and an instance, not one class. The law stays plain and serializable, and one
+  law serves many deployed instances.
+- **`KeyPair` holds a live signer, not serializable key data.** The key
+  producer lives in the kind package, which instantiates `PK` and `S` with the
+  scheme's wire types (for example `JubjubPoint` from
   `@midnight-ntwrk/compact-runtime`).
+- **`attest` belongs to the kind.** This package fixes only the contract:
+  parse, `verify`, sign; throw to reject.
+- **An instance carries no registry slot.** The signed message binds none, so
+  one instance serves any number of registries; each app places it in its own
+  trusted set.
 
 ## Links
 
-- [Thoth (repo root)](https://github.com/txpipe-shop/thoth) — overall architecture and docs
-- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — architecture overview, flow, and out-of-scope
-- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md) — how to add an attestor kind on top of this package
-- [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core) — the keyless law this package instantiates alongside keys
-- [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts) — the on-chain registry that verifies the signatures positionally
+- [Thoth (repo root)](https://github.com/txpipe-shop/thoth)
+- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md): architecture, the claim and its wire order
+- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md): how to add an attestor kind
+- [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): the keyless law this package instantiates with a key
+- [`@thoth/client`](https://github.com/txpipe-shop/thoth/tree/main/packages/client): the dApp side that collects attestations
+- [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies signatures by slot

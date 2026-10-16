@@ -1,9 +1,5 @@
-// Test mock: a thin deployable wrapper around the attestation + registry
-// modules, specialized to V=3 values, B=2 byte halves (one 32-byte byte
-// value), K=22 message fields, M=3 signatures, N=2 threshold (2-of-3). Exists
-// only to give the modules a top-level shell to compile against and to
-// re-export the pure parity surface (`message`, `computeId`, `holderOf`,
-// `holderCommitment`) plus byte-value predicate demos the simulator tests use.
+// Test mock: the modules at V=3, B=2 (one byte value), K=22, 2-of-3, with the
+// pure circuits and byte-value predicates the simulator tests read.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
@@ -41,10 +37,8 @@ export pure circuit keysDistinct(ks: Vector<3, JubjubPoint>): Boolean {
   return R_keysDistinct(ks);
 }
 
-// App-predicate demo: reassemble the claim's byte value 0 from its two
-// adjacent 16-byte halves and compare it as one Bytes<32>. The caller supplies
-// the expected value (e.g. the other claim's attested identifier), so the same
-// circuit is the equality predicate over two claims.
+// App-predicate demo: reassemble byte value 0 from its two halves and compare
+// it to a caller-supplied Bytes<32>.
 export circuit openAndReadBytes(id: Bytes<32>, expected: Bytes<32>): [] {
   const c = B_openClaim(id);
   assert(Bytes[...c.byteHalves[0], ...c.byteHalves[1]] == expected, "byteValue[0] mismatch");

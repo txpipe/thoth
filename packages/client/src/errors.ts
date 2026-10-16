@@ -1,20 +1,14 @@
 /**
- * A collected attestation failed vetting.
- *
- * `reason` identifies a key, message, registry slot, claim, or signature
- * mismatch. Verifier failures, including thrown errors, count as signature
- * mismatches.
+ * A collected attestation failed a check in `resolveAttestation`; `reason`
+ * names it. A verifier that returns `false` or throws is a `'signature'`
+ * mismatch.
  */
 export class AttestationMismatchError extends Error {
-  /** The id of the offending attestor. */
+  /** The offending attestor's id. */
   readonly attestorId: string;
-  /** Which integrity check failed. */
+  /** Which check failed. */
   readonly reason: 'public-key' | 'message' | 'claim' | 'signature';
 
-  /**
-   * @param attestorId — the offending attestor's id.
-   * @param reason — the failed check.
-   */
   constructor(attestorId: string, reason: 'public-key' | 'message' | 'claim' | 'signature') {
     super(`attestation from "${attestorId}" failed ${reason} check`);
     this.attestorId = attestorId;
@@ -22,23 +16,18 @@ export class AttestationMismatchError extends Error {
   }
 }
 
-/**
- * A named attestor is not a member of the trusted set.
- */
+/** A named attestor is not a member of the trusted set. */
 export class AttestorNotInTrustedSetError extends Error {
   /** The id that was looked up. */
   readonly attestorId: string;
 
-  /**
-   * @param attestorId — the id that was looked up.
-   */
   constructor(attestorId: string) {
     super(`attestor "${attestorId}" is not in the trusted set`);
     this.attestorId = attestorId;
   }
 }
 
-/** A {@link InvalidTrustedSetError} construction invariant. */
+/** The check an {@link InvalidTrustedSetError} reports. */
 export type TrustedSetInvariant =
   | 'registry-size'
   | 'empty'
@@ -47,26 +36,13 @@ export type TrustedSetInvariant =
   | 'registry-index'
   | 'duplicate-slot';
 
-/**
- * A trusted set failed its construction invariants.
- *
- * `reason` discriminates the failing check: a `registrySize` that is not a
- * positive integer (`'registry-size'`), an empty set (`'empty'`), two members
- * with the same `id` (`'duplicate-id'`), two members pinning the same public
- * key (`'duplicate-key'`), two members assigned the same
- * registry slot (`'duplicate-slot'`), or a `registryIndex` outside
- * `[0, registrySize)` (`'registry-index'`).
- */
+/** A trusted set failed a check in `buildTrustedSet`; `reason` names it. */
 export class InvalidTrustedSetError extends Error {
-  /** The offending attestor's id (`''` for a failed `'empty'` or `'registry-size'` check). */
+  /** The offending attestor's id; `''` for `'empty'` and `'registry-size'`. */
   readonly attestorId: string;
-  /** Which construction invariant failed. */
+  /** Which check failed. */
   readonly reason: TrustedSetInvariant;
 
-  /**
-   * @param attestorId — the offending attestor's id.
-   * @param reason — the failed construction check.
-   */
   constructor(attestorId: string, reason: TrustedSetInvariant) {
     const detail: Record<TrustedSetInvariant, string> = {
       'registry-size': 'the registry size is not a positive integer',

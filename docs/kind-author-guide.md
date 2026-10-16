@@ -4,13 +4,13 @@ A kind is a family of attestors that share one law: how they read evidence,
 what policy they enforce, and which claim they sign. zkFetch
 ([`@thoth/zk-tls`](../packages/zk-tls/README.md)) is the reference kind; this
 guide names its pieces as the example for each step. Terms follow
-[`CONTEXT.md`](../CONTEXT.md).
+[`CONTEXT.md`](../CONTEXT.md#kinds).
 
-A new kind that signs the standard claim needs **no contract change**. The
-contract knows nothing about kinds.
-It sees a claim in the fixed [wire layout](DESIGN.md#the-claim), checks the
-signatures against its registry, and accepts the claim's `policyHash` only if
-it is in its sealed set. An app accepts your kind by sealing your policy's
+A new kind that signs the standard claim needs no contract change. The
+contract knows nothing about kinds. It sees a claim in the fixed
+[wire layout](DESIGN.md#wire-order), checks the signatures against its
+registry, and accepts the claim's `policyHash` only if it is in its sealed
+set. An app accepts your kind by sealing your policy's
 hash (ADR 0002, ADR 0008).
 
 ## What you build
@@ -26,8 +26,8 @@ hash (ADR 0002, ADR 0008).
 | Instance builder | attestor | `buildAttestor` | `zkFetchAttestor` |
 | Client | dApp | `@thoth/client` | `zkFetchClient` |
 
-Put shared logic at the package root, so a client-only app never imports the
-attestor host. Give the attestor and the client their own subpath entries, as
+Put shared logic at the package root, so a client-only app never imports
+`@thoth/attestor`. Give the attestor and the client their own subpath entries, as
 `@thoth/zk-tls/attestor` and `@thoth/zk-tls/client` do.
 
 ## 1. Name the law
@@ -46,18 +46,15 @@ Never bake an app's policy into an attestor instance.
 
 - Write a zod schema. Then write a normalizer that fills defaults and sorts or
   deduplicates anything whose order carries no meaning.
-- Hash the normalized form: `policyHashOf(law, normalized, claimVersion)`.
+- Hash the normalized form: `policyHashOf(law, normalized)`.
   Policies that mean the same thing must hash the same, or two honest
   attestors sign different messages and never reach the threshold together.
 - Each slot declares how its disclosed string is interpreted. `int` or `float`
-  feeds a numeric slot. The byte rules fill a 32-byte slot: `bytes` keeps the
-  string's UTF-8 bytes (not injective — trailing NULs and unpaired surrogates
-  collapse into the padding), `hex` decodes case-insensitive hex with an
-  optional `0x` prefix, and `base64` decodes the standard or URL-safe alphabet
-  with optional `=` padding. A value that does not fit, or misses a declared
-  `length`, is not certifiable. Decoding never deletes a character — separators
-  and whitespace are data (ADR 0010). Numeric rules must target numeric slots;
-  byte rules must target byte slots.
+  feeds a numeric slot; the byte rules `bytes`, `hex` and `base64` fill a
+  32-byte slot, as the [Byte slot](../CONTEXT.md#the-claim) entry describes
+  (ADR 0010). A value that does not fit, or misses a declared `length`, is not
+  certifiable. Numeric rules must target numeric slots; byte rules must target
+  byte slots.
 - Keep per-operator trust anchors out of the policy. Which witness an attestor
   trusts is instance configuration (zkFetch's `witnessAddress`), not law.
 - Pin the hash of one fixed policy to its bytes in a test, as
@@ -91,14 +88,14 @@ let it drive a policy decision.
 ## 5. The claim
 
 Use the canonical claim: `claimSchema(V, W)` for the schema and
-`claimToMessage` for `message` (omit `W` for a numeric-only kind). Your kind decides only the header fields that come from the evidence
-and the values:
+`claimToMessage` for `message` (omit `W` for a numeric-only kind). Your kind
+decides only the header fields that come from the evidence and the values:
 
 - `policyHash` is your policy hash and `subjectHash` is your subject hash.
 - `windowStart` and `windowEnd` are the window the client proposed. Sign it
-  only if your source's observation falls inside it. When the
-  fact itself happened, such as a block height or event time, is a value, not
-  the window (ADR 0005).
+  only if your source's observation falls inside it. When the fact itself
+  happened, such as a block height or event time, is a value, not the window
+  (ADR 0005).
 - `values` are `Uint<64>`, positional, one per numeric slot of the policy's slot
   map. Set `present[i]` for every measured slot, even when its value is zero. An
   unmeasured slot is `present[i] = false` with value `0`; the contract rejects
@@ -106,13 +103,12 @@ and the values:
 - `byteValues` are 32-byte values (identifiers, strings), positional, one per
   byte slot. The policy's byte rule canonicalizes a disclosed string into the
   32-byte slot, zero-padding shorter values; a value that does not fit is not
-  certifiable and its slot stays unpresent. The kind
-  layer carries one flag per byte slot (`present[V + i]`); `claimToMessage` and
-  the contract split each value into two adjacent 16-byte halves and repeat the
-  flag on both halves. The contract's witness takes that split shape too, so a
-  dApp returns `toContractClaim(claim)` (from `@thoth/core/claim`) from
-  `getAttestationWitness`, never the kind-facing claim itself — even with
-  `W = 0`, whose empty `bytePresent`/`byteHalves` the contract still requires.
+  certifiable and its slot stays unpresent. Your claim carries one flag per
+  byte slot (`present[V + i]`); the message and the contract use the split
+  shape in the [wire order](DESIGN.md#wire-order). So a dApp returns
+  `toContractClaim(claim)` (from `@thoth/core/claim`) from
+  `getAttestationWitness`, never your claim itself, even with `W = 0`, whose
+  empty `bytePresent`/`byteHalves` the contract still requires.
 - `appId` and `holder` come from the claim proposal. The attestor signs them
   but cannot check them. The contract checks `holder` against the caller's
   secret; `appId` is compared by the app's own predicate, not by the module.
@@ -145,17 +141,22 @@ In your `attest`:
 
 - parse every input with the definition's schemas;
 - run `definition.verify`;
-- check per-instance trust anchors, such as "the evidence was signed by *my*
+- check per-instance trust anchors, such as "the evidence was signed by my
   witness";
-- **derive the claim yourself** from the verified evidence and sign that, not
-  the proposal. Take `appId`, `holder`, the window and the requested numeric and
+- derive the claim yourself from the verified evidence and sign that, not the
+  proposal. Take `appId`, `holder`, the window and the requested numeric and
   byte counts from the proposal, but derive every value and present flag;
 - sign `definition.message(claim)` and return the claim, message, public key
   and signature.
 
-The instance has no registry slot or fixed slot counts, so one instance and
-signing key can serve apps with different claim layouts. Each consuming contract
-enforces its own fixed `#V` and `#B`.
+The [`@thoth/attestor` README](../packages/attestor/README.md#usage) signs the
+parsed proposal to stay short; a real kind signs the claim it derived, as
+`zkFetchAttestor` does.
+
+The instance has no registry slot
+([why](../packages/attestor/README.md#design-decisions)) and no fixed slot
+counts, so one instance and signing key can serve apps with different claim
+layouts. Each consuming contract enforces its own fixed `#V` and `#B`.
 
 Infer the requested counts from `claim.values.length` and
 `claim.byteValues.length`, as `zkFetchAttestor` does. Derive the authoritative
@@ -166,7 +167,7 @@ the attestor instance needs no `valueSlots`/`byteSlots` field.
 ## 8. The client
 
 The client runs on the user's machine and builds on `@thoth/client` (see its
-README, "For kind SDK authors"):
+[Usage](../packages/client/README.md#usage)):
 
 - Take a `TrustedSet` built by `buildTrustedSet`. The app assigns each
   attestor's registry slot there.
@@ -211,6 +212,6 @@ as private input (ADR 0004).
 
 A new kind is a new package under `packages/<kind>`. Add it to the root
 `package.json` `workspaces`, and to the build-first chain of the root `types`
-script if another workspace imports it (see `AGENTS.md`, "Stale `dist/`
-footgun"). Pin `@midnight-ntwrk/compact-runtime` to the same version as the
+script if another workspace imports it (see
+[CONTRIBUTING.md](../CONTRIBUTING.md#commands)). Pin `@midnight-ntwrk/compact-runtime` to the same version as the
 other packages.

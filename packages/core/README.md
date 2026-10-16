@@ -1,116 +1,116 @@
 # @thoth/core
 
-Core types and definitions for the Thoth N-of-M attestation system.
+The keyless types a kind of attestor implements and the claim its attestors sign, for kind authors.
 
-Thoth lets Midnight contracts accept externally attested information with ZK
-privacy. `@thoth/core` is the shared, **keyless** contract law: the claim shape,
-the attestor definition schemas, and the client-facing attestor descriptor. It
-carries no signing key and no host machinery, those live in
-[`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor).
+> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
 ## Install
 
+The package is not on npm. Build it from a checkout of this repo and install it by path, with `zod`:
+
 ```bash
-npm install @thoth/core
+git clone https://github.com/txpipe-shop/thoth && cd thoth
+npm install && npm run build
+cd /path/to/your-app && npm install /path/to/thoth/packages/core zod
 ```
 
-## What's in it
+Its package name is `@thoth/core`; that name may change until the npm scope is settled.
 
-The package exposes three entry points:
+## Usage
 
-- **`@thoth/core`**:
-  - `AttestationInput<P, E, C>` — the raw policy / evidence / claim submitted to an attestor
-  - `AttestorDefinition<K, P, E, C>` — the shareable, keyless law a kind of attestor implements: zod schemas for `policy`/`evidence`/`claim`, plus `verify` (decide whether to attest) and `message` (encode a claim into the message type)
-  - `AttestorDescriptor<D, PK>` — the client-facing face of an attestor: everything a client needs to address it
-  - `Attestation<C, PK, S>` — the signed artifact an attestor produces and a client collects
-- **`@thoth/core/claim`**:
-  - `Claim<V, W>` / `ClaimInput<V, W>` — the canonical claim: header (version, appId, policyHash, windowStart, windowEnd, subjectHash, holder), a `present` mask (`V` numeric slots then `W` byte slots), `V` numeric `values`, and `W` 32-byte `byteValues`. `W` defaults to `0`
-  - `claimSchema<V, W>` — a zod schema that validates and coerces a raw claim payload into the canonical claim shape (`W` defaults to `0`; an omitted `byteValues` defaults to `[]`). Call it with no arguments when `V`/`W` are unknown at parse time: the exact-length constraints are then skipped, but `present` must still have one flag per value
-  - `bytes32Schema` — a zod schema for the claim's 32-byte `appId`, `policyHash` and `subjectHash`
-  - `claimToMessage` — encode a parsed `Claim` into the exact `FlatMessage` the contract's `buildMessage` verifies
-  - `toContractClaim` / `ContractClaim` — convert a parsed `Claim` into the contract's `Claim` struct, the shape a dApp's `getAttestationWitness` returns
-  - `FlatMessage` — a Compact `Vector<K, Field>` as a `readonly bigint[]`
-- **`@thoth/core/claim-context`**:
-  - `policyHashOf(law, policy, version?)` — hash a kind's policy, tagged with its law and the wire version
-  - `subjectHashOf(fields)` — hash a kind's subject struct; equals the circuit's `persistentHash` of that struct
-  - `holderCommitmentOf(secret)` — the per-claim holder commitment of a holder secret; equals the circuit's `holderCommitment`
-  - `claimContextDigestOf(context)` — the hash of a `ClaimContext` that every witness signs into its context
-
-Kind identity belongs to `AttestorDefinition`. An attestation carries the
-claim, message, public key, and signature; callers already have the definition
-of the attestor they queried. For standard claims, `policyHashOf` commits to
-the law tag, policy, and wire version inside the signed claim.
-
-### The flat message type
-
-`FlatMessage` is the **default** signed-message type. It's the default for a
-`Msg` generic threaded through `AttestorDefinition`, `AttestorSigner`, `KeyPair`
-and `Attestation`, so a standard kind never mentions it. A kind that needs a
-different message shape opts in by giving its `message()` another return type
-(derived via `MessageOf<D>`), and the whole host stack agrees with the
-definition. `claimToMessage` is the canonical encoder for the standard shape —
-it mirrors the contract's `buildMessage` byte-for-byte, guarded by the parity
-test in the contracts suite.
+A kind is a law: zod schemas for its policy, evidence and claim, a `verify`
+step, and a `message` encoding. You write that law against `@thoth/core` and
+pair it with a key in [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor).
 
 ```ts
-import { claimSchema, claimToMessage } from '@thoth/core/claim';
 import type { AttestorDefinition } from '@thoth/core';
+import { claimSchema, claimToMessage } from '@thoth/core/claim';
+import { policyHashOf } from '@thoth/core/claim-context';
+import { z } from 'zod';
 
-// A kind's definition uses the claim schema as its claim law.
-const def: AttestorDefinition<'my-kind@1', z.ZodType, z.ZodType, z.ZodType> = {
-  kind: 'my-kind@1', // the kind's versioned law tag
-  policy: /* … */,
-  evidence: /* … */,
-  claim: claimSchema<8>(8),
-  verify: () => {},
+const LAW = 'my-kind@1';
+const policySchema = z.object({ allowedHosts: z.array(z.string()) });
+const evidenceSchema = z.object({ host: z.string(), value: z.number() });
+const claim = claimSchema(1); // one numeric slot, no byte slots
+
+export const definition = {
+  kind: LAW,
+  policy: policySchema,
+  evidence: evidenceSchema,
+  claim,
+  verify({ policy, evidence, claim }) {
+    if (!policy.allowedHosts.includes(evidence.host)) {
+      throw new Error(`host ${evidence.host} is not allowed`);
+    }
+    if (!Buffer.from(claim.policyHash).equals(policyHashOf(LAW, policy))) {
+      throw new Error('claim does not commit to this policy');
+    }
+    if (!claim.present[0] || claim.values[0] !== BigInt(evidence.value)) {
+      throw new Error('claim does not match the evidence');
+    }
+  },
   message: (claim) => claimToMessage(claim),
-};
+} satisfies AttestorDefinition<typeof LAW, typeof policySchema, typeof evidenceSchema, typeof claim>;
 ```
 
-### The claim shape vs the wire shape
+A dApp sends an `AttestationInput` (policy, evidence, claim proposal); the
+attestor parses it with the schemas, runs `verify`, signs `message(claim)`, and
+returns an `Attestation`. `AttestorDescriptor` is the client-side view of an
+attestor: its definition and public key, without key material.
 
-The front-facing claim and the contract's stored claim are deliberately
-different shapes. A `Claim` addresses every slot with **one** `present` mask of
-length `V+W` — numeric slots first, byte slots after — because that is the seam
-a kind reasons about. The contract instead stores each byte value as two
-adjacent 16-byte halves and carries a flag per half (`bytePresent`, `B = 2W`);
-the per-half flag exists because a `W = 0` specialization must still compile and
-Compact cannot index a zero-length vector
-([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
-`claimToMessage` bridges the two on the wire and `toContractClaim` in the
-witness: both duplicate each byte slot's flag onto both halves and split each
-`byteValues[i]` into bytes 0–15 / 16–31, so the contract's `buildMessage` over
-the converted claim equals `claimToMessage`'s output (guarded by the parity
-tests). A `Claim` is not the witness shape even with `W = 0`, so a dApp always
-converts it before handing it to the contract. The same
-whole-vs-split pattern already applies to the header fields, which are whole in
-the claim and split into halves on the wire. Two invariants follow: honest
-claims always give a byte slot's two halves the same flag, and no production
-path converts a stored (contract-shaped) claim back into a `Claim` — apps read a
-stored claim via `openClaim` and use its halves directly.
+The three entry points:
 
-### The claim context
+- **`@thoth/core`**: `AttestorDefinition`, `AttestationInput`, `Attestation`, `AttestorDescriptor`, `MessageOf`.
+- **`@thoth/core/claim`**: `Claim`, `ClaimInput`, `claimSchema`, `bytes32Schema`, `claimToMessage`, `toContractClaim`, `ContractClaim`, `FlatMessage`, `CLAIM_VERSION`.
+- **`@thoth/core/claim-context`**: `policyHashOf`, `subjectHashOf`, `holderCommitmentOf`, `claimContextDigestOf`, `ClaimContext`, `CanonicalValue`.
 
-The claim-context helpers are shared by every kind; each kind supplies its own
-policy and subject structs. `policyHashOf` is SHA-256 of the canonical
-serialization of `[law, version, policy]`; `claimContextDigestOf` is SHA-256 of
-`['thoth:claim-context', context]`. Both use the same canonical serialization:
-JSON with sorted keys and no whitespace, a `bigint` as a quoted decimal string,
-and bytes as lowercase hex. Another implementation reproduces them from those
-rules alone. `subjectHashOf` is a circuit hash instead, because an app
-recomputes the subject hash in-circuit from private fields. It requires a
-subject struct whose fields are all `Bytes<32>`. `holderCommitmentOf` is a
-circuit hash for the same reason: the contract re-derives the holder from the
-caller's secret. Its tag keeps it apart from the vault pseudonym the contract
-derives from the same secret. A claim carries this commitment as `holder`;
-the contract requires the caller to know its secret. Use a fresh high-entropy
-secret per claim. Secret reuse links claims; the layer makes no cross-claim
-identity or unlinkability promise.
+## Concepts
+
+- [Kind and law](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#kinds): a kind is a family of attestors sharing one law; the law's versioned tag (`my-kind@1`) is the definition's `kind`.
+- [Claim](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the header (version, app id, policy hash, window, subject hash, holder), the `present` mask, and the numeric and byte values. `Claim<V, W>` has `V` numeric slots and `W` byte slots; `W` defaults to `0`.
+- [Policy and policyHash](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the rules an attestor enforced; the claim commits to them through `policyHashOf`.
+- [Subject and subjectHash](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): what the claim is about, a struct of 32-byte fields hashed by `subjectHashOf`.
+- [Holder](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): a per-claim commitment of a secret, from `holderCommitmentOf`.
+- [Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): when the attestor observed, in Unix seconds.
+- [Claim context](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): policy hash, subject hash, holder and window, the part every attestor derives the same claim from.
+- [Message and wire layout](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the flat field vector the attestors sign and the contract rebuilds; the layout is in the [`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact) header and the [design doc](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#the-claim).
+
+## Guarantees and limits
+
+What the package checks:
+
+- `claimSchema(v, w)` validates the claim shape and lengths, coerces numeric fields to `bigint`, and defaults an omitted `byteValues` to `[]`. Without `v` it skips the exact-length checks but still requires one `present` flag per value.
+- `claimToMessage` produces the exact message the contract's `buildMessage` rebuilds; the contracts suite checks the parity.
+- `toContractClaim` produces the contract's `Claim` struct from a `Claim`. A dApp always converts, even with `W = 0`.
+- `policyHashOf` and `claimContextDigestOf` are SHA-256 over a canonical JSON serialization: sorted keys, no whitespace, a `bigint` as a quoted decimal string, bytes as lowercase hex. Another implementation reproduces them from those rules alone.
+- `subjectHashOf` and `holderCommitmentOf` are circuit hashes, equal to the circuit's `persistentHash` of the subject struct and its `holderCommitment`, so an app can recompute them in-circuit.
+
+What it does not do:
+
+- It verifies no evidence and signs nothing. `verify` is the kind's job; signing is `@thoth/attestor`'s.
+- It does not check `appId`. An app that must refuse another app's claims compares it in its own predicate.
+- Nothing signs `claimContextDigestOf`. It identifies a context; on its own it binds nothing.
+
+What your app must do:
+
+- Use a fresh high-entropy secret per claim. Reusing a secret links claims; the layer promises no cross-claim identity or unlinkability.
+- Read the window as when the attestor observed, not as the time of the fact.
+- Give a byte slot's two halves the same flag. `toContractClaim` and `claimToMessage` do this from one `present` flag; the contract does not check the pairing.
+
+## Design decisions
+
+- **Claim types are keyless.** `@thoth/core` carries no signing key; anything that commits to a message calls the kind's `message()`. Key-holding instances live in `@thoth/attestor`.
+- **The claim carries no kind.** The policy hash, tagged with the law and wire version, is what the contract checks, so a second kind is a new policy hash served by the same module ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
+- **The holder is a per-claim commitment, not an identity.** Only the owner of that claim's secret can vault it; per-user state is yours to build ([ADR 0004](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
+- **The window is when the attestor observed.** A fact's own time travels as a claim value, and your predicate bounds it ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
+- **A `Claim` is not the contract's struct.** A `Claim` has one `present` mask over `V + W` slots; the contract carries each byte value as two 16-byte halves with a flag per half, so you convert with `toContractClaim` before handing it to a witness ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
+- **`FlatMessage` is the default message type.** A kind that needs another shape gives `message()` another return type; `MessageOf<D>` carries it through the signer, key pair and attestation.
 
 ## Links
 
-- [Thoth (repo root)](https://github.com/txpipe-shop/thoth) — overall architecture and docs
-- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md) — design overview, the claim and its wire order
-- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md) — how to add an attestor kind on top of this package
-- [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor) — the host (key boundary, instances)
-- [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts) — the on-chain Compact modules the claim shape mirrors
+- [Thoth (repo root)](https://github.com/txpipe-shop/thoth)
+- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md): the claim and its wire order
+- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md): how to add an attestor kind
+- [CONTEXT.md](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md): the glossary
+- [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor): pairs a definition with a signing key
+- [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the Compact modules the claim mirrors
