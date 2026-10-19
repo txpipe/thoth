@@ -129,6 +129,17 @@ What it does not check, and what your app must do:
 - The nullifier does not stop the same fact from being claimed again under a fresh holder, even in the same window: a new fetch gets a new salt. If your app needs one claim per fact, keep your own set ([contracts limits](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/README.md#guarantees-and-limits)).
 - Every attestor in a trusted set must run the same witness version and behavior; an upstream change can split the set. Run the attestor guide's [live check](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/attestor-guide.md#live-check) before rotating.
 
+The empty-body check is opt-in like the live check and needs one witness. It
+sends a body while the witness signs an empty one, and asserts the attestor
+refuses the evidence:
+
+```bash
+npm run witnesses --workspace=packages/zk-tls   # terminal A
+WITNESS_URLS=ws://localhost:8001/ws npx vitest run packages/zk-tls/test/empty-body.test.ts
+```
+
+`PROBE_URL` overrides the target (`https://httpbin.org/post`).
+
 ## Design decisions
 
 - **The attestor signs the claim it derives, not the one the client proposes.** The proposal only supplies `appId`, `holder`, the window and the slot counts; values, `subjectHash` and `salt` come from the evidence ([ADR 0001](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0001-source-binding-by-in-circuit-subject-hash.md)).
