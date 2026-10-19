@@ -400,6 +400,8 @@ const claimParametersOf = (
   url: string;
   method?: unknown;
   body?: unknown;
+  geoLocation?: unknown;
+  proxySessionId?: unknown;
   responseMatches?: unknown;
   responseRedactions?: unknown;
 }> => {
@@ -407,6 +409,8 @@ const claimParametersOf = (
     url?: unknown;
     method?: unknown;
     body?: unknown;
+    geoLocation?: unknown;
+    proxySessionId?: unknown;
     responseMatches?: unknown;
     responseRedactions?: unknown;
   }>;
@@ -422,6 +426,8 @@ const claimParametersOf = (
     url: parameters.url,
     method: parameters.method,
     body: parameters.body,
+    geoLocation: parameters.geoLocation,
+    proxySessionId: parameters.proxySessionId,
     responseMatches: parameters.responseMatches,
     responseRedactions: parameters.responseRedactions,
   };
@@ -781,8 +787,9 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
 };
 
 /**
- * Check evidence against the policy: the attested URL is HTTPS on an allowed
- * host, the signed disclosure rules equal the policy's canonical form, and
+ * Check evidence against the policy: the signed request carries no
+ * `{{param}}` template, the attested URL is HTTPS on an allowed host, the
+ * signed disclosure rules equal the policy's canonical form, and
  * every required slot is certifiable. `responseText` is not witness-signed and
  * takes no part.
  *
@@ -794,6 +801,23 @@ export const assertEvidenceMatchesPolicy = (
   policy: ZkFetchPolicy,
 ): string => {
   const parameters = claimParametersOf(verified.claim);
+  // Any `{{` is refused, not only a fillable template: Reclaim matches the signed path and body
+  // against the sent request with `{{…}…}` as a wildcard over redacted bytes. The url is normalised
+  // the way WHATWG parses it (tab, LF and CR removed, path braces encoded) and the way Reclaim
+  // decodes it back (`%7B`/`%7D` to braces) before the check.
+  for (const field of ['url', 'body', 'geoLocation', 'proxySessionId'] as const) {
+    const value = parameters[field];
+    const text =
+      field === 'url' && typeof value === 'string'
+        ? value
+            .replace(/[\t\n\r]/g, '')
+            .replace(/%7B/gi, '{')
+            .replace(/%7D/gi, '}')
+        : value;
+    if (typeof text === 'string' && text.includes('{{')) {
+      throw new Error(`the signed ${field} cannot use {{param}} templates`);
+    }
+  }
   const url = new URL(parameters.url);
   if (url.protocol !== 'https:') {
     throw new Error(`attested url must be https, got ${url.protocol}//`);
