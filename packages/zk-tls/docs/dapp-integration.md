@@ -118,6 +118,8 @@ const attestment = await proved.attest(); // or .attest(txpipeDescriptor.id)
 to agree on one claim before any attestor is contacted. Every witness signs
 the holder and window through the [claim context](../../../CONTEXT.md#the-claim)
 digest ([ADR 0011](../../../docs/adr/0011-evidence-binds-the-claim-context.md)).
+Leave room in `windowEnd` for a slow proof: evidence observed after it is
+refused (see [Collecting a threshold](#collecting-a-threshold)).
 `attest` then asks the named attestors, or all of them, to sign it.
 
 ## Collecting a threshold

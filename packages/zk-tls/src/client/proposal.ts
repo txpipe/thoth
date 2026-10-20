@@ -77,6 +77,36 @@ const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetc
 };
 
 /**
+ * Require the evidence to carry the claim context digest the request bound, so
+ * a prover cannot hand back evidence signed for another holder or window. This
+ * compares the client's own value; recomputing the digest stays the attestor's
+ * job.
+ *
+ * @throws if the evidence's signed context carries another digest.
+ */
+const assertEvidenceMatchesClaimContext = (
+  evidence: ZkFetchEvidence,
+  request: ZkFetchRequest,
+): void => {
+  const bound = request.context?.[ZK_FETCH_CLAIM_CONTEXT_KEY];
+  if (bound === undefined) {
+    return;
+  }
+  let signed: unknown;
+  try {
+    signed = (JSON.parse(evidence.claim.context) as Record<string, unknown> | null)?.[
+      ZK_FETCH_CLAIM_CONTEXT_KEY
+    ];
+  } catch {
+    // Not JSON: the claim proposal and the attestor refuse it, as today.
+    return;
+  }
+  if (signed !== bound) {
+    throw new Error('prover returned evidence for another claim context than requested');
+  }
+};
+
+/**
  * Build the claim proposal the client sends to every attestor.
  *
  * The claim is deterministic in the evidence, so the proposal is what each
@@ -180,7 +210,7 @@ export const bindRequestToClaimContext = (
   policy: ZkFetchPolicy,
   binding: ZkFetchProveOptions,
 ): ZkFetchRequest => {
-  if (request.context !== undefined && Object.hasOwn(request.context, ZK_FETCH_CLAIM_CONTEXT_KEY)) {
+  if (request.context != null && Object.hasOwn(request.context, ZK_FETCH_CLAIM_CONTEXT_KEY)) {
     throw new Error(`request context cannot set ${ZK_FETCH_CLAIM_CONTEXT_KEY}`);
   }
   const { holder, windowStart, windowEnd } = binding;
@@ -201,8 +231,8 @@ export const bindRequestToClaimContext = (
  * provers or the secret header check read.
  *
  * @throws if the attestor has no prover, the evidence is invalid or for
- *   another origin or subject, or it carries a secret header value
- *   ({@link SecretHeaderError}).
+ *   another origin, subject or claim context, or it carries a secret header
+ *   value ({@link SecretHeaderError}).
  */
 export const proveWith = async <PK>(
   provers: ZkFetchClientConfig<number, PK, unknown>['provers'],
@@ -215,6 +245,7 @@ export const proveWith = async <PK>(
   }
   const evidence = zkFetchEvidenceSchema.parse(await prover.prove(copyRequest(request)));
   assertEvidenceMatchesRequest(evidence, request);
+  assertEvidenceMatchesClaimContext(evidence, request);
   assertNoSecretHeaders(evidence, request);
   return evidence;
 };

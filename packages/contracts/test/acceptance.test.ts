@@ -12,7 +12,7 @@ import type { KeyPair } from '@thoth/attestor';
 import { descriptorOf } from '@thoth/attestor';
 import { buildTrustedSet } from '@thoth/client';
 import { jubjubVerifier } from '@thoth/client/jubjub';
-import { toContractClaim } from '@thoth/core/claim';
+import { type Claim, toContractClaim } from '@thoth/core/claim';
 import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
@@ -20,12 +20,7 @@ import {
   zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
-import {
-  type ZkFetchAttestorFailure,
-  type ZkFetchProver,
-  type ZkFetchRequest,
-  zkFetchClient,
-} from '@thoth/zk-tls/client';
+import { type ZkFetchProver, type ZkFetchRequest, zkFetchClient } from '@thoth/zk-tls/client';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DISCLOSURE_RULES } from '../../zk-tls/test/helpers/helper.js';
 import { testWitness } from '../../zk-tls/test/helpers/witness.js';
@@ -90,6 +85,8 @@ type Submission = { claim: B_Claim; signatures: JubjubSchnorrSignature[]; commit
 
 /** The evidence each attestor's witness signed for the honest holder, by attestor id. */
 const honestEvidence: Record<string, ZkFetchEvidence> = {};
+/** The claim the honest threshold set signed. */
+let honestClaim: Claim<number, number>;
 
 // The zkFetch client the app runs, pinning both operators at slots 0 and 1.
 const clientWith = (provers: Record<string, ZkFetchProver>) =>
@@ -155,6 +152,7 @@ const collectSubmission = async (): Promise<Submission> => {
     ),
   );
   const { claim, collected } = await client.collect(request, collectOptions(holderSecret));
+  honestClaim = claim;
   const signatures = registryKeys.map(
     (_, slot) =>
       collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
@@ -212,24 +210,19 @@ describe('cross-seam acceptance', () => {
   const otherSecret = randomBytes(32);
 
   it('gets no claim for another holder from evidence signed for the honest one', async () => {
-    // Whoever sees the honest evidence replays it to the same attestors under their own holder.
-    const thief = clientWith(
-      Object.fromEntries(
-        attestors.map(({ id }) => [
-          id,
-          { prove: async () => honestEvidence[id] as ZkFetchEvidence },
-        ]),
-      ),
-    );
-    const refused = thief.collect(request, collectOptions(otherSecret));
-    await expect(refused).rejects.toMatchObject({ reason: 'threshold' });
-    // Every attestor received the replayed evidence and refused it.
-    const { failures } = await refused.catch(
-      (error: { failures: ZkFetchAttestorFailure[] }) => error,
-    );
-    expect([...failures].sort((a, b) => a.registryIndex - b.registryIndex)).toEqual(
-      attestors.map((_, registryIndex) => ({ registryIndex, reason: 'attestation' })),
-    );
+    // Whoever sees the honest evidence replays it to the same attestors under their
+    // own holder. The attestors themselves refuse it, without the client's help.
+    const thiefHolder = pureCircuits.holderCommitment(otherSecret);
+    for (const { attestor } of operators) {
+      const replayed = {
+        policy,
+        evidence: honestEvidence[attestor.id] as ZkFetchEvidence,
+        claim: { ...honestClaim, holder: thiefHolder },
+      };
+      await expect(
+        attestor.attest(replayed as unknown as Parameters<typeof attestor.attest>[0]),
+      ).rejects.toThrow(/claim context digest/);
+    }
   });
 
   it.each([

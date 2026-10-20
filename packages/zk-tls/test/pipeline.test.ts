@@ -1145,24 +1145,34 @@ describe('zkFetch attestor + client', () => {
     expect(probe.called).toBe(0);
   });
 
-  it('gets no claim for another holder from evidence signed for this one', async () => {
+  it('refuses evidence signed for another holder before contacting any attestor', async () => {
     const proof = await prove();
+    let calls = 0;
+    const counting: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> = {
+      async request(attestor, input) {
+        calls += 1;
+        return transport.request(attestor, input);
+      },
+    };
     const thief = clientWith({
+      transport: counting,
       provers: Object.fromEntries(
         ids.map((id) => [id, { prove: async () => evidenceOf(proof.evidences, id) }]),
       ),
     });
-    const refused = thief.collect(collectionRequest, {
-      ...options(),
-      holder: new Uint8Array(32).fill(0xc2),
-    });
+    const stolen = new Uint8Array(32).fill(0xc2);
+    await expect(thief.proveReq(collectionRequest, binding(stolen))).rejects.toThrow(
+      /another claim context/,
+    );
+    const refused = thief.collect(collectionRequest, { ...options(), holder: stolen });
     await expect(refused).rejects.toMatchObject({ reason: 'threshold' });
     const { failures } = await refused.catch(
       (error: { failures: ZkFetchAttestorFailure[] }) => error,
     );
     expect([...failures].sort((a, b) => a.registryIndex - b.registryIndex)).toEqual(
-      ids.map((_, registryIndex) => ({ registryIndex, reason: 'attestation' })),
+      ids.map((_, registryIndex) => ({ registryIndex, reason: 'evidence' })),
     );
+    expect(calls).toBe(0);
   });
 
   it('refuses evidence observed outside the window before contacting any attestor', async () => {
