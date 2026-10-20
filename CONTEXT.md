@@ -62,6 +62,10 @@ _Avoid_: Schema, field map.
 The zkFetch policy's response patterns and reveal whitelist (`responseMatches` and `responseRedactions`): the exact extraction the witness executed and signed into the claim. The attestor requires the signed rules to equal the policy's, and the policy hash commits to them, so a claim slot cannot be pointed at a different field than the policy intends.
 _Avoid_: Extraction plan, reveal plan.
 
+**Body policy**:
+The zkFetch policy's required rule for the signed request body (`bodyPolicy`), part of the policy hash. The subject hashes the signed body. `non-empty` requires a non-empty signed body, which the witness compares to the sent one. `{ sha256 }` pins an exact non-empty body; the empty body's hash is not a valid pin. `ignored` accepts only an empty signed body, which is `sha256('')` in the subject, and does not bind the body the witness sent. Use `ignored` only when the endpoint ignores bodies; prefer a non-empty sentinel pinned with `{ sha256 }`.
+_Avoid_: emptyBody, requestBody.
+
 **policyHash**:
 A hash of the policy the attestors enforced, tagged with the kind's law and the wire version. The contract seals the set of hashes it accepts and rejects any other, so a requester cannot substitute a laxer policy.
 _Avoid_: policyDigest, rulesHash.

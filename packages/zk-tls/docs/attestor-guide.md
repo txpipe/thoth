@@ -56,10 +56,12 @@ and runs these checks before signing:
 2. `assertEvidenceMatchesPolicy(verified, policy)` refuses a signed url, body,
    `geoLocation` or `proxySessionId` that carries a `{{param}}` template (see
    [Building the request](dapp-integration.md#building-the-request)), checks
-   the attested URL against the host allowlist, requires the witness-signed
-   `responseMatches` and `responseRedactions` to equal the policy's canonical
-   disclosure rules, and requires every required slot to be certifiable.
-   `responseText` is not witness-signed, so no check reads it.
+   the attested URL against the host allowlist, checks the signed request body
+   against the policy's required [body policy](dapp-integration.md#body-policy),
+   requires the witness-signed `responseMatches` and `responseRedactions` to
+   equal the policy's canonical disclosure rules, and requires every required
+   slot to be certifiable. `responseText` is not witness-signed, so no check
+   reads it.
 3. `assertObservationInWindow({ claim, verified })` requires the witness's
    observation time to fall inside the proposed window, bounds included. The
    contract bounds the window's length and checks it against block time.

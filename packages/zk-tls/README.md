@@ -41,6 +41,7 @@ const policy: ZkFetchPolicy = {
   slots: [{ slot: 0, name: 'stars', parse: 'int' }],
   responseMatches: [{ type: 'regex', value: '"stargazers_count":\\s*(?<stars>\\d+)' }],
   responseRedactions: [{ regex: '"stargazers_count":\\s*\\d+' }],
+  bodyPolicy: 'ignored', // this endpoint ignores request bodies
 };
 
 const client = zkFetchClient.init({
@@ -83,9 +84,9 @@ const attestment = await client.collect(
 - [Attestor](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles): verifies evidence under a policy and signs the claim. One instance serves any contract; the dApp assigns its registry slot.
 - [Witness](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles): the Reclaim process that runs the fetch and signs what it saw. Each attestor trusts exactly one, by address.
 - [Prover](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles): the client-side evidence source, `zkFetchProver`, one per attestor, pointed at that attestor's witness.
-- [Policy](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the host allowlist, the slot map, and the [disclosure rules](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim). `zkFetchPolicyHashOf(policy)` is the claim's `policyHash`, which the contract seals.
+- [Policy](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the host allowlist, the slot map, the [disclosure rules](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim), and the [body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy). `zkFetchPolicyHashOf(policy)` is the claim's `policyHash`, which the contract seals.
 - [Claim](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): what the attestors sign. Its [values](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) and [present](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) mask hold what the witness disclosed, slot by slot; [byte slots](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) carry fixed-width byte strings.
-- [Subject](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the request (method, host, path, body), each part hashed; `subjectHash` binds the claim to it.
+- [Subject](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the request (method, host, path, body), each part hashed; `subjectHash` binds the claim to it. An empty body hashes to `sha256('')`, and the [body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy) decides whether it is allowed.
 - [Holder](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): a per-claim commitment from `holderCommitmentOf(secret)`. Keep the secret for the contract witness.
 - [Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): when the witnesses observed, not when the fact happened.
 - [Trusted set](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection) and [attestment](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the dApp's pinned attestors, and the N-of-M set `collect` returns.
@@ -98,6 +99,7 @@ What the attestor checks before signing:
 - The witness address is the one the instance was built with.
 - The signed request carries no `{{param}}` template ([why](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
 - The attested URL is HTTPS on an allowed host.
+- The signed request body satisfies the policy's [body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy), which every policy sets: `non-empty` requires a non-empty signed body, which the witness compares to the sent body; `{ sha256 }` pins an exact non-empty body; `ignored` requires an empty signed body and leaves the sent body unbound.
 - The disclosure rules the witness signed equal the policy's, so a slot cannot be pointed at a different field than the policy intends. Array order, the order of a rule's keys, empty redaction keys and an absent array are inert; every other difference, including Reclaim's `invert` and `hash`, rejects.
 - Every required slot is certifiable: disclosed and parseable under its rule and `length` pin. An optional slot that is absent or unparseable is signed unpresent.
 - The witness's observation time falls inside the proposed window, bounds included.
@@ -117,6 +119,7 @@ What the client checks:
 What it does not check, and what your app must do:
 
 - The window is not the exact fetch time: the fetch happened no earlier than about 10 minutes before `windowStart`. Do not read it as the time of the fact ([Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) explains why).
+- `ignored` does not bind the body the witness sent: a caller can send a body while every witness signs an empty one, including on a GET. Use it only for endpoints that ignore bodies at every layer. An endpoint that can read a body, including a GET, sets `non-empty` or a pin; send a harmless sentinel when the endpoint accepts one.
 - The client does not re-verify the witness signature; each attestor does, and the contract enforces the threshold.
 - `responseText` is the transcript as the client saw it. The witness does not sign it, and no check reads it.
 - The secret header check cannot recognize every transformation of a secret. The prover must still redact.
@@ -130,8 +133,9 @@ What it does not check, and what your app must do:
 - Every attestor in a trusted set must run the same witness version and behavior; an upstream change can split the set. Run the attestor guide's [live check](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/attestor-guide.md#live-check) before rotating.
 
 The empty-body check is opt-in like the live check and needs one witness. It
-sends a body while the witness signs an empty one, and asserts the attestor
-refuses the evidence:
+sends a body while the witness signs an empty one, and asserts the `non-empty`
+policy refuses the evidence; an endpoint that ignores bodies sets `ignored`, or
+sends a sentinel pinned with `{ sha256 }`:
 
 ```bash
 npm run witnesses --workspace=packages/zk-tls   # terminal A
@@ -151,6 +155,7 @@ WITNESS_URLS=ws://localhost:8001/ws npx vitest run packages/zk-tls/test/empty-bo
 - **Byte rules decode the representation.** `hex` and `base64` fold only what carries no data, so separators and whitespace stay data; the [Byte slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) entry has the rules ([ADR 0010](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0010-encoded-byte-rules.md)).
 - **The disclosure rules are part of the policy.** The client proves with the policy's rules, the attestor requires the signed rules to equal them, and the policy hash commits to them. A rule cannot use `{{param}}` templates, because the witness would sign the template and run the substitution.
 - **The signed request carries no `{{param}}` template.** The signed url, body, `geoLocation` and `proxySessionId` cannot contain `{{`, so put a per-user URL in the request as a concrete URL and don't use Reclaim's secret `paramValues` ([Building the request](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
+- **The policy decides how the request body is bound.** `bodyPolicy` is required and part of the policy hash, so there is no method-based default. Reclaim 5.0.8 compares the sent body only when the signed body is non-empty, so the policy must choose: `non-empty` makes the witness compare the body to the sent one; `ignored` is the explicit unbound mode for endpoints that reject bodies; a `{ sha256 }` pin fixes a non-empty body or a harmless sentinel. Use `non-empty` or a pin for any endpoint that can read a body, including a GET ([Body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy)).
 - **One policy per trusted set.** N-of-M means N attestors signed the same message, so every attestor must enforce the same policy; different readings produce different messages and never count together. Which witness an attestor trusts is per instance, not part of the policy.
 - **One attestor instance serves any contract.** The slot counts come from each proposal, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
 - **The prover is its own entry point.** `@thoth/zk-tls/prover` loads the Reclaim client libraries lazily, so a client-only build never pulls them. `@thoth/zk-tls/client` imports neither those libraries nor `@thoth/attestor`.

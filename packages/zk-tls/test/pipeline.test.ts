@@ -20,6 +20,7 @@ import {
   type ZkFetchDefinition,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
+  zkFetchBodyHashOf,
   zkFetchClaimContextDigestOf,
   zkFetchClaimSchema,
   zkFetchEvidenceSchema,
@@ -268,7 +269,7 @@ describe('zkFetch attestor + client', () => {
       parameters: {
         url: overrides.url ?? request.url,
         method: request.method ?? 'GET',
-        body: '',
+        body: request.body ?? '',
         ...DISCLOSURE_RULES,
       },
       context: request.context,
@@ -962,6 +963,31 @@ describe('zkFetch attestor + client', () => {
     await expect(
       hostile.proveReq({ url: 'https://api.github.com/x', method: 'GET' }, binding()),
     ).rejects.toThrow(/not in allowlist/);
+  });
+
+  it('binds a pinned body end to end', async () => {
+    const body = '{"q":1}';
+    const url = 'https://api.github.com/repos/x';
+    const client = clientWith({
+      policy: { ...policy(), bodyPolicy: { sha256: zkFetchBodyHashOf(body) } },
+    });
+    const proof = await client.proveReq({ url, method: 'POST', body }, binding());
+
+    expect(proof.claim.subjectHash).toEqual(zkFetchSubjectHashOf({ method: 'POST', url, body }));
+    const attestment = await proof.attest();
+    expect(attestment.collected).toHaveLength(3);
+  });
+
+  it('refuses a request body that does not match the pinned body', async () => {
+    const client = clientWith({
+      policy: { ...policy(), bodyPolicy: { sha256: zkFetchBodyHashOf('{"q":1}') } },
+    });
+    await expect(
+      client.proveReq(
+        { url: 'https://api.github.com/repos/x', method: 'POST', body: '{"q":2}' },
+        binding(),
+      ),
+    ).rejects.toThrow(/body/);
   });
 
   it('refuses evidence for the requested origin but another path', async () => {
