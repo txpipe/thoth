@@ -164,7 +164,10 @@ export interface ZkFetchClientConfig<V extends number, PK, S> {
   readonly transport: AttestorTransport<ZkFetchDefinition, PK, S>;
   /** Verifies attestor signatures before a response counts. */
   readonly verifier: AttestationVerifier<PK, S>;
-  /** The policy every attestor in the set enforces. The contract seals its hash. */
+  /**
+   * The policy every attestor in the set enforces, including how the request
+   * body is bound. The contract seals its hash.
+   */
   readonly policy: ZkFetchPolicy;
   /** 32 bytes, signed into every claim. */
   readonly appId: Uint8Array;

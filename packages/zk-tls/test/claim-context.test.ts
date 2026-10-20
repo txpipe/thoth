@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import {
   type ZkFetchPolicy,
+  zkFetchBodyHashOf,
   zkFetchPolicyHashOf,
   zkFetchSubjectHashOf,
   zkFetchSubjectOf,
@@ -126,6 +127,25 @@ describe('zkFetchPolicyHashOf', () => {
     expect(() => zkFetchPolicyHashOf({ ...policy, allowedHosts: [] })).toThrow();
   });
 
+  it('binds an explicit body policy', () => {
+    const withIgnored = zkFetchPolicyHashOf({ ...policy, bodyPolicy: 'ignored' });
+    const withNonEmpty = zkFetchPolicyHashOf({ ...policy, bodyPolicy: 'non-empty' });
+    const withPin = zkFetchPolicyHashOf({
+      ...policy,
+      bodyPolicy: { sha256: zkFetchBodyHashOf('{}') },
+    });
+
+    expect(hex(withIgnored)).not.toBe(hex(zkFetchPolicyHashOf(policy)));
+    expect(hex(withNonEmpty)).not.toBe(hex(withIgnored));
+    expect(hex(withPin)).not.toBe(hex(withNonEmpty));
+  });
+
+  it('rejects a body pin that is not 32 bytes', () => {
+    expect(() =>
+      zkFetchPolicyHashOf({ ...policy, bodyPolicy: { sha256: new Uint8Array(31) } }),
+    ).toThrow();
+  });
+
   it('pins the canonical form of a normalized policy', () => {
     // Hand-written canonical JSON, not this implementation's output: the
     // policy hash is the on-chain binding, so its bytes must not drift.
@@ -164,6 +184,13 @@ describe('zkFetchPolicyHashOf', () => {
           '"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
       ),
     );
+  });
+});
+
+describe('zkFetchBodyHashOf', () => {
+  it('is SHA-256 of the UTF-8 body', () => {
+    expect(hex(zkFetchBodyHashOf(''))).toBe(sha256(''));
+    expect(hex(zkFetchBodyHashOf('{"a":1}'))).toBe(sha256('{"a":1}'));
   });
 });
 

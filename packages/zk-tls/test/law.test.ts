@@ -18,6 +18,7 @@ import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
   type ZkFetchSlot,
+  zkFetchBodyHashOf,
   zkFetchClaimContextDigestOf,
   zkFetchPolicyHashOf,
   zkFetchPolicySchema,
@@ -515,9 +516,12 @@ describe('assertEvidenceMatchesPolicy', () => {
     ...DISCLOSURE_RULES,
   };
 
-  const verified = (url: string): VerifiedEvidence =>
+  const verified = (url: string, method = 'GET', body = ''): VerifiedEvidence =>
     verifiedOf(
-      claimWith({ url, ...DISCLOSURE_RULES }, { extractedParameters: { distance: '12.4' } }),
+      claimWith(
+        { url, method, body, ...DISCLOSURE_RULES },
+        { extractedParameters: { distance: '12.4' } },
+      ),
       {
         distance: '12.4',
       },
@@ -570,7 +574,7 @@ describe('assertEvidenceMatchesPolicy', () => {
   it('refuses a required slot whose disclosure is missing or unparseable', () => {
     const missing = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', ...DISCLOSURE_RULES },
+        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
         { extractedParameters: {} },
       ),
       {},
@@ -580,7 +584,7 @@ describe('assertEvidenceMatchesPolicy', () => {
     );
     const unparseable = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', ...DISCLOSURE_RULES },
+        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
         { extractedParameters: { distance: 'abc' } },
       ),
       { distance: 'abc' },
@@ -602,6 +606,8 @@ describe('assertEvidenceMatchesPolicy', () => {
     // Reclaim signs the parameters with sorted keys.
     const signed = {
       url: 'https://api.github.com/x',
+      method: 'GET',
+      body: '',
       responseMatches: [
         { type: 'contains', value: 'moving_time' },
         { type: 'regex', value: '(?<distance>[\\d.]+)' },
@@ -621,12 +627,81 @@ describe('assertEvidenceMatchesPolicy', () => {
     };
     const missing = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', ...DISCLOSURE_RULES },
+        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
         { extractedParameters: {} },
       ),
       {},
     );
     expect(assertEvidenceMatchesPolicy(missing, optional)).toBe('api.github.com');
+  });
+
+  describe('body policy', () => {
+    it('defaults to non-empty for POST and ignored for GET', () => {
+      expect(() =>
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x'), policy),
+      ).not.toThrow();
+      expect(() =>
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST'), policy),
+      ).toThrow(/body/);
+      expect(
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST', '{}'), policy),
+      ).toBe('api.github.com');
+    });
+
+    it('ignores the body only when it is signed empty', () => {
+      const ignored: ZkFetchPolicy = { ...policy, bodyPolicy: 'ignored' };
+      expect(
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST'), ignored),
+      ).toBe('api.github.com');
+      expect(() =>
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST', '{}'), ignored),
+      ).toThrow(/body/);
+    });
+
+    it('requires a non-empty body when the policy says so', () => {
+      const nonEmpty: ZkFetchPolicy = { ...policy, bodyPolicy: 'non-empty' };
+      expect(
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'GET', '{}'), nonEmpty),
+      ).toBe('api.github.com');
+      expect(() =>
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'GET'), nonEmpty),
+      ).toThrow(/body/);
+    });
+
+    it('pins the exact signed body', () => {
+      const pinned: ZkFetchPolicy = {
+        ...policy,
+        bodyPolicy: { sha256: zkFetchBodyHashOf('{}') },
+      };
+      expect(
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST', '{}'), pinned),
+      ).toBe('api.github.com');
+      expect(() =>
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST'), pinned),
+      ).toThrow(/body/);
+      expect(() =>
+        assertEvidenceMatchesPolicy(
+          verified('https://api.github.com/x', 'POST', '{"x":1}'),
+          pinned,
+        ),
+      ).toThrow(/body/);
+    });
+
+    it('pins an empty body explicitly', () => {
+      const pinnedEmpty: ZkFetchPolicy = {
+        ...policy,
+        bodyPolicy: { sha256: zkFetchBodyHashOf('') },
+      };
+      expect(assertEvidenceMatchesPolicy(verified('https://api.github.com/x'), pinnedEmpty)).toBe(
+        'api.github.com',
+      );
+      expect(() =>
+        assertEvidenceMatchesPolicy(
+          verified('https://api.github.com/x', 'POST', '{}'),
+          pinnedEmpty,
+        ),
+      ).toThrow(/body/);
+    });
   });
 });
 
