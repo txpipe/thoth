@@ -1,5 +1,5 @@
-// An empty signed body does not bind the body the witness sent: the receipt
-// check skips the body comparison, so a caller can sign no body and send one.
+// Reclaim 5.0.8 skips the sent-body comparison for an empty signed body
+// (lib/index.js:7239-7242), so a caller can sign no body and send one.
 import { randomBytes } from 'node:crypto';
 import {
   CURRENT_ATTESTOR_VERSION,
@@ -49,9 +49,27 @@ const OFFLINE_REQUEST = [
 ].join('\r\n');
 const OFFLINE_RESPONSE = 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}';
 
+const GET_URL = 'https://httpbin.org/get';
+const GET_REQUEST = [
+  'GET /get HTTP/1.1',
+  'Host: httpbin.org',
+  'Connection: close',
+  `Content-Length: ${Buffer.byteLength(OFFLINE_BODY)}`,
+  'Accept-Encoding: identity',
+  'Content-Type: application/json',
+  '',
+  OFFLINE_BODY,
+].join('\r\n');
+const GET_RESPONSE = 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}';
+
 const receipt = [
   { sender: 'client', message: strToUint8Array(OFFLINE_REQUEST) },
   { sender: 'server', message: strToUint8Array(OFFLINE_RESPONSE) },
+] satisfies Transcript<Uint8Array>;
+
+const getReceipt = [
+  { sender: 'client', message: strToUint8Array(GET_REQUEST) },
+  { sender: 'server', message: strToUint8Array(GET_RESPONSE) },
 ] satisfies Transcript<Uint8Array>;
 
 const receiptParams = (body: string) => ({
@@ -71,9 +89,22 @@ const checkReceipt = (body: string): unknown =>
     ctx: PROVIDER_CTX,
   });
 
+const checkGetReceipt = (body: string): unknown =>
+  providers.http.assertValidProviderReceipt({
+    clientVersion: CURRENT_ATTESTOR_VERSION,
+    receipt: getReceipt,
+    params: { ...receiptParams(body), url: GET_URL, method: 'GET' },
+    logger,
+    ctx: PROVIDER_CTX,
+  });
+
 describe('Reclaim receipt check', () => {
   it('accepts a signed empty body when the request carries a body', () => {
     expect(() => checkReceipt('')).not.toThrow();
+  });
+
+  it('accepts a signed empty body when a GET carries a body', () => {
+    expect(() => checkGetReceipt('')).not.toThrow();
   });
 
   it('rejects a non-empty signed body that differs from the sent body', () => {
@@ -118,6 +149,7 @@ describe.skipIf(WITNESS_URL === '')('live witness', () => {
       slots: [{ slot: 0, name: 'q', parse: 'int' }],
       responseMatches: [{ type: 'regex', value: '"q":\\s*(?<q>\\d+)' }],
       responseRedactions: [{ regex: '"q":\\s*\\d+' }],
+      bodyPolicy: 'non-empty',
     };
     const now = BigInt(Math.floor(Date.now() / 1000));
     const windowStart = now - 60n;

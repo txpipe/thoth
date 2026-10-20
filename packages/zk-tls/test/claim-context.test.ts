@@ -19,6 +19,7 @@ const sha256 = (text: string): string => createHash('sha256').update(text, 'utf-
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.example.com'],
   slots: [{ slot: 0, name: 'price', parse: 'int' }],
+  bodyPolicy: 'ignored',
   ...DISCLOSURE_RULES,
 };
 
@@ -29,6 +30,7 @@ describe('zkFetchPolicyHashOf', () => {
       slots: [{ slot: 0, name: 'price', parse: 'int', optional: false }],
       responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
       responseRedactions: [],
+      bodyPolicy: 'ignored',
       claimVersion: 1n,
     };
 
@@ -48,6 +50,7 @@ describe('zkFetchPolicyHashOf', () => {
         { slot: 1, name: 'volume', parse: 'float' },
         { slot: 0, name: 'price', parse: 'int' },
       ],
+      bodyPolicy: 'ignored',
       ...DISCLOSURE_RULES,
     };
     const spelledOut: ZkFetchPolicy = {
@@ -56,6 +59,7 @@ describe('zkFetchPolicyHashOf', () => {
         { slot: 0, name: 'price', parse: 'int', optional: false },
         { slot: 1, name: 'volume', parse: 'float', optional: false },
       ],
+      bodyPolicy: 'ignored',
       claimVersion: 1n,
       ...DISCLOSURE_RULES,
     };
@@ -92,6 +96,7 @@ describe('zkFetchPolicyHashOf', () => {
       slots: [{ slot: 0, name: 'price', parse: 'int' }],
       responseMatches: responseMatches as ZkFetchPolicy['responseMatches'],
       responseRedactions: responseRedactions as ZkFetchPolicy['responseRedactions'],
+      bodyPolicy: 'ignored',
     });
     const price = { type: 'regex', value: '"price":\\s*(?<price>\\d+)' };
     const volume = { type: 'regex', value: '"volume":\\s*(?<volume>\\d+)' };
@@ -127,17 +132,20 @@ describe('zkFetchPolicyHashOf', () => {
     expect(() => zkFetchPolicyHashOf({ ...policy, allowedHosts: [] })).toThrow();
   });
 
-  it('binds an explicit body policy', () => {
-    const withIgnored = zkFetchPolicyHashOf({ ...policy, bodyPolicy: 'ignored' });
+  it('binds the body policy', () => {
     const withNonEmpty = zkFetchPolicyHashOf({ ...policy, bodyPolicy: 'non-empty' });
     const withPin = zkFetchPolicyHashOf({
       ...policy,
       bodyPolicy: { sha256: zkFetchBodyHashOf('{}') },
     });
 
-    expect(hex(withIgnored)).not.toBe(hex(zkFetchPolicyHashOf(policy)));
-    expect(hex(withNonEmpty)).not.toBe(hex(withIgnored));
+    expect(hex(withNonEmpty)).not.toBe(hex(zkFetchPolicyHashOf(policy)));
     expect(hex(withPin)).not.toBe(hex(withNonEmpty));
+  });
+
+  it('requires a body policy', () => {
+    const missing = { ...policy, bodyPolicy: undefined } as unknown as ZkFetchPolicy;
+    expect(() => zkFetchPolicyHashOf(missing)).toThrow();
   });
 
   it('rejects a body pin that is not 32 bytes', () => {
@@ -146,14 +154,33 @@ describe('zkFetchPolicyHashOf', () => {
     ).toThrow();
   });
 
+  it('rejects the empty body as a pin', () => {
+    expect(() =>
+      zkFetchPolicyHashOf({ ...policy, bodyPolicy: { sha256: zkFetchBodyHashOf('') } }),
+    ).toThrow(/ignored/);
+  });
+
+  it('hashes a Buffer pin as the same bytes', () => {
+    const bytes = zkFetchPolicyHashOf({
+      ...policy,
+      bodyPolicy: { sha256: zkFetchBodyHashOf('{}') },
+    });
+    const buffer = zkFetchPolicyHashOf({
+      ...policy,
+      bodyPolicy: { sha256: Buffer.from(zkFetchBodyHashOf('{}')) },
+    });
+
+    expect(hex(buffer)).toBe(hex(bytes));
+  });
+
   it('pins the canonical form of a normalized policy', () => {
     // Hand-written canonical JSON, not this implementation's output: the
     // policy hash is the on-chain binding, so its bytes must not drift.
     expect(hex(zkFetchPolicyHashOf(policy))).toBe(
       sha256(
-        '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"claimVersion":"1",' +
-          '"responseMatches":[{"type":"regex","value":"(?<data>.*)"}],"responseRedactions":[],' +
-          '"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
+        '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"bodyPolicy":"ignored",' +
+          '"claimVersion":"1","responseMatches":[{"type":"regex","value":"(?<data>.*)"}],' +
+          '"responseRedactions":[],"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
       ),
     );
   });

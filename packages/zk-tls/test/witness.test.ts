@@ -31,6 +31,7 @@ const policy: ZkFetchPolicy = {
     { slot: 0, name: 'balance', parse: 'int' },
     { slot: 1, name: 'score', parse: 'float', optional: true },
   ],
+  bodyPolicy: 'ignored',
   ...DISCLOSURE_RULES,
 };
 
@@ -315,6 +316,7 @@ describe('test-key witness', () => {
     const distancePolicy = zkFetchPolicySchema.parse({
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+      bodyPolicy: 'ignored',
       responseMatches: [{ type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' }],
       responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }],
     }) as ZkFetchPolicy;
@@ -341,6 +343,7 @@ describe('test-key witness', () => {
     const distancePolicy = zkFetchPolicySchema.parse({
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+      bodyPolicy: 'ignored',
       responseMatches: [{ type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' }],
       responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }],
     }) as ZkFetchPolicy;
@@ -365,6 +368,7 @@ describe('test-key witness', () => {
     const activePolicy: ZkFetchPolicy = {
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+      bodyPolicy: 'ignored',
       responseMatches: [distance, movingTime],
       responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }],
     };
@@ -393,6 +397,7 @@ describe('test-key witness', () => {
     const activePolicy: ZkFetchPolicy = {
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+      bodyPolicy: 'ignored',
       responseMatches: [distance, movingTime],
       responseRedactions: redactions,
     };
@@ -419,6 +424,7 @@ describe('test-key witness', () => {
     const activePolicy: ZkFetchPolicy = {
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'balance', parse: 'int' }],
+      bodyPolicy: 'ignored',
       responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
       responseRedactions: [],
     };
@@ -443,6 +449,7 @@ describe('test-key witness', () => {
     const activePolicy: ZkFetchPolicy = {
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'balance', parse: 'int' }],
+      bodyPolicy: 'ignored',
       responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
       responseRedactions: [],
     };

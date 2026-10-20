@@ -60,6 +60,7 @@ const policy = (
 ): ZkFetchPolicy => ({
   allowedHosts: ['api.github.com'],
   slots,
+  bodyPolicy: 'ignored',
   ...DISCLOSURE_RULES,
 });
 
@@ -354,6 +355,7 @@ describe('zkFetch attestor + client', () => {
     const bytePolicy = (optional = false): ZkFetchPolicy => ({
       allowedHosts: ['api.github.com'],
       slots: [{ slot: 3, name: 'data', parse: 'bytes', optional }],
+      bodyPolicy: 'ignored',
       ...DISCLOSURE_RULES,
     });
 
@@ -404,6 +406,7 @@ describe('zkFetch attestor + client', () => {
           { slot: 3, name: 'first', parse: 'bytes' },
           { slot: 4, name: 'second', parse: 'bytes' },
         ],
+        bodyPolicy: 'ignored',
         ...DISCLOSURE_RULES,
       };
       const { claim, collected } = await clientWith({
@@ -421,6 +424,7 @@ describe('zkFetch attestor + client', () => {
       const hexPolicy: ZkFetchPolicy = {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 3, name: 'data', parse: 'hex', length: 2 }],
+        bodyPolicy: 'ignored',
         ...DISCLOSURE_RULES,
       };
       const { claim, collected } = await clientWith({
@@ -438,6 +442,7 @@ describe('zkFetch attestor + client', () => {
       const pinnedPolicy: ZkFetchPolicy = {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 3, name: 'data', parse: 'hex', length: 3 }],
+        bodyPolicy: 'ignored',
         ...DISCLOSURE_RULES,
       };
       await expect(
