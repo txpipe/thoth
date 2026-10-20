@@ -494,6 +494,30 @@ describe('assertEvidenceMatchesPolicy', () => {
     );
   });
 
+  it('accepts signed rules whose keys are sorted against a policy keyed otherwise', () => {
+    const keyedOtherwise: ZkFetchPolicy = {
+      ...policy,
+      responseMatches: [
+        { value: '(?<distance>[\\d.]+)', type: 'regex' },
+        { value: 'moving_time', type: 'contains' },
+      ],
+      responseRedactions: [{ regex: 'a', jsonPath: '' }, { jsonPath: '$.b' }],
+    };
+    // Reclaim signs the parameters with sorted keys.
+    const signed = {
+      url: 'https://api.github.com/x',
+      responseMatches: [
+        { type: 'contains', value: 'moving_time' },
+        { type: 'regex', value: '(?<distance>[\\d.]+)' },
+      ],
+      responseRedactions: [{ jsonPath: '', regex: 'a' }, { jsonPath: '$.b' }],
+    };
+    const evidence = verifiedOf(claimWith(signed, { extractedParameters: { distance: '12.4' } }), {
+      distance: '12.4',
+    });
+    expect(assertEvidenceMatchesPolicy(evidence, keyedOtherwise)).toBe('api.github.com');
+  });
+
   it('allows an optional slot to be absent', () => {
     const optional = {
       ...policy,

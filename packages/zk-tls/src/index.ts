@@ -253,13 +253,22 @@ export const zkFetchPolicySchema = z.object({
   claimVersion: z.bigint().optional(),
 });
 
-/** Sort rule entries by their canonical JSON, so array order never changes a hash. */
-const sortCanonical = <T>(entries: readonly T[]): T[] =>
-  [...entries].sort((a, b) => {
-    const left = canonicalJson(a);
-    const right = canonicalJson(b);
-    return left < right ? -1 : left > right ? 1 : 0;
-  });
+const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Sort rule entries by their JSON with keys sorted, so neither array order nor
+ * the order a rule's keys were written in changes a hash or a comparison.
+ */
+const sortCanonical = <T>(entries: readonly T[]): T[] => {
+  // Rules are flat records, so sorting the top-level keys is enough.
+  const keyOf = (entry: T): string =>
+    canonicalJson(
+      entry !== null && typeof entry === 'object'
+        ? Object.fromEntries(Object.entries(entry).sort(([a], [b]) => compareStrings(a, b)))
+        : entry,
+    );
+  return [...entries].sort((a, b) => compareStrings(keyOf(a), keyOf(b)));
+};
 
 /**
  * The canonical form every disclosure-rules comparison and hash reads.

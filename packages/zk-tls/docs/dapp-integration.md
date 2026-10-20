@@ -230,7 +230,7 @@ both the client and the attestor reject a policy that crosses the regions.
 
 `responseMatches` and `responseRedactions` are required and part of the policy
 hash. The same rules under a different spelling hash the same: array order,
-empty redaction keys and an absent array are inert. The schema refuses
+the order of a rule's keys, empty redaction keys and an absent array are inert. The schema refuses
 Reclaim's `invert` and `hash` and any `{{param}}` template, so evidence whose
 signed rules carry them is refused too.
 

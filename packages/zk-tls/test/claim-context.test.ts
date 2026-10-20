@@ -103,6 +103,25 @@ describe('zkFetchPolicyHashOf', () => {
     );
   });
 
+  it('hashes redactions the same whichever keys they spell out', () => {
+    const plan = (responseRedactions: ZkFetchPolicy['responseRedactions']): ZkFetchPolicy => ({
+      ...policy,
+      responseRedactions,
+    });
+    expect(
+      hex(zkFetchPolicyHashOf(plan([{ jsonPath: '$.b' }, { regex: '', jsonPath: '$.a' }]))),
+    ).toBe(
+      hex(
+        zkFetchPolicyHashOf(
+          plan([
+            { regex: '', jsonPath: '$.b' },
+            { regex: '', jsonPath: '$.a' },
+          ]),
+        ),
+      ),
+    );
+  });
+
   it('rejects a malformed policy', () => {
     expect(() => zkFetchPolicyHashOf({ ...policy, allowedHosts: [] })).toThrow();
   });
@@ -114,6 +133,34 @@ describe('zkFetchPolicyHashOf', () => {
       sha256(
         '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"claimVersion":"1",' +
           '"responseMatches":[{"type":"regex","value":"(?<data>.*)"}],"responseRedactions":[],' +
+          '"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
+      ),
+    );
+  });
+
+  it('pins the canonical form of a multi-rule policy', () => {
+    // Hand-written canonical JSON, not this implementation's output: the
+    // policy hash is the on-chain binding, and the rule order is what the
+    // key-order fix changed, so neither may drift.
+    const multiRule: ZkFetchPolicy = {
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'price', parse: 'int' }],
+      responseMatches: [
+        { value: '(?<distance>[0-9.]+)', type: 'regex' },
+        { value: 'moving_time', type: 'contains' },
+      ],
+      responseRedactions: [
+        { regex: 'a', jsonPath: '$.z' },
+        { regex: 'b', jsonPath: '$.a' },
+      ],
+    };
+    expect(hex(zkFetchPolicyHashOf(multiRule))).toBe(
+      sha256(
+        '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"claimVersion":"1",' +
+          '"responseMatches":[{"type":"contains","value":"moving_time"},' +
+          '{"type":"regex","value":"(?<distance>[0-9.]+)"}],' +
+          '"responseRedactions":[{"jsonPath":"$.a","regex":"b","xPath":""},' +
+          '{"jsonPath":"$.z","regex":"a","xPath":""}],' +
           '"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
       ),
     );

@@ -281,6 +281,31 @@ describe('test-key witness', () => {
     expect(attestation.claim.values[0]).toBe(12n);
   });
 
+  it('accepts evidence whose rules are keyed the way Reclaim signs them', async () => {
+    const distance = { value: '"distance":\\s*(?<distance>[\\d.]+)', type: 'regex' } as const;
+    const movingTime = { value: '"moving_time"', type: 'contains' } as const;
+    const redactions = [{ regex: '"distance":\\s*[\\d.]+', jsonPath: '' }, { jsonPath: '$.b' }];
+    const activePolicy: ZkFetchPolicy = {
+      allowedHosts: ['api.example.com'],
+      slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+      responseMatches: [distance, movingTime],
+      responseRedactions: redactions,
+    };
+    // The helper signs the parameters with sorted keys, as the witness does.
+    const evidence = await observe(alice, {
+      values: { distance: '12.4' },
+      parameters: {
+        url: 'https://api.example.com/v1/account',
+        method: 'GET',
+        body: '',
+        responseMatches: [distance, movingTime],
+        responseRedactions: redactions,
+      },
+    });
+    const attestation = await attestWith(aliceAttestor, evidence, WINDOW, {}, activePolicy);
+    expect(attestation.claim.values[0]).toBe(12n);
+  });
+
   it('accepts evidence that omits responseRedactions under a policy with none', async () => {
     const activePolicy: ZkFetchPolicy = {
       allowedHosts: ['api.example.com'],
