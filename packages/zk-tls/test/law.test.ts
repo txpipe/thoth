@@ -706,6 +706,13 @@ describe('assertEvidenceMatchesPolicy', () => {
         }),
       ).toThrow(/ignored/);
     });
+
+    it('refuses a policy without a body policy', () => {
+      const missing = { ...policy, bodyPolicy: undefined } as unknown as ZkFetchPolicy;
+      expect(() =>
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x'), missing),
+      ).toThrow(/bodyPolicy/);
+    });
   });
 });
 

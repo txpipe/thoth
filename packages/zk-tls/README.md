@@ -32,16 +32,18 @@ A dApp pins its attestors, fetches through each one's witness, and collects a th
 import { buildTrustedSet } from '@thoth/client';
 import { jubjubVerifier } from '@thoth/client/jubjub';
 import { holderCommitmentOf } from '@thoth/core/claim-context';
-import type { ZkFetchPolicy } from '@thoth/zk-tls';
+import { zkFetchBodyHashOf, type ZkFetchPolicy } from '@thoth/zk-tls';
 import { zkFetchClient } from '@thoth/zk-tls/client';
 import { zkFetchProver } from '@thoth/zk-tls/prover';
+
+const SENTINEL = '{"thoth":"ignored"}';
 
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.github.com'],
   slots: [{ slot: 0, name: 'stars', parse: 'int' }],
   responseMatches: [{ type: 'regex', value: '"stargazers_count":\\s*(?<stars>\\d+)' }],
   responseRedactions: [{ regex: '"stargazers_count":\\s*\\d+' }],
-  bodyPolicy: 'ignored', // this endpoint ignores request bodies
+  bodyPolicy: { sha256: zkFetchBodyHashOf(SENTINEL) }, // bind the body we send
 };
 
 const client = zkFetchClient.init({
@@ -65,7 +67,7 @@ const client = zkFetchClient.init({
 
 const now = Math.floor(Date.now() / 1000);
 const attestment = await client.collect(
-  { url: 'https://api.github.com/repos/txpipe/dolos' },
+  { url: 'https://api.github.com/repos/txpipe/dolos', body: SENTINEL },
   {
     holder: holderCommitmentOf(holderSecret), // a fresh 32-byte secret per claim
     windowStart: BigInt(now - 60),
@@ -99,7 +101,7 @@ What the attestor checks before signing:
 - The witness address is the one the instance was built with.
 - The signed request carries no `{{param}}` template ([why](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
 - The attested URL is HTTPS on an allowed host.
-- The signed request body satisfies the policy's [body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy), which every policy sets: `non-empty` requires a non-empty signed body, which the witness compares to the sent body; `{ sha256 }` pins an exact non-empty body; `ignored` requires an empty signed body and leaves the sent body unbound.
+- The signed request body satisfies the policy's [body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy), which every policy sets: `non-empty` requires a non-empty signed body, which the witness compares to the sent body except for secret `paramValues` bytes; `{ sha256 }` pins an exact non-empty body; `ignored` requires an empty signed body and leaves the sent body unbound.
 - The disclosure rules the witness signed equal the policy's, so a slot cannot be pointed at a different field than the policy intends. Array order, the order of a rule's keys, empty redaction keys and an absent array are inert; every other difference, including Reclaim's `invert` and `hash`, rejects.
 - Every required slot is certifiable: disclosed and parseable under its rule and `length` pin. An optional slot that is absent or unparseable is signed unpresent.
 - The witness's observation time falls inside the proposed window, bounds included.
@@ -120,6 +122,7 @@ What it does not check, and what your app must do:
 
 - The window is not the exact fetch time: the fetch happened no earlier than about 10 minutes before `windowStart`. Do not read it as the time of the fact ([Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) explains why).
 - `ignored` does not bind the body the witness sent: a caller can send a body while every witness signs an empty one, including on a GET. Use it only for endpoints that ignore bodies at every layer. An endpoint that can read a body, including a GET, sets `non-empty` or a pin; send a harmless sentinel when the endpoint accepts one.
+- `non-empty` and a pin compare against the transcript with secret `paramValues` bytes replaced by `*`, so a body built from secret `paramValues` is bound only by its redacted shape. Send a concrete body instead ([Body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy)).
 - The client does not re-verify the witness signature; each attestor does, and the contract enforces the threshold.
 - `responseText` is the transcript as the client saw it. The witness does not sign it, and no check reads it.
 - The secret header check cannot recognize every transformation of a secret. The prover must still redact.
@@ -142,7 +145,8 @@ npm run witnesses --workspace=packages/zk-tls   # terminal A
 WITNESS_URLS=ws://localhost:8001/ws npx vitest run packages/zk-tls/test/empty-body.test.ts
 ```
 
-`PROBE_URL` overrides the target (`https://httpbin.org/post`).
+`PROBE_URL` overrides the target (`https://httpbin.org/post`); it must accept a
+POST and echo the JSON body so the `"q"` match extracts the digits.
 
 ## Design decisions
 

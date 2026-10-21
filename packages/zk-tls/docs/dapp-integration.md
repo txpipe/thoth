@@ -81,7 +81,7 @@ const policy = zkFetchPolicySchema.parse({
     { regex: '"distance":\\s*[\\d.]+' },
     { regex: '"moving_time":\\s*\\d+' },
   ],
-  // This endpoint ignores request bodies.
+  // Only safe because this endpoint ignores request bodies at every layer.
   bodyPolicy: 'ignored',
 });
 
@@ -257,9 +257,10 @@ signed body only when the signed body is non-empty, so the mode is the
 difference between a bound body and an explicit risk:
 
 - `non-empty`: the signed body must be non-empty. The witness compares it to
-  the sent body, so a caller cannot sign no body and send another. Use it for
-  variable bodies, such as a GraphQL query with per-user variables, and for any
-  endpoint that can read a body, including a GET or DELETE.
+  the sent body, except for secret `paramValues` bytes (see below), so a caller
+  cannot sign no body and send another. Use it for variable bodies, such as a
+  GraphQL query with per-user variables, and for any endpoint that can read a
+  body, including a GET or DELETE.
 - `{ sha256 }`: the signed body must hash to the pin. Build it with
   `zkFetchBodyHashOf(body)`; the empty body's hash is refused, so use `ignored`
   for an empty signed body. Use a pin for a fixed body, or for a harmless
@@ -269,6 +270,12 @@ difference between a bound body and an explicit risk:
   and every proxy, WAF and auth layer: a body can change the response even when
   the handler ignores it. A GET or DELETE that can read a body is not covered;
   use `non-empty` with a sentinel or a pin.
+
+Reclaim compares against the transcript with secret `paramValues` bytes
+replaced by `*`, so the signed body matches whenever it has `*` at those
+positions. A body built from secret `paramValues` is therefore bound only by
+its redacted shape under `non-empty` or a pin. Put a concrete body in the
+request instead ([Building the request](#building-the-request)).
 
 An endpoint that accepts a body but has nothing to say in it should send a
 harmless non-empty sentinel and pin it, rather than using `ignored`:
@@ -287,10 +294,11 @@ const policy: ZkFetchPolicy = {
 
 There is no method-based default: a policy that fetches both a bodyless GET and
 a POST with a variable body uses one client and policy per body rule (the
-contract seals a set of hashes), or sends a sentinel for both. Reclaim skips
-the sent-body comparison when the signed body is empty, so `ignored` cannot
-bind an empty body. A witness that compared unconditionally would close that
-gap, but Reclaim 5.0.8 does not; the policy choice is the binding.
+contract seals a set of hashes), or sends the same fixed harmless body for both
+when both requests can carry it. Reclaim skips the sent-body comparison when
+the signed body is empty, so `ignored` cannot bind an empty body. A witness
+that compared unconditionally would close that gap, but Reclaim 5.0.8 does
+not; the policy choice is the binding.
 
 The policy has no response-size bound: `responseText` is the transcript as the
 client saw it and the witness does not sign it. Limit transport payloads

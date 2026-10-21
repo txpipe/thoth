@@ -98,6 +98,25 @@ const checkGetReceipt = (body: string): unknown =>
     ctx: PROVIDER_CTX,
   });
 
+/** The body the transcript carries after Reclaim redacts a secret `paramValues` span. */
+const REDACTED_BODY = '*'.repeat(Buffer.byteLength(SENT_BODY));
+const redactedReceipt = [
+  {
+    sender: 'client',
+    message: strToUint8Array(OFFLINE_REQUEST.replace(OFFLINE_BODY, REDACTED_BODY)),
+  },
+  { sender: 'server', message: strToUint8Array(OFFLINE_RESPONSE) },
+] satisfies Transcript<Uint8Array>;
+
+const checkRedactedReceipt = (body: string): unknown =>
+  providers.http.assertValidProviderReceipt({
+    clientVersion: CURRENT_ATTESTOR_VERSION,
+    receipt: redactedReceipt,
+    params: receiptParams(body),
+    logger,
+    ctx: PROVIDER_CTX,
+  });
+
 describe('Reclaim receipt check', () => {
   it('accepts a signed empty body when the request carries a body', () => {
     expect(() => checkReceipt('')).not.toThrow();
@@ -109,6 +128,12 @@ describe('Reclaim receipt check', () => {
 
   it('rejects a non-empty signed body that differs from the sent body', () => {
     expect(() => checkReceipt('not-the-sent-body')).toThrow('request body mismatch');
+  });
+
+  // Secret `paramValues` become `*` in the transcript, so a signed body of `*`s
+  // matches any hidden bytes; the body policy's redaction caveat relies on this.
+  it('accepts a signed body of redaction markers for a redacted transcript', () => {
+    expect(() => checkRedactedReceipt(REDACTED_BODY)).not.toThrow();
   });
 });
 
