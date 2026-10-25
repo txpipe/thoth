@@ -1,0 +1,3 @@
+# no-mistakes reviewer for thoth. The model and effort are set in the global
+# no-mistakes config, because agent_config is global-only.
+agent: opencode
