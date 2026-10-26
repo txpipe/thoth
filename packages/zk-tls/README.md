@@ -164,6 +164,10 @@ POST and echo the JSON body so the `"q"` match extracts the digits.
 - **One attestor instance serves any contract.** The slot counts come from each proposal, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
 - **The prover is its own entry point.** `@thoth/zk-tls/prover` loads the Reclaim client libraries lazily, so a client-only build never pulls them. `@thoth/zk-tls/client` imports neither those libraries nor `@thoth/attestor`.
 
+## License
+
+AGPL-3.0-only: this package links Reclaim Protocol's [attestor-core](https://github.com/reclaimprotocol/attestor-core), which is AGPL-3.0-only. An app that incorporates this package must offer the combined work under AGPL; the rest of Thoth stays MIT. If AGPL doesn't fit your app, don't include this package, or get a commercial license from Reclaim. Third-party code: attestor-core AGPL-3.0-only © Reclaim Protocol; [tls](https://github.com/reclaimprotocol/tls) MIT © CreatorOS Inc.
+
 ## Links
 
 - [Thoth (repo root)](https://github.com/txpipe-shop/thoth): overall architecture and docs
