@@ -191,6 +191,7 @@ describe('zkFetchPolicyHashOf', () => {
     // key-order fix changed, so neither may drift.
     const multiRule: ZkFetchPolicy = {
       allowedHosts: ['api.example.com'],
+      bodyPolicy: 'ignored',
       slots: [{ slot: 0, name: 'price', parse: 'int' }],
       responseMatches: [
         { value: '(?<distance>[0-9.]+)', type: 'regex' },
@@ -203,7 +204,8 @@ describe('zkFetchPolicyHashOf', () => {
     };
     expect(hex(zkFetchPolicyHashOf(multiRule))).toBe(
       sha256(
-        '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"claimVersion":"1",' +
+        '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"bodyPolicy":"ignored",' +
+          '"claimVersion":"1",' +
           '"responseMatches":[{"type":"contains","value":"moving_time"},' +
           '{"type":"regex","value":"(?<distance>[0-9.]+)"}],' +
           '"responseRedactions":[{"jsonPath":"$.a","regex":"b","xPath":""},' +
