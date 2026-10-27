@@ -140,7 +140,7 @@ const attestment = await client.collect(request, {
 
 - Set the window to the freshness and width your contract accepts. Every
   witness signs under this one window, and `collect` keeps it fixed across
-  spares. A witness stamps its observation time after it builds the proof, so
+  spares. The prover stamps its observation time after it builds the proof, so
   leave room for a slow proof: evidence observed after `windowEnd` is refused.
 - Set `threshold` to your contract's N.
 - `expiresAt` is a local deadline, not signed. Give it at least twice

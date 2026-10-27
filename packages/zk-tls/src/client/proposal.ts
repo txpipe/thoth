@@ -98,7 +98,7 @@ const assertEvidenceMatchesClaimContext = (
       ZK_FETCH_CLAIM_CONTEXT_KEY
     ];
   } catch {
-    // Not JSON: the claim proposal and the attestor refuse it, as today.
+    // Not JSON: the claim proposal and the attestor refuse it.
     return;
   }
   if (signed !== bound) {
@@ -161,7 +161,7 @@ export const buildClaimProposal = async <V extends number>(options: {
 
 /**
  * Shallow-copy a request with its own `secretHeaders` and `context`, so a
- * holder cannot change the original's secrets or claim context digest.
+ * prover cannot change the original's secrets or claim context digest.
  */
 export const copyRequest = (request: ZkFetchRequest): ZkFetchRequest => ({
   ...request,
@@ -202,8 +202,9 @@ export const bindRequestToPolicy = (
  * Return the request with the claim context digest in its context, so every
  * witness signs the holder and window its evidence is for.
  *
- * @throws if the request's context already sets {@link ZK_FETCH_CLAIM_CONTEXT_KEY}, or its
- *   URL does not parse.
+ * @throws if the request's context already sets {@link ZK_FETCH_CLAIM_CONTEXT_KEY}, its URL
+ *   does not parse, the policy fails `zkFetchPolicySchema`, the holder is not 32
+ *   bytes, or a window bound is negative.
  */
 export const bindRequestToClaimContext = (
   request: ZkFetchRequest,
