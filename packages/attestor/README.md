@@ -32,6 +32,7 @@ const law = defineAttestor({
   evidence: myEvidenceSchema,
   claim: claimSchema<8>(8),
   verify: async (input) => {
+    // Check the evidence, and that `input.claim.salt` is the salt it fixes (ADR 0012).
     if (!accepts(input)) throw new Error('rejected');
   },
   message: (claim) => claimToMessage(claim),

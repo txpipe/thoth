@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { AttestationInput } from '@thoth/core';
-import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
-import { bytes32Schema, CLAIM_VERSION } from '@thoth/core/claim';
+import type { Claim, FlatMessage } from '@thoth/core/claim';
+import { CLAIM_VERSION, claimSchema } from '@thoth/core/claim';
 import type { CanonicalValue } from '@thoth/core/claim-context';
 import { claimContextDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
@@ -72,43 +72,7 @@ export const zkFetchEvidenceSchema = z.object({
  * counts are `values.length` and `byteValues.length` (default `[]`), and
  * `present` needs one flag per slot.
  */
-export const zkFetchClaimSchema: z.ZodType<
-  Claim<number, number>,
-  z.core.$ZodTypeInternals<Claim<number, number>, ClaimInput<number, number>>
-> = z
-  .object({
-    version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
-    appId: bytes32Schema,
-    policyHash: bytes32Schema,
-    windowStart: z.union([z.number(), z.bigint()]),
-    windowEnd: z.union([z.number(), z.bigint()]),
-    subjectHash: bytes32Schema,
-    holder: bytes32Schema,
-    salt: bytes32Schema,
-    present: z.array(z.boolean()),
-    values: z.array(z.union([z.number(), z.bigint()])),
-    byteValues: z.array(bytes32Schema).default([]),
-  })
-  .refine((input) => input.present.length === input.values.length + input.byteValues.length, {
-    message: 'present and values must have the same length, plus one byte flag per byteValue',
-    path: ['present'],
-  })
-  .transform((input) => ({
-    version: BigInt(input.version),
-    appId: input.appId,
-    policyHash: input.policyHash,
-    windowStart: BigInt(input.windowStart),
-    windowEnd: BigInt(input.windowEnd),
-    subjectHash: input.subjectHash,
-    holder: input.holder,
-    salt: input.salt,
-    present: input.present,
-    values: input.values.map((value) => BigInt(value)),
-    byteValues: input.byteValues,
-  })) as unknown as z.ZodType<
-  Claim<number, number>,
-  z.core.$ZodTypeInternals<Claim<number, number>, ClaimInput<number, number>>
->;
+export const zkFetchClaimSchema = claimSchema<number, number>();
 
 /**
  * The zkFetch kind's definition, the value `createZkFetchDefinition` returns.

@@ -49,6 +49,19 @@ describe('claimSchema', () => {
     expect(parsed.byteValues).toEqual([]);
   });
 
+  it('owns copies of the byte arrays, even over shared memory', () => {
+    const holder = new Uint8Array(new SharedArrayBuffer(32));
+    holder.set(bytes32(0x44));
+    const input = { ...byteBase, appId: bytes32(0x11), holder, byteValues: [fullSpan()] };
+    const parsed = claimSchema(3, 1).parse(input);
+    for (const bytes of [input.appId, holder, ...input.byteValues]) {
+      bytes.fill(0xee);
+    }
+    expect(parsed.appId).toEqual(bytes32(0x11));
+    expect(parsed.holder).toEqual(bytes32(0x44));
+    expect(parsed.byteValues).toEqual([fullSpan()]);
+  });
+
   it('rejects a present mask of the wrong length', () => {
     expect(() => claimSchema(3, 1).parse({ ...byteBase, present: [true, false, true] })).toThrow();
   });

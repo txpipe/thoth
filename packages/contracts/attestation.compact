@@ -161,6 +161,23 @@ module attestation<#K, #V, #B, #N, #M> {
     return persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:holder-commitment:v1"), secret]);
   }
 
+  /// The nullifier `verifyAttestation` records: the hash of the claim's
+  /// observation identity. Exported pure so tests can reproduce it.
+  export pure circuit nullifierOf(claim: Claim): Bytes<32> {
+    return persistentHash<Observation>(
+             Observation { appId: claim.appId,
+                           policyHash: claim.policyHash,
+                           subjectHash: claim.subjectHash,
+                           salt: claim.salt,
+                           windowStart: claim.windowStart,
+                           windowEnd: claim.windowEnd,
+                           values: claim.values,
+                           byteHalves: claim.byteHalves,
+                           present: claim.present,
+                           bytePresent: claim.bytePresent }
+             );
+  }
+
   /// Verify an attested claim and store it in the claims vault.
   export circuit verifyAttestation(): [] {
     const [claim, sigs, rand] = getAttestationWitness();
@@ -197,19 +214,7 @@ module attestation<#K, #V, #B, #N, #M> {
     const secret = getHolderSecret();
     assert(claim.holder == holderCommitment(secret), "Holder mismatch");
 
-    const nullifier =
-            persistentHash<Observation>(
-              Observation { appId: claim.appId,
-                            policyHash: claim.policyHash,
-                            subjectHash: claim.subjectHash,
-                            salt: claim.salt,
-                            windowStart: claim.windowStart,
-                            windowEnd: claim.windowEnd,
-                            values: claim.values,
-                            byteHalves: claim.byteHalves,
-                            present: claim.present,
-                            bytePresent: claim.bytePresent }
-              );
+    const nullifier = nullifierOf(claim);
     assert(!nullifiers.member(disclose(nullifier)), "Observation replay");
     nullifiers.insert(disclose(nullifier));
 

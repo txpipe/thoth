@@ -30,7 +30,8 @@ import { z } from 'zod';
 
 const LAW = 'my-kind@1';
 const policySchema = z.object({ allowedHosts: z.array(z.string()) });
-const evidenceSchema = z.object({ host: z.string(), value: z.number() });
+// `salt`: hex of a secret your source signs with the observation (ADR 0012).
+const evidenceSchema = z.object({ host: z.string(), value: z.number(), salt: z.string() });
 const claim = claimSchema(1); // one numeric slot, no byte slots
 
 export const definition = {
@@ -47,6 +48,10 @@ export const definition = {
     }
     if (!claim.present[0] || claim.values[0] !== BigInt(evidence.value)) {
       throw new Error('claim does not match the evidence');
+    }
+    // A salt the client could choose would let it mint several claims from one observation.
+    if (Buffer.from(claim.salt).toString('hex') !== evidence.salt) {
+      throw new Error('claim salt is not the one the evidence fixes');
     }
   },
   message: (claim) => claimToMessage(claim),

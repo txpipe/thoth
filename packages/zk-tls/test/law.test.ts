@@ -552,7 +552,7 @@ describe('assertEvidenceMatchesPolicy', () => {
   });
 
   it('allows subdomains of an allowlisted suffix and ignores case', () => {
-    const suffixes = { allowedHosts: ['GitHub.COM'] } as ZkFetchPolicy;
+    const suffixes: Pick<ZkFetchPolicy, 'allowedHosts'> = { allowedHosts: ['GitHub.COM'] };
     expect(
       assertEvidenceMatchesPolicy(verified('https://uploads.api.github.com/x'), {
         ...policy,
@@ -615,7 +615,7 @@ describe('assertEvidenceMatchesPolicy', () => {
   });
 
   it('allows an optional slot to be absent', () => {
-    const optional = {
+    const optional: ZkFetchPolicy = {
       ...policy,
       slots: [{ slot: 0, name: 'distance', parse: 'float', optional: true }],
     };

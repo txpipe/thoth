@@ -4,15 +4,7 @@
 // the halves, the unchanged W = 0 layout, and that the salted nullifier does
 // not confirm a guessed value.
 import { randomBytes } from 'node:crypto';
-import {
-  type CompactType,
-  CompactTypeBoolean,
-  CompactTypeBytes,
-  CompactTypeUnsignedInteger,
-  CompactTypeVector,
-  type JubjubSchnorrSignature,
-  persistentHash,
-} from '@midnight-ntwrk/compact-runtime';
+import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import { claimToMessage, toContractClaim } from '@thoth/core/claim';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
@@ -356,39 +348,6 @@ describe('signature and identity coverage', () => {
   });
 });
 
-// `persistentHash<S>` of a struct: its fields' encodings in declaration order.
-const structHash = (fields: readonly (readonly [CompactType<unknown>, unknown])[]): Uint8Array =>
-  persistentHash<unknown[]>(
-    {
-      alignment: () => fields.flatMap(([type]) => type.alignment()),
-      toValue: (values) => fields.flatMap(([type], i) => type.toValue(values[i])),
-      fromValue: () => {
-        throw new Error('structHash only encodes');
-      },
-    },
-    fields.map(([, value]) => value),
-  );
-
-const BYTES32 = new CompactTypeBytes(32);
-const UINT32 = new CompactTypeUnsignedInteger(2n ** 32n - 1n, 4);
-const BOOLEANS = (n: number) => new CompactTypeVector(n, CompactTypeBoolean);
-
-// The nullifier preimage: the `Observation` struct in declaration order, with
-// `guess` as the byte value and `salt` as the salt.
-const observationFields = (claim: B_Claim, guess: Uint8Array, salt: Uint8Array) =>
-  [
-    [BYTES32, claim.appId],
-    [BYTES32, claim.policyHash],
-    [BYTES32, claim.subjectHash],
-    [BYTES32, salt],
-    [UINT32, claim.windowStart],
-    [UINT32, claim.windowEnd],
-    [new CompactTypeVector(3, new CompactTypeUnsignedInteger(2n ** 64n - 1n, 8)), claim.values],
-    [new CompactTypeVector(2, new CompactTypeBytes(16)), splitHalves(guess)],
-    [BOOLEANS(3), claim.present],
-    [BOOLEANS(2), claim.bytePresent],
-  ] as const;
-
 describe('nullifier privacy', () => {
   beforeEach(async () => {
     sim = await MockAttestationBytesSim.create(createPrivateState<B_Claim>(holder), registryKeys);
@@ -399,8 +358,8 @@ describe('nullifier privacy', () => {
     await submit(signed(claim));
     const nullifiers = sim.ledgerView().B_nullifiers;
     const nullifierOf = (guess: string, salt: Uint8Array) =>
-      structHash(observationFields(claim, padded32(guess), salt));
-    // The preimage is right: with the secret salt, the true value is the stored nullifier.
+      pureCircuits.nullifierOf({ ...claim, salt, byteHalves: splitHalves(padded32(guess)) });
+    // With the secret salt, the true value is the stored nullifier.
     expect(nullifiers.member(nullifierOf('alice-github', claim.salt))).toBe(true);
     // An observer knows every field but the salt; no salt it can name confirms a guess.
     const candidates = ['bob-github', 'alice-github', 'carol-github', 'dave-github'];

@@ -157,7 +157,7 @@ describe('test-key witness', () => {
         WINDOW,
         claimOverrides,
       ),
-    ).rejects.toThrow(/present and values must have the same length/);
+    ).rejects.toThrow(/present must have one flag per value/);
   });
 
   it('rejects a policy slot outside the requested count before proof verification', async () => {

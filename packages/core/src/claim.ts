@@ -92,7 +92,8 @@ export const bytes32Schema = z
 /**
  * Zod schema for a claim with `V` numeric and `W` byte slots: validates the
  * shape, coerces the numeric fields to `bigint`, and defaults an omitted
- * `byteValues` to `[]`.
+ * `byteValues` to `[]`. The parsed claim owns copies of every byte array, so
+ * the caller cannot change it between an attestor's checks and its signature.
  *
  * Omit `v` for a size-agnostic schema: no exact-length check, but `present`
  * still needs one flag per value.
@@ -128,18 +129,20 @@ export function claimSchema<V extends number = number, W extends number = 0>(
       message: 'present must have one flag per value: values.length + byteValues.length',
       path: ['present'],
     })
+    // `new Uint8Array` copies even an array over shared memory, which
+    // `structuredClone` would share.
     .transform((input) => ({
       version: BigInt(input.version),
-      appId: input.appId,
-      policyHash: input.policyHash,
+      appId: new Uint8Array(input.appId),
+      policyHash: new Uint8Array(input.policyHash),
       windowStart: BigInt(input.windowStart),
       windowEnd: BigInt(input.windowEnd),
-      subjectHash: input.subjectHash,
-      holder: input.holder,
-      salt: input.salt,
+      subjectHash: new Uint8Array(input.subjectHash),
+      holder: new Uint8Array(input.holder),
+      salt: new Uint8Array(input.salt),
       present: input.present,
       values: input.values.map((value) => BigInt(value)),
-      byteValues: input.byteValues,
+      byteValues: input.byteValues.map((bytes) => new Uint8Array(bytes)),
     }));
   return schema as unknown as z.ZodType<
     Claim<V, W>,

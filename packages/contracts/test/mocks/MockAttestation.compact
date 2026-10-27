@@ -38,6 +38,10 @@ export pure circuit computeId(a: A_Claim, rand: Bytes<32>): Bytes<32> {
   return A_computeId(a, rand);
 }
 
+export pure circuit nullifierOf(a: A_Claim): Bytes<32> {
+  return A_nullifierOf(a);
+}
+
 export pure circuit holderOf(secret: Bytes<32>): Field {
   return A_holderOf(secret);
 }
