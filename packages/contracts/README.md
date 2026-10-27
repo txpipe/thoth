@@ -167,7 +167,9 @@ What the module does not check, and what your app does itself:
   (derived from the holder secret) and window in public, and the transaction
   discloses which accepted policy it used.
 - Holder secrets are not checked for freshness. Use a fresh, high-entropy
-  secret per claim and keep it to open that claim; reusing one links its
+  secret per claim and keep it to open that claim. Where the salt follows the
+  holder, a guessable secret makes the salt guessable too, and the nullifier
+  can then confirm guessed values. Reusing a secret links its
   commitments and vault entries.
 - `openClaim` consumes no nullifier, so opening is repeatable. "Use once"
   rules are your own state, keyed on the vault pseudonym. Never re-export
@@ -192,7 +194,9 @@ What the module does not check, and what your app does itself:
   ([ADR 0006](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0006-nullifier-keys-on-the-observation-identity.md),
   [ADR 0011](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
 - **The nullifier hashes a secret salt.** The salt never reaches the ledger, so
-  nobody can confirm a guessed value by recomputing the nullifier. The
+  only those who hold the evidence, such as the witnesses and attestors, can
+  confirm a guessed value by recomputing the nullifier; they already see the
+  values. The
   attestors derive it from the evidence, so a client cannot vary it to replay
   one observation ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
 - **No kind on-chain; the policy hash is the commitment.** A requester cannot

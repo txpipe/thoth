@@ -198,7 +198,8 @@ export interface ZkFetchClientProof<V extends number, PK, S> {
 export interface ZkFetchProveOptions {
   /**
    * Per-claim commitment from `holderCommitmentOf(secret)`, 32 bytes. Keep the
-   * secret for the contract witness; use a fresh one per claim.
+   * secret for the contract witness; use a fresh one per claim. Never disclose
+   * the commitment on-chain: it is the only secret input to the claim's salt.
    */
   readonly holder: Uint8Array;
   /** Inclusive start of the signed observation window, Unix seconds. */

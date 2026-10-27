@@ -222,6 +222,19 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  * });
  * ```
  */
+// Parsing keeps the caller's byte arrays, so a caller holding one could change
+// the holder between `verify` and the signature. `new Uint8Array` copies even an
+// array over shared memory, which `structuredClone` would share.
+const ownBytesOf = (claim: Claim<number, number>): Claim<number, number> => ({
+  ...claim,
+  appId: new Uint8Array(claim.appId),
+  policyHash: new Uint8Array(claim.policyHash),
+  subjectHash: new Uint8Array(claim.subjectHash),
+  holder: new Uint8Array(claim.holder),
+  salt: new Uint8Array(claim.salt),
+  byteValues: claim.byteValues.map((bytes) => new Uint8Array(bytes)),
+});
+
 export function zkFetchAttestor<PK, S>(parts: {
   id: string;
   keyPair: KeyPair<PK, S, FlatMessage>;
@@ -239,10 +252,7 @@ export function zkFetchAttestor<PK, S>(parts: {
     attest: async (definition, signer, input) => {
       const policy = definition.policy.parse(input.policy);
       const evidence = definition.evidence.parse(input.evidence);
-      // Parsing keeps the caller's arrays. Copy them, so a caller that keeps a
-      // reference (or passes a Proxy, which fails to clone) cannot change the
-      // holder or window between `verify` and the signature.
-      const proposed = structuredClone(definition.claim.parse(input.claim));
+      const proposed = ownBytesOf(definition.claim.parse(input.claim));
       await definition.verify({ policy, evidence, claim: proposed });
       if (evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
         throw new Error(

@@ -178,5 +178,5 @@ _Avoid_: Vault, storage.
 
 - A **kind** has one **law**; many **attestors** run it, each trusting its own **witness**.
 - A **policy** belongs to one law; its **policyHash** is what the contract seals.
-- An **observation** produces one **claim**; the **nullifier** keys on its **observation identity**, so the same claim cannot be accepted twice. The evidence binds the **claim context**, so a fresh **holder** needs a new observation; where the **salt** follows the holder, that observation gets a new nullifier even for the same fact ([details](packages/contracts/README.md#guarantees-and-limits)).
+- An **observation** produces one **claim** for each app id and slot count; the **nullifier** keys on its **observation identity**, so the same claim cannot be accepted twice. The evidence binds the **claim context**, so a fresh **holder** needs a new observation; where the **salt** follows the holder, that observation gets a new nullifier even for the same fact ([details](packages/contracts/README.md#guarantees-and-limits)).
 - An **attestment** is N **attestations** over one **message**, each placed at its **registry slot** from the **trusted set**.
