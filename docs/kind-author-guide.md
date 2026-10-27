@@ -20,6 +20,7 @@ hash (ADR 0002, ADR 0008).
 | Law tag | everywhere | — | `ZK_FETCH_LAW = 'zk-fetch@1'` |
 | Policy schema, normalizer and hash | shared | `policyHashOf` (`@thoth/core/claim-context`) | `zkFetchPolicySchema`, `normalizePolicy`, `zkFetchPolicyHashOf` |
 | Subject struct and hash | shared | `subjectHashOf` | `zkFetchSubjectOf`, `zkFetchSubjectHashOf` |
+| Claim context binding | shared, checked by the attestor | `claimContextDigestOf` | `zkFetchClaimContextDigestOf`, `assertClaimMatchesContext` |
 | Evidence schema | shared | zod | `zkFetchEvidenceSchema` |
 | Claim derivation | shared | `Claim` (`@thoth/core/claim`) | `deriveClaimFromEvidence` |
 | Definition (`verify`, `message`) | attestor | `defineAttestor` (`@thoth/attestor`) | `createZkFetchDefinition` |
@@ -109,9 +110,16 @@ decides only the header fields that come from the evidence and the values:
   `toContractClaim(claim)` (from `@thoth/core/claim`) from
   `getAttestationWitness`, never your claim itself, even with `W = 0`, whose
   empty `bytePresent`/`byteHalves` the contract still requires.
-- `appId` and `holder` come from the claim proposal. The attestor signs them
-  but cannot check them. The contract checks `holder` against the caller's
-  secret; `appId` is compared by the app's own predicate, not by the module.
+- `appId` and `holder` come from the claim proposal. The contract checks
+  `holder` against the caller's secret; `appId` is compared by the app's own
+  predicate, not by the module.
+- Bind the holder and window to the evidence. Have the
+  [witness](../CONTEXT.md#roles) sign `claimContextDigestOf` of the
+  [claim context](../CONTEXT.md#the-claim) (`@thoth/core/claim-context`), and
+  refuse a proposal whose holder or window gives another digest. Otherwise
+  whoever sees the evidence can claim its observation under their own holder.
+  zkFetch signs it into the witness's context (`assertClaimMatchesContext`,
+  ADR 0011).
 
 The claim does not commit to the evidence (ADR 0007). Everything the contract
 or app must rely on has to be a field of the signed message.
@@ -128,7 +136,9 @@ targets the matching region before proof verification. Then:
 2. check the evidence against the policy;
 3. check that the observation falls inside the proposed window;
 4. check that the proposed `subjectHash` is the one of what the evidence signed;
-5. check that the proposed values, byte values, and `present` say exactly what
+5. check that the evidence signed the claim context digest of the proposal's
+   holder and window;
+6. check that the proposed values, byte values, and `present` say exactly what
    the evidence showed.
 
 `message` is `claimToMessage(claim)`. A kind that needs a different message
@@ -181,6 +191,9 @@ The client runs on the user's machine and builds on `@thoth/client` (see its
 - Keep request secrets on the user's machine. The attestors see evidence, not
   credentials.
 
+Fix the holder and window before you collect evidence, and have every
+witness sign their claim context digest ([5. The claim](#5-the-claim)).
+
 The holder is `holderCommitmentOf(secret)` with a fresh 32-byte secret per
 claim. Only the commitment leaves the machine; the secret reaches the contract only
 as private input (ADR 0004).
@@ -206,7 +219,8 @@ as private input (ADR 0004).
   the claim it derived, not the one proposed.
 - **Acceptance.** Run the path end to end against the simulator, as
   `packages/contracts/test/acceptance.test.ts` does for zkFetch: honest claim
-  accepted, each signed field mutated and rejected.
+  accepted, each signed field mutated and rejected, and evidence replayed
+  under another holder refused by the attestors.
 
 ## Packaging
 

@@ -65,15 +65,21 @@ and runs these checks before signing:
    contract bounds the window's length and checks it against block time.
 4. `assertClaimMatchesSubject({ claim, verified })` requires the proposal's
    `subjectHash` to be the hash of the request the witness signed.
-5. `assertClaimMatchesDisclosures({ claim, disclosures, policy })` requires the
+5. `assertClaimMatchesContext({ claim, verified, policy })` requires the
+   context the witness signed to carry the
+   [claim context](../../../CONTEXT.md#the-claim) digest of the policy, the
+   signed request's subject, and the proposal's holder and window
+   ([ADR 0011](../../../docs/adr/0011-evidence-binds-the-claim-context.md)).
+6. `assertClaimMatchesDisclosures({ claim, disclosures, policy })` requires the
    proposal to say exactly what the evidence disclosed.
 
 `attestor.attest` then rejects evidence whose signing witness is not your
 `witnessAddress`, derives its own claim from the evidence, and signs that: the
 values and `present` flags from the disclosed values, the signed request's
 subject hash, and the policy's hash. It takes `appId`, the window and the
-holder commitment from the proposal. A client cannot make you certify a
-reading the evidence does not support.
+holder commitment from the proposal, the last two checked against the digest
+the witness signed. A client cannot make you certify a reading the evidence
+does not support.
 
 ## Running a Reclaim witness
 

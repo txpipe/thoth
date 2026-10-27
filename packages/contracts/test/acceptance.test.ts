@@ -12,10 +12,15 @@ import type { KeyPair } from '@thoth/attestor';
 import { descriptorOf } from '@thoth/attestor';
 import { buildTrustedSet } from '@thoth/client';
 import { jubjubVerifier } from '@thoth/client/jubjub';
-import { toContractClaim } from '@thoth/core/claim';
-import { type ZkFetchPolicy, zkFetchPolicyHashOf, zkFetchSubjectHashOf } from '@thoth/zk-tls';
+import { type Claim, toContractClaim } from '@thoth/core/claim';
+import {
+  type ZkFetchEvidence,
+  type ZkFetchPolicy,
+  zkFetchPolicyHashOf,
+  zkFetchSubjectHashOf,
+} from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
-import { type ZkFetchRequest, zkFetchClient } from '@thoth/zk-tls/client';
+import { type ZkFetchProver, type ZkFetchRequest, zkFetchClient } from '@thoth/zk-tls/client';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DISCLOSURE_RULES } from '../../zk-tls/test/helpers/helper.js';
 import { testWitness } from '../../zk-tls/test/helpers/witness.js';
@@ -78,10 +83,14 @@ const holderSecret = randomBytes(32);
 
 type Submission = { claim: B_Claim; signatures: JubjubSchnorrSignature[]; commitRand: Uint8Array };
 
-// Collect the honest threshold set through the zkFetch client and lay its
-// signatures out at their registry slots, the dummy filling the unqueried one.
-const collectSubmission = async (): Promise<Submission> => {
-  const client = zkFetchClient.init({
+/** The evidence each attestor's witness signed for the honest holder, by attestor id. */
+const honestEvidence: Record<string, ZkFetchEvidence> = {};
+/** The claim the honest threshold set signed. */
+let honestClaim: Claim<number, number>;
+
+// The zkFetch client the app runs, pinning both operators at slots 0 and 1.
+const clientWith = (provers: Record<string, ZkFetchProver>) =>
+  zkFetchClient.init({
     trusted: buildTrustedSet({
       registrySize: registryKeys.length,
       attestors: attestors.map((attestor, registryIndex) => ({
@@ -103,12 +112,28 @@ const collectSubmission = async (): Promise<Submission> => {
     appId: APP_ID,
     valueSlots: VALUE_SLOTS,
     byteSlots: BYTE_SLOTS,
-    provers: Object.fromEntries(
+    provers,
+  });
+
+const collectOptions = (secret: Uint8Array) => ({
+  holder: pureCircuits.holderCommitment(secret),
+  windowStart: BigInt(OBSERVED_AT),
+  windowEnd: WINDOW_END,
+  expiresAt: Date.now() + 60_000,
+  threshold: 2,
+  attestorTimeoutMs: 5_000,
+});
+
+// Collect the honest threshold set through the zkFetch client and lay its
+// signatures out at their registry slots, the dummy filling the unqueried one.
+const collectSubmission = async (): Promise<Submission> => {
+  const client = clientWith(
+    Object.fromEntries(
       operators.map(({ witness, attestor }) => [
         attestor.id,
         {
-          prove: (proved: ZkFetchRequest) =>
-            witness.sign({
+          prove: async (proved: ZkFetchRequest) => {
+            const evidence = await witness.sign({
               values: { stars: '42', owner: OWNER },
               timestampS: OBSERVED_AT,
               parameters: {
@@ -118,19 +143,16 @@ const collectSubmission = async (): Promise<Submission> => {
                 ...DISCLOSURE_RULES,
               },
               context: proved.context,
-            }),
+            });
+            honestEvidence[attestor.id] = evidence;
+            return evidence;
+          },
         },
       ]),
     ),
-  });
-  const { claim, collected } = await client.collect(request, {
-    holder: pureCircuits.holderCommitment(holderSecret),
-    windowStart: BigInt(OBSERVED_AT),
-    windowEnd: WINDOW_END,
-    expiresAt: Date.now() + 60_000,
-    threshold: 2,
-    attestorTimeoutMs: 5_000,
-  });
+  );
+  const { claim, collected } = await client.collect(request, collectOptions(holderSecret));
+  honestClaim = claim;
   const signatures = registryKeys.map(
     (_, slot) =>
       collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
@@ -186,6 +208,23 @@ describe('cross-seam acceptance', () => {
   });
 
   const otherSecret = randomBytes(32);
+
+  it('gets no claim for another holder from evidence signed for the honest one', async () => {
+    // Whoever sees the honest evidence replays it to the same attestors under their
+    // own holder. The attestors themselves refuse it, without the client's help.
+    const thiefHolder = pureCircuits.holderCommitment(otherSecret);
+    for (const { attestor } of operators) {
+      const replayed = {
+        policy,
+        evidence: honestEvidence[attestor.id] as ZkFetchEvidence,
+        claim: { ...honestClaim, holder: thiefHolder },
+      };
+      await expect(
+        attestor.attest(replayed as unknown as Parameters<typeof attestor.attest>[0]),
+      ).rejects.toThrow(/claim context digest/);
+    }
+  });
+
   it.each([
     { name: 'a value', mutate: (c: B_Claim) => ({ ...c, values: [43n, 0n, 0n] }) },
     {

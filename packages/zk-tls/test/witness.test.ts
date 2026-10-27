@@ -6,8 +6,10 @@ import { type Claim, claimToMessage, type FlatMessage } from '@thoth/core/claim'
 import {
   deriveClaimFromEvidence,
   parsedEvidenceView,
+  ZK_FETCH_CLAIM_CONTEXT_KEY,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
+  zkFetchClaimContextDigestOf,
   zkFetchPolicyHashOf,
   zkFetchPolicySchema,
   zkFetchSubjectHashOf,
@@ -32,22 +34,49 @@ const policy: ZkFetchPolicy = {
   ...DISCLOSURE_RULES,
 };
 
+/** The holder every claim in this suite is proposed with. */
+const HOLDER = new Uint8Array(32).fill(0xc1);
+
+/** The observation window every claim in this suite is proposed with. */
+const WINDOW = { windowStart: 1_786_000_000n, windowEnd: 1_786_000_010n };
+
+const PARAMETERS = {
+  url: 'https://api.example.com/v1/account',
+  method: 'GET',
+  body: '',
+  ...DISCLOSURE_RULES,
+};
+
+/**
+ * Sign an observation whose context carries the claim context digest a client
+ * signs for `activePolicy`, the observed request, {@link HOLDER} and {@link WINDOW}.
+ */
 const observe = (
   witness: TestWitness,
   overrides: Partial<Observation> = {},
-): Promise<ZkFetchEvidence> =>
-  witness.sign({
+  activePolicy: ZkFetchPolicy = policy,
+): Promise<ZkFetchEvidence> => {
+  const parameters = overrides.parameters ?? PARAMETERS;
+  return witness.sign({
     values: { balance: '0', score: '7.6' },
     timestampS: 1_786_000_000,
-    parameters: {
-      url: 'https://api.example.com/v1/account',
-      method: 'GET',
-      body: '',
-      ...DISCLOSURE_RULES,
+    parameters,
+    context: {
+      intent: 'ab'.repeat(32),
+      [ZK_FETCH_CLAIM_CONTEXT_KEY]: zkFetchClaimContextDigestOf({
+        policy: activePolicy,
+        request: {
+          url: String(parameters.url),
+          method: String(parameters.method),
+          body: String(parameters.body),
+        },
+        holder: HOLDER,
+        ...WINDOW,
+      }),
     },
-    context: { intent: 'ab'.repeat(32) },
     ...overrides,
   });
+};
 
 const makeAttestor = (id: string, witnessAddress: string) =>
   zkFetchAttestor({
@@ -62,9 +91,6 @@ const makeAttestor = (id: string, witnessAddress: string) =>
 const aliceAttestor = makeAttestor('attestor-alice', alice.address);
 const bobAttestor = makeAttestor('attestor-bob', bob.address);
 
-/** The observation window every claim in this suite is proposed with. */
-const WINDOW = { windowStart: 1_786_000_000n, windowEnd: 1_786_000_010n };
-
 const attestWith = (
   attestor: typeof aliceAttestor,
   evidence: ZkFetchEvidence,
@@ -76,7 +102,7 @@ const attestWith = (
     verified: parsedEvidenceView(evidence),
     policy: activePolicy,
     appId: APP_ID,
-    holder: new Uint8Array(32).fill(0xc1),
+    holder: HOLDER,
     valueSlots: 3,
     ...window,
   });
@@ -172,7 +198,7 @@ describe('test-key witness', () => {
 
   it('is deterministic across runs', async () => {
     // RFC 6979 signing: the same observation always yields this signature.
-    expect((await observe(alice)).signatureHex).toBe(
+    expect((await observe(alice, { context: { intent: 'ab'.repeat(32) } })).signatureHex).toBe(
       '0x79cff7aef768dd40ad4e61a20a084a35ed3bb2deae1c8443592500701280da9b7536aa09f930244d461c96daefa815f838f97c77f4119d2dfd00bd521d7c6fed1b',
     );
   });
@@ -201,6 +227,33 @@ describe('test-key witness', () => {
     await expect(
       attestWith(aliceAttestor, await observe(alice), WINDOW, { subjectHash: other }),
     ).rejects.toThrow(/subjectHash does not match/);
+  });
+
+  it('rejects a proposal for another holder than the witness signed', async () => {
+    const sign = vi.spyOn(aliceAttestor.signer, 'sign');
+    await expect(
+      attestWith(aliceAttestor, await observe(alice), WINDOW, {
+        holder: new Uint8Array(32).fill(0xc2),
+      }),
+    ).rejects.toThrow(/claim context digest/);
+    expect(sign).not.toHaveBeenCalled();
+    sign.mockRestore();
+  });
+
+  it('rejects a proposal for another window than the witness signed', async () => {
+    // The observation still falls inside the swapped window.
+    await expect(
+      attestWith(aliceAttestor, await observe(alice), {
+        windowStart: WINDOW.windowStart,
+        windowEnd: WINDOW.windowEnd + 10n,
+      }),
+    ).rejects.toThrow(/claim context digest/);
+  });
+
+  it('rejects evidence whose signed context carries no claim context digest', async () => {
+    await expect(
+      attestWith(aliceAttestor, await observe(alice, { context: { intent: 'ab'.repeat(32) } })),
+    ).rejects.toThrow(/claim context digest/);
   });
 
   it('is rejected when signed by another witness', async () => {
@@ -267,16 +320,20 @@ describe('test-key witness', () => {
       responseMatches: [distance, movingTime],
       responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }],
     };
-    const evidence = await observe(alice, {
-      values: { distance: '12.4' },
-      parameters: {
-        url: 'https://api.example.com/v1/account',
-        method: 'GET',
-        body: '',
-        responseMatches: [movingTime, distance],
-        responseRedactions: [{ jsonPath: '', xPath: '', regex: '"distance":\\s*[\\d.]+' }],
+    const evidence = await observe(
+      alice,
+      {
+        values: { distance: '12.4' },
+        parameters: {
+          url: 'https://api.example.com/v1/account',
+          method: 'GET',
+          body: '',
+          responseMatches: [movingTime, distance],
+          responseRedactions: [{ jsonPath: '', xPath: '', regex: '"distance":\\s*[\\d.]+' }],
+        },
       },
-    });
+      activePolicy,
+    );
     const attestation = await attestWith(aliceAttestor, evidence, WINDOW, {}, activePolicy);
     expect(attestation.claim.values[0]).toBe(12n);
   });
@@ -292,16 +349,20 @@ describe('test-key witness', () => {
       responseRedactions: redactions,
     };
     // The helper signs the parameters with sorted keys, as the witness does.
-    const evidence = await observe(alice, {
-      values: { distance: '12.4' },
-      parameters: {
-        url: 'https://api.example.com/v1/account',
-        method: 'GET',
-        body: '',
-        responseMatches: [distance, movingTime],
-        responseRedactions: redactions,
+    const evidence = await observe(
+      alice,
+      {
+        values: { distance: '12.4' },
+        parameters: {
+          url: 'https://api.example.com/v1/account',
+          method: 'GET',
+          body: '',
+          responseMatches: [distance, movingTime],
+          responseRedactions: redactions,
+        },
       },
-    });
+      activePolicy,
+    );
     const attestation = await attestWith(aliceAttestor, evidence, WINDOW, {}, activePolicy);
     expect(attestation.claim.values[0]).toBe(12n);
   });
@@ -313,15 +374,19 @@ describe('test-key witness', () => {
       responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
       responseRedactions: [],
     };
-    const evidence = await observe(alice, {
-      values: { balance: '7' },
-      parameters: {
-        url: 'https://api.example.com/v1/account',
-        method: 'GET',
-        body: '',
-        responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+    const evidence = await observe(
+      alice,
+      {
+        values: { balance: '7' },
+        parameters: {
+          url: 'https://api.example.com/v1/account',
+          method: 'GET',
+          body: '',
+          responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+        },
       },
-    });
+      activePolicy,
+    );
     const attestation = await attestWith(aliceAttestor, evidence, WINDOW, {}, activePolicy);
     expect(attestation.claim.values[0]).toBe(7n);
   });
@@ -428,7 +493,7 @@ describe('test-key witness', () => {
       verified: parsedEvidenceView(await observe(alice)),
       policy,
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       valueSlots: 3,
       ...WINDOW,
     });
@@ -436,7 +501,7 @@ describe('test-key witness', () => {
       verified: parsedEvidenceView(await observe(bob)),
       policy,
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       valueSlots: 3,
       ...WINDOW,
     });
@@ -449,7 +514,7 @@ describe('test-key witness', () => {
         verified: parsedEvidenceView(await observe(alice, overrides)),
         policy,
         appId: APP_ID,
-        holder: new Uint8Array(32).fill(0xc1),
+        holder: HOLDER,
         valueSlots: 3,
         ...WINDOW,
       });

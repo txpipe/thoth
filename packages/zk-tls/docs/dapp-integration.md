@@ -99,6 +99,7 @@ const client = zkFetchClient.init({
 
 // holderSecret: 32 cryptographically random bytes, fresh per claim, kept locally.
 const holder = holderCommitmentOf(holderSecret);
+const start = Math.floor(Date.now() / 1000);
 const proved = await client.proveReq(
   {
     url: 'https://www.strava.com/api/v3/athlete/activities?per_page=1',
@@ -107,15 +108,19 @@ const proved = await client.proveReq(
     secretHeaders: { authorization: `Bearer ${accessToken}` },
     context: { label: 'strava-activity' },
   },
-  holder,
+  { holder, windowStart: BigInt(start), windowEnd: BigInt(start + 60) },
 );
 
 const attestment = await proved.attest(); // or .attest(txpipeDescriptor.id)
 ```
 
 `proveReq` fetches through every pinned attestor's witness and requires them
-to agree on one claim before any attestor is contacted; `attest` then asks the
-named attestors, or all of them, to sign it.
+to agree on one claim before any attestor is contacted. Every witness signs
+the holder and window through the [claim context](../../../CONTEXT.md#the-claim)
+digest ([ADR 0011](../../../docs/adr/0011-evidence-binds-the-claim-context.md)).
+Leave room in `windowEnd` for a slow proof: evidence observed after it is
+refused (see [Collecting a threshold](#collecting-a-threshold)).
+`attest` then asks the named attestors, or all of them, to sign it.
 
 ## Collecting a threshold
 
@@ -123,7 +128,6 @@ named attestors, or all of them, to sign it.
 invalid attestor:
 
 ```ts
-const start = Math.floor(Date.now() / 1000);
 const attestment = await client.collect(request, {
   holder,
   windowStart: BigInt(start),
@@ -136,7 +140,8 @@ const attestment = await client.collect(request, {
 
 - Set the window to the freshness and width your contract accepts. Every
   witness signs under this one window, and `collect` keeps it fixed across
-  spares.
+  spares. A witness stamps its observation time after it builds the proof, so
+  leave room for a slow proof: evidence observed after `windowEnd` is refused.
 - Set `threshold` to your contract's N.
 - `expiresAt` is a local deadline, not signed. Give it at least twice
   `attestorTimeoutMs` after the start so a spare can still prove after one
@@ -153,8 +158,11 @@ what is refused, and what `ZkFetchThresholdError` carries.
 
 `ZkFetchRequest` describes the fetch. The witness signs the URL, method, body
 and disclosure rules into the claim, so the policy can rely on them.
-`publicHeaders` are visible to whoever verifies the evidence; `secretHeaders` and
-`context` are not. The two fields with protocol meaning:
+`publicHeaders` and `context` are visible to whoever verifies the evidence:
+every attestor and anyone the evidence reaches. Only `secretHeaders` are not.
+The client adds the claim context digest to `context` under
+the `thothClaimContext` key and refuses a request that sets that key itself.
+The two fields with protocol meaning:
 
 - `responseMatches` selects what gets certified. A named group
   (`(?<distance>…)`) becomes a disclosed value keyed by the group name; a

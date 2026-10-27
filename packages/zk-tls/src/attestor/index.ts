@@ -11,6 +11,7 @@ import { claimToMessage } from '@thoth/core/claim';
 import { hexToBytes } from '../hex.js';
 import {
   assertEvidenceMatchesPolicy,
+  assertObservationInWindow,
   assertPolicySlotsInRange,
   claimRequestOf,
   deriveClaimFromEvidence,
@@ -18,10 +19,12 @@ import {
   parsedEvidenceView,
   parseSlotValue,
   type VerifiedEvidence,
+  ZK_FETCH_CLAIM_CONTEXT_KEY,
   ZK_FETCH_LAW,
   type ZkFetchDefinition,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
+  zkFetchClaimContextDigestOf,
   zkFetchClaimSchema,
   zkFetchEvidenceSchema,
   zkFetchPolicySchema,
@@ -132,21 +135,38 @@ export const assertClaimMatchesSubject = (options: {
 };
 
 /**
- * Require the witness's observation time to fall inside the proposed window,
- * bounds included (ADR 0005). The contract bounds the window's length and
- * checks it against block time.
+ * Require the context the witness signed to carry the claim context digest of
+ * the policy, the signed request's subject, and the proposal's holder and
+ * window (ADR 0011).
  *
- * @throws if the witness observed outside the window.
+ * @throws if the signed context is not JSON or carries no digest or another one,
+ *   the signed parameters carry no request or an unparseable URL, the policy fails
+ *   `zkFetchPolicySchema`, the holder is not 32 bytes, or a window bound is negative.
  */
-export const assertObservationInWindow = (options: {
+export const assertClaimMatchesContext = (options: {
   claim: Claim<number, number>;
   verified: VerifiedEvidence;
+  policy: ZkFetchPolicy;
 }): void => {
-  const { claim, verified } = options;
-  const observedAt = BigInt(verified.claim.timestampS);
-  if (observedAt < claim.windowStart || observedAt > claim.windowEnd) {
+  const { claim, verified, policy } = options;
+  let signed: unknown;
+  try {
+    signed = (JSON.parse(verified.claim.context) as Record<string, unknown> | null)?.[
+      ZK_FETCH_CLAIM_CONTEXT_KEY
+    ];
+  } catch {
+    throw new Error('claim context is not valid JSON');
+  }
+  const expected = zkFetchClaimContextDigestOf({
+    policy,
+    request: claimRequestOf(verified.claim),
+    holder: claim.holder,
+    windowStart: claim.windowStart,
+    windowEnd: claim.windowEnd,
+  });
+  if (signed !== expected) {
     throw new Error(
-      `witness observation ${observedAt} is outside the claim window [${claim.windowStart}, ${claim.windowEnd}]`,
+      "the witness-signed context does not carry this claim's claim context digest (holder, window, policy or subject differ)",
     );
   }
 };
@@ -176,6 +196,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
       assertEvidenceMatchesPolicy(verified, input.policy);
       assertObservationInWindow({ claim: input.claim, verified });
       assertClaimMatchesSubject({ claim: input.claim, verified });
+      assertClaimMatchesContext({ claim: input.claim, verified, policy: input.policy });
       assertClaimMatchesDisclosures({
         claim: input.claim,
         disclosures: verified.disclosedValues,

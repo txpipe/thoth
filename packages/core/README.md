@@ -89,7 +89,7 @@ What it does not do:
 
 - It verifies no evidence and signs nothing. `verify` is the kind's job; signing is `@thoth/attestor`'s.
 - It does not check `appId`. An app that must refuse another app's claims compares it in its own predicate.
-- Nothing signs `claimContextDigestOf`. It identifies a context; on its own it binds nothing.
+- It does not bind a claim context to evidence. `claimContextDigestOf` only hashes it; your kind has its [witness](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles) sign the digest and its `verify` check it ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#5-the-claim)).
 
 What your app must do:
 
@@ -103,6 +103,7 @@ What your app must do:
 - **The claim carries no kind.** The policy hash, tagged with the law and wire version, is what the contract checks, so a second kind is a new policy hash served by the same module ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
 - **The holder is a per-claim commitment, not an identity.** Only the owner of that claim's secret can vault it; per-user state is yours to build ([ADR 0004](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
 - **The window is when the attestor observed.** A fact's own time travels as a claim value, and your predicate bounds it ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
+- **Evidence binds the claim context.** Your kind's witness signs the `claimContextDigestOf` digest with its evidence and your `verify` recomputes it from the proposal, so the holder and window are fixed before the witness observes ([ADR 0011](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
 - **A `Claim` is not the contract's struct.** A `Claim` has one `present` mask over `V + W` slots; the contract carries each byte value as two 16-byte halves with a flag per half, so you convert with `toContractClaim` before handing it to a witness ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
 - **`FlatMessage` is the default message type.** A kind that needs another shape gives `message()` another return type; `MessageOf<D>` carries it through the signer, key pair and attestation.
 
