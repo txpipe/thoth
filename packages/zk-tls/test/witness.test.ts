@@ -273,6 +273,14 @@ describe('test-key witness', () => {
     sign.mockRestore();
   });
 
+  it('signs the holder it checked when the caller changes its proposal mid-attest', async () => {
+    const holder = HOLDER.slice();
+    const pending = attestWith(aliceAttestor, await observe(alice), WINDOW, { holder });
+    holder.fill(0xee);
+    const attestation = await pending;
+    expect(attestation.claim.holder).toEqual(HOLDER);
+  });
+
   it('rejects evidence whose signed context carries no claim context digest', async () => {
     await expect(
       attestWith(aliceAttestor, await observe(alice, { context: { intent: 'ab'.repeat(32) } })),

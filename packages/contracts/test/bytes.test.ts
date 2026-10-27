@@ -373,13 +373,14 @@ const BYTES32 = new CompactTypeBytes(32);
 const UINT32 = new CompactTypeUnsignedInteger(2n ** 32n - 1n, 4);
 const BOOLEANS = (n: number) => new CompactTypeVector(n, CompactTypeBoolean);
 
-// The Observation fields an observer can fill in: everything but the salt, with
-// the byte value as the guess.
-const observationFields = (claim: B_Claim, guess: Uint8Array) =>
+// The nullifier preimage: the `Observation` struct in declaration order, with
+// `guess` as the byte value and `salt` as the salt.
+const observationFields = (claim: B_Claim, guess: Uint8Array, salt: Uint8Array) =>
   [
     [BYTES32, claim.appId],
     [BYTES32, claim.policyHash],
     [BYTES32, claim.subjectHash],
+    [BYTES32, salt],
     [UINT32, claim.windowStart],
     [UINT32, claim.windowEnd],
     [new CompactTypeVector(3, new CompactTypeUnsignedInteger(2n ** 64n - 1n, 8)), claim.values],
@@ -397,17 +398,16 @@ describe('nullifier privacy', () => {
     const claim = makeByteClaim({ byteValue: padded32('alice-github') });
     await submit(signed(claim));
     const nullifiers = sim.ledgerView().B_nullifiers;
+    const nullifierOf = (guess: string, salt: Uint8Array) =>
+      structHash(observationFields(claim, padded32(guess), salt));
+    // The preimage is right: with the secret salt, the true value is the stored nullifier.
+    expect(nullifiers.member(nullifierOf('alice-github', claim.salt))).toBe(true);
+    // An observer knows every field but the salt; no salt it can name confirms a guess.
     const candidates = ['bob-github', 'alice-github', 'carol-github', 'dave-github'];
+    const publicSalts = [new Uint8Array(32), claim.appId, claim.policyHash, claim.subjectHash];
     const confirmed = candidates.filter((candidate) =>
-      nullifiers.member(structHash(observationFields(claim, padded32(candidate)))),
+      publicSalts.some((salt) => nullifiers.member(nullifierOf(candidate, salt))),
     );
     expect(confirmed).toEqual([]);
-    // With the secret salt the same hash is the stored nullifier.
-    const [appId, policyHash, subjectHash, ...rest] = observationFields(
-      claim,
-      padded32('alice-github'),
-    );
-    const salted = [appId, policyHash, subjectHash, [BYTES32, claim.salt] as const, ...rest];
-    expect(nullifiers.member(structHash(salted))).toBe(true);
   });
 });

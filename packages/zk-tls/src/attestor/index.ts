@@ -239,7 +239,10 @@ export function zkFetchAttestor<PK, S>(parts: {
     attest: async (definition, signer, input) => {
       const policy = definition.policy.parse(input.policy);
       const evidence = definition.evidence.parse(input.evidence);
-      const proposed = definition.claim.parse(input.claim);
+      // Parsing keeps the caller's arrays. Copy them, so a caller that keeps a
+      // reference (or passes a Proxy, which fails to clone) cannot change the
+      // holder or window between `verify` and the signature.
+      const proposed = structuredClone(definition.claim.parse(input.claim));
       await definition.verify({ policy, evidence, claim: proposed });
       if (evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
         throw new Error(
