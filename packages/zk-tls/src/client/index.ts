@@ -305,8 +305,7 @@ export const zkFetchClient = {
       collect: (request, options) =>
         collectThreshold({ ...config, policy: checkedPolicy }, request, options),
       proveReq: async (request, options): Promise<ZkFetchClientProof<V, PK, S>> => {
-        const parsed = proveOptionsSchema.parse(options);
-        const binding = { ...parsed, holder: parsed.holder.slice() };
+        const binding = proveOptionsSchema.parse(options);
         const signedRequest = bindRequestToClaimContext(
           bindRequestToPolicy(request, checkedPolicy),
           checkedPolicy,

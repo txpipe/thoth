@@ -239,8 +239,9 @@ export function zkFetchAttestor<PK, S>(parts: {
     attest: async (definition, signer, input) => {
       const policy = definition.policy.parse(input.policy);
       const evidence = definition.evidence.parse(input.evidence);
-      // The parsed claim owns its byte arrays, so the caller cannot change the
-      // holder between `verify` and the signature.
+      // `zkFetchClaimSchema` is `claimSchema()`, whose parsed claim owns its byte
+      // arrays, so the caller cannot change the holder between `verify` and the
+      // signature.
       const proposed = definition.claim.parse(input.claim);
       await definition.verify({ policy, evidence, claim: proposed });
       if (evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {

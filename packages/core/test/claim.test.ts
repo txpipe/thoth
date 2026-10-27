@@ -62,6 +62,19 @@ describe('claimSchema', () => {
     expect(parsed.byteValues).toEqual([fullSpan()]);
   });
 
+  it('checks the length of the copy, not of the caller object', () => {
+    // A Proxy reports 32 bytes to the check but yields 64 when copied.
+    const holder = new Proxy(bytes32(0x44), {
+      get: (target, key) =>
+        key === Symbol.iterator
+          ? function* () {
+              yield* new Uint8Array(64).fill(0xee);
+            }
+          : Reflect.get(target, key),
+    });
+    expect(() => claimSchema(3, 1).parse({ ...byteBase, holder })).toThrow(/expected 32 bytes/);
+  });
+
   it('rejects a present mask of the wrong length', () => {
     expect(() => claimSchema(3, 1).parse({ ...byteBase, present: [true, false, true] })).toThrow();
   });

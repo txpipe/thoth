@@ -83,10 +83,15 @@ export const CLAIM_VERSION = 1n;
 
 /**
  * Zod schema for the claim's 32-byte fields (`appId`, `policyHash`, `subjectHash`,
- * `holder`, `salt`).
+ * `holder`, `salt`). It returns a copy the caller cannot change, and checks the
+ * copy, not the caller's object.
  */
 export const bytes32Schema = z
   .instanceof(Uint8Array)
+  // `new Uint8Array` copies even an array over shared memory, which
+  // `structuredClone` would share. Checking the copy means a Proxy cannot
+  // pass with one length and copy to another.
+  .transform((bytes) => new Uint8Array(bytes))
   .refine((bytes) => bytes.length === 32, { message: 'expected 32 bytes' });
 
 /**
@@ -129,20 +134,18 @@ export function claimSchema<V extends number = number, W extends number = 0>(
       message: 'present must have one flag per value: values.length + byteValues.length',
       path: ['present'],
     })
-    // `new Uint8Array` copies even an array over shared memory, which
-    // `structuredClone` would share.
     .transform((input) => ({
       version: BigInt(input.version),
-      appId: new Uint8Array(input.appId),
-      policyHash: new Uint8Array(input.policyHash),
+      appId: input.appId,
+      policyHash: input.policyHash,
       windowStart: BigInt(input.windowStart),
       windowEnd: BigInt(input.windowEnd),
-      subjectHash: new Uint8Array(input.subjectHash),
-      holder: new Uint8Array(input.holder),
-      salt: new Uint8Array(input.salt),
+      subjectHash: input.subjectHash,
+      holder: input.holder,
+      salt: input.salt,
       present: input.present,
       values: input.values.map((value) => BigInt(value)),
-      byteValues: input.byteValues.map((bytes) => new Uint8Array(bytes)),
+      byteValues: input.byteValues,
     }));
   return schema as unknown as z.ZodType<
     Claim<V, W>,
