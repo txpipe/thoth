@@ -1,0 +1,50 @@
+{
+  "name": "@thoth/cardano",
+  "version": "0.0.0",
+  "description": "cardano@1 chain-event attestor kind for the Thoth N-of-M attestation system.",
+  "type": "module",
+  "license": "MIT",
+  "author": "TxPipe-Shop",
+  "keywords": [
+    "thoth",
+    "midnight",
+    "attestation",
+    "zero-knowledge",
+    "zk",
+    "cardano"
+  ],
+  "homepage": "https://github.com/txpipe-shop/thoth#readme",
+  "bugs": {
+    "url": "https://github.com/txpipe-shop/thoth/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/txpipe-shop/thoth.git",
+    "directory": "packages/cardano"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@thoth/core": "*",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}
