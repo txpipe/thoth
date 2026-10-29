@@ -1,5 +1,5 @@
-// Unit tests for the claim-context hashes (`@thoth/core/claim-context`): the
-// policy hash, the subject hash, the holder commitment, and the claim-context
+// Unit tests for the claim context hashes (`@thoth/core/claim-context`): the
+// policy hash, the subject hash, the holder commitment, and the claim context
 // digest.
 //
 // Each expected digest is rebuilt from a hand-written canonical serialization

@@ -1,7 +1,8 @@
-// Byte-value slot tests for the bytes mock (V = 3, B = 2, K = 22): wire parity
+// Byte-value slot tests for the bytes mock (V = 3, B = 2, K = 24): wire parity
 // between `claimToMessage` and the compiled `buildMessage`, the absent-slot law
 // in the simulator, byte-value predicates (reassembly), signature coverage over
-// the halves, and the unchanged W = 0 layout.
+// the halves, the unchanged W = 0 layout, and that the salted nullifier does
+// not confirm a guessed value.
 import { randomBytes } from 'node:crypto';
 import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import { claimToMessage, toContractClaim } from '@thoth/core/claim';
@@ -82,15 +83,15 @@ describe('bytes claim wire', () => {
     const claim = makeByteClaim();
     const message = pureCircuits.message(claim);
     expect(claimToMessage(coreOf(claim))).toEqual(message);
-    expect(message).toHaveLength(22);
+    expect(message).toHaveLength(24);
     // [B: 2][present(3): 1,0,0][bytePresent(2): 1,1][values(3)][low half][high half]
-    expect(message[11]).toBe(2n);
-    expect(message.slice(12, 17)).toEqual([1n, 0n, 0n, 1n, 1n]);
-    expect(message.slice(17, 20)).toEqual([12345n, 0n, 0n]);
+    expect(message[13]).toBe(2n);
+    expect(message.slice(14, 19)).toEqual([1n, 0n, 0n, 1n, 1n]);
+    expect(message.slice(19, 22)).toEqual([12345n, 0n, 0n]);
     // "abc" occupies the low half (non-zero); the trailing half is zero padding,
     // so the low field must come first.
-    expect(message[20]).not.toBe(0n);
-    expect(message[21]).toBe(0n);
+    expect(message[22]).not.toBe(0n);
+    expect(message[23]).toBe(0n);
   });
 
   it('round-trips a core claim through the contract shape', () => {
@@ -108,20 +109,20 @@ describe('bytes claim wire', () => {
     const highField = le(high);
     // Distinct, non-zero halves — a swap or reversal fails both encoders.
     expect(lowField).not.toBe(highField);
-    expect(claimToMessage(coreOf(claim)).slice(20, 22)).toEqual([lowField, highField]);
-    expect(pureCircuits.message(claim).slice(20, 22)).toEqual([lowField, highField]);
+    expect(claimToMessage(coreOf(claim)).slice(22, 24)).toEqual([lowField, highField]);
+    expect(pureCircuits.message(claim).slice(22, 24)).toEqual([lowField, highField]);
   });
 
   it('pins an absent byte flag to two zero fields even with halves present', () => {
     const claim = makeByteClaim({ bytePresent: [false, false] });
-    expect(pureCircuits.message(claim).slice(15, 17)).toEqual([0n, 0n]);
+    expect(pureCircuits.message(claim).slice(17, 19)).toEqual([0n, 0n]);
   });
 
   it('keeps the numeric-only message, plus a zero byte-half count, for a B = 0 claim', () => {
     const claim: A_Claim = makeClaim();
     const message = claimToMessage({ ...claim, byteValues: [] });
-    expect(message).toHaveLength(18);
-    expect(message[11]).toBe(0n);
+    expect(message).toHaveLength(20);
+    expect(message[13]).toBe(0n);
     expect(message).toEqual(mockPureCircuits.message(claim));
   });
 
@@ -137,6 +138,7 @@ describe('bytes claim wire', () => {
       windowEnd: 200n,
       subjectHash: b(0x33),
       holder: b(0x44),
+      salt: b(0x55),
       present: [true, false, true],
       values: [7n, 8n, 9n],
       bytePresent: [],
@@ -144,7 +146,7 @@ describe('bytes claim wire', () => {
     };
     const rand = Uint8Array.from({ length: 32 }, (_, i) => i);
     expect(Buffer.from(mockPureCircuits.computeId(claim, rand)).toString('hex')).toBe(
-      '05ad544859fbde8b12d09006a2ca6de2e73193f9495b8502bd1755b0b499c8d1',
+      'd56f26ee241f06678b4cb1e41f12346f484b41bf827d50118599fe7093fa51d3',
     );
   });
 });
@@ -154,7 +156,7 @@ describe('layout binding', () => {
     sim = await MockAttestationBytesSim.create(createPrivateState<B_Claim>(holder), registryKeys);
   });
 
-  // The mock is V = 3, W = 1 (K = 22); a V = 1, W = 2 claim also encodes to 22
+  // The mock is V = 3, W = 1 (K = 24); a V = 1, W = 2 claim also encodes to 24
   // fields. With its byte slot 0 absent, it lines up with `claim` field for field
   // except the signed byte-half count, so without that field honest signatures
   // over the competing layout would verify against the deployed one.
@@ -170,9 +172,9 @@ describe('layout binding', () => {
     const message = claimToMessage(competing);
     const deployed = pureCircuits.message(claim);
     expect(message).toHaveLength(deployed.length);
-    const withoutCount = (fields: readonly bigint[]) => fields.filter((_, i) => i !== 11);
+    const withoutCount = (fields: readonly bigint[]) => fields.filter((_, i) => i !== 13);
     expect(withoutCount(message)).toEqual(withoutCount(deployed));
-    expect([message[11], deployed[11]]).toEqual([4n, 2n]);
+    expect([message[13], deployed[13]]).toEqual([4n, 2n]);
   });
 
   it('rejects honest signatures over the competing layout', async () => {
@@ -343,5 +345,28 @@ describe('signature and identity coverage', () => {
     await submit(second);
     expect(sim.ledgerView().B_nullifiers.size()).toBe(2n);
     await expect(submit(first)).rejects.toThrow('Observation replay');
+  });
+});
+
+describe('nullifier privacy', () => {
+  beforeEach(async () => {
+    sim = await MockAttestationBytesSim.create(createPrivateState<B_Claim>(holder), registryKeys);
+  });
+
+  it('does not confirm a guessed byte value from the public fields', async () => {
+    const claim = makeByteClaim({ byteValue: padded32('alice-github') });
+    await submit(signed(claim));
+    const nullifiers = sim.ledgerView().B_nullifiers;
+    const nullifierOf = (guess: string, salt: Uint8Array) =>
+      pureCircuits.nullifierOf({ ...claim, salt, byteHalves: splitHalves(padded32(guess)) });
+    // With the secret salt, the true value is the stored nullifier.
+    expect(nullifiers.member(nullifierOf('alice-github', claim.salt))).toBe(true);
+    // An observer knows every field but the salt; no salt it can name confirms a guess.
+    const candidates = ['bob-github', 'alice-github', 'carol-github', 'dave-github'];
+    const publicSalts = [new Uint8Array(32), claim.appId, claim.policyHash, claim.subjectHash];
+    const confirmed = candidates.filter((candidate) =>
+      publicSalts.some((salt) => nullifiers.member(nullifierOf(candidate, salt))),
+    );
+    expect(confirmed).toEqual([]);
   });
 });

@@ -266,8 +266,13 @@ const claim = toContractClaim(attestment.claim);
 See `@thoth/contracts` for the circuit and the registry wiring.
 
 Replay protection keys on the signed observation: app id, policy hash, subject
-hash, window, values and `present`. A new holder or context does not make a new
-observation.
+hash, salt, window, values and `present`. The salt is the claim context digest
+the witnesses signed, so for one app id and claim shape the same evidence
+yields the same claim, and the public nullifier cannot confirm a guessed value
+([ADR 0012](../../../docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
+The salt follows the holder, so a new fetch of the same fact under a fresh
+holder gets a new nullifier, even in the same window; the contracts README
+[says what your app does about it](../../contracts/README.md#guarantees-and-limits).
 
 Recorded evidence lives at
 `examples/demo-attestation/fixtures/fixture-github-attestor-core-x-0m.json`

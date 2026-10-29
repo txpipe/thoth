@@ -34,6 +34,12 @@ export interface Claim<V extends number, W extends number = 0> {
   /** From `holderCommitmentOf`. 32 bytes. */
   holder: Uint8Array;
   /**
+   * 32 secret bytes the nullifier hashes; the chain never sees them. The kind
+   * fixes them from the evidence, so the client cannot change them without new
+   * evidence (ADR 0012).
+   */
+  salt: Uint8Array;
+  /**
    * Exactly `V + W` flags: `present[i]` true means `values[i]` was measured for
    * `i < V`, and `byteValues[i - V]` for `i >= V`. A measured value may be zero.
    */
@@ -64,6 +70,8 @@ export interface ClaimInput<V extends number, W extends number = 0> {
   subjectHash: Uint8Array;
   /** 32 bytes. */
   holder: Uint8Array;
+  /** 32 bytes. */
+  salt: Uint8Array;
   present: readonly boolean[];
   values: readonly (number | bigint)[];
   /** 32 bytes each. Defaults to `[]`. */
@@ -73,15 +81,24 @@ export interface ClaimInput<V extends number, W extends number = 0> {
 /** The claim wire version {@link claimSchema} applies when a raw input omits `version`. */
 export const CLAIM_VERSION = 1n;
 
-/** Zod schema for the claim's 32-byte fields (`appId`, `policyHash`, `subjectHash`, `holder`). */
+/**
+ * Zod schema for the claim's 32-byte fields (`appId`, `policyHash`, `subjectHash`,
+ * `holder`, `salt`). It returns a copy the caller cannot change, and checks the
+ * copy, not the caller's object.
+ */
 export const bytes32Schema = z
   .instanceof(Uint8Array)
+  // `new Uint8Array` copies even an array over shared memory, which
+  // `structuredClone` would share. Checking the copy means a Proxy cannot
+  // pass with one length and copy to another.
+  .transform((bytes) => new Uint8Array(bytes))
   .refine((bytes) => bytes.length === 32, { message: 'expected 32 bytes' });
 
 /**
  * Zod schema for a claim with `V` numeric and `W` byte slots: validates the
  * shape, coerces the numeric fields to `bigint`, and defaults an omitted
- * `byteValues` to `[]`.
+ * `byteValues` to `[]`. The parsed claim owns copies of every byte array, so
+ * the caller cannot change it between an attestor's checks and its signature.
  *
  * Omit `v` for a size-agnostic schema: no exact-length check, but `present`
  * still needs one flag per value.
@@ -102,6 +119,7 @@ export function claimSchema<V extends number = number, W extends number = 0>(
       windowEnd: z.union([z.number(), z.bigint()]),
       subjectHash: bytes32Schema,
       holder: bytes32Schema,
+      salt: bytes32Schema,
       present: v === undefined ? z.array(z.boolean()) : z.array(z.boolean()).length(v + byteCount),
       values:
         v === undefined
@@ -124,6 +142,7 @@ export function claimSchema<V extends number = number, W extends number = 0>(
       windowEnd: BigInt(input.windowEnd),
       subjectHash: input.subjectHash,
       holder: input.holder,
+      salt: input.salt,
       present: input.present,
       values: input.values.map((value) => BigInt(value)),
       byteValues: input.byteValues,
@@ -156,8 +175,8 @@ function splitBytes(bytes: Uint8Array): [bigint, bigint] {
  * A kind whose claim is exactly the standard shape implements `message()` with
  * this; a kind that extends the claim keeps its own encoder.
  *
- * @throws if `appId`, `policyHash`, `subjectHash`, `holder` or a byte value is
- *   not 32 bytes, or if `present` does not have one flag per value.
+ * @throws if `appId`, `policyHash`, `subjectHash`, `holder`, `salt` or a byte
+ *   value is not 32 bytes, or if `present` does not have one flag per value.
  */
 export function claimToMessage<V extends number, W extends number = 0>(
   claim: Claim<V, W>,
@@ -179,6 +198,7 @@ export function claimToMessage<V extends number, W extends number = 0>(
     claim.windowEnd,
     ...splitBytes(claim.subjectHash),
     ...splitBytes(claim.holder),
+    ...splitBytes(claim.salt),
     BigInt(2 * byteCount),
     ...flags.slice(0, numericCount),
     ...byteFlags,
@@ -206,6 +226,8 @@ export interface ContractClaim {
   subjectHash: Uint8Array;
   /** 32 bytes. */
   holder: Uint8Array;
+  /** 32 bytes. */
+  salt: Uint8Array;
   /** Exactly `V`. */
   present: boolean[];
   /** Exactly `B`: each byte slot's flag twice. */
@@ -240,6 +262,7 @@ export function toContractClaim<V extends number, W extends number = 0>(
     windowEnd: claim.windowEnd,
     subjectHash: claim.subjectHash,
     holder: claim.holder,
+    salt: claim.salt,
     present: claim.present.slice(0, numericCount),
     bytePresent: claim.present.slice(numericCount).flatMap((present) => [present, present]),
     values: [...claim.values],

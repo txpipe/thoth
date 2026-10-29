@@ -15,7 +15,7 @@ import {
   zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DISCLOSURE_RULES } from './helpers/helper.js';
 import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
 
@@ -48,9 +48,25 @@ const PARAMETERS = {
 };
 
 /**
- * Sign an observation whose context carries the claim context digest a client
- * signs for `activePolicy`, the observed request, {@link HOLDER} and {@link WINDOW}.
+ * The claim context digest a client signs for `activePolicy`, the request,
+ * {@link HOLDER} and {@link WINDOW}.
  */
+const digestOf = (
+  parameters: Observation['parameters'] = PARAMETERS,
+  activePolicy: ZkFetchPolicy = policy,
+): string =>
+  zkFetchClaimContextDigestOf({
+    policy: activePolicy,
+    request: {
+      url: String(parameters.url),
+      method: String(parameters.method),
+      body: String(parameters.body),
+    },
+    holder: HOLDER,
+    ...WINDOW,
+  });
+
+/** Sign an observation whose context carries {@link digestOf} its parameters. */
 const observe = (
   witness: TestWitness,
   overrides: Partial<Observation> = {},
@@ -63,16 +79,7 @@ const observe = (
     parameters,
     context: {
       intent: 'ab'.repeat(32),
-      [ZK_FETCH_CLAIM_CONTEXT_KEY]: zkFetchClaimContextDigestOf({
-        policy: activePolicy,
-        request: {
-          url: String(parameters.url),
-          method: String(parameters.method),
-          body: String(parameters.body),
-        },
-        holder: HOLDER,
-        ...WINDOW,
-      }),
+      [ZK_FETCH_CLAIM_CONTEXT_KEY]: digestOf(parameters, activePolicy),
     },
     ...overrides,
   });
@@ -91,7 +98,7 @@ const makeAttestor = (id: string, witnessAddress: string) =>
 const aliceAttestor = makeAttestor('attestor-alice', alice.address);
 const bobAttestor = makeAttestor('attestor-bob', bob.address);
 
-const attestWith = (
+const attestWith = async (
   attestor: typeof aliceAttestor,
   evidence: ZkFetchEvidence,
   window: { windowStart: bigint; windowEnd: bigint } = WINDOW,
@@ -112,6 +119,11 @@ const attestWith = (
   >[0]);
 };
 
+// Restore every spy even when its test fails, so one failure does not cascade.
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('test-key witness', () => {
   it('reuses one attestor and key across claim sizes and applications', async () => {
     const evidence = await observe(alice);
@@ -130,7 +142,7 @@ describe('test-key witness', () => {
       expect(attestation.claim.values.slice(2)).toEqual(Array<bigint>(size - 2).fill(0n));
       expect(attestation.claim.present.slice(2)).toEqual(Array<boolean>(size - 2).fill(false));
       expect(attestation.signature).toBe(`sig:${attestation.message.join(',')}`);
-      expect(attestation.message).toHaveLength(12 + 2 * size);
+      expect(attestation.message).toHaveLength(14 + 2 * size);
     }
   });
 
@@ -145,7 +157,7 @@ describe('test-key witness', () => {
         WINDOW,
         claimOverrides,
       ),
-    ).rejects.toThrow(/present and values must have the same length/);
+    ).rejects.toThrow(/present must have one flag per value/);
   });
 
   it('rejects a policy slot outside the requested count before proof verification', async () => {
@@ -164,7 +176,7 @@ describe('test-key witness', () => {
     });
     expect(attestation.claim.present).toEqual([true, true, false]);
     expect(attestation.claim.values).toEqual([0n, 8n, 0n]);
-    expect(attestation.message.slice(11)).toEqual([0n, 1n, 1n, 0n, 0n, 8n, 0n]);
+    expect(attestation.message.slice(13)).toEqual([0n, 1n, 1n, 0n, 0n, 8n, 0n]);
     expect(attestation.signature).toBe(`sig:${attestation.message.join(',')}`);
   });
 
@@ -237,7 +249,6 @@ describe('test-key witness', () => {
       }),
     ).rejects.toThrow(/claim context digest/);
     expect(sign).not.toHaveBeenCalled();
-    sign.mockRestore();
   });
 
   it('rejects a proposal for another window than the witness signed', async () => {
@@ -248,6 +259,44 @@ describe('test-key witness', () => {
         windowEnd: WINDOW.windowEnd + 10n,
       }),
     ).rejects.toThrow(/claim context digest/);
+  });
+
+  it('signs the claim context digest the witness signed as the salt', async () => {
+    const attestation = await attestWith(aliceAttestor, await observe(alice));
+    expect(Buffer.from(attestation.claim.salt).toString('hex')).toBe(digestOf());
+  });
+
+  it('rejects a proposal with another salt than the witness signed', async () => {
+    const sign = vi.spyOn(aliceAttestor.signer, 'sign');
+    await expect(
+      attestWith(aliceAttestor, await observe(alice), WINDOW, {
+        salt: new Uint8Array(32).fill(0xee),
+      }),
+    ).rejects.toThrow(/salt/);
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an array it owns', () => HOLDER.slice()],
+    [
+      'an array over shared memory',
+      () => {
+        const holder = new Uint8Array(new SharedArrayBuffer(32));
+        holder.set(HOLDER);
+        return holder;
+      },
+    ],
+  ])('signs the holder it checked when the caller changes %s after verify', async (_, holderOf) => {
+    const holder = holderOf();
+    const { verify } = aliceAttestor.definition;
+    // Change the caller's holder after every check has passed, before the signature.
+    vi.spyOn(aliceAttestor.definition, 'verify').mockImplementation(async (input) => {
+      await verify(input);
+      holder.fill(0xee);
+    });
+    const attestation = await attestWith(aliceAttestor, await observe(alice), WINDOW, { holder });
+    expect(attestation.claim.holder).toEqual(HOLDER);
+    expect(attestation.message).toEqual(claimToMessage(attestation.claim));
   });
 
   it('rejects evidence whose signed context carries no claim context digest', async () => {
@@ -286,7 +335,6 @@ describe('test-key witness', () => {
       /disclosure rules/,
     );
     expect(sign).not.toHaveBeenCalled();
-    sign.mockRestore();
   });
 
   it('rejects evidence whose responseRedactions differ from the policy', async () => {
@@ -444,7 +492,6 @@ describe('test-key witness', () => {
     const sign = vi.spyOn(aliceAttestor.signer, 'sign');
     await expect(attestWith(aliceAttestor, evidence)).rejects.toThrow(/\{\{param\}\} templates/);
     expect(sign).not.toHaveBeenCalled();
-    sign.mockRestore();
   });
 
   it('is rejected when the claim identifier does not match its signed content', async () => {
@@ -518,7 +565,8 @@ describe('test-key witness', () => {
         valueSlots: 3,
         ...WINDOW,
       });
-    expect(claimToMessage(await deriveClaim({ context: { intent: 'cd'.repeat(32) } }))).toEqual(
+    const context = { intent: 'cd'.repeat(32), [ZK_FETCH_CLAIM_CONTEXT_KEY]: digestOf() };
+    expect(claimToMessage(await deriveClaim({ context }))).toEqual(
       claimToMessage(await deriveClaim()),
     );
   });

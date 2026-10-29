@@ -29,10 +29,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=22 msg fields  V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
-import "attestation"<22, 3, 2, 2, 3> prefix A_;
+//           K=24 msg fields  V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
+import "attestation"<24, 3, 2, 2, 3> prefix A_;
 
-import "attestor_registry"<3, 22> prefix R_;
+import "attestor_registry"<3, 24> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
@@ -54,7 +54,7 @@ export circuit verifyAttestation(): [] {
 }
 
 // The signed message, so the attestor side and tests can reproduce it.
-export pure circuit message(a: A_Claim): Vector<22, Field> {
+export pure circuit message(a: A_Claim): Vector<24, Field> {
   return A_buildMessage(a);
 }
 
@@ -89,6 +89,7 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
 
 - [Claim](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim):
   the signed statement, with its `policyHash`, `subjectHash`, `holder`,
+  [salt](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim),
   window, `present` mask, numeric values and byte slots.
 - [Registry](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain)
   and [registry slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection):
@@ -145,21 +146,35 @@ What the module does not check, and what your app does itself:
   Do not read it as the time of the fact
   ([Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim)
   explains why).
-- Claim values stay private witness data, but they are not hidden from
-  guessing: the nullifier is a public, unsalted hash of the observation whose
-  other inputs are public or guessable, so anyone can confirm a guessed value
-  by recomputing it. This is easy for an enumerable identifier in a byte slot,
-  and it is one of the
-  [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity).
-  The ledger also stores each claim's commitment, vault pseudonym (derived
-  from the holder secret) and window in public.
+- The module does not check where the `salt` came from. The nullifier hides
+  the values only while the salt is secret, so your kind's attestors must
+  derive it from the evidence, keep it off-chain, and include an input an
+  outsider cannot guess or enumerate, such as the holder commitment through the
+  claim context digest. A hash of public or guessable evidence alone hides
+  nothing
+  ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
+  Never disclose the salt or `claim.holder` in your own circuits: a kind may
+  derive the salt from the holder, as zkFetch does. Key holder state on the
+  vault pseudonym (`holderOf`) instead.
+- The nullifier does not stop one fact from being claimed again under a fresh
+  holder when the kind's salt follows the holder, as zkFetch's does: a new
+  fetch under a fresh holder gets a new salt and a new nullifier, even in the
+  same window. If your app needs one claim per fact (one per account per day,
+  say), keep your own set keyed on that fact. That set is public, so it
+  confirms guesses at whatever it keys on
+  ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
+  The ledger stores each claim's nullifier, commitment, vault pseudonym
+  (derived from the holder secret) and window in public, and the transaction
+  discloses which accepted policy it used.
 - Holder secrets are not checked for freshness. Use a fresh, high-entropy
-  secret per claim and keep it to open that claim; reusing one links its
+  secret per claim and keep it to open that claim. Where the salt follows the
+  holder, a guessable secret makes the salt guessable too, and the nullifier
+  can then confirm guessed values. Reusing a secret links its
   commitments and vault entries.
 - `openClaim` consumes no nullifier, so opening is repeatable. "Use once"
-  rules are your own holder-keyed state. Never re-export `openClaim` as a
-  top-level entry point: its return value is tainted and would force a
-  `disclose()` that publishes every value.
+  rules are your own state, keyed on the vault pseudonym. Never re-export
+  `openClaim` as a top-level entry point: its return value is tainted and
+  would force a `disclose()` that publishes every value.
 - Key provenance is your trust decision; the registry checks only that the
   pinned keys are distinct. The keys are fixed at deploy: to rotate an
   attestor, deploy a new contract.
@@ -170,9 +185,20 @@ What the module does not check, and what your app does itself:
   field of the signed vector, so a kind cannot pass the contract data through
   an unsigned side channel.
 - **Replay protection keys on the observation identity.** The nullifier hashes
-  `appId`, `policyHash`, `subjectHash`, the window, the values and the flags,
-  and excludes `holder` and `version`. Re-attesting the same observation for a
-  fresh holder still fails ([ADR 0006](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0006-nullifier-keys-on-the-observation-identity.md)).
+  `appId`, `policyHash`, `subjectHash`, `salt`, the window, the values and the
+  flags. It does not hash `holder` or `version`, but the holder can reach it
+  through the kind's salt, so a fresh holder may get a fresh nullifier. What
+  stops a fresh holder from re-claiming an observation is the kind's evidence
+  binding: a new holder needs new evidence, which gets a new nullifier when the
+  salt follows the holder ([Guarantees and limits](#guarantees-and-limits))
+  ([ADR 0006](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0006-nullifier-keys-on-the-observation-identity.md),
+  [ADR 0011](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
+- **The nullifier hashes a secret salt.** The salt never reaches the ledger, so
+  only those who hold the evidence, such as the witnesses and attestors, can
+  confirm a guessed value by recomputing the nullifier; they already see the
+  values. The
+  attestors derive it from the evidence, so a client cannot vary it to replay
+  one observation ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
 - **No kind on-chain; the policy hash is the commitment.** A requester cannot
   substitute a laxer policy, and a new kind needs no change here: you accept
   it by sealing its policy hash ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).

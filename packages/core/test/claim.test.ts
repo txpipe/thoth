@@ -24,6 +24,7 @@ const numericBase = {
   windowEnd: 200n,
   subjectHash: bytes32(0x33),
   holder: bytes32(0x44),
+  salt: bytes32(0x55),
   present: [true, false, true],
   values: [7n, 0n, 9n],
 };
@@ -46,6 +47,32 @@ describe('claimSchema', () => {
   it('defaults omitted byteValues to [] and keeps Claim<V> meaning W = 0', () => {
     const parsed = claimSchema(3).parse(numericBase);
     expect(parsed.byteValues).toEqual([]);
+  });
+
+  it('owns copies of the byte arrays, even over shared memory', () => {
+    const holder = new Uint8Array(new SharedArrayBuffer(32));
+    holder.set(bytes32(0x44));
+    const input = { ...byteBase, appId: bytes32(0x11), holder, byteValues: [fullSpan()] };
+    const parsed = claimSchema(3, 1).parse(input);
+    for (const bytes of [input.appId, holder, ...input.byteValues]) {
+      bytes.fill(0xee);
+    }
+    expect(parsed.appId).toEqual(bytes32(0x11));
+    expect(parsed.holder).toEqual(bytes32(0x44));
+    expect(parsed.byteValues).toEqual([fullSpan()]);
+  });
+
+  it('checks the length of the copy, not of the caller object', () => {
+    // A Proxy reports 32 bytes to the check but yields 64 when copied.
+    const holder = new Proxy(bytes32(0x44), {
+      get: (target, key) =>
+        key === Symbol.iterator
+          ? function* () {
+              yield* new Uint8Array(64).fill(0xee);
+            }
+          : Reflect.get(target, key),
+    });
+    expect(() => claimSchema(3, 1).parse({ ...byteBase, holder })).toThrow(/expected 32 bytes/);
   });
 
   it('rejects a present mask of the wrong length', () => {
@@ -71,6 +98,12 @@ describe('claimSchema', () => {
     expect(() => claimSchema(3, 1).parse(numericBase)).toThrow();
   });
 
+  it('requires a 32-byte salt', () => {
+    expect(() => claimSchema(3).parse({ ...numericBase, salt: new Uint8Array(31) })).toThrow();
+    const { salt: _, ...unsalted } = numericBase;
+    expect(() => claimSchema(3).parse(unsalted)).toThrow();
+  });
+
   it('rejects a byte value that is not 32 bytes', () => {
     expect(() =>
       claimSchema(3, 1).parse({ ...byteBase, byteValues: [new Uint8Array(31)] }),
@@ -82,27 +115,33 @@ describe('claimToMessage', () => {
   it('duplicates the byte flag per half and splits each value into adjacent halves', () => {
     const value = fullSpan();
     const message = claimToMessage(claimSchema(3, 1).parse(byteBase));
-    // header(12) + present(3) + bytePresent(2) + values(3) + halves(2) = 22
-    expect(message).toHaveLength(12 + 2 * 3 + 2 * 2);
+    // header(14) + present(3) + bytePresent(2) + values(3) + halves(2) = 24
+    expect(message).toHaveLength(14 + 2 * 3 + 2 * 2);
     // the header's last field is the byte-half count B = 2W
-    expect(message[11]).toBe(2n);
+    expect(message[13]).toBe(2n);
     // numeric flags, then the byte slot's flag once per half
-    expect(message.slice(12, 17)).toEqual([1n, 0n, 1n, 1n, 1n]);
-    expect(message.slice(17, 20)).toEqual([7n, 0n, 9n]);
+    expect(message.slice(14, 19)).toEqual([1n, 0n, 1n, 1n, 1n]);
+    expect(message.slice(19, 22)).toEqual([7n, 0n, 9n]);
     // bytes 0–15 then bytes 16–31, each as its little-endian value; the two
     // differ, so a swapped or reversed half would fail this.
     const low = le(value.slice(0, 16));
     const high = le(value.slice(16));
     expect(low).not.toBe(high);
-    expect(message.slice(20, 22)).toEqual([low, high]);
+    expect(message.slice(22, 24)).toEqual([low, high]);
+  });
+
+  it('signs the salt in the two header fields after the holder', () => {
+    const salt = fullSpan();
+    const message = claimToMessage(claimSchema(3).parse({ ...numericBase, salt }));
+    expect(message.slice(11, 13)).toEqual([le(salt.slice(0, 16)), le(salt.slice(16))]);
   });
 
   it('keeps the numeric-only layout when W = 0', () => {
     const claim: Claim<3, 0> = claimSchema(3).parse(numericBase);
     const message = claimToMessage(claim);
-    expect(message).toHaveLength(2 * 3 + 12);
-    expect(message.slice(11, 15)).toEqual([0n, 1n, 0n, 1n]);
-    expect(message.slice(15, 18)).toEqual([7n, 0n, 9n]);
+    expect(message).toHaveLength(2 * 3 + 14);
+    expect(message.slice(13, 17)).toEqual([0n, 1n, 0n, 1n]);
+    expect(message.slice(17, 20)).toEqual([7n, 0n, 9n]);
   });
 
   it('interleaves flags and halves across two byte slots (W = 2)', () => {
@@ -115,15 +154,15 @@ describe('claimToMessage', () => {
       byteValues: [first, second],
     });
     const message = claimToMessage(claim);
-    // header(12) + present(2) + bytePresent(4) + values(2) + halves(4) = 24
-    expect(message).toHaveLength(12 + 2 * 2 + 2 * 4);
-    expect(message[11]).toBe(4n);
+    // header(14) + present(2) + bytePresent(4) + values(2) + halves(4) = 26
+    expect(message).toHaveLength(14 + 2 * 2 + 2 * 4);
+    expect(message[13]).toBe(4n);
     // numeric flags, then each byte slot's flag duplicated once per half
-    expect(message.slice(12, 14)).toEqual([0n, 1n]);
-    expect(message.slice(14, 18)).toEqual([1n, 1n, 0n, 0n]);
-    expect(message.slice(18, 20)).toEqual([0n, 0n]);
+    expect(message.slice(14, 16)).toEqual([0n, 1n]);
+    expect(message.slice(16, 20)).toEqual([1n, 1n, 0n, 0n]);
+    expect(message.slice(20, 22)).toEqual([0n, 0n]);
     // halves in value order, each value bytes 0–15 / 16–31 as LE Uint<128>
-    expect(message.slice(20, 24)).toEqual([
+    expect(message.slice(22, 26)).toEqual([
       le(first.slice(0, 16)),
       le(first.slice(16)),
       le(second.slice(0, 16)),

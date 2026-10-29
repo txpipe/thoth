@@ -123,7 +123,7 @@ const parseOptions = <PK>(
     if (candidates.length < options.threshold) {
       throw new Error('fewer candidate slots than the threshold');
     }
-    return { options: { ...options, holder: options.holder.slice() }, candidates };
+    return { options, candidates };
   } catch {
     throw new ZkFetchThresholdError('invalid-options');
   }

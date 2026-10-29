@@ -39,7 +39,7 @@ _Avoid_: Driver, plugin.
 ### The claim
 
 **Claim**:
-The canonical statement of what was observed, and the thing attestors sign. It carries the version, the app id, the policy hash, the observation window, the subject hash, the holder, the present mask, and the measured values (numeric and byte). It carries no nonce and no kind.
+The canonical statement of what was observed, and the thing attestors sign. It carries the version, the app id, the policy hash, the observation window, the subject hash, the holder, the salt, the present mask, and the measured values (numeric and byte). It carries no nonce and no kind.
 _Avoid_: Assertion, statement.
 
 **Version**:
@@ -78,6 +78,10 @@ _Avoid_: requestBinding, evidenceHash, metaHash.
 A per-claim commitment, not a user id. Only the owner of that claim's secret can vault it. The layer does not promise that two claims share a holder.
 _Avoid_: Owner, user, account, identity.
 
+**Salt**:
+A secret 32-byte value the claim carries and the nullifier hashes, so the nullifier cannot confirm a guessed value. The kind fixes it from the evidence, so the client cannot change it without new evidence. zkFetch uses the claim context digest, so the salt follows the holder and window the client binds before proving. It never appears on-chain (ADR 0012).
+_Avoid_: Nonce, randomness.
+
 **Window**:
 When the attestor's witness observed, in Unix seconds, not when the underlying fact happened. It is not the exact fetch time: a zkFetch witness's observation time (`timestampS`) comes from the request, and Reclaim rejects it only if it is more than 10 minutes in the future, with no lower bound. So the window shows the fetch happened no earlier than about 10 minutes before `windowStart`. Freshness still holds on-chain, because post-dating is capped. The contract checks the window against its own clock; a fact's own time travels as a value (ADR 0005).
 _Avoid_: Timestamp, event time.
@@ -95,7 +99,7 @@ A value slot carrying a 32-byte string, for facts that are not numbers, such as 
 _Avoid_: Blob, string slot.
 
 **Claim proposal**:
-The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder, window and the requested numeric and byte value-slot counts from the proposal.
+The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder, window and the requested numeric and byte value-slot counts from the proposal, and refuses a proposal whose salt differs from the one it derives.
 _Avoid_: Draft, request.
 
 **Claim context**:
@@ -107,7 +111,7 @@ One attested session: the single fetch or event read the witnesses signed. Uniqu
 _Avoid_: Request, session.
 
 **Observation identity**:
-The fields that make an observation unique: app id, policy hash, subject hash, window, numeric values, byte values, and present. It excludes holder and version.
+The fields that make an observation unique: app id, policy hash, subject hash, salt, window, numeric values, byte values, and present. It does not include holder or version directly; the holder reaches it only through the kind's salt.
 _Avoid_: Claim id, nonce.
 
 **Fact**:
@@ -163,16 +167,16 @@ The N in N-of-M: how many registry keys must sign the same message.
 _Avoid_: Quorum, majority.
 
 **Nullifier**:
-The hash of the observation identity. The contract stores it so the same observation is not accepted twice, whatever the holder. It is public and unsalted, so anyone who can guess a claim's values can confirm the guess by recomputing it ([details](packages/contracts/README.md#guarantees-and-limits)).
+The hash of the observation identity. The contract stores it so the same observation is not accepted twice. It is public, but it hashes the secret salt, so a guess at a claim's values cannot be confirmed by recomputing it.
 _Avoid_: Replay marker, nonce.
 
 **Claims vault**:
-The store of accepted claims, keyed by a commitment. It does not store claim values on-chain; the nullifier entry says what a guess can still confirm.
+The store of accepted claims, keyed by a commitment. It does not store claim values on-chain.
 _Avoid_: Vault, storage.
 
 ## Relationships
 
 - A **kind** has one **law**; many **attestors** run it, each trusting its own **witness**.
 - A **policy** belongs to one law; its **policyHash** is what the contract seals.
-- An **observation** produces one **claim**; the **nullifier** keys on its **observation identity**, so a fresh **holder** cannot claim it again.
+- An **observation** produces one **claim** for each app id and slot count; the **nullifier** keys on its **observation identity**, so the same claim cannot be accepted twice. The evidence binds the **claim context**, so a fresh **holder** needs a new observation; where the **salt** follows the holder, that observation gets a new nullifier even for the same fact ([details](packages/contracts/README.md#guarantees-and-limits)).
 - An **attestment** is N **attestations** over one **message**, each placed at its **registry slot** from the **trusted set**.

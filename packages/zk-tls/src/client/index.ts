@@ -198,7 +198,8 @@ export interface ZkFetchClientProof<V extends number, PK, S> {
 export interface ZkFetchProveOptions {
   /**
    * Per-claim commitment from `holderCommitmentOf(secret)`, 32 bytes. Keep the
-   * secret for the contract witness; use a fresh one per claim.
+   * secret for the contract witness; use a fresh one per claim. Never disclose
+   * the commitment on-chain: it is the only secret input to the claim's salt.
    */
   readonly holder: Uint8Array;
   /** Inclusive start of the signed observation window, Unix seconds. */
@@ -304,8 +305,7 @@ export const zkFetchClient = {
       collect: (request, options) =>
         collectThreshold({ ...config, policy: checkedPolicy }, request, options),
       proveReq: async (request, options): Promise<ZkFetchClientProof<V, PK, S>> => {
-        const parsed = proveOptionsSchema.parse(options);
-        const binding = { ...parsed, holder: parsed.holder.slice() };
+        const binding = proveOptionsSchema.parse(options);
         const signedRequest = bindRequestToClaimContext(
           bindRequestToPolicy(request, checkedPolicy),
           checkedPolicy,

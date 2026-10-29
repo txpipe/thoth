@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { AttestationInput } from '@thoth/core';
-import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
-import { bytes32Schema, CLAIM_VERSION } from '@thoth/core/claim';
+import type { Claim, FlatMessage } from '@thoth/core/claim';
+import { CLAIM_VERSION, claimSchema } from '@thoth/core/claim';
 import type { CanonicalValue } from '@thoth/core/claim-context';
 import { claimContextDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
-import { bytesToHex } from './hex.js';
+import { bytesToHex, hexToBytes } from './hex.js';
 
 /** The zkFetch kind's law tag, also its kind identifier. */
 export const ZK_FETCH_LAW = 'zk-fetch@1';
@@ -72,41 +72,7 @@ export const zkFetchEvidenceSchema = z.object({
  * counts are `values.length` and `byteValues.length` (default `[]`), and
  * `present` needs one flag per slot.
  */
-export const zkFetchClaimSchema: z.ZodType<
-  Claim<number, number>,
-  z.core.$ZodTypeInternals<Claim<number, number>, ClaimInput<number, number>>
-> = z
-  .object({
-    version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
-    appId: bytes32Schema,
-    policyHash: bytes32Schema,
-    windowStart: z.union([z.number(), z.bigint()]),
-    windowEnd: z.union([z.number(), z.bigint()]),
-    subjectHash: bytes32Schema,
-    holder: bytes32Schema,
-    present: z.array(z.boolean()),
-    values: z.array(z.union([z.number(), z.bigint()])),
-    byteValues: z.array(bytes32Schema).default([]),
-  })
-  .refine((input) => input.present.length === input.values.length + input.byteValues.length, {
-    message: 'present and values must have the same length, plus one byte flag per byteValue',
-    path: ['present'],
-  })
-  .transform((input) => ({
-    version: BigInt(input.version),
-    appId: input.appId,
-    policyHash: input.policyHash,
-    windowStart: BigInt(input.windowStart),
-    windowEnd: BigInt(input.windowEnd),
-    subjectHash: input.subjectHash,
-    holder: input.holder,
-    present: input.present,
-    values: input.values.map((value) => BigInt(value)),
-    byteValues: input.byteValues,
-  })) as unknown as z.ZodType<
-  Claim<number, number>,
-  z.core.$ZodTypeInternals<Claim<number, number>, ClaimInput<number, number>>
->;
+export const zkFetchClaimSchema = claimSchema<number, number>();
 
 /**
  * The zkFetch kind's definition, the value `createZkFetchDefinition` returns.
@@ -423,6 +389,28 @@ export const zkFetchClaimContextDigestOf = (options: {
       windowEnd,
     }),
   );
+};
+
+/**
+ * The claim context digest the witness signed into the claim's context, as
+ * lowercase hex without a prefix.
+ *
+ * @throws if the context is not JSON, or carries no 32-byte hex digest under
+ *   {@link ZK_FETCH_CLAIM_CONTEXT_KEY}.
+ */
+export const signedClaimContextDigestOf = (claim: ProviderClaimData): string => {
+  let signed: unknown;
+  try {
+    signed = (JSON.parse(claim.context) as Record<string, unknown> | null)?.[
+      ZK_FETCH_CLAIM_CONTEXT_KEY
+    ];
+  } catch {
+    throw new Error('claim context is not valid JSON');
+  }
+  if (typeof signed !== 'string' || !/^[0-9a-f]{64}$/.test(signed)) {
+    throw new Error('the witness-signed context carries no claim context digest');
+  }
+  return signed;
 };
 
 const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => {
@@ -766,13 +754,15 @@ export function assertPolicySlotsInRange(
  * Derive the claim the attestor signs from parsed evidence.
  *
  * Values and `present` come from the disclosed values, `subjectHash` from the
- * signed request, `policyHash` and `version` from the policy; `appId`,
- * `holder` and the window are the caller's (ADR 0004, ADR 0005). A slot whose
+ * signed request, `salt` from the claim context digest the witness signed
+ * (ADR 0012), `policyHash` and `version` from the policy; `appId`, `holder`
+ * and the window are the caller's (ADR 0004, ADR 0005). A slot whose
  * disclosure is absent or unparseable stays unpresent.
  *
  * @throws if a policy slot is out of range or in the wrong region, the policy
- *   fails {@link zkFetchPolicySchema}, or the signed parameters carry no
- *   request (see {@link claimRequestOf}).
+ *   fails {@link zkFetchPolicySchema}, the signed parameters carry no request
+ *   (see {@link claimRequestOf}), or the signed context carries no claim
+ *   context digest (see {@link signedClaimContextDigestOf}).
  */
 export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(options: {
   verified: VerifiedEvidence;
@@ -820,6 +810,7 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
     version: claimVersion,
     appId,
     holder,
+    salt: hexToBytes(signedClaimContextDigestOf(verified.claim)),
     policyHash: zkFetchPolicyHashOf(policy),
     windowStart,
     windowEnd,

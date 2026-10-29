@@ -168,8 +168,8 @@ READMEs don't repeat it.
 
 - Contract logic is tested with the simulator via vitest in
   `packages/contracts/test/`. The mock top-level shells
-  (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, K=18, M=3,
-  N=2 — and `MockAttestationBytes.compact` — V=3, B=2, K=22) specialize the
+  (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, K=20, M=3,
+  N=2 — and `MockAttestationBytes.compact` — V=3, B=2, K=24) specialize the
   modules so tests run against real artifacts.
 - `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
   compiled pure circuits — never hand-roll the message encoding; use

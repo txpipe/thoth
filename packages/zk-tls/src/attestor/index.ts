@@ -8,7 +8,7 @@ import { buildAttestor, defineAttestor } from '@thoth/attestor';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
-import { hexToBytes } from '../hex.js';
+import { bytesToHex, hexToBytes } from '../hex.js';
 import {
   assertEvidenceMatchesPolicy,
   assertObservationInWindow,
@@ -18,8 +18,8 @@ import {
   isByteRule,
   parsedEvidenceView,
   parseSlotValue,
+  signedClaimContextDigestOf,
   type VerifiedEvidence,
-  ZK_FETCH_CLAIM_CONTEXT_KEY,
   ZK_FETCH_LAW,
   type ZkFetchDefinition,
   type ZkFetchEvidence,
@@ -137,11 +137,12 @@ export const assertClaimMatchesSubject = (options: {
 /**
  * Require the context the witness signed to carry the claim context digest of
  * the policy, the signed request's subject, and the proposal's holder and
- * window (ADR 0011).
+ * window (ADR 0011). The proposal's salt must be that digest (ADR 0012).
  *
  * @throws if the signed context is not JSON or carries no digest or another one,
- *   the signed parameters carry no request or an unparseable URL, the policy fails
- *   `zkFetchPolicySchema`, the holder is not 32 bytes, or a window bound is negative.
+ *   the salt differs from it, the signed parameters carry no request or an
+ *   unparseable URL, the policy fails `zkFetchPolicySchema`, the holder is not
+ *   32 bytes, or a window bound is negative.
  */
 export const assertClaimMatchesContext = (options: {
   claim: Claim<number, number>;
@@ -149,14 +150,7 @@ export const assertClaimMatchesContext = (options: {
   policy: ZkFetchPolicy;
 }): void => {
   const { claim, verified, policy } = options;
-  let signed: unknown;
-  try {
-    signed = (JSON.parse(verified.claim.context) as Record<string, unknown> | null)?.[
-      ZK_FETCH_CLAIM_CONTEXT_KEY
-    ];
-  } catch {
-    throw new Error('claim context is not valid JSON');
-  }
+  const signed = signedClaimContextDigestOf(verified.claim);
   const expected = zkFetchClaimContextDigestOf({
     policy,
     request: claimRequestOf(verified.claim),
@@ -168,6 +162,9 @@ export const assertClaimMatchesContext = (options: {
     throw new Error(
       "the witness-signed context does not carry this claim's claim context digest (holder, window, policy or subject differ)",
     );
+  }
+  if (bytesToHex(claim.salt) !== signed) {
+    throw new Error('claim salt is not the claim context digest the witness signed');
   }
 };
 
@@ -242,6 +239,9 @@ export function zkFetchAttestor<PK, S>(parts: {
     attest: async (definition, signer, input) => {
       const policy = definition.policy.parse(input.policy);
       const evidence = definition.evidence.parse(input.evidence);
+      // `zkFetchClaimSchema` is `claimSchema()`, whose parsed claim owns its byte
+      // arrays, so the caller cannot change the holder between `verify` and the
+      // signature.
       const proposed = definition.claim.parse(input.claim);
       await definition.verify({ policy, evidence, claim: proposed });
       if (evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
