@@ -38,6 +38,7 @@ const policy: ZkFetchPolicy = {
   slots: [{ slot: 0, name: 'stars', parse: 'int' }],
   responseMatches: [RESPONSE_MATCH],
   responseRedactions: [RESPONSE_REDACTION],
+  bodyPolicy: 'ignored',
 };
 
 // V = 1 numeric slot (stars) then W = 1 byte slot (the repo's "owner/repo").
@@ -49,6 +50,7 @@ const mixedPolicy: ZkFetchPolicy = {
   ],
   responseMatches: [RESPONSE_MATCH, NAME_MATCH],
   responseRedactions: [RESPONSE_REDACTION, NAME_REDACTION],
+  bodyPolicy: 'ignored',
 };
 
 /**

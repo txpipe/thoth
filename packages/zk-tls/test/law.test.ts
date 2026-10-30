@@ -18,6 +18,7 @@ import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
   type ZkFetchSlot,
+  zkFetchBodyHashOf,
   zkFetchClaimContextDigestOf,
   zkFetchPolicyHashOf,
   zkFetchPolicySchema,
@@ -79,6 +80,7 @@ describe('zkFetchPolicySchema disclosure rules', () => {
   const policyWith = (rules: Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'>) => ({
     allowedHosts: ['api.github.com'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+    bodyPolicy: 'ignored',
     ...rules,
   });
   const match = { type: 'regex', value: '(?<distance>[\\d.]+)' } as const;
@@ -114,6 +116,7 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
       policy: {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 0, name: 'v', parse }],
+        bodyPolicy: 'ignored',
         ...DISCLOSURE_RULES,
       },
       appId: APP_ID,
@@ -229,6 +232,7 @@ describe('deriveClaimFromEvidence', () => {
   const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
     allowedHosts: ['api.github.com'],
     slots,
+    bodyPolicy: 'ignored',
     ...DISCLOSURE_RULES,
   });
 
@@ -293,7 +297,10 @@ describe('deriveClaimFromEvidence', () => {
     });
     const claim = deriveClaimFromEvidence({
       verified,
-      policy: policy([{ slot: 0, name: 'a', parse: 'int' }]),
+      policy: {
+        ...policy([{ slot: 0, name: 'a', parse: 'int' }]),
+        bodyPolicy: 'non-empty',
+      },
       appId: APP_ID,
       holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 1,
@@ -400,6 +407,7 @@ describe('assertClaimMatchesContext', () => {
   const policy: ZkFetchPolicy = {
     allowedHosts: ['api.github.com'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+    bodyPolicy: 'ignored',
     ...DISCLOSURE_RULES,
   };
   const window = { holder: new Uint8Array(32).fill(7), windowStart: 10n, windowEnd: 20n };
@@ -452,6 +460,7 @@ describe('assertClaimMatchesDisclosures', () => {
   const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
     allowedHosts: ['api.github.com'],
     slots,
+    bodyPolicy: 'ignored',
     ...DISCLOSURE_RULES,
   });
 
@@ -512,12 +521,16 @@ describe('assertEvidenceMatchesPolicy', () => {
   const policy: ZkFetchPolicy = {
     allowedHosts: ['api.github.com'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+    bodyPolicy: 'ignored',
     ...DISCLOSURE_RULES,
   };
 
-  const verified = (url: string): VerifiedEvidence =>
+  const verified = (url: string, method = 'GET', body = ''): VerifiedEvidence =>
     verifiedOf(
-      claimWith({ url, ...DISCLOSURE_RULES }, { extractedParameters: { distance: '12.4' } }),
+      claimWith(
+        { url, method, body, ...DISCLOSURE_RULES },
+        { extractedParameters: { distance: '12.4' } },
+      ),
       {
         distance: '12.4',
       },
@@ -570,7 +583,7 @@ describe('assertEvidenceMatchesPolicy', () => {
   it('refuses a required slot whose disclosure is missing or unparseable', () => {
     const missing = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', ...DISCLOSURE_RULES },
+        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
         { extractedParameters: {} },
       ),
       {},
@@ -580,7 +593,7 @@ describe('assertEvidenceMatchesPolicy', () => {
     );
     const unparseable = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', ...DISCLOSURE_RULES },
+        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
         { extractedParameters: { distance: 'abc' } },
       ),
       { distance: 'abc' },
@@ -602,6 +615,8 @@ describe('assertEvidenceMatchesPolicy', () => {
     // Reclaim signs the parameters with sorted keys.
     const signed = {
       url: 'https://api.github.com/x',
+      method: 'GET',
+      body: '',
       responseMatches: [
         { type: 'contains', value: 'moving_time' },
         { type: 'regex', value: '(?<distance>[\\d.]+)' },
@@ -621,12 +636,93 @@ describe('assertEvidenceMatchesPolicy', () => {
     };
     const missing = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', ...DISCLOSURE_RULES },
+        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
         { extractedParameters: {} },
       ),
       {},
     );
     expect(assertEvidenceMatchesPolicy(missing, optional)).toBe('api.github.com');
+  });
+
+  describe('body policy', () => {
+    it('applies the chosen mode to every method', () => {
+      const ignored: ZkFetchPolicy = { ...policy, bodyPolicy: 'ignored' };
+      expect(assertEvidenceMatchesPolicy(verified('https://api.github.com/x'), ignored)).toBe(
+        'api.github.com',
+      );
+      expect(
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST'), ignored),
+      ).toBe('api.github.com');
+      expect(() =>
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST', '{}'), ignored),
+      ).toThrow(/body/);
+
+      const nonEmpty: ZkFetchPolicy = { ...policy, bodyPolicy: 'non-empty' };
+      expect(
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'GET', '{}'), nonEmpty),
+      ).toBe('api.github.com');
+      expect(() =>
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'GET'), nonEmpty),
+      ).toThrow(/body/);
+      expect(
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST', '{}'), nonEmpty),
+      ).toBe('api.github.com');
+    });
+
+    it('pins the exact signed body', () => {
+      const pinned: ZkFetchPolicy = {
+        ...policy,
+        bodyPolicy: { sha256: zkFetchBodyHashOf('{}') },
+      };
+      expect(
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST', '{}'), pinned),
+      ).toBe('api.github.com');
+      expect(() =>
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST'), pinned),
+      ).toThrow(/body/);
+      expect(() =>
+        assertEvidenceMatchesPolicy(
+          verified('https://api.github.com/x', 'POST', '{"x":1}'),
+          pinned,
+        ),
+      ).toThrow(/body/);
+    });
+
+    it('treats a Buffer pin as the same bytes', () => {
+      const pinned: ZkFetchPolicy = {
+        ...policy,
+        bodyPolicy: { sha256: Buffer.from(zkFetchBodyHashOf('{}')) },
+      };
+      expect(
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x', 'POST', '{}'), pinned),
+      ).toBe('api.github.com');
+    });
+
+    it('refuses a signed body with a redaction marker under every mode', () => {
+      const starred = verified('https://api.github.com/x', 'POST', '{"q":*********}');
+      const pinned = { sha256: zkFetchBodyHashOf('{"q":123456789}') };
+      for (const bodyPolicy of ['non-empty', 'ignored', pinned] as const) {
+        expect(() => assertEvidenceMatchesPolicy(starred, { ...policy, bodyPolicy })).toThrow(
+          /cannot contain \*/,
+        );
+      }
+    });
+
+    it('refuses the empty body as a pin', () => {
+      expect(() =>
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x'), {
+          ...policy,
+          bodyPolicy: { sha256: zkFetchBodyHashOf('') },
+        }),
+      ).toThrow(/ignored/);
+    });
+
+    it('refuses a policy without a body policy', () => {
+      const missing = { ...policy, bodyPolicy: undefined } as unknown as ZkFetchPolicy;
+      expect(() =>
+        assertEvidenceMatchesPolicy(verified('https://api.github.com/x'), missing),
+      ).toThrow(/bodyPolicy/);
+    });
   });
 });
 
@@ -634,6 +730,7 @@ describe('byte value parse rules', () => {
   const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
     allowedHosts: ['api.github.com'],
     slots,
+    bodyPolicy: 'ignored',
     ...DISCLOSURE_RULES,
   });
 
@@ -783,6 +880,7 @@ describe('byte value parse rules', () => {
       zkFetchPolicySchema.parse({
         allowedHosts: ['api.github.com'],
         slots: [slot],
+        bodyPolicy: 'ignored',
         ...DISCLOSURE_RULES,
       });
     expect(() => policyWith({ slot: 0, name: 'id', parse: 'int', length: 4 })).toThrow(/length/);

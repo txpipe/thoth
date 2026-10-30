@@ -81,6 +81,8 @@ const policy = zkFetchPolicySchema.parse({
     { regex: '"distance":\\s*[\\d.]+' },
     { regex: '"moving_time":\\s*\\d+' },
   ],
+  // Safe only if a body cannot change this endpoint's response at any layer.
+  bodyPolicy: 'ignored',
 });
 
 const client = zkFetchClient.init({
@@ -187,6 +189,11 @@ client and the attestor refuse evidence whose signed URL, body, `geoLocation`
 or `proxySessionId` contains `{{`, in the URL also when written as `%7B`/`%7D`
 or split by a tab or line break, which URL parsing drops.
 
+The subject hash binds the **signed** body. An empty body contributes
+`sha256('')` and does not bind the body the witness sent: the witness checks the
+sent body only when the signed body is non-empty. The policy's
+[body policy](#body-policy) decides which signed bodies are accepted.
+
 Whatever you reveal must be identical across independent fetches, because each
 witness signs the revealed slice into the claim. A whole-response
 `(?<data>.*)` match is not safe: HTTP headers carry per-request values such as
@@ -241,6 +248,55 @@ hash. The same rules under a different spelling hash the same: array order,
 the order of a rule's keys, empty redaction keys and an absent array are inert. The schema refuses
 Reclaim's `invert` and `hash` and any `{{param}}` template, so evidence whose
 signed rules carry them is refused too.
+
+### Body policy
+
+`bodyPolicy` is required and part of the policy hash. It decides which signed
+request bodies the attestor accepts. The witness compares the sent body to the
+signed body only when the signed body is non-empty, so the mode is the
+difference between a bound body and an explicit risk:
+
+- `non-empty`: the signed body must be non-empty. The witness compares it to
+  the sent body, so a caller cannot sign no body and send another. Use it for
+  variable bodies, such as a GraphQL query with per-user variables, and for any
+  endpoint that can read a body, including a GET or DELETE.
+- `{ sha256 }`: the signed body must hash to the pin. Build it with
+  `zkFetchBodyHashOf(body)`; the empty body's hash is refused, so use `ignored`
+  for an empty signed body. Use a pin for a fixed body, or for a harmless
+  sentinel on a bodyless API.
+- `ignored`: the signed body must be empty, and the witness does not bind the
+  sent body. Use it only when a body cannot change the endpoint's response at
+  any layer. Audit the handler and every proxy, WAF and auth layer in front of
+  it; a handler that ignores the body is not enough on its own. Otherwise use
+  `non-empty` or a pin, even for a GET or DELETE.
+
+Under every mode, the client and the attestor refuse a signed body that
+contains `*`. Reclaim's comparison treats a signed `*` as equal to a `*` in the
+transcript, and the caller chooses which request bytes it redacts to `*`, so
+each one would leave a sent byte unbound. A body that needs a literal `*`
+escapes it, for example as `*` in JSON. `zkFetchBodyHashOf` refuses such
+a body too.
+
+An endpoint that accepts a body but has nothing to say in it should send a
+harmless non-empty sentinel and pin it, rather than using `ignored`:
+
+```ts
+import { zkFetchBodyHashOf, type ZkFetchPolicy } from '@thoth/zk-tls';
+
+const SENTINEL = '{"thoth":"ignored"}';
+const policy: ZkFetchPolicy = {
+  allowedHosts: ['api.example.com'],
+  // ...
+  bodyPolicy: { sha256: zkFetchBodyHashOf(SENTINEL) },
+};
+// Send SENTINEL as the request body and let the endpoint ignore it.
+```
+
+There is no method-based default: a policy that fetches both a bodyless GET and
+a POST with a variable body uses one client and policy per body rule (the
+contract seals a set of hashes), or sends the same fixed harmless body for both
+when both requests can carry it. A witness that compared the body
+unconditionally would let `ignored` bind it too, but Reclaim 5.0.8 does not.
 
 The policy has no response-size bound: `responseText` is the transcript as the
 client saw it and the witness does not sign it. Limit transport payloads

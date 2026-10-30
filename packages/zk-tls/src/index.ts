@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { CLAIM_VERSION, claimSchema } from '@thoth/core/claim';
+import { bytes32Schema, CLAIM_VERSION, claimSchema } from '@thoth/core/claim';
 import type { CanonicalValue } from '@thoth/core/claim-context';
 import { claimContextDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
@@ -155,6 +155,18 @@ export interface ZkFetchResponseRedaction {
   xPath?: string;
 }
 
+/**
+ * How the policy constrains the signed request body.
+ *
+ * `non-empty` requires a non-empty signed body, which the witness compares to
+ * the sent body. `{ sha256 }` pins an exact non-empty body; the empty body's
+ * hash is refused, so `sha256('')` is not a pin. `ignored` requires an empty
+ * signed body and does not bind the body the witness sent; it asserts that a
+ * body cannot change the endpoint's response at any layer. Under every mode a
+ * signed body containing `*` is refused.
+ */
+export type ZkFetchBodyPolicy = 'ignored' | 'non-empty' | { readonly sha256: Uint8Array };
+
 /** The policy a zkFetch attestor enforces. */
 export interface ZkFetchPolicy {
   /** Hosts the attested URL may target: exact, or any subdomain of one. */
@@ -164,6 +176,11 @@ export interface ZkFetchPolicy {
   responseMatches: readonly ZkFetchResponseMatch[];
   /** The reveal whitelist the witness must have signed. */
   responseRedactions: readonly ZkFetchResponseRedaction[];
+  /**
+   * How the signed request body is bound (see {@link ZkFetchBodyPolicy}). The
+   * policy hash commits to it, so every attestor enforces the same rule.
+   */
+  bodyPolicy: ZkFetchBodyPolicy;
   /** The claim version the attestor signs. Defaults to 1. */
   claimVersion?: bigint;
 }
@@ -173,11 +190,19 @@ export interface ZkFetchPolicy {
 const noTemplate = (rule: string): boolean => !/\{\{[^{}]+\}\}/.test(rule);
 const TEMPLATE_ERROR = 'disclosure rules cannot use {{param}} templates';
 
+/** SHA-256 of a UTF-8 string, raw bytes. */
+const sha256 = (data: string): Uint8Array =>
+  new Uint8Array(createHash('sha256').update(data, 'utf-8').digest());
+
+/** The empty body's hash, which a `{ sha256 }` policy pin refuses. */
+const EMPTY_BODY_SHA256 = bytesToHex(sha256(''));
+
 /**
  * Runtime validator for {@link ZkFetchPolicy}.
  *
  * Rule entries are strict, so Reclaim's `invert` and `hash` are refused, and
- * rule texts cannot carry `{{param}}` templates.
+ * rule texts cannot carry `{{param}}` templates. `bodyPolicy` is required; a
+ * pin is 32 bytes and not the empty body's hash.
  */
 export const zkFetchPolicySchema = z.object({
   allowedHosts: z.array(z.string()).min(1),
@@ -217,6 +242,15 @@ export const zkFetchPolicySchema = z.object({
       xPath: z.string().refine(noTemplate, TEMPLATE_ERROR).optional(),
     }),
   ),
+  bodyPolicy: z.union([
+    z.literal('ignored'),
+    z.literal('non-empty'),
+    z
+      .strictObject({ sha256: bytes32Schema })
+      .refine((pin) => bytesToHex(pin.sha256) !== EMPTY_BODY_SHA256, {
+        message: "a body pin cannot be the empty body; use bodyPolicy: 'ignored'",
+      }),
+  ]),
   claimVersion: z.bigint().optional(),
 });
 
@@ -271,8 +305,8 @@ const normalizedRulesOf = (rules: {
 
 /**
  * Parse a policy into the form every hash and check reads: defaults filled,
- * hosts lowercased, deduplicated and sorted, slots sorted by index, and the
- * disclosure rules canonicalized.
+ * hosts lowercased, deduplicated and sorted, slots sorted by index, the
+ * disclosure rules canonicalized, and `bodyPolicy` carried through.
  *
  * @throws if the policy fails {@link zkFetchPolicySchema}.
  */
@@ -286,6 +320,7 @@ export const normalizePolicy = (policy: ZkFetchPolicy) => {
       .sort((a, b) => a.slot - b.slot),
     responseMatches: rules.responseMatches,
     responseRedactions: rules.responseRedactions,
+    bodyPolicy: parsed.bodyPolicy,
     claimVersion: parsed.claimVersion ?? CLAIM_VERSION,
   };
 };
@@ -302,9 +337,21 @@ export const zkFetchPolicyHashOf = (policy: ZkFetchPolicy): Uint8Array => {
   return policyHashOf(ZK_FETCH_LAW, normalized, normalized.claimVersion);
 };
 
-/** SHA-256 of a UTF-8 string, raw bytes. */
-const sha256 = (data: string): Uint8Array =>
-  new Uint8Array(createHash('sha256').update(data, 'utf-8').digest());
+/**
+ * SHA-256 of a request body, as a policy's `bodyPolicy: { sha256 }` pin.
+ *
+ * The policy refuses the empty body's hash as a pin; use `'ignored'` for an
+ * empty signed body.
+ *
+ * @throws if the body contains `*`: no signed body may carry one, so the pin
+ *   could never match.
+ */
+export const zkFetchBodyHashOf = (body: string): Uint8Array => {
+  if (body.includes('*')) {
+    throw new Error('a pinned body cannot contain *');
+  }
+  return sha256(body);
+};
 
 /** The request a zkFetch claim is about. */
 export interface ZkFetchSubjectRequest {
@@ -824,9 +871,13 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
 /**
  * Check evidence against the policy: the signed request carries no
  * `{{param}}` template, the attested URL is HTTPS on an allowed host, the
- * signed disclosure rules equal the policy's canonical form, and
- * every required slot is certifiable. `responseText` is not witness-signed and
- * takes no part.
+ * signed request body carries no `*` and satisfies the policy's body mode,
+ * the signed disclosure rules equal the policy's canonical form, and every
+ * required slot is certifiable. `responseText` is not witness-signed and takes
+ * no part.
+ *
+ * The policy is parsed with {@link zkFetchPolicySchema} first, so a missing
+ * `bodyPolicy` or the empty body's pin fails here rather than later.
  *
  * @returns the lowercased attested host.
  * @throws on the first failed check.
@@ -835,6 +886,7 @@ export const assertEvidenceMatchesPolicy = (
   verified: VerifiedEvidence,
   policy: ZkFetchPolicy,
 ): string => {
+  const parsedPolicy = zkFetchPolicySchema.parse(policy);
   const parameters = claimParametersOf(verified.claim);
   // Any `{{` is refused, not only a fillable template: Reclaim matches the signed path and body
   // against the sent request with `{{…}…}` as a wildcard over redacted bytes. The url is normalised
@@ -858,21 +910,42 @@ export const assertEvidenceMatchesPolicy = (
     throw new Error(`attested url must be https, got ${url.protocol}//`);
   }
   const host = url.hostname.toLowerCase();
-  if (!hostAllowed(host, policy.allowedHosts)) {
-    throw new Error(`attested host ${host} not in allowlist [${policy.allowedHosts.join(', ')}]`);
+  if (!hostAllowed(host, parsedPolicy.allowedHosts)) {
+    throw new Error(
+      `attested host ${host} not in allowlist [${parsedPolicy.allowedHosts.join(', ')}]`,
+    );
+  }
+  const request = claimRequestOf(verified.claim);
+  const signedBody = request.body ?? '';
+  // Reclaim's body comparison treats a signed `*` as equal to a `*` in the transcript, and the
+  // caller chooses which request bytes it redacts to `*`, so each one leaves a sent byte unbound.
+  if (signedBody.includes('*')) {
+    throw new Error('the signed request body cannot contain *');
+  }
+  const bodyPolicy = parsedPolicy.bodyPolicy;
+  if (bodyPolicy === 'ignored') {
+    if (signedBody !== '') {
+      throw new Error("the signed request body must be empty under bodyPolicy: 'ignored'");
+    }
+  } else if (bodyPolicy === 'non-empty') {
+    if (signedBody === '') {
+      throw new Error('the signed request body is empty but the policy requires a non-empty body');
+    }
+  } else if (bytesToHex(sha256(signedBody)) !== bytesToHex(bodyPolicy.sha256)) {
+    throw new Error('the signed request body does not match the policy');
   }
   const signedRules = normalizedRulesOf({
     responseMatches: parameters.responseMatches,
     responseRedactions: parameters.responseRedactions,
   });
   const policyRules = normalizedRulesOf({
-    responseMatches: policy.responseMatches,
-    responseRedactions: policy.responseRedactions,
+    responseMatches: parsedPolicy.responseMatches,
+    responseRedactions: parsedPolicy.responseRedactions,
   });
   if (!isDeepStrictEqual(signedRules, policyRules)) {
     throw new Error('evidence disclosure rules do not match the policy');
   }
-  for (const slot of policy.slots) {
+  for (const slot of parsedPolicy.slots) {
     if (slot.optional) {
       continue;
     }

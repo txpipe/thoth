@@ -62,6 +62,7 @@ const policy: ZkFetchPolicy = {
     { slot: 1, name: 'forks', parse: 'int', optional: true },
     { slot: 3, name: 'owner', parse: 'bytes' },
   ],
+  bodyPolicy: 'ignored',
   ...DISCLOSURE_RULES,
 };
 const request: ZkFetchRequest = { url: 'https://api.github.com/repos/x', method: 'GET' };
