@@ -150,3 +150,18 @@ overrides it), reveals only `stargazers_count` and `full_name`, and derives one
 numeric-only claim and one claim with a byte slot. For each it checks that both
 witnesses derive the same identifier and message, with the star count present
 and the byte slot equal to the zero-padded UTF-8 of `full_name`.
+
+`test/empty-body.test.ts` has a second live check, which needs one witness. It
+sends a body while the witness signs an empty one, and asserts that a
+`non-empty` [body policy](dapp-integration.md#body-policy) refuses the
+evidence:
+
+```bash
+WITNESS_URLS=ws://localhost:8001/ws \
+  npx vitest run packages/zk-tls/test/empty-body.test.ts
+```
+
+It posts to `https://httpbin.org/post`; `PROBE_URL` overrides it with any
+endpoint that accepts a POST and echoes the JSON body, so the `"q"` match
+extracts the digits. Its offline half, which runs Reclaim's receipt check on a
+hand-built transcript, always runs.

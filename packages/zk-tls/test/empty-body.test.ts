@@ -130,8 +130,8 @@ describe('Reclaim receipt check', () => {
     expect(() => checkReceipt('not-the-sent-body')).toThrow('request body mismatch');
   });
 
-  // Secret `paramValues` become `*` in the transcript, so a signed body of `*`s
-  // matches any hidden bytes; the body policy's redaction caveat relies on this.
+  // The caller chooses which request bytes it redacts to `*`, so a signed body of
+  // `*`s matches any hidden bytes; this is why the attestor refuses `*` in a signed body.
   it('accepts a signed body of redaction markers for a redacted transcript', () => {
     expect(() => checkRedactedReceipt(REDACTED_BODY)).not.toThrow();
   });

@@ -221,6 +221,10 @@ describe('zkFetchBodyHashOf', () => {
     expect(hex(zkFetchBodyHashOf(''))).toBe(sha256(''));
     expect(hex(zkFetchBodyHashOf('{"a":1}'))).toBe(sha256('{"a":1}'));
   });
+
+  it('refuses a body with a redaction marker, which no signed body may carry', () => {
+    expect(() => zkFetchBodyHashOf('{"q":"*"}')).toThrow(/cannot contain \*/);
+  });
 });
 
 describe('zkFetchSubjectOf', () => {

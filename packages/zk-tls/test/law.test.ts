@@ -698,6 +698,16 @@ describe('assertEvidenceMatchesPolicy', () => {
       ).toBe('api.github.com');
     });
 
+    it('refuses a signed body with a redaction marker under every mode', () => {
+      const starred = verified('https://api.github.com/x', 'POST', '{"q":*********}');
+      const pinned = { sha256: zkFetchBodyHashOf('{"q":123456789}') };
+      for (const bodyPolicy of ['non-empty', 'ignored', pinned] as const) {
+        expect(() => assertEvidenceMatchesPolicy(starred, { ...policy, bodyPolicy })).toThrow(
+          /cannot contain \*/,
+        );
+      }
+    });
+
     it('refuses the empty body as a pin', () => {
       expect(() =>
         assertEvidenceMatchesPolicy(verified('https://api.github.com/x'), {

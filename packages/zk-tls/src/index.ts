@@ -158,11 +158,12 @@ export interface ZkFetchResponseRedaction {
 /**
  * How the policy constrains the signed request body.
  *
- * `ignored` requires an empty signed body but does not bind the body the
- * witness sent; it is a policy assertion that the endpoint ignores any body.
  * `non-empty` requires a non-empty signed body, which the witness compares to
  * the sent body. `{ sha256 }` pins an exact non-empty body; the empty body's
- * hash is refused, so `sha256('')` is not a pin.
+ * hash is refused, so `sha256('')` is not a pin. `ignored` requires an empty
+ * signed body and does not bind the body the witness sent; it asserts that a
+ * body cannot change the endpoint's response at any layer. Under every mode a
+ * signed body containing `*` is refused.
  */
 export type ZkFetchBodyPolicy = 'ignored' | 'non-empty' | { readonly sha256: Uint8Array };
 
@@ -176,12 +177,8 @@ export interface ZkFetchPolicy {
   /** The reveal whitelist the witness must have signed. */
   responseRedactions: readonly ZkFetchResponseRedaction[];
   /**
-   * How the signed request body is constrained. The policy hash commits to it,
-   * so every attestor enforces the same rule. `non-empty` requires a non-empty
-   * signed body, which the witness compares to the sent body. `ignored` accepts
-   * only an empty signed body and does not bind the body the witness sent;
-   * prefer a non-empty sentinel pinned with `{ sha256 }` when the endpoint
-   * accepts a body. Build a pin with {@link zkFetchBodyHashOf}.
+   * How the signed request body is bound (see {@link ZkFetchBodyPolicy}). The
+   * policy hash commits to it, so every attestor enforces the same rule.
    */
   bodyPolicy: ZkFetchBodyPolicy;
   /** The claim version the attestor signs. Defaults to 1. */
@@ -204,9 +201,8 @@ const EMPTY_BODY_SHA256 = bytesToHex(sha256(''));
  * Runtime validator for {@link ZkFetchPolicy}.
  *
  * Rule entries are strict, so Reclaim's `invert` and `hash` are refused, and
- * rule texts cannot carry `{{param}}` templates. `bodyPolicy` is required and
- * accepts the two named modes or a 32-byte SHA-256 pin; the empty body's hash
- * is refused, because an empty signed body must use `ignored`.
+ * rule texts cannot carry `{{param}}` templates. `bodyPolicy` is required; a
+ * pin is 32 bytes and not the empty body's hash.
  */
 export const zkFetchPolicySchema = z.object({
   allowedHosts: z.array(z.string()).min(1),
@@ -346,8 +342,16 @@ export const zkFetchPolicyHashOf = (policy: ZkFetchPolicy): Uint8Array => {
  *
  * The policy refuses the empty body's hash as a pin; use `'ignored'` for an
  * empty signed body.
+ *
+ * @throws if the body contains `*`: no signed body may carry one, so the pin
+ *   could never match.
  */
-export const zkFetchBodyHashOf = (body: string): Uint8Array => sha256(body);
+export const zkFetchBodyHashOf = (body: string): Uint8Array => {
+  if (body.includes('*')) {
+    throw new Error('a pinned body cannot contain *');
+  }
+  return sha256(body);
+};
 
 /** The request a zkFetch claim is about. */
 export interface ZkFetchSubjectRequest {
@@ -867,9 +871,10 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
 /**
  * Check evidence against the policy: the signed request carries no
  * `{{param}}` template, the attested URL is HTTPS on an allowed host, the
- * signed request body satisfies the policy's body mode, the signed disclosure
- * rules equal the policy's canonical form, and every required slot is
- * certifiable. `responseText` is not witness-signed and takes no part.
+ * signed request body carries no `*` and satisfies the policy's body mode,
+ * the signed disclosure rules equal the policy's canonical form, and every
+ * required slot is certifiable. `responseText` is not witness-signed and takes
+ * no part.
  *
  * The policy is parsed with {@link zkFetchPolicySchema} first, so a missing
  * `bodyPolicy` or the empty body's pin fails here rather than later.
@@ -912,10 +917,15 @@ export const assertEvidenceMatchesPolicy = (
   }
   const request = claimRequestOf(verified.claim);
   const signedBody = request.body ?? '';
+  // Reclaim's body comparison treats a signed `*` as equal to a `*` in the transcript, and the
+  // caller chooses which request bytes it redacts to `*`, so each one leaves a sent byte unbound.
+  if (signedBody.includes('*')) {
+    throw new Error('the signed request body cannot contain *');
+  }
   const bodyPolicy = parsedPolicy.bodyPolicy;
   if (bodyPolicy === 'ignored') {
     if (signedBody !== '') {
-      throw new Error('the signed request body must be empty when the policy ignores the body');
+      throw new Error("the signed request body must be empty under bodyPolicy: 'ignored'");
     }
   } else if (bodyPolicy === 'non-empty') {
     if (signedBody === '') {

@@ -63,7 +63,7 @@ The zkFetch policy's response patterns and reveal whitelist (`responseMatches` a
 _Avoid_: Extraction plan, reveal plan.
 
 **Body policy**:
-The zkFetch policy's required rule for the signed request body (`bodyPolicy`), part of the policy hash. The subject hashes the signed body. `non-empty` requires a non-empty signed body, which the witness compares to the sent one with secret `paramValues` bytes redacted. `{ sha256 }` pins an exact non-empty body; the empty body's hash is not a valid pin. `ignored` accepts only an empty signed body, which is `sha256('')` in the subject, and does not bind the body the witness sent. Use `ignored` only when the endpoint ignores bodies; prefer a non-empty sentinel pinned with `{ sha256 }`.
+The zkFetch policy's required rule for the signed request body (`bodyPolicy`): `non-empty`, a `{ sha256 }` pin, or `ignored`, which leaves the sent body unbound. The policy hash commits to it, and the subject hashes the signed body. The modes and when to use each are in [Body policy](packages/zk-tls/docs/dapp-integration.md#body-policy).
 _Avoid_: emptyBody, requestBody.
 
 **policyHash**:
