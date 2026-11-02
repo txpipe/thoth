@@ -62,6 +62,8 @@ export type OutputPolicy = CardanoBase & {
   slots: CardanoCommonSlots & {
     /** The output's lovelace amount. */
     lovelace: number;
+    /** The output's index within its transaction. */
+    outputIndex: number;
   };
 };
 
@@ -169,6 +171,7 @@ const outputSchema = z
       slot: numericSlotSchema,
       blockNumber: numericSlotSchema,
       lovelace: numericSlotSchema,
+      outputIndex: numericSlotSchema,
     }),
   })
   .superRefine((policy, context) => {

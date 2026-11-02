@@ -24,7 +24,7 @@ const OUTPUT: OutputPolicy = {
   networkMagic: 2,
   confirmationDepth: 3,
   address: TEST_ADDRESS,
-  slots: { blockTime: 0, slot: 1, blockNumber: 2, lovelace: 3 },
+  slots: { blockTime: 0, slot: 1, blockNumber: 2, lovelace: 3, outputIndex: 4 },
 };
 
 const parse = (policy: unknown): CardanoPolicy => cardanoPolicySchema.parse(policy);
@@ -45,6 +45,8 @@ describe('cardanoPolicySchema', () => {
     expect(() => parse({ ...OUTPUT, slots: withoutBlockTime })).toThrow();
     const { lovelace: ___, ...withoutLovelace } = OUTPUT.slots;
     expect(() => parse({ ...OUTPUT, slots: withoutLovelace })).toThrow();
+    const { outputIndex: ____, ...withoutOutputIndex } = OUTPUT.slots;
+    expect(() => parse({ ...OUTPUT, slots: withoutOutputIndex })).toThrow();
   });
 
   it('rejects a slot the variant does not carry', () => {
@@ -54,6 +56,9 @@ describe('cardanoPolicySchema', () => {
 
   it('rejects duplicate slot indices across names', () => {
     expect(() => parse({ ...OUTPUT, slots: { ...OUTPUT.slots, lovelace: 0 } })).toThrow(
+      'declared once',
+    );
+    expect(() => parse({ ...OUTPUT, slots: { ...OUTPUT.slots, outputIndex: 0 } })).toThrow(
       'declared once',
     );
   });
@@ -202,7 +207,7 @@ describe('cardanoPolicyHashOf', () => {
 
   it('pins the canonical output policy hash to its bytes', () => {
     expect(Buffer.from(cardanoPolicyHashOf(OUTPUT)).toString('hex')).toBe(
-      'f72230ddf3ec3c8bf4b58ce282918b52efe5bdba8e34647dee70e4c26823f2ff',
+      '260be4b7b15828a6ec3c053f8f4e9c9065658f69e083b0fb23d1e98bbce4f3b1',
     );
   });
 });
