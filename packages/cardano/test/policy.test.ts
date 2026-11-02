@@ -21,6 +21,7 @@ const MAINNET_ADDRESS = `addr1${'q'.repeat(53)}`;
 const OUTPUT: OutputPolicy = {
   kind: 'output',
   network: 'preview',
+  networkMagic: 2,
   confirmationDepth: 3,
   address: TEST_ADDRESS,
   slots: { blockTime: 0, slot: 1, blockNumber: 2, lovelace: 3 },
@@ -70,17 +71,19 @@ describe('cardanoPolicySchema', () => {
   });
 
   it('checks the address prefix against the network', () => {
-    expect(() => parse({ ...OUTPUT, network: 'mainnet', address: TEST_ADDRESS })).toThrow(
-      'is not a mainnet payment address',
-    );
+    expect(() =>
+      parse({ ...OUTPUT, network: 'mainnet', networkMagic: 764824073, address: TEST_ADDRESS }),
+    ).toThrow('is not a mainnet payment address');
     expect(() => parse({ ...OUTPUT, address: MAINNET_ADDRESS })).toThrow(
       'is not a preview payment address',
     );
-    expect(() => parse({ ...OUTPUT, network: 'mainnet', address: MAINNET_ADDRESS })).not.toThrow();
+    expect(() =>
+      parse({ ...OUTPUT, network: 'mainnet', networkMagic: 764824073, address: MAINNET_ADDRESS }),
+    ).not.toThrow();
   });
 
   it('accepts a testnet address under either testnet name, since the address cannot say which', () => {
-    expect(parse({ ...OUTPUT, network: 'preprod' }).network).toBe('preprod');
+    expect(parse({ ...OUTPUT, network: 'preprod', networkMagic: 1 }).network).toBe('preprod');
     expect(parse({ ...OUTPUT, network: 'preview' }).network).toBe('preview');
   });
 
@@ -114,6 +117,42 @@ describe('cardanoPolicySchema', () => {
     expect(() => parse({ ...OUTPUT, network: 'banana' })).toThrow();
   });
 
+  it('requires the fixed magic for each public network', () => {
+    expect(parse({ ...OUTPUT, network: 'preprod', networkMagic: 1 }).networkMagic).toBe(1);
+    expect(() => parse({ ...OUTPUT, network: 'preprod', networkMagic: 2 })).toThrow(
+      'preprod magic is 1',
+    );
+    expect(() => parse({ ...OUTPUT, networkMagic: 1 })).toThrow('preview magic is 2');
+    const mainnet = { ...OUTPUT, network: 'mainnet', address: MAINNET_ADDRESS };
+    expect(() => parse({ ...mainnet, networkMagic: 764824073 })).not.toThrow();
+    expect(() => parse({ ...mainnet, networkMagic: 2 })).toThrow('mainnet magic is 764824073');
+  });
+
+  it('accepts a devnet with its own magic, using the testnet address prefix', () => {
+    const devnet = { ...OUTPUT, network: 'devnet', networkMagic: 42 };
+    expect(parse(devnet).network).toBe('devnet');
+    expect(() => parse({ ...devnet, address: MAINNET_ADDRESS })).toThrow(
+      'is not a devnet payment address',
+    );
+  });
+
+  it('rejects a devnet that claims a public magic', () => {
+    for (const magic of [1, 2, 764824073]) {
+      expect(() => parse({ ...OUTPUT, network: 'devnet', networkMagic: magic })).toThrow(
+        'cannot use the public magic',
+      );
+    }
+  });
+
+  it('rejects a magic outside 1 to 2^32-1, zero, and a fractional magic', () => {
+    expect(() => parse({ ...OUTPUT, networkMagic: 0 })).toThrow();
+    expect(() => parse({ ...OUTPUT, networkMagic: -1 })).toThrow();
+    expect(() => parse({ ...OUTPUT, networkMagic: 1.5 })).toThrow();
+    const devnet = { ...OUTPUT, network: 'devnet' };
+    expect(parse({ ...devnet, networkMagic: 2 ** 32 - 1 }).networkMagic).toBe(2 ** 32 - 1);
+    expect(() => parse({ ...devnet, networkMagic: 2 ** 32 })).toThrow();
+  });
+
   it('names the valid kind when the kind is unknown', () => {
     expect(() => parse({ ...OUTPUT, kind: 'mint' })).toThrow("Expected 'output'");
     expect(() => parse({ ...OUTPUT, kind: 'asset-output' })).toThrow("Expected 'output'");
@@ -124,6 +163,7 @@ describe('cardanoPolicyHashOf', () => {
   it('hashes equivalent policies the same, whatever the key order', () => {
     const reordered = {
       slots: OUTPUT.slots,
+      networkMagic: OUTPUT.networkMagic,
       address: OUTPUT.address,
       confirmationDepth: OUTPUT.confirmationDepth,
       network: OUTPUT.network,
@@ -141,8 +181,9 @@ describe('cardanoPolicyHashOf', () => {
   it('changes the hash when one field changes', () => {
     const baseline = cardanoPolicyHashOf(OUTPUT);
     const mutations: CardanoPolicy[] = [
-      { ...OUTPUT, network: 'preprod' },
-      { ...OUTPUT, network: 'mainnet', address: MAINNET_ADDRESS },
+      { ...OUTPUT, network: 'preprod', networkMagic: 1 },
+      { ...OUTPUT, network: 'mainnet', networkMagic: 764824073, address: MAINNET_ADDRESS },
+      { ...OUTPUT, network: 'devnet', networkMagic: 42 },
       { ...OUTPUT, confirmationDepth: 4 },
       { ...OUTPUT, address: `addr_test1${'p'.repeat(53)}` },
       { ...OUTPUT, slots: { ...OUTPUT.slots, lovelace: 6 } },
@@ -153,9 +194,15 @@ describe('cardanoPolicyHashOf', () => {
     }
   });
 
+  it('hashes two devnets that differ only in magic differently', () => {
+    const a = cardanoPolicyHashOf({ ...OUTPUT, network: 'devnet', networkMagic: 42 });
+    const b = cardanoPolicyHashOf({ ...OUTPUT, network: 'devnet', networkMagic: 43 });
+    expect(a).not.toEqual(b);
+  });
+
   it('pins the canonical output policy hash to its bytes', () => {
     expect(Buffer.from(cardanoPolicyHashOf(OUTPUT)).toString('hex')).toBe(
-      '38b7a121e0284266cd9ffe580bb01ccded4ee5cd46e3151a8cb886f5893b60a8',
+      'f72230ddf3ec3c8bf4b58ce282918b52efe5bdba8e34647dee70e4c26823f2ff',
     );
   });
 });

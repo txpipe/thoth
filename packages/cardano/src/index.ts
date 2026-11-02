@@ -9,16 +9,31 @@ import { z } from 'zod';
 /** The cardano@1 kind's law tag, also its kind identifier. */
 export const CARDANO_LAW = 'cardano@1';
 
-/** The Cardano networks the law covers. */
-export const CARDANO_NETWORKS = ['mainnet', 'preview', 'preprod'] as const;
+/** The Cardano networks the law covers. `devnet` is an undeployed local network. */
+export const CARDANO_NETWORKS = ['mainnet', 'preview', 'preprod', 'devnet'] as const;
 
 /** One Cardano network. */
 export type CardanoNetwork = (typeof CARDANO_NETWORKS)[number];
 
-/** Fields every variant shares: the network, the depth and the address pin. */
+/** Network magics of the public networks, which a policy must use for them. */
+const PUBLIC_MAGICS = {
+  mainnet: 764824073,
+  preview: 2,
+  preprod: 1,
+} as const;
+
+/** Largest network magic: Cardano's magic is a 32-bit unsigned integer. */
+const MAX_NETWORK_MAGIC = 2 ** 32 - 1;
+
+/** Fields every variant shares: the network, its magic, the depth and the address pin. */
 export type CardanoBase = {
   /** The chain network the event must belong to. */
   network: CardanoNetwork;
+  /**
+   * The network magic the node must report. Public networks have fixed
+   * values; a devnet sets its own (1 to 2^32-1, not a public magic).
+   */
+  networkMagic: number;
   /** Blocks the event's block must sit below the tip at read time. */
   confirmationDepth: number;
   /** The script address the app watches, bech32, stored lowercase. */
@@ -63,14 +78,15 @@ export type CardanoPolicy = OutputPolicy;
 // attestor's read.
 const BECH32_CHARS = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const MAINNET_ADDRESS = new RegExp(`^addr1[${BECH32_CHARS}]{53,}$`);
-// Preview and preprod share the testnet prefix, so an address cannot tell
-// them apart. The attestor compares the node's network magic instead.
+// Preview, preprod and devnet share the testnet prefix, so an address cannot
+// tell them apart. The network magic is what identifies the network.
 const TESTNET_ADDRESS = new RegExp(`^addr_test1[${BECH32_CHARS}]{53,}$`);
 
 const ADDRESS_PATTERN: Record<CardanoNetwork, RegExp> = {
   mainnet: MAINNET_ADDRESS,
   preview: TESTNET_ADDRESS,
   preprod: TESTNET_ADDRESS,
+  devnet: TESTNET_ADDRESS,
 };
 
 const numericSlotSchema = z.number().int().nonnegative();
@@ -95,6 +111,35 @@ const checkAddressMatchesNetwork = (
   }
 };
 
+/**
+ * Fails when the magic does not identify the network. A public network must
+ * use its fixed magic; a devnet must not claim one, or it could be confused
+ * with a public network.
+ */
+const checkNetworkMagic = (
+  policy: { network: CardanoNetwork; networkMagic: number },
+  context: z.RefinementCtx,
+): void => {
+  if (policy.network === 'devnet') {
+    const publicMagics = Object.values(PUBLIC_MAGICS) as number[];
+    if (publicMagics.includes(policy.networkMagic)) {
+      context.addIssue({
+        code: 'custom',
+        message: `devnet cannot use the public magic ${policy.networkMagic}`,
+        path: ['networkMagic'],
+      });
+    }
+    return;
+  }
+  if (policy.networkMagic !== PUBLIC_MAGICS[policy.network]) {
+    context.addIssue({
+      code: 'custom',
+      message: `${policy.network} magic is ${PUBLIC_MAGICS[policy.network]}`,
+      path: ['networkMagic'],
+    });
+  }
+};
+
 /** Fails when two named slots share a claim slot index. */
 const checkSlotIndicesDistinct = (
   slots: Record<string, number>,
@@ -115,6 +160,7 @@ const checkSlotIndicesDistinct = (
 const outputSchema = z
   .strictObject({
     network: z.enum(CARDANO_NETWORKS),
+    networkMagic: z.number().int().min(1).max(MAX_NETWORK_MAGIC),
     confirmationDepth: z.number().int().nonnegative(),
     address: addressSchema,
     kind: z.literal('output'),
@@ -126,6 +172,7 @@ const outputSchema = z
     }),
   })
   .superRefine((policy, context) => {
+    checkNetworkMagic(policy, context);
     checkAddressMatchesNetwork(policy, context);
     checkSlotIndicesDistinct(policy.slots, context);
   });
