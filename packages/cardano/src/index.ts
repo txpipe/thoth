@@ -1,6 +1,6 @@
-// The cardano@1 chain-event kind: attests one event read from a Cardano
-// transaction. This module carries the law tag, the policy schema and the
-// policy hash; the attestor and client entry points build on it.
+// The cardano@1 chain-event kind: attests one lovelace output read from a
+// Cardano transaction. This module carries the law tag, the policy schema and
+// the policy hash; the attestor and client entry points build on it.
 
 import type { CanonicalValue } from '@thoth/core/claim-context';
 import { policyHashOf } from '@thoth/core/claim-context';
@@ -14,22 +14,6 @@ export const CARDANO_NETWORKS = ['mainnet', 'preview', 'preprod'] as const;
 
 /** One Cardano network. */
 export type CardanoNetwork = (typeof CARDANO_NETWORKS)[number];
-
-/** A native asset, by policy id and name. */
-export type CardanoAssetClass = {
-  /** 28-byte policy id, hex without prefix (56 chars). */
-  policyId: string;
-  /** The asset name, hex without prefix, even length, at most 32 bytes. */
-  assetName: string;
-};
-
-/** One byte slot: which claim byte slot a named field fills (ADR 0009). */
-export type CardanoByteSlot = {
-  /** The claim slot index in the claim's one index space. */
-  slot: number;
-  /** Exact byte length, 1–32 (ADR 0010). */
-  length: number;
-};
 
 /** Fields every variant shares: the network, the depth and the address pin. */
 export type CardanoBase = {
@@ -67,73 +51,29 @@ export type OutputPolicy = CardanoBase & {
 };
 
 /**
- * One native asset output at the watched address. The asset is pinned in the
- * policy, so the claim is about that asset only.
- */
-export type AssetOutputPolicy = CardanoBase & {
-  kind: 'asset-output';
-  /** The asset the output must carry. */
-  asset: CardanoAssetClass;
-  slots: CardanoCommonSlots & {
-    /** The pinned asset's quantity in the output. */
-    quantity: number;
-    /** The pinned asset's policy id (28 bytes). */
-    policyId: CardanoByteSlot;
-    /** The pinned asset's name, with the pinned length. */
-    assetName: CardanoByteSlot;
-  };
-};
-
-/**
  * The policy a cardano@1 attestor enforces. The variant tag rides in the
  * policy hash, so adding a variant is additive (ADR 0013).
  */
-export type CardanoPolicy = OutputPolicy | AssetOutputPolicy;
+export type CardanoPolicy = OutputPolicy;
 
-/** Byte length of a Cardano policy id. */
-const POLICY_ID_BYTES = 28;
+// CIP-19 payment addresses, bech32, lowercase. The 53 characters after the
+// prefix are the smallest payment address (29 bytes, 47 characters, plus the
+// 6-character checksum); pointer addresses are longer and CIP-19 sets no
+// maximum. The checksum is not verified here: a wrong checksum fails at the
+// attestor's read.
+const BECH32_CHARS = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+const MAINNET_ADDRESS = new RegExp(`^addr1[${BECH32_CHARS}]{53,}$`);
+// Preview and preprod share the testnet prefix, so an address cannot tell
+// them apart. The attestor compares the node's network magic instead.
+const TESTNET_ADDRESS = new RegExp(`^addr_test1[${BECH32_CHARS}]{53,}$`);
 
-const policyIdSchema = z
-  .string()
-  .length(2 * POLICY_ID_BYTES)
-  .regex(/^[0-9a-f]+$/i, 'expected hex');
-
-const assetNameSchema = z
-  .string()
-  .regex(/^(?:[0-9a-f]{2}){0,32}$/i, 'expected even hex of at most 32 bytes');
-
-/**
- * Bech32 payment addresses per network, lowercase. The checksum is not
- * verified: a wrong checksum fails at the attestor's read, not here.
- */
 const ADDRESS_PATTERN: Record<CardanoNetwork, RegExp> = {
-  mainnet: /^addr1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,}$/,
-  preview: /^addr_test1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,}$/,
-  preprod: /^addr_test1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,}$/,
+  mainnet: MAINNET_ADDRESS,
+  preview: TESTNET_ADDRESS,
+  preprod: TESTNET_ADDRESS,
 };
-
-const assetClassSchema = z.strictObject({
-  policyId: policyIdSchema,
-  assetName: assetNameSchema,
-});
 
 const numericSlotSchema = z.number().int().nonnegative();
-
-const byteSlotSchema = z.strictObject({
-  slot: z.number().int().nonnegative(),
-  length: z.number().int().min(1).max(32),
-});
-
-const policyIdSlotSchema = byteSlotSchema.refine(
-  (entry) => entry.length === POLICY_ID_BYTES,
-  'policyId is 28 bytes',
-);
-
-const commonSlots = {
-  blockTime: numericSlotSchema,
-  slot: numericSlotSchema,
-  blockNumber: numericSlotSchema,
-};
 
 // Bech32 is case-insensitive, so the policy stores one canonical case.
 const addressSchema = z
@@ -141,77 +81,62 @@ const addressSchema = z
   .min(1)
   .transform((address) => address.toLowerCase());
 
-const baseShape = {
-  network: z.enum(CARDANO_NETWORKS),
-  confirmationDepth: z.number().int().nonnegative(),
-  address: addressSchema,
+/** Fails when the address prefix or charset does not match the network. */
+const checkAddressMatchesNetwork = (
+  policy: { network: CardanoNetwork; address: string },
+  context: z.RefinementCtx,
+): void => {
+  if (!ADDRESS_PATTERN[policy.network].test(policy.address)) {
+    context.addIssue({
+      code: 'custom',
+      message: `address is not a ${policy.network} payment address`,
+      path: ['address'],
+    });
+  }
 };
 
-const outputSchema = z.strictObject({
-  ...baseShape,
-  kind: z.literal('output'),
-  slots: z.strictObject({
-    ...commonSlots,
-    lovelace: numericSlotSchema,
-  }),
-});
+/** Fails when two named slots share a claim slot index. */
+const checkSlotIndicesDistinct = (
+  slots: Record<string, number>,
+  context: z.RefinementCtx,
+): void => {
+  const indices = Object.values(slots);
+  if (new Set(indices).size !== indices.length) {
+    context.addIssue({
+      code: 'custom',
+      message: 'each slot index may be declared once',
+      path: ['slots'],
+    });
+  }
+};
 
-const assetOutputSchema = z.strictObject({
-  ...baseShape,
-  kind: z.literal('asset-output'),
-  asset: assetClassSchema,
-  slots: z.strictObject({
-    ...commonSlots,
-    quantity: numericSlotSchema,
-    policyId: policyIdSlotSchema,
-    assetName: byteSlotSchema,
-  }),
-});
-
-/** The claim slot index an entry fills. */
-const slotIndexOf = (entry: number | CardanoByteSlot): number =>
-  typeof entry === 'number' ? entry : entry.slot;
+// Each variant owns its schema and refinements. A new variant adds its own
+// schema here and an entry in the union below; this one is not edited.
+const outputSchema = z
+  .strictObject({
+    network: z.enum(CARDANO_NETWORKS),
+    confirmationDepth: z.number().int().nonnegative(),
+    address: addressSchema,
+    kind: z.literal('output'),
+    slots: z.strictObject({
+      blockTime: numericSlotSchema,
+      slot: numericSlotSchema,
+      blockNumber: numericSlotSchema,
+      lovelace: numericSlotSchema,
+    }),
+  })
+  .superRefine((policy, context) => {
+    checkAddressMatchesNetwork(policy, context);
+    checkSlotIndicesDistinct(policy.slots, context);
+  });
 
 /**
- * Runtime validator for {@link CardanoPolicy}. The types fix each variant's
- * slot names; this checks what they cannot: the address format for the
- * network, slot indices that are distinct across all names, and an asset-name
- * slot whose length matches the pinned name.
+ * Runtime validator for {@link CardanoPolicy}. Dispatches on `kind`, so an
+ * unknown kind fails with the valid kinds named.
  */
-export const cardanoPolicySchema: z.ZodType<CardanoPolicy> = z
-  .discriminatedUnion('kind', [outputSchema, assetOutputSchema])
-  .superRefine((policy, context) => {
-    if (!ADDRESS_PATTERN[policy.network].test(policy.address)) {
-      context.addIssue({
-        code: 'custom',
-        message: `address is not a ${policy.network} payment address`,
-        path: ['address'],
-      });
-    }
-
-    const entries = Object.values(policy.slots) as (number | CardanoByteSlot)[];
-    const indices = entries.map(slotIndexOf);
-    if (new Set(indices).size !== indices.length) {
-      context.addIssue({
-        code: 'custom',
-        message: 'each slot index may be declared once',
-        path: ['slots'],
-      });
-    }
-
-    // The pinned name's length is known here, so a slot that disagrees would
-    // certify a value the pin can never match.
-    if (policy.kind === 'asset-output') {
-      const pinnedBytes = policy.asset.assetName.length / 2;
-      if (policy.slots.assetName.length !== pinnedBytes) {
-        context.addIssue({
-          code: 'custom',
-          message: `assetName slot is ${policy.slots.assetName.length} bytes, the pinned name is ${pinnedBytes}`,
-          path: ['slots', 'assetName', 'length'],
-        });
-      }
-    }
-  });
+export const cardanoPolicySchema: z.ZodType<CardanoPolicy> = z.discriminatedUnion('kind', [
+  outputSchema,
+]);
 
 /**
  * Parse a policy into the form every hash and check reads. Every field is
