@@ -163,13 +163,13 @@ const collectSubmission = async (): Promise<Submission> => {
   return { claim: toContractClaim(claim), signatures, commitRand: randomBytes(32) };
 };
 
-// A fresh ledger that seals the policy the attestors enforced, with its block
-// time at the end of the observation window.
-const freshLedger = async (): Promise<MockAttestationBytesSim> => {
+// A fresh ledger that seals the app id and the policy the attestors enforced,
+// with its block time at the end of the observation window.
+const freshLedger = async (appId = APP_ID): Promise<MockAttestationBytesSim> => {
   const sim = await MockAttestationBytesSim.create(
     createPrivateState<B_Claim>(holderSecret),
     registryKeys,
-    { policyHashes: [zkFetchPolicyHashOf(policy), POLICY_B] },
+    { appId, policyHashes: [zkFetchPolicyHashOf(policy), POLICY_B] },
   );
   sim.now = Number(WINDOW_END);
   return sim;
@@ -258,9 +258,14 @@ describe('cross-seam acceptance', () => {
         ],
       }),
     },
-    // POLICY_B is sealed too, so only the signatures can reject it. Another
-    // app id is absent: the sealed app id rejects it before the signatures.
+    // POLICY_B is sealed too, so only the signatures can reject it.
     { name: 'the policy', mutate: (c: B_Claim) => ({ ...c, policyHash: POLICY_B }) },
+    // The ledger seals the substituted app id, so only the signatures can reject it.
+    {
+      name: 'the app id',
+      mutate: (c: B_Claim) => ({ ...c, appId: flip(APP_ID, 0) }),
+      sealedAppId: flip(APP_ID, 0),
+    },
     {
       name: 'the subject',
       mutate: (c: B_Claim) => ({ ...c, subjectHash: flip(c.subjectHash, 0) }),
@@ -277,10 +282,13 @@ describe('cross-seam acceptance', () => {
       mutate: (c: B_Claim) => ({ ...c, holder: pureCircuits.holderCommitment(otherSecret) }),
       secret: otherSecret,
     },
-  ])('rejects the signatures over a claim with $name mutated', async ({ mutate, secret }) => {
-    const sim = await freshLedger();
-    await expect(submit(sim, { ...honest, claim: mutate(honest.claim) }, secret)).rejects.toThrow(
-      'Insufficient valid signatures',
-    );
-  });
+  ])(
+    'rejects the signatures over a claim with $name mutated',
+    async ({ mutate, secret, sealedAppId }) => {
+      const sim = await freshLedger(sealedAppId);
+      await expect(submit(sim, { ...honest, claim: mutate(honest.claim) }, secret)).rejects.toThrow(
+        'Insufficient valid signatures',
+      );
+    },
+  );
 });
