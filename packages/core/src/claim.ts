@@ -151,20 +151,7 @@ export function claimSchema<V extends number = number, W extends number = 0>(
     .refine((input) => input.present.length === input.values.length + input.byteValues.length, {
       message: 'present must have one flag per value: values.length + byteValues.length',
       path: ['present'],
-    })
-    .transform((input) => ({
-      version: input.version,
-      appId: input.appId,
-      policyHash: input.policyHash,
-      windowStart: input.windowStart,
-      windowEnd: input.windowEnd,
-      subjectHash: input.subjectHash,
-      holder: input.holder,
-      salt: input.salt,
-      present: input.present,
-      values: input.values,
-      byteValues: input.byteValues,
-    }));
+    });
   return schema as unknown as z.ZodType<
     Claim<V, W>,
     z.core.$ZodTypeInternals<Claim<V, W>, ClaimInput<V, W>>

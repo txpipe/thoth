@@ -1,6 +1,6 @@
 // Unit tests for the canonical claim shape (`@thoth/core/claim`): the schema's
-// length and numeric-bound validation and `claimToMessage`'s wire encoding, including the
-// per-half byte flag duplication and the adjacent 16-byte halves, and
+// length and numeric-bound validation, `claimToMessage`'s wire encoding
+// (per-half byte flag duplication, adjacent 16-byte halves), and
 // `toContractClaim`'s mask guard (its parity lives in the contracts tests).
 import { type Claim, claimSchema, claimToMessage, toContractClaim } from '@thoth/core/claim';
 import { describe, expect, it } from 'vitest';
@@ -115,14 +115,14 @@ describe('claimSchema numeric bounds', () => {
   // Each numeric field with the contract type it lands in: values are
   // `Uint<64>`, the window bounds `Uint<32>`, the version `Uint<8>`.
   const fields = [
-    { name: 'values[0]', bits: 64, set: (n: number | bigint) => ({ values: [n, 0n, 9n] }) },
-    { name: 'windowStart', bits: 32, set: (n: number | bigint) => ({ windowStart: n }) },
-    { name: 'windowEnd', bits: 32, set: (n: number | bigint) => ({ windowEnd: n }) },
-    { name: 'version', bits: 8, set: (n: number | bigint) => ({ version: n }) },
+    { path: 'values.0', bits: 64, set: (n: number | bigint) => ({ values: [n, 0n, 9n] }) },
+    { path: 'windowStart', bits: 32, set: (n: number | bigint) => ({ windowStart: n }) },
+    { path: 'windowEnd', bits: 32, set: (n: number | bigint) => ({ windowEnd: n }) },
+    { path: 'version', bits: 8, set: (n: number | bigint) => ({ version: n }) },
   ];
   const parse = (patch: object) => claimSchema(3).safeParse({ ...numericBase, ...patch });
 
-  for (const { name, bits, set } of fields) {
+  for (const { path, bits, set } of fields) {
     const bound = 1n << BigInt(bits);
     const invalid: [string, number | bigint][] = [
       ['a negative number', -1],
@@ -133,16 +133,14 @@ describe('claimSchema numeric bounds', () => {
       [`2^${bits}`, bound],
     ];
     for (const [label, input] of invalid) {
-      it(`rejects ${label} in ${name} with a validation error`, () => {
+      it(`rejects ${label} in ${path} with a validation error`, () => {
         const result = parse(set(input));
         expect(result.success).toBe(false);
-        expect(result.error?.issues.map((issue) => issue.path.join('.'))).toContain(
-          name.replace('[0]', '.0'),
-        );
+        expect(result.error?.issues.map((issue) => issue.path.join('.'))).toContain(path);
       });
     }
 
-    it(`accepts 0 and 2^${bits} - 1 in ${name}, as a bigint`, () => {
+    it(`accepts 0 and 2^${bits} - 1 in ${path}`, () => {
       expect(parse(set(0)).success).toBe(true);
       expect(parse(set(bound - 1n)).success).toBe(true);
     });
