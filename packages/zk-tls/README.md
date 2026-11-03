@@ -97,6 +97,7 @@ const attestment = await client.collect(
 
 What the attestor checks before signing:
 
+- The policy, the evidence and the proposed claim fit [`ZK_FETCH_LIMITS`](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/src/index.ts): at most 64 numeric and 64 byte slots, bounded policy arrays and bounded strings. Oversized input fails while it is parsed, before the proof check or the signature runs.
 - The witness's ECDSA signature over the Reclaim claim, and that the claim identifier matches its signed content.
 - The witness address is the one the instance was built with.
 - The signed request carries no `{{param}}` template ([why](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
@@ -147,7 +148,8 @@ What it does not check, and what your app must do:
 - **The signed request carries no `{{param}}` template.** The signed url, body, `geoLocation` and `proxySessionId` cannot contain `{{`, so put a per-user URL in the request as a concrete URL and don't use Reclaim's secret `paramValues` ([Building the request](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
 - **The policy decides how the request body is bound.** `bodyPolicy` is required and part of the policy hash, so there is no method-based default and every attestor enforces the same rule. Reclaim compares the sent body only when the signed body is non-empty, so you choose between a bound body (`non-empty` or a pin) and the explicit unbound `ignored` ([Body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy)).
 - **One policy per trusted set.** N-of-M means N attestors signed the same message, so every attestor must enforce the same policy; different readings produce different messages and never count together. Which witness an attestor trusts is per instance, not part of the policy.
-- **One attestor instance serves any contract.** The slot counts come from each proposal, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
+- **The input limits are fixed by the kind.** Every zkFetch attestor rejects the same oversized input, so a trusted set never splits on input size. A contract with more slots than `ZK_FETCH_LIMITS` allows cannot use this kind.
+- **One attestor instance serves any contract.** The slot counts come from each proposal, up to `ZK_FETCH_LIMITS`, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
 - **The prover is its own entry point.** `@thoth/zk-tls/prover` loads the Reclaim client libraries lazily, so a client-only build never pulls them. `@thoth/zk-tls/client` imports neither those libraries nor `@thoth/attestor`.
 
 ## License

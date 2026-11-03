@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { AttestationInput } from '@thoth/core';
-import type { Claim, FlatMessage } from '@thoth/core/claim';
+import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { bytes32Schema, CLAIM_VERSION, claimSchema } from '@thoth/core/claim';
 import type { CanonicalValue } from '@thoth/core/claim-context';
 import { claimContextDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
@@ -47,32 +47,108 @@ export interface ZkFetchEvidence {
   responseText?: string;
 }
 
+/**
+ * The largest input a zkFetch attestor parses. The schemas reject anything
+ * bigger before any proof check or signature runs, so an oversized request
+ * costs the attestor no more than its parse.
+ *
+ * Every attestor of the kind enforces the same limits, so a trusted set never
+ * splits on input size. String limits count UTF-16 code units.
+ */
+export const ZK_FETCH_LIMITS = {
+  /** Numeric claim slots, `values.length`. */
+  valueSlots: 64,
+  /** Byte claim slots, `byteValues.length`. */
+  byteSlots: 64,
+  /** Entries in a policy's `allowedHosts`. */
+  allowedHosts: 64,
+  /** Entries in a policy's `responseMatches`. */
+  responseMatches: 32,
+  /** Entries in a policy's `responseRedactions`. */
+  responseRedactions: 32,
+  /** A host in `allowedHosts`, the DNS name limit. */
+  hostLength: 253,
+  /** A slot's `name`. */
+  slotNameLength: 128,
+  /** A response match `value`, or a redaction's `regex`, `jsonPath` or `xPath`. */
+  ruleLength: 4096,
+  /** The evidence's `claim.parameters`: the signed request, headers and body included. */
+  parametersLength: 256 * 1024,
+  /** The evidence's `claim.context`, which carries every disclosed value. */
+  contextLength: 1024 * 1024,
+  /** The evidence's `responseText`, the transcript as the client saw it. */
+  responseTextLength: 4 * 1024 * 1024,
+  /**
+   * Every other evidence string: `provider`, `owner`, `identifier`,
+   * `signatureHex` and `attestorAddress`.
+   */
+  fieldLength: 256,
+} as const;
+
+/** An evidence string with no larger limit of its own. */
+const evidenceField = z.string().max(ZK_FETCH_LIMITS.fieldLength);
+
 const claimDataSchema = z.object({
-  provider: z.string(),
-  parameters: z.string(),
-  owner: z.string(),
+  provider: evidenceField,
+  parameters: z.string().max(ZK_FETCH_LIMITS.parametersLength),
+  owner: evidenceField,
   timestampS: z.number(),
-  context: z.string(),
-  identifier: z.string(),
+  context: z.string().max(ZK_FETCH_LIMITS.contextLength),
+  identifier: evidenceField,
   epoch: z.number(),
 });
 
-/** Runtime validator for {@link ZkFetchEvidence}. Unknown fields are stripped. */
+/**
+ * Runtime validator for {@link ZkFetchEvidence}. Unknown fields are stripped,
+ * and every string is capped by {@link ZK_FETCH_LIMITS}.
+ */
 export const zkFetchEvidenceSchema = z.object({
   claim: claimDataSchema,
-  signatureHex: z.string(),
-  attestorAddress: z.string(),
-  responseText: z.string().optional(),
+  signatureHex: evidenceField,
+  attestorAddress: evidenceField,
+  responseText: z.string().max(ZK_FETCH_LIMITS.responseTextLength).optional(),
 });
+
+/** The claim's slot arrays and the most entries each may have. */
+const SLOT_ARRAY_LIMITS = [
+  ['values', ZK_FETCH_LIMITS.valueSlots],
+  ['byteValues', ZK_FETCH_LIMITS.byteSlots],
+  ['present', ZK_FETCH_LIMITS.valueSlots + ZK_FETCH_LIMITS.byteSlots],
+] as const;
 
 /**
  * The zkFetch kind's claim schema.
  *
  * `claimSchema` from `@thoth/core/claim` without the fixed lengths: the slot
  * counts are `values.length` and `byteValues.length` (default `[]`), and
- * `present` needs one flag per slot.
+ * `present` needs one flag per slot. The counts are capped by
+ * {@link ZK_FETCH_LIMITS}.
  */
-export const zkFetchClaimSchema = claimSchema<number, number>();
+export const zkFetchClaimSchema = z.preprocess<
+  unknown,
+  ReturnType<typeof claimSchema<number, number>>,
+  ClaimInput<number, number>
+>((input: unknown, context) => {
+  // Counted before any element is parsed: the signed message has one field per
+  // slot, so an uncapped count is a cheap CPU and memory attack.
+  const record: Readonly<Record<string, unknown>> =
+    typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
+  for (const [key, max] of SLOT_ARRAY_LIMITS) {
+    const entries = record[key];
+    if (Array.isArray(entries) && entries.length > max) {
+      context.addIssue({
+        code: 'too_big',
+        origin: 'array',
+        maximum: max,
+        inclusive: true,
+        input: entries,
+        path: [key],
+        message: `${key} has ${entries.length} entries; at most ${max} allowed`,
+      });
+    }
+  }
+  return input;
+}, claimSchema<number, number>());
 
 /**
  * The zkFetch kind's definition, the value `createZkFetchDefinition` returns.
@@ -190,6 +266,9 @@ export interface ZkFetchPolicy {
 const noTemplate = (rule: string): boolean => !/\{\{[^{}]+\}\}/.test(rule);
 const TEMPLATE_ERROR = 'disclosure rules cannot use {{param}} templates';
 
+/** A disclosure rule's text, capped by {@link ZK_FETCH_LIMITS}. */
+const ruleText = z.string().max(ZK_FETCH_LIMITS.ruleLength);
+
 /** SHA-256 of a UTF-8 string, raw bytes. */
 const sha256 = (data: string): Uint8Array =>
   new Uint8Array(createHash('sha256').update(data, 'utf-8').digest());
@@ -202,16 +281,20 @@ const EMPTY_BODY_SHA256 = bytesToHex(sha256(''));
  *
  * Rule entries are strict, so Reclaim's `invert` and `hash` are refused, and
  * rule texts cannot carry `{{param}}` templates. `bodyPolicy` is required; a
- * pin is 32 bytes and not the empty body's hash.
+ * pin is 32 bytes and not the empty body's hash. Array and string sizes are
+ * capped by {@link ZK_FETCH_LIMITS}.
  */
 export const zkFetchPolicySchema = z.object({
-  allowedHosts: z.array(z.string()).min(1),
+  allowedHosts: z
+    .array(z.string().max(ZK_FETCH_LIMITS.hostLength))
+    .min(1)
+    .max(ZK_FETCH_LIMITS.allowedHosts),
   slots: z
     .array(
       z
         .object({
           slot: z.number().int().nonnegative(),
-          name: z.string().min(1),
+          name: z.string().min(1).max(ZK_FETCH_LIMITS.slotNameLength),
           parse: z.enum(['int', 'float', 'bytes', 'hex', 'base64']),
           length: z.number().int().min(1).max(32).optional(),
           optional: z.boolean().optional(),
@@ -226,22 +309,26 @@ export const zkFetchPolicySchema = z.object({
           }
         }),
     )
-    .min(1),
+    .min(1)
+    .max(ZK_FETCH_LIMITS.valueSlots + ZK_FETCH_LIMITS.byteSlots),
   responseMatches: z
     .array(
       z.strictObject({
         type: z.enum(['regex', 'contains']),
-        value: z.string().min(1).refine(noTemplate, TEMPLATE_ERROR),
+        value: ruleText.min(1).refine(noTemplate, TEMPLATE_ERROR),
       }),
     )
-    .min(1),
-  responseRedactions: z.array(
-    z.strictObject({
-      regex: z.string().refine(noTemplate, TEMPLATE_ERROR).optional(),
-      jsonPath: z.string().refine(noTemplate, TEMPLATE_ERROR).optional(),
-      xPath: z.string().refine(noTemplate, TEMPLATE_ERROR).optional(),
-    }),
-  ),
+    .min(1)
+    .max(ZK_FETCH_LIMITS.responseMatches),
+  responseRedactions: z
+    .array(
+      z.strictObject({
+        regex: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
+        jsonPath: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
+        xPath: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
+      }),
+    )
+    .max(ZK_FETCH_LIMITS.responseRedactions),
   bodyPolicy: z.union([
     z.literal('ignored'),
     z.literal('non-empty'),
