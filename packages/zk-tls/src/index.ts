@@ -347,9 +347,8 @@ export const normalizePolicy = (policy: ZkFetchPolicy) => {
   const parsed = zkFetchPolicySchema.parse(policy);
   const rules = normalizedRulesOf(parsed);
   return {
-    // The schema refused every entry `canonicalHostEntry` cannot read.
     allowedHosts: [
-      ...new Set(parsed.allowedHosts.map((host) => canonicalHostEntry(host) as string)),
+      ...new Set(parsed.allowedHosts.flatMap((host) => canonicalHostEntry(host) ?? [])),
     ].sort(),
     slots: parsed.slots
       .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
@@ -950,12 +949,11 @@ export const assertEvidenceMatchesPolicy = (
   if (url.protocol !== 'https:') {
     throw new Error(`attested url must be https, got ${url.protocol}//`);
   }
-  // WHATWG lowercases the hostname and empties the port when it is 443.
-  const name = url.hostname.replace(/\.+$/, '');
-  const host = url.port === '' ? name : `${name}:${url.port}`;
-  if (!hostAllowed(host, parsedPolicy.allowedHosts)) {
+  // WHATWG has already dropped port 443 from `url.host`; a host no entry could name fails closed.
+  const host = canonicalHostEntry(url.host);
+  if (host === undefined || !hostAllowed(host, parsedPolicy.allowedHosts)) {
     throw new Error(
-      `attested host ${host} not in allowlist [${parsedPolicy.allowedHosts.join(', ')}]`,
+      `attested host ${url.host} not in allowlist [${parsedPolicy.allowedHosts.join(', ')}]`,
     );
   }
   const request = claimRequestOf(verified.claim);
