@@ -32,6 +32,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./attestor": {
+      "types": "./dist/attestor/index.d.ts",
+      "import": "./dist/attestor/index.js"
     }
   },
   "scripts": {
@@ -39,6 +43,7 @@
     "types": "tsc --noEmit"
   },
   "dependencies": {
+    "@thoth/attestor": "*",
     "@thoth/core": "*",
     "zod": "^4.5.4"
   },
