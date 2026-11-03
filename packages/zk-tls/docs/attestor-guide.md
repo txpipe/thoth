@@ -106,10 +106,10 @@ PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start   # ws://localhost:8001/ws
 
 For two witnesses at once, `npm run witnesses --workspace=packages/zk-tls` runs
 `scripts/start-witnesses.sh`: it clones `attestor-core` at a pinned commit
-(`f451eb3`, 5.1.6, the version `@thoth/zk-tls` depends on), installs it,
-starts two witnesses on ports 8001 and 8002, and prints each one's address. `WITNESS_REF`, `WITNESS_CLONE_DIR`,
-`WITNESS_PORT_A`/`B` and `WITNESS_KEY_A`/`B` override the defaults; Ctrl-C
-stops both.
+(`f451eb3`, the source of the 5.1.6 release `@thoth/zk-tls` depends on),
+installs it, starts two witnesses on ports 8001 and 8002, and prints each one's
+address. `WITNESS_REF`, `WITNESS_CLONE_DIR`, `WITNESS_PORT_A`/`B` and
+`WITNESS_KEY_A`/`B` override the defaults; Ctrl-C stops both.
 
 ## Witness agreement and upgrades
 

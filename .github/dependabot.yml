@@ -7,6 +7,8 @@ updates:
     ignore:
       # Pinned with the Compact compiler; see CONTRIBUTING.md#dev-setup.
       - dependency-name: '@midnight-ntwrk/compact-runtime'
+      # Bumped by hand with the witness pin in packages/zk-tls/scripts/start-witnesses.sh.
+      - dependency-name: '@reclaimprotocol/*'
     groups:
       npm:
         patterns: ['*']

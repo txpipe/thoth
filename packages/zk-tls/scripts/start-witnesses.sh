@@ -4,7 +4,8 @@
 #
 # The clone is pinned so the live check does not drift with upstream. Keep the
 # version equal to @reclaimprotocol/attestor-core in package.json, and bump the
-# commit with it once a newer witness is verified.
+# commit with it once a newer witness is verified. Upstream's package.json still
+# reads 5.1.4 at this commit; it carries the same source as the npm 5.1.6 release.
 set -euo pipefail
 
 REPO=https://github.com/reclaimprotocol/attestor-core
