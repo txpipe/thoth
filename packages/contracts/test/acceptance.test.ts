@@ -258,9 +258,9 @@ describe('cross-seam acceptance', () => {
         ],
       }),
     },
-    // POLICY_B is sealed too, so only the signatures can reject it.
+    // POLICY_B is sealed too, so only the signatures can reject it. Another
+    // app id is absent: the sealed app id rejects it before the signatures.
     { name: 'the policy', mutate: (c: B_Claim) => ({ ...c, policyHash: POLICY_B }) },
-    { name: 'the app id', mutate: (c: B_Claim) => ({ ...c, appId: flip(c.appId, 0) }) },
     {
       name: 'the subject',
       mutate: (c: B_Claim) => ({ ...c, subjectHash: flip(c.subjectHash, 0) }),

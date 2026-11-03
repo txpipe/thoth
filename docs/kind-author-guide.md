@@ -111,8 +111,8 @@ decides only the header fields that come from the evidence and the values:
   `getAttestationWitness`, never your claim itself, even with `W = 0`, whose
   empty `bytePresent`/`byteHalves` the contract still requires.
 - `appId` and `holder` come from the claim proposal. The contract checks
-  `holder` against the caller's secret; `appId` is compared by the app's own
-  predicate, not by the module.
+  `holder` against the caller's secret and `appId` against the app id it
+  seals.
 - Bind the holder and window to the evidence. Have the
   [witness](../CONTEXT.md#roles) sign `claimContextDigestOf` of the
   [claim context](../CONTEXT.md#the-claim) (`@thoth/core/claim-context`), and

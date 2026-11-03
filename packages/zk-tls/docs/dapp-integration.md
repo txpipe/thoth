@@ -23,7 +23,8 @@ contract. The [package README](../README.md) explains the terms; the
   [Building the policy](#building-the-policy). Every claim carries
   `zkFetchPolicyHashOf(policy)` as its `policyHash`, and your contract must
   seal that hash at deploy or it rejects the claim.
-- **`appId`.** The 32 bytes naming your app, signed into every claim.
+- **`appId`.** The 32 bytes naming your app, signed into every claim. Your
+  contract seals the same bytes at deploy and rejects a claim for any other.
 - **`valueSlots`.** Your contract's `#V`, the numeric slot count.
 - **`byteSlots`.** Optional: half your contract's `#B`, since the contract
   stores each 32-byte value as two 16-byte halves. Defaults to `0`.

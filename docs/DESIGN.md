@@ -62,7 +62,7 @@ The terms are defined in [`CONTEXT.md`](../CONTEXT.md#the-claim).
 | Field | What it is |
 |-------|------------|
 | `version` | Wire version, `1` until a layout is deployed |
-| `appId` | The app the claim is for |
+| `appId` | The app the claim is for; the contract seals its own and rejects any other ([ADR 0013](adr/0013-contract-seals-its-app-id.md)) |
 | `policyHash` | Hash of the policy the attestors enforced; stands in for the kind ([ADR 0002](adr/0002-no-kind-on-chain-policy-hash.md)) |
 | `windowStart`, `windowEnd` | When the attestor observed, in Unix seconds ([ADR 0005](adr/0005-window-is-when-the-attestor-observed.md)) |
 | `subjectHash` | Circuit hash of what the claim is about ([ADR 0001](adr/0001-source-binding-by-in-circuit-subject-hash.md)) |

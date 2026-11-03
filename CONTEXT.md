@@ -47,7 +47,7 @@ The claim's wire version, `1`. It stays `1` until a layout is deployed.
 _Avoid_: Schema id.
 
 **App id**:
-The 32 bytes naming the app a claim is for. Signed into the claim and into the observation identity. The module does not check it; an app that must refuse another app's claims compares it in its own predicate.
+The 32 bytes naming the app a claim is for. Signed into the claim and into the observation identity. The contract seals one app id at deploy and rejects a claim for any other.
 _Avoid_: Scope, contract id.
 
 **Policy**:
