@@ -109,11 +109,14 @@ export const zkFetchEvidenceSchema = z.object({
   responseText: z.string().max(ZK_FETCH_LIMITS.responseTextLength).optional(),
 });
 
+/** The most claim slots, numeric and byte together. */
+const MAX_SLOTS = ZK_FETCH_LIMITS.valueSlots + ZK_FETCH_LIMITS.byteSlots;
+
 /** The claim's slot arrays and the most entries each may have. */
 const SLOT_ARRAY_LIMITS = [
   ['values', ZK_FETCH_LIMITS.valueSlots],
   ['byteValues', ZK_FETCH_LIMITS.byteSlots],
-  ['present', ZK_FETCH_LIMITS.valueSlots + ZK_FETCH_LIMITS.byteSlots],
+  ['present', MAX_SLOTS],
 ] as const;
 
 /**
@@ -310,7 +313,7 @@ export const zkFetchPolicySchema = z.object({
         }),
     )
     .min(1)
-    .max(ZK_FETCH_LIMITS.valueSlots + ZK_FETCH_LIMITS.byteSlots),
+    .max(MAX_SLOTS),
   responseMatches: z
     .array(
       z.strictObject({

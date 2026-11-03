@@ -24,7 +24,9 @@ contract. The [package README](../README.md) explains the terms; the
   `zkFetchPolicyHashOf(policy)` as its `policyHash`, and your contract must
   seal that hash at deploy or it rejects the claim.
 - **`appId`.** The 32 bytes naming your app, signed into every claim.
-- **`valueSlots`.** Your contract's `#V`, the numeric slot count.
+- **`valueSlots`.** Your contract's `#V`, the numeric slot count. Attestors
+  accept at most 64 numeric and 64 byte slots
+  ([limits](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls#guarantees-and-limits)).
 - **`byteSlots`.** Optional: half your contract's `#B`, since the contract
   stores each 32-byte value as two 16-byte halves. Defaults to `0`.
 - **`provers`.** Where evidence comes from, keyed by attestor id. Each entry

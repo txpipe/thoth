@@ -82,7 +82,7 @@ describe('zkFetch attestor input limits', () => {
     const count = ZK_FETCH_LIMITS.valueSlots + 1;
     await expectRejectedUnverified(
       { claim: { ...claim, values: repeat(count, 0), present: repeat(count, false) } },
-      /values has 65 entries; at most 64 allowed/,
+      new RegExp(`values has ${count} entries; at most ${ZK_FETCH_LIMITS.valueSlots} allowed`),
     );
   });
 
@@ -96,7 +96,7 @@ describe('zkFetch attestor input limits', () => {
           present: repeat(count + 1, false),
         },
       },
-      /byteValues has 65 entries; at most 64 allowed/,
+      new RegExp(`byteValues has ${count} entries; at most ${ZK_FETCH_LIMITS.byteSlots} allowed`),
     );
   });
 
@@ -109,8 +109,8 @@ describe('zkFetch attestor input limits', () => {
       byteValues: repeat(bytes, new Uint8Array(32)),
       present: repeat(values + bytes, false),
     });
-    expect(parsed.values).toHaveLength(64);
-    expect(parsed.byteValues).toHaveLength(64);
+    expect(parsed.values).toHaveLength(values);
+    expect(parsed.byteValues).toHaveLength(bytes);
   });
 
   it.each([

@@ -27,7 +27,9 @@ Serve `attestor.attest(input)` to dApps over the transport you choose;
 
 The instance takes no registry slot and no slot counts, so one instance
 serves any dApp ([why](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
-Each claim proposal carries the slot counts of the contract it is for.
+Each claim proposal carries the slot counts of the contract it is for, up to
+the [limits](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls#guarantees-and-limits)
+every zkFetch attestor enforces.
 
 ### The witness address
 

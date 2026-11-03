@@ -97,7 +97,10 @@ const attestment = await client.collect(
 
 What the attestor checks before signing:
 
-- The policy, the evidence and the proposed claim fit [`ZK_FETCH_LIMITS`](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/src/index.ts): at most 64 numeric and 64 byte slots, bounded policy arrays and bounded strings. Oversized input fails while it is parsed, before the proof check or the signature runs.
+- The policy, the evidence and the proposed claim fit [`ZK_FETCH_LIMITS`](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/src/index.ts). Oversized input fails while it is parsed, before the law's `verify` step or the signature runs. String lengths count UTF-16 code units.
+  - Claim: 64 numeric slots and 64 byte slots.
+  - Policy: 64 `allowedHosts` of up to 253 characters, one slot entry per claim slot with names up to 128 characters, 32 `responseMatches` and 32 `responseRedactions` with rule texts up to 4096 characters.
+  - Evidence: `claim.parameters` up to 256 KiB, `claim.context` up to 1 MiB, `responseText` up to 4 MiB, and 256 characters for each other string.
 - The witness's ECDSA signature over the Reclaim claim, and that the claim identifier matches its signed content.
 - The witness address is the one the instance was built with.
 - The signed request carries no `{{param}}` template ([why](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
