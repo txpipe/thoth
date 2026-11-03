@@ -98,7 +98,7 @@ const attestment = await client.collect(
 What the attestor checks before signing:
 
 - The witness's ECDSA signature over the Reclaim claim, and that the claim identifier matches its signed content.
-- The witness address is the one the instance was built with.
+- The witness address is the one the definition was created with, checked before the signature.
 - The signed request carries no `{{param}}` template ([why](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
 - The attested URL is HTTPS on an allowed host.
 - The signed request body carries no `*` and satisfies the policy's [body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy).

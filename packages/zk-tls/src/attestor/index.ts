@@ -168,14 +168,29 @@ export const assertClaimMatchesContext = (options: {
   }
 };
 
+/** A witness address: `0x` and 40 hex digits. */
+const WITNESS_ADDRESS = /^0x[0-9a-f]{40}$/i;
+
 /**
- * Create the zkFetch kind's shareable definition: the three schemas, a
+ * Create the zkFetch kind's definition for one operator: the three schemas, a
  * `verify` that runs every check in this module in order, and a `message`
  * that encodes the claim with `claimToMessage`.
  *
- * Instantiate it with {@link zkFetchAttestor}.
+ * `verify` rejects evidence from any witness but `witnessAddress`, before the
+ * proof check, so pairing the definition with `buildAttestor` keeps the pin.
+ * {@link zkFetchAttestor} builds the deployable attestor on top of it.
+ *
+ * @param options.witnessAddress The operator's own Reclaim witness address,
+ *   `0x` + 40 hex. Compared case-insensitively.
+ * @throws if `witnessAddress` is not `0x` and 40 hex digits.
  */
-export function createZkFetchDefinition(): ZkFetchDefinition {
+export function createZkFetchDefinition(options: { witnessAddress: string }): ZkFetchDefinition {
+  if (!WITNESS_ADDRESS.test(options.witnessAddress)) {
+    throw new Error(
+      `witnessAddress must be 0x and 40 hex digits, got ${JSON.stringify(options.witnessAddress)}`,
+    );
+  }
+  const trustedWitnessAddress = options.witnessAddress.toLowerCase();
   return defineAttestor({
     kind: ZK_FETCH_LAW,
     policy: zkFetchPolicySchema,
@@ -189,6 +204,14 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
         input.claim.values.length,
         input.claim.byteValues.length,
       );
+      // The proof check only shows that the evidence's own `attestorAddress`
+      // signed it. Without this pin, a client could run its own witness, sign
+      // any response, and have it certified.
+      if (input.evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
+        throw new Error(
+          `evidence signed by witness ${input.evidence.attestorAddress}, not this attestor's witness ${trustedWitnessAddress}`,
+        );
+      }
       const verified = await verifyZkFetchProof(input.evidence);
       assertEvidenceMatchesPolicy(verified, input.policy);
       assertObservationInWindow({ claim: input.claim, verified });
@@ -207,8 +230,8 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
 /**
  * Build a deployable zkFetch attestor.
  *
- * It accepts evidence only from the witness at `witnessAddress`, runs the
- * definition's `verify`, then derives its own claim from the evidence, sized
+ * It runs the `verify` of `createZkFetchDefinition({ witnessAddress })`,
+ * which accepts evidence only from the witness at `witnessAddress`, then derives its own claim from the evidence, sized
  * to the proposal's `values` and `byteValues` lengths, and signs that.
  *
  * @example
@@ -221,6 +244,8 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  *   witnessAddress: '0x…', // the public address of your Reclaim witness
  * });
  * ```
+ *
+ * @throws if `witnessAddress` is not `0x` and 40 hex digits.
  */
 export function zkFetchAttestor<PK, S>(parts: {
   id: string;
@@ -229,8 +254,7 @@ export function zkFetchAttestor<PK, S>(parts: {
   witnessAddress: string;
 }): Attestor<ZkFetchDefinition, PK, S> {
   const { id, keyPair, witnessAddress } = parts;
-  const trustedWitnessAddress = witnessAddress.toLowerCase();
-  const definition = createZkFetchDefinition();
+  const definition = createZkFetchDefinition({ witnessAddress });
   const publicKey = keyPair.publicKey;
   return buildAttestor({
     id,
@@ -244,11 +268,6 @@ export function zkFetchAttestor<PK, S>(parts: {
       // signature.
       const proposed = definition.claim.parse(input.claim);
       await definition.verify({ policy, evidence, claim: proposed });
-      if (evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
-        throw new Error(
-          `evidence signed by witness ${evidence.attestorAddress}, not this attestor's witness ${trustedWitnessAddress}`,
-        );
-      }
       const verified = parsedEvidenceView(evidence);
       const claim = deriveClaimFromEvidence({
         verified,

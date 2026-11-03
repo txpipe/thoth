@@ -32,9 +32,10 @@ Each claim proposal carries the slot counts of the contract it is for.
 ### The witness address
 
 `witnessAddress` is the public Ethereum address of your own Reclaim witness.
-The instance compares it case-insensitively and rejects evidence any other
-witness signed. The attestor process never receives or derives the witness
-private key; read the address from the witness's `/address` endpoint:
+The definition's `verify` compares it case-insensitively and rejects evidence
+any other witness signed, so an attestor built with `buildAttestor` and
+`createZkFetchDefinition({ witnessAddress })` keeps the pin too. The attestor
+process never receives or derives the witness private key; read the address from the witness's `/address` endpoint:
 
 ```bash
 curl --fail http://localhost:8001/address
@@ -48,12 +49,16 @@ witness host gives the same address.
 
 The dApp sends the raw input over the transport. The attestor parses it with
 its own schemas, requires every policy slot to fit the proposal's slot counts,
-and runs these checks before signing:
+and runs the checks of `createZkFetchDefinition({ witnessAddress })`'s `verify`
+before signing:
 
-1. `verifyZkFetchProof(evidence)` verifies the witness's ECDSA signature over
+1. The evidence's `attestorAddress` must be your `witnessAddress`, compared
+   case-insensitively. This runs before the proof check, so evidence from any
+   other witness costs no signature verification.
+2. `verifyZkFetchProof(evidence)` verifies the witness's ECDSA signature over
    the claim, checks the claim identifier against its signed content, and reads
    the values the witness disclosed.
-2. `assertEvidenceMatchesPolicy(verified, policy)` refuses a signed url, body,
+3. `assertEvidenceMatchesPolicy(verified, policy)` refuses a signed url, body,
    `geoLocation` or `proxySessionId` that carries a `{{param}}` template (see
    [Building the request](dapp-integration.md#building-the-request)), checks
    the attested URL against the host allowlist, checks the signed request body
@@ -62,25 +67,24 @@ and runs these checks before signing:
    equal the policy's canonical disclosure rules, and requires every required
    slot to be certifiable. `responseText` is not witness-signed, so no check
    reads it.
-3. `assertObservationInWindow({ claim, verified })` requires the witness's
+4. `assertObservationInWindow({ claim, verified })` requires the witness's
    observation time to fall inside the proposed window, bounds included. The
    contract bounds the window's length and checks it against block time.
-4. `assertClaimMatchesSubject({ claim, verified })` requires the proposal's
+5. `assertClaimMatchesSubject({ claim, verified })` requires the proposal's
    `subjectHash` to be the hash of the request the witness signed.
-5. `assertClaimMatchesContext({ claim, verified, policy })` requires the
+6. `assertClaimMatchesContext({ claim, verified, policy })` requires the
    context the witness signed to carry the
    [claim context](../../../CONTEXT.md#the-claim) digest of the policy, the
    signed request's subject, and the proposal's holder and window
    ([ADR 0011](../../../docs/adr/0011-evidence-binds-the-claim-context.md)),
    and the proposal's salt to be that digest.
-6. `assertClaimMatchesDisclosures({ claim, disclosures, policy })` requires the
+7. `assertClaimMatchesDisclosures({ claim, disclosures, policy })` requires the
    proposal to say exactly what the evidence disclosed.
 
-`attestor.attest` then rejects evidence whose signing witness is not your
-`witnessAddress`, derives its own claim from the evidence, and signs that: the
-values and `present` flags from the disclosed values, the signed request's
-subject hash, the policy's hash, and the salt from the signed claim context
-digest ([ADR 0012](../../../docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
+`attestor.attest` then derives its own claim from the evidence and signs
+that: the values and `present` flags from the disclosed values, the signed
+request's subject hash, the policy's hash, and the salt from the signed claim
+context digest ([ADR 0012](../../../docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
 It takes `appId`, the window and the holder commitment from the proposal, the
 last two checked against the digest the witness signed. A client cannot make
 you certify a reading the evidence does not support.

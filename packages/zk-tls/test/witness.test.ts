@@ -2,6 +2,8 @@
 // sign provider claim data. Checks the zkFetch attestor accepts evidence signed
 // by the witness address it pins, offline and deterministically, and rejects
 // evidence from any other witness.
+
+import { buildAttestor } from '@thoth/attestor';
 import { type Claim, claimToMessage, type FlatMessage } from '@thoth/core/claim';
 import {
   deriveClaimFromEvidence,
@@ -14,7 +16,7 @@ import {
   zkFetchPolicySchema,
   zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
-import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
+import { createZkFetchDefinition, zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DISCLOSURE_RULES } from './helpers/helper.js';
 import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
@@ -309,6 +311,60 @@ describe('test-key witness', () => {
   it('is rejected when signed by another witness', async () => {
     await expect(attestWith(aliceAttestor, await observe(bob))).rejects.toThrow(
       /not this attestor's witness/,
+    );
+  });
+
+  it("rejects another witness's evidence in the definition's verify, before proof verification", async () => {
+    const definition = createZkFetchDefinition({ witnessAddress: alice.address });
+    const evidence = await observe(bob);
+    const claim = deriveClaimFromEvidence({
+      verified: parsedEvidenceView(evidence),
+      policy,
+      appId: APP_ID,
+      holder: HOLDER,
+      valueSlots: 3,
+      ...WINDOW,
+    });
+    // A malformed signature would fail proof verification; the witness check must fire first.
+    await expect(
+      definition.verify({ policy, evidence: { ...evidence, signatureHex: '0x00' }, claim }),
+    ).rejects.toThrow(/not this attestor's witness/);
+    await expect(definition.verify({ policy, evidence, claim })).rejects.toThrow(
+      /not this attestor's witness/,
+    );
+  });
+
+  it('pins the witness when the definition is paired with buildAttestor', async () => {
+    const attestor = buildAttestor({
+      id: 'attestor-generic',
+      definition: createZkFetchDefinition({ witnessAddress: alice.address.toUpperCase() }),
+      keyPair: { publicKey: 'attestor-generic', signer: { sign: () => 'sig' } },
+      // The generic `attest` from the `@thoth/attestor` README: no witness check of its own.
+      attest: async (definition, signer, input) => {
+        const parsed = {
+          policy: definition.policy.parse(input.policy),
+          evidence: definition.evidence.parse(input.evidence),
+          claim: definition.claim.parse(input.claim),
+        };
+        await definition.verify(parsed);
+        const message = definition.message(parsed.claim);
+        const signature = await signer.sign(message);
+        return { claim: parsed.claim, message, publicKey: 'attestor-generic', signature };
+      },
+    });
+    await expect(
+      attestWith(attestor as unknown as typeof aliceAttestor, await observe(bob)),
+    ).rejects.toThrow(/not this attestor's witness/);
+    const attestation = await attestWith(
+      attestor as unknown as typeof aliceAttestor,
+      await observe(alice),
+    );
+    expect(attestation.publicKey).toBe('attestor-generic');
+  });
+
+  it('rejects a witness address that is not 0x and 40 hex digits', () => {
+    expect(() => createZkFetchDefinition({ witnessAddress: 'alice' })).toThrow(
+      /witnessAddress must be 0x and 40 hex digits/,
     );
   });
 
