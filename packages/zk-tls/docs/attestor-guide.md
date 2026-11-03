@@ -34,7 +34,7 @@ Each claim proposal carries the slot counts of the contract it is for.
 `witnessAddress` is the public Ethereum address of your own Reclaim witness.
 The definition's `verify` compares it case-insensitively and rejects evidence
 any other witness signed, so an attestor built with `buildAttestor` and
-`createZkFetchDefinition({ witnessAddress })` keeps the pin too. The attestor
+`createZkFetchDefinition({ witnessAddress })` checks the witness too. The attestor
 process never receives or derives the witness private key; read the address from the witness's `/address` endpoint:
 
 ```bash

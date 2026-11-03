@@ -337,7 +337,9 @@ describe('test-key witness', () => {
   it('pins the witness when the definition is paired with buildAttestor', async () => {
     const attestor = buildAttestor({
       id: 'attestor-generic',
-      definition: createZkFetchDefinition({ witnessAddress: alice.address.toUpperCase() }),
+      definition: createZkFetchDefinition({
+        witnessAddress: `0x${alice.address.slice(2).toUpperCase()}`,
+      }),
       keyPair: { publicKey: 'attestor-generic', signer: { sign: () => 'sig' } },
       // The generic `attest` from the `@thoth/attestor` README: no witness check of its own.
       attest: async (definition, signer, input) => {
@@ -362,11 +364,14 @@ describe('test-key witness', () => {
     expect(attestation.publicKey).toBe('attestor-generic');
   });
 
-  it('rejects a witness address that is not 0x and 40 hex digits', () => {
-    expect(() => createZkFetchDefinition({ witnessAddress: 'alice' })).toThrow(
-      /witnessAddress must be 0x and 40 hex digits/,
-    );
-  });
+  it.each(['alice', `0X${'ab'.repeat(20)}`, `0x${'ab'.repeat(19)}`])(
+    'rejects the witness address %s',
+    (witnessAddress) => {
+      expect(() => createZkFetchDefinition({ witnessAddress })).toThrow(
+        /witnessAddress must be 0x and 40 hex digits/,
+      );
+    },
+  );
 
   it('rejects evidence whose disclosure rules differ from the policy', async () => {
     const distancePolicy = zkFetchPolicySchema.parse({

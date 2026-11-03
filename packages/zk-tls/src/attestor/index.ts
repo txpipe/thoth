@@ -169,7 +169,7 @@ export const assertClaimMatchesContext = (options: {
 };
 
 /** A witness address: `0x` and 40 hex digits. */
-const WITNESS_ADDRESS = /^0x[0-9a-f]{40}$/i;
+const WITNESS_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 
 /**
  * Create the zkFetch kind's definition for one operator: the three schemas, a
@@ -177,7 +177,8 @@ const WITNESS_ADDRESS = /^0x[0-9a-f]{40}$/i;
  * that encodes the claim with `claimToMessage`.
  *
  * `verify` rejects evidence from any witness but `witnessAddress`, before the
- * proof check, so pairing the definition with `buildAttestor` keeps the pin.
+ * proof check, so an attestor built from it with `buildAttestor` checks the
+ * witness too.
  * {@link zkFetchAttestor} builds the deployable attestor on top of it.
  *
  * @param options.witnessAddress The operator's own Reclaim witness address,
@@ -185,7 +186,7 @@ const WITNESS_ADDRESS = /^0x[0-9a-f]{40}$/i;
  * @throws if `witnessAddress` is not `0x` and 40 hex digits.
  */
 export function createZkFetchDefinition(options: { witnessAddress: string }): ZkFetchDefinition {
-  if (!WITNESS_ADDRESS.test(options.witnessAddress)) {
+  if (!WITNESS_ADDRESS_PATTERN.test(options.witnessAddress)) {
     throw new Error(
       `witnessAddress must be 0x and 40 hex digits, got ${JSON.stringify(options.witnessAddress)}`,
     );
@@ -205,7 +206,7 @@ export function createZkFetchDefinition(options: { witnessAddress: string }): Zk
         input.claim.byteValues.length,
       );
       // The proof check only shows that the evidence's own `attestorAddress`
-      // signed it. Without this pin, a client could run its own witness, sign
+      // signed it. Without this check, a client could run its own witness, sign
       // any response, and have it certified.
       if (input.evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
         throw new Error(
@@ -230,9 +231,10 @@ export function createZkFetchDefinition(options: { witnessAddress: string }): Zk
 /**
  * Build a deployable zkFetch attestor.
  *
- * It runs the `verify` of `createZkFetchDefinition({ witnessAddress })`,
- * which accepts evidence only from the witness at `witnessAddress`, then derives its own claim from the evidence, sized
- * to the proposal's `values` and `byteValues` lengths, and signs that.
+ * It runs the `verify` of `createZkFetchDefinition({ witnessAddress })`, which
+ * accepts evidence only from the witness at `witnessAddress`, then derives its
+ * own claim from the evidence, sized to the proposal's `values` and
+ * `byteValues` lengths, and signs that.
  *
  * @example
  * ```ts
