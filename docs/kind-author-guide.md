@@ -96,11 +96,13 @@ decides only the header fields that come from the evidence and the values:
 - `windowStart` and `windowEnd` are the window the client proposed. Sign it
   only if your source's observation falls inside it. When the fact itself
   happened, such as a block height or event time, is a value, not the window
-  (ADR 0005).
+  (ADR 0005). Both bounds are `Uint<32>` Unix seconds.
 - `values` are `Uint<64>`, positional, one per numeric slot of the policy's slot
   map. Set `present[i]` for every measured slot, even when its value is zero. An
   unmeasured slot is `present[i] = false` with value `0`; the contract rejects
-  anything else. Do not guess a value you could not read.
+  anything else. Do not guess a value you could not read. `claimSchema` rejects
+  a value, window bound or version that is negative, fractional, an unsafe
+  integer `number`, or too large for its contract type.
 - `byteValues` are 32-byte values (identifiers, strings), positional, one per
   byte slot. The policy's byte rule canonicalizes a disclosed string into the
   32-byte slot, zero-padding shorter values; a value that does not fit is not

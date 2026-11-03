@@ -1,5 +1,5 @@
 // Unit tests for the canonical claim shape (`@thoth/core/claim`): the schema's
-// length validation and `claimToMessage`'s wire encoding, including the
+// length and numeric-bound validation and `claimToMessage`'s wire encoding, including the
 // per-half byte flag duplication and the adjacent 16-byte halves, and
 // `toContractClaim`'s mask guard (its parity lives in the contracts tests).
 import { type Claim, claimSchema, claimToMessage, toContractClaim } from '@thoth/core/claim';
@@ -108,6 +108,54 @@ describe('claimSchema', () => {
     expect(() =>
       claimSchema(3, 1).parse({ ...byteBase, byteValues: [new Uint8Array(31)] }),
     ).toThrow();
+  });
+});
+
+describe('claimSchema numeric bounds', () => {
+  // Each numeric field with the contract type it lands in: values are
+  // `Uint<64>`, the window bounds `Uint<32>`, the version `Uint<8>`.
+  const fields = [
+    { name: 'values[0]', bits: 64, set: (n: number | bigint) => ({ values: [n, 0n, 9n] }) },
+    { name: 'windowStart', bits: 32, set: (n: number | bigint) => ({ windowStart: n }) },
+    { name: 'windowEnd', bits: 32, set: (n: number | bigint) => ({ windowEnd: n }) },
+    { name: 'version', bits: 8, set: (n: number | bigint) => ({ version: n }) },
+  ];
+  const parse = (patch: object) => claimSchema(3).safeParse({ ...numericBase, ...patch });
+
+  for (const { name, bits, set } of fields) {
+    const bound = 1n << BigInt(bits);
+    const invalid: [string, number | bigint][] = [
+      ['a negative number', -1],
+      ['a negative bigint', -1n],
+      ['a fractional number', 1.5],
+      ['an unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+      ['NaN', Number.NaN],
+      [`2^${bits}`, bound],
+    ];
+    for (const [label, input] of invalid) {
+      it(`rejects ${label} in ${name} with a validation error`, () => {
+        const result = parse(set(input));
+        expect(result.success).toBe(false);
+        expect(result.error?.issues.map((issue) => issue.path.join('.'))).toContain(
+          name.replace('[0]', '.0'),
+        );
+      });
+    }
+
+    it(`accepts 0 and 2^${bits} - 1 in ${name}, as a bigint`, () => {
+      expect(parse(set(0)).success).toBe(true);
+      expect(parse(set(bound - 1n)).success).toBe(true);
+    });
+  }
+
+  it('accepts a safe-integer number and coerces it to bigint', () => {
+    const parsed = claimSchema(3).parse({ ...numericBase, windowStart: 100, values: [7, 0, 9] });
+    expect(parsed.windowStart).toBe(100n);
+    expect(parsed.values).toEqual([7n, 0n, 9n]);
+  });
+
+  it('bounds values when v is omitted', () => {
+    expect(claimSchema().safeParse({ ...numericBase, values: [-1n, 0n, 9n] }).success).toBe(false);
   });
 });
 
