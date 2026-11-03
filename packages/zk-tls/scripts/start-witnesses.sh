@@ -2,13 +2,14 @@
 # Start two Reclaim witnesses (attestor-core sidecars) for the live check in
 # packages/zk-tls/test/live.test.ts. Runs in the foreground; Ctrl-C stops both.
 #
-# The clone is pinned so the live check does not drift with upstream. Bump the
-# commit and version below when a newer witness is verified.
+# The clone is pinned so the live check does not drift with upstream. Keep the
+# version equal to @reclaimprotocol/attestor-core in package.json, and bump the
+# commit with it once a newer witness is verified.
 set -euo pipefail
 
 REPO=https://github.com/reclaimprotocol/attestor-core
-PINNED_REF="${WITNESS_REF:-7d8b90cc79ddf1dd43b3d327776fbd46726e5571}"
-PINNED_VERSION=5.1.4
+PINNED_REF="${WITNESS_REF:-f451eb3c3038efcf7c11b2497d7540d8f1e95752}"
+PINNED_VERSION=5.1.6
 CLONE_DIR="${WITNESS_CLONE_DIR:-${TMPDIR:-/tmp}/thoth-attestor-core}"
 PORT_A="${WITNESS_PORT_A:-8001}"
 PORT_B="${WITNESS_PORT_B:-8002}"
