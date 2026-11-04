@@ -1,7 +1,8 @@
 // The cardano@1 chain-event kind: the policy union, policy hash and claim
 // schema shared by every variant. The output variant lives under ./output/.
 
-import type { Claim } from '@thoth/core/claim';
+import type { AttestationInput } from '@thoth/core';
+import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { claimSchema } from '@thoth/core/claim';
 import type { CanonicalValue } from '@thoth/core/claim-context';
 import { z } from 'zod';
@@ -106,6 +107,19 @@ export const cardanoPolicyHashOf = (policy: CardanoPolicy): Uint8Array =>
  * slot.
  */
 export const cardanoClaimSchema = claimSchema<number, 0>();
+
+/** The cardano@1 definition, the value `createCardanoDefinition` returns. */
+export interface CardanoDefinition {
+  /** The kind identifier, `cardano@1`. */
+  readonly kind: typeof CARDANO_LAW;
+  readonly policy: typeof cardanoPolicySchema;
+  readonly evidence: typeof cardanoEvidenceSchema;
+  readonly claim: typeof cardanoClaimSchema;
+  /** Check a parsed proposal against the observation the attestor read. Throws to reject. */
+  verify(input: AttestationInput<CardanoPolicy, CardanoObservedEvidence, Claim<number, 0>>): void;
+  /** Encode the parsed claim into the flat signed message. */
+  message(claim: Claim<number, 0>): FlatMessage;
+}
 
 /**
  * Derive the claim of one observed output. `appId`, `holder` and the value

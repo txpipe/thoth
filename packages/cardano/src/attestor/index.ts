@@ -5,12 +5,13 @@ import type { Attestor, KeyPair } from '@thoth/attestor';
 import { buildAttestor } from '@thoth/attestor';
 import type { FlatMessage } from '@thoth/core/claim';
 import {
+  type CardanoDefinition,
   type CardanoLocator,
   type CardanoObservation,
   cardanoObservationSchema,
   deriveCardanoClaim,
 } from '../index.js';
-import { type CardanoDefinition, createCardanoDefinition } from './law.js';
+import { createCardanoDefinition } from './law.js';
 
 export type { CardanoDefinition };
 export { createCardanoDefinition };
