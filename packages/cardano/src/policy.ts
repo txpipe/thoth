@@ -77,16 +77,22 @@ export const addressSchema = z
   .min(1)
   .transform((address) => address.toLowerCase());
 
-/** Fails when the address prefix or charset does not match the network. */
+/**
+ * Fails when the address prefix or charset does not match the network.
+ *
+ * `path` is the field the issue points at; it defaults to `['address']` so a
+ * variant whose address field has another name can report the right one.
+ */
 export const checkAddressMatchesNetwork = (
   policy: { network: CardanoNetwork; address: string },
   context: z.RefinementCtx,
+  path: (string | number)[] = ['address'],
 ): void => {
   if (!ADDRESS_PATTERN[policy.network].test(policy.address)) {
     context.addIssue({
       code: 'custom',
       message: `address is not a ${policy.network} payment address`,
-      path: ['address'],
+      path,
     });
   }
 };

@@ -13,11 +13,14 @@ import {
   cardanoOutputPolicySchema,
   cardanoOutputSaltOf,
   cardanoOutputSubjectHashOf,
+  cardanoOutputSubjectOf,
   deriveOutputClaim,
   type OutputLocator,
   type OutputObservation,
   type OutputObservedEvidence,
   type OutputPolicy,
+  type OutputSubject,
+  type OutputSubjectInput,
 } from './output/index.js';
 import {
   CARDANO_LAW,
@@ -36,6 +39,8 @@ export type {
   OutputObservation,
   OutputObservedEvidence,
   OutputPolicy,
+  OutputSubject,
+  OutputSubjectInput,
 };
 export {
   CARDANO_LAW,
@@ -45,6 +50,7 @@ export {
   cardanoOutputObservationSchema,
   cardanoOutputSaltOf,
   cardanoOutputSubjectHashOf,
+  cardanoOutputSubjectOf,
 };
 
 /**

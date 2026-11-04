@@ -168,6 +168,53 @@ export type OutputObservedEvidence = OutputLocator & {
   observation?: OutputObservation;
 };
 
+/** The raw fields of one output the subject commits to. */
+export interface OutputSubjectInput {
+  /** The network magic of the chain the output belongs to. */
+  networkMagic: number;
+  /** The output's address, lowercase bech32. */
+  address: string;
+  /** The transaction hash, 64 lowercase hex characters. */
+  txHash: string;
+  /** The output's index within the transaction, a uint32. */
+  outputIndex: number;
+  /** The block hash, 64 lowercase hex characters. */
+  blockHash: string;
+}
+
+/**
+ * The subject of one observed output as 32-byte fields, in the order the
+ * circuit struct declares them. An app passes these fields as private input
+ * and recomputes the hash in-circuit (ADR 0001).
+ */
+export interface OutputSubject {
+  /** The network magic as a 32-byte big-endian uint32, right-aligned. */
+  networkMagic: Uint8Array;
+  /** SHA-256 of the lowercase bech32 address. */
+  addressHash: Uint8Array;
+  /** The 32 bytes of the transaction hash. */
+  txHash: Uint8Array;
+  /** The output index as a 32-byte big-endian uint32, right-aligned. */
+  outputIndex: Uint8Array;
+  /** The 32 bytes of the block hash. */
+  blockHash: Uint8Array;
+}
+
+/**
+ * Build the subject fields of one observed output, in the order the circuit's
+ * subject struct declares them.
+ *
+ * @throws if the network magic or output index is not a uint32, or a hash is
+ *   not 64 lowercase hex characters.
+ */
+export const cardanoOutputSubjectOf = (input: OutputSubjectInput): OutputSubject => ({
+  networkMagic: bytes32OfUint32(input.networkMagic),
+  addressHash: cardanoAddressHashOf(input.address),
+  txHash: bytes32OfHex(input.txHash),
+  outputIndex: bytes32OfUint32(input.outputIndex),
+  blockHash: bytes32OfHex(input.blockHash),
+});
+
 /**
  * Hash the event's identity: the network magic, the address, the transaction
  * hash, the output index and the block hash.
@@ -178,20 +225,16 @@ export type OutputObservedEvidence = OutputLocator & {
  * @throws if the network magic or output index is not a uint32, or a hash is
  *   not 64 lowercase hex characters.
  */
-export const cardanoOutputSubjectHashOf = (
-  networkMagic: number,
-  address: string,
-  txHash: string,
-  outputIndex: number,
-  blockHash: string,
-): Uint8Array =>
-  subjectHashOf([
-    bytes32OfUint32(networkMagic),
-    cardanoAddressHashOf(address),
-    bytes32OfHex(txHash),
-    bytes32OfUint32(outputIndex),
-    bytes32OfHex(blockHash),
+export const cardanoOutputSubjectHashOf = (input: OutputSubjectInput): Uint8Array => {
+  const subject = cardanoOutputSubjectOf(input);
+  return subjectHashOf([
+    subject.networkMagic,
+    subject.addressHash,
+    subject.txHash,
+    subject.outputIndex,
+    subject.blockHash,
   ]);
+};
 
 /** Keeps the salt apart from the subject and any other kind's hashes. */
 const SALT_TAG = 'thoth:cardano-salt:v1';
@@ -256,13 +299,13 @@ export const deriveOutputClaim = (options: {
     policyHash: cardanoOutputPolicyHashOf(policy),
     windowStart: BigInt(block.time),
     windowEnd: BigInt(block.time),
-    subjectHash: cardanoOutputSubjectHashOf(
-      observation.networkMagic,
-      output.address,
-      output.txHash,
-      output.outputIndex,
-      block.hash,
-    ),
+    subjectHash: cardanoOutputSubjectHashOf({
+      networkMagic: observation.networkMagic,
+      address: output.address,
+      txHash: output.txHash,
+      outputIndex: output.outputIndex,
+      blockHash: block.hash,
+    }),
     holder,
     salt: cardanoOutputSaltOf(observation.networkMagic, output.txHash, output.outputIndex),
     present,
