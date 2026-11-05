@@ -23,18 +23,21 @@ import {
   type OutputSubjectInput,
 } from './output/index.js';
 import {
+  CARDANO_FACTS,
   CARDANO_LAW,
   CARDANO_NETWORKS,
-  type CardanoCommonSlots,
+  type CardanoFact,
   type CardanoNetwork,
   type CardanoPolicyBase,
+  type CardanoSlot,
   policyHashOfCardano,
 } from './policy.js';
 
 export type {
-  CardanoCommonSlots,
+  CardanoFact,
   CardanoNetwork,
   CardanoPolicyBase,
+  CardanoSlot,
   OutputLocator,
   OutputObservation,
   OutputObservedEvidence,
@@ -43,6 +46,7 @@ export type {
   OutputSubjectInput,
 };
 export {
+  CARDANO_FACTS,
   CARDANO_LAW,
   CARDANO_NETWORKS,
   cardanoAddressHashOf,

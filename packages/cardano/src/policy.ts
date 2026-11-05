@@ -38,16 +38,26 @@ export type CardanoPolicyBase = {
 };
 
 /**
- * Slots every variant certifies. A slot map is total: each variant names
- * every slot it carries, so the claim's values are fully determined.
+ * The facts any cardano@1 policy can measure, each a field of the event read.
+ * A variant's schema narrows this to the subset its read can fill.
  */
-export type CardanoCommonSlots = {
-  /** The block's Unix time. */
-  blockTime: number;
-  /** The block's absolute slot. */
+export const CARDANO_FACTS = [
+  'blockTime',
+  'slot',
+  'blockNumber',
+  'lovelace',
+  'outputIndex',
+] as const;
+
+/** One measurable fact of a cardano@1 event. */
+export type CardanoFact = (typeof CARDANO_FACTS)[number];
+
+/** One claim-slot binding: which fact fills which claim slot. */
+export type CardanoSlot = {
+  /** Index into the claim's numeric value slots, `0..V-1`. */
   slot: number;
-  /** The block's height. */
-  blockNumber: number;
+  /** The fact to measure into `slot`. */
+  name: CardanoFact;
 };
 
 // CIP-19 payment addresses, bech32, lowercase. The 53 characters after the
@@ -126,16 +136,31 @@ export const checkNetworkMagic = (
   }
 };
 
-/** Fails when two named slots share a claim slot index. */
+/** Fails when two slot entries share a claim slot index. */
 export const checkSlotIndicesDistinct = (
-  slots: Record<string, number>,
+  slots: readonly { slot: number }[],
   context: z.RefinementCtx,
 ): void => {
-  const indices = Object.values(slots);
+  const indices = slots.map((entry) => entry.slot);
   if (new Set(indices).size !== indices.length) {
     context.addIssue({
       code: 'custom',
       message: 'each slot index may be declared once',
+      path: ['slots'],
+    });
+  }
+};
+
+/** Fails when one fact is mapped to more than one claim slot. */
+export const checkSlotNamesDistinct = (
+  slots: readonly { name: string }[],
+  context: z.RefinementCtx,
+): void => {
+  const names = slots.map((entry) => entry.name);
+  if (new Set(names).size !== names.length) {
+    context.addIssue({
+      code: 'custom',
+      message: 'each fact may be mapped once',
       path: ['slots'],
     });
   }

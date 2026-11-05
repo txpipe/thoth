@@ -10,12 +10,15 @@ import { z } from 'zod';
 import { bytes32OfHex, bytes32OfText, bytes32OfUint32, HEX_64 } from '../bytes.js';
 import {
   addressSchema,
+  CARDANO_FACTS,
   CARDANO_NETWORKS,
-  type CardanoCommonSlots,
+  type CardanoFact,
   type CardanoPolicyBase,
+  type CardanoSlot,
   checkAddressMatchesNetwork,
   checkNetworkMagic,
   checkSlotIndicesDistinct,
+  checkSlotNamesDistinct,
   MAX_NETWORK_MAGIC,
   numericSlotSchema,
   policyHashOfCardano,
@@ -24,24 +27,23 @@ import {
 /** The overflow bound of a claim value: lovelace is a uint64. */
 const MAX_LOVELACE = 2n ** 64n - 1n;
 
-/** The slots the output variant certifies. */
-export type OutputSlots = CardanoCommonSlots & {
-  /** The output's lovelace amount. */
-  lovelace: number;
-  /** The output's index within its transaction. */
-  outputIndex: number;
-};
-
 /**
- * One lovelace output at the watched address. The `slots` map says which
- * claim slot each field fills (ADR 0009, ADR 0013).
+ * One output at the watched address. The `slots` list says which claim slot
+ * each measured fact fills (ADR 0009, ADR 0013); the policy hash commits to
+ * it, so every attestor fills the same slots.
  */
 export type OutputPolicy = CardanoPolicyBase & {
   kind: 'output';
   /** The address the app watches, bech32, stored lowercase. */
   address: string;
-  slots: OutputSlots;
+  slots: readonly CardanoSlot[];
 };
+
+/** Runtime validator for one {@link CardanoSlot}. */
+const outputSlotSchema = z.strictObject({
+  slot: numericSlotSchema,
+  name: z.enum(CARDANO_FACTS),
+});
 
 /** Runtime validator for {@link OutputPolicy}. */
 export const cardanoOutputPolicySchema = z
@@ -51,19 +53,24 @@ export const cardanoOutputPolicySchema = z
     confirmationDepth: z.number().int().nonnegative(),
     address: addressSchema,
     kind: z.literal('output'),
-    slots: z.strictObject({
-      blockTime: numericSlotSchema,
-      slot: numericSlotSchema,
-      blockNumber: numericSlotSchema,
-      lovelace: numericSlotSchema,
-      outputIndex: numericSlotSchema,
-    }),
+    slots: z
+      .array(outputSlotSchema)
+      .min(1)
+      .superRefine((slots, context) => {
+        checkSlotIndicesDistinct(slots, context);
+        checkSlotNamesDistinct(slots, context);
+      }),
   })
   .superRefine((policy, context) => {
     checkNetworkMagic(policy, context);
     checkAddressMatchesNetwork(policy, context);
-    checkSlotIndicesDistinct(policy.slots, context);
-  });
+  })
+  .transform((policy) => ({
+    ...policy,
+    // Sorted by index, so the policy hash is the same whatever order the
+    // author wrote the entries in.
+    slots: [...policy.slots].sort((a, b) => a.slot - b.slot),
+  }));
 
 /**
  * Hash an output policy under the `cardano@1` law and the claim wire version.
@@ -265,6 +272,7 @@ export const deriveOutputClaim = (options: {
   valueSlots: number;
 }): Claim<number, 0> => {
   const { policy, observation, appId, holder, valueSlots } = options;
+  const { block, output } = observation;
   const present = Array.from({ length: valueSlots }, () => false);
   const values = Array.from({ length: valueSlots }, () => 0n);
   const fill = (slot: number, value: number | bigint): void => {
@@ -274,13 +282,17 @@ export const deriveOutputClaim = (options: {
     present[slot] = true;
     values[slot] = BigInt(value);
   };
-  fill(policy.slots.blockTime, observation.block.time);
-  fill(policy.slots.slot, observation.block.slot);
-  fill(policy.slots.blockNumber, observation.block.blockNumber);
-  fill(policy.slots.lovelace, observation.output.lovelace);
-  fill(policy.slots.outputIndex, observation.output.outputIndex);
+  const factValues: Record<CardanoFact, number | bigint> = {
+    blockTime: block.time,
+    slot: block.slot,
+    blockNumber: block.blockNumber,
+    lovelace: output.lovelace,
+    outputIndex: output.outputIndex,
+  };
+  for (const { slot, name } of policy.slots) {
+    fill(slot, factValues[name]);
+  }
 
-  const { block, output } = observation;
   return {
     version: CLAIM_VERSION,
     appId,

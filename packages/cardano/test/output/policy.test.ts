@@ -24,54 +24,60 @@ const OUTPUT: OutputPolicy = {
   networkMagic: 2,
   confirmationDepth: 3,
   address: TEST_ADDRESS,
-  slots: { blockTime: 0, slot: 1, blockNumber: 2, lovelace: 3, outputIndex: 4 },
+  slots: [
+    { slot: 0, name: 'blockTime' },
+    { slot: 1, name: 'slot' },
+    { slot: 2, name: 'blockNumber' },
+    { slot: 3, name: 'lovelace' },
+    { slot: 4, name: 'outputIndex' },
+  ],
 };
 
 const parse = (policy: unknown): CardanoPolicy => cardanoPolicySchema.parse(policy);
 
 describe('cardanoPolicySchema', () => {
-  it('parses the output variant', () => {
-    expect(parse(OUTPUT)).toEqual(OUTPUT);
+  it('parses the output variant, sorting its slots by index', () => {
+    const shuffled = { ...OUTPUT, slots: [...OUTPUT.slots].reverse() };
+    expect(parse(shuffled)).toEqual(OUTPUT);
   });
 
   it('accepts a zero confirmation depth, leaving the depth to the app', () => {
     expect(parse({ ...OUTPUT, confirmationDepth: 0 }).confirmationDepth).toBe(0);
   });
 
-  it('requires every slot the output carries', () => {
-    const { blockNumber: _, ...withoutBlockNumber } = OUTPUT.slots;
-    expect(() => parse({ ...OUTPUT, slots: withoutBlockNumber })).toThrow();
-    const { blockTime: __, ...withoutBlockTime } = OUTPUT.slots;
-    expect(() => parse({ ...OUTPUT, slots: withoutBlockTime })).toThrow();
-    const { lovelace: ___, ...withoutLovelace } = OUTPUT.slots;
-    expect(() => parse({ ...OUTPUT, slots: withoutLovelace })).toThrow();
-    const { outputIndex: ____, ...withoutOutputIndex } = OUTPUT.slots;
-    expect(() => parse({ ...OUTPUT, slots: withoutOutputIndex })).toThrow();
+  it('accepts a policy that maps a subset of the facts', () => {
+    const minimal = parse({ ...OUTPUT, slots: [{ slot: 0, name: 'lovelace' }] });
+    expect(minimal.slots).toEqual([{ slot: 0, name: 'lovelace' }]);
   });
 
-  it('rejects a slot the variant does not carry', () => {
-    expect(() => parse({ ...OUTPUT, slots: { ...OUTPUT.slots, quantity: 6 } })).toThrow();
-    expect(() => parse({ ...OUTPUT, slots: { ...OUTPUT.slots, policyId: 6 } })).toThrow();
+  it('rejects an empty slot list', () => {
+    expect(() => parse({ ...OUTPUT, slots: [] })).toThrow();
   });
 
-  it('rejects duplicate slot indices across names', () => {
-    expect(() => parse({ ...OUTPUT, slots: { ...OUTPUT.slots, lovelace: 0 } })).toThrow(
-      'declared once',
-    );
-    expect(() => parse({ ...OUTPUT, slots: { ...OUTPUT.slots, outputIndex: 0 } })).toThrow(
-      'declared once',
-    );
+  it('rejects a fact the variant does not carry', () => {
+    expect(() => parse({ ...OUTPUT, slots: [{ slot: 0, name: 'quantity' }] })).toThrow();
+    expect(() => parse({ ...OUTPUT, slots: [{ slot: 0, name: 'policyId' }] })).toThrow();
+  });
+
+  it('rejects duplicate slot indices across facts', () => {
+    const duplicated = [...OUTPUT.slots.slice(0, 4), { slot: 0, name: 'outputIndex' }];
+    expect(() => parse({ ...OUTPUT, slots: duplicated })).toThrow('declared once');
+  });
+
+  it('rejects one fact mapped to more than one slot', () => {
+    const duplicated = [...OUTPUT.slots, { slot: 5, name: 'lovelace' }];
+    expect(() => parse({ ...OUTPUT, slots: duplicated })).toThrow('mapped once');
   });
 
   it('rejects a negative or fractional slot index, and a bad depth', () => {
-    expect(() => parse({ ...OUTPUT, slots: { ...OUTPUT.slots, blockTime: -1 } })).toThrow();
-    expect(() => parse({ ...OUTPUT, slots: { ...OUTPUT.slots, blockTime: 0.5 } })).toThrow();
+    expect(() => parse({ ...OUTPUT, slots: [{ slot: -1, name: 'lovelace' }] })).toThrow();
+    expect(() => parse({ ...OUTPUT, slots: [{ slot: 0.5, name: 'lovelace' }] })).toThrow();
     expect(() => parse({ ...OUTPUT, confirmationDepth: 1.5 })).toThrow();
     expect(() => parse({ ...OUTPUT, confirmationDepth: -1 })).toThrow();
   });
 
-  it('rejects an unknown key anywhere, so a typo cannot silently drop a slot', () => {
-    expect(() => parse({ ...OUTPUT, slots: { ...OUTPUT.slots, lovelcae: 4 } })).toThrow();
+  it('rejects an unknown key anywhere, so a typo cannot silently drop a fact', () => {
+    expect(() => parse({ ...OUTPUT, slots: [{ slot: 4, name: 'lovelcae' }] })).toThrow();
     expect(() => parse({ ...OUTPUT, extra: 1 })).toThrow();
   });
 
@@ -165,15 +171,8 @@ describe('cardanoPolicySchema', () => {
 });
 
 describe('cardanoPolicyHashOf', () => {
-  it('hashes equivalent policies the same, whatever the key order', () => {
-    const reordered = {
-      slots: OUTPUT.slots,
-      networkMagic: OUTPUT.networkMagic,
-      address: OUTPUT.address,
-      confirmationDepth: OUTPUT.confirmationDepth,
-      network: OUTPUT.network,
-      kind: OUTPUT.kind,
-    };
+  it('hashes equivalent policies the same, whatever the entry order', () => {
+    const reordered = { ...OUTPUT, slots: [...OUTPUT.slots].reverse() };
     expect(cardanoPolicyHashOf(reordered as OutputPolicy)).toEqual(cardanoPolicyHashOf(OUTPUT));
   });
 
@@ -185,14 +184,16 @@ describe('cardanoPolicyHashOf', () => {
 
   it('changes the hash when one field changes', () => {
     const baseline = cardanoPolicyHashOf(OUTPUT);
+    const remapped = (name: OutputPolicy['slots'][number]['name'], slot: number) =>
+      OUTPUT.slots.map((entry) => (entry.name === name ? { ...entry, slot } : entry));
     const mutations: CardanoPolicy[] = [
       { ...OUTPUT, network: 'preprod', networkMagic: 1 },
       { ...OUTPUT, network: 'mainnet', networkMagic: 764824073, address: MAINNET_ADDRESS },
       { ...OUTPUT, network: 'devnet', networkMagic: 42 },
       { ...OUTPUT, confirmationDepth: 4 },
       { ...OUTPUT, address: `addr_test1${'p'.repeat(53)}` },
-      { ...OUTPUT, slots: { ...OUTPUT.slots, lovelace: 6 } },
-      { ...OUTPUT, slots: { ...OUTPUT.slots, blockNumber: 6 } },
+      { ...OUTPUT, slots: remapped('lovelace', 6) },
+      { ...OUTPUT, slots: remapped('blockNumber', 6) },
     ];
     for (const mutated of mutations) {
       expect(cardanoPolicyHashOf(mutated)).not.toEqual(baseline);
@@ -207,7 +208,7 @@ describe('cardanoPolicyHashOf', () => {
 
   it('pins the canonical output policy hash to its bytes', () => {
     expect(Buffer.from(cardanoPolicyHashOf(OUTPUT)).toString('hex')).toBe(
-      '260be4b7b15828a6ec3c053f8f4e9c9065658f69e083b0fb23d1e98bbce4f3b1',
+      '43a36f36210e42c8d3357821afb855b739ec22c832ecf7a5df3b79b05221d907',
     );
   });
 });

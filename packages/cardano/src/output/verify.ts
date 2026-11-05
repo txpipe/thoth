@@ -54,7 +54,7 @@ export const verifyOutputObservation = (
     throw new Error(`claim window is not the block time ${block.time}`);
   }
 
-  for (const slot of Object.values(policy.slots)) {
+  for (const { slot } of policy.slots) {
     if (slot >= claim.values.length) {
       throw new Error(
         `policy slot ${slot} is outside the claim's ${claim.values.length} value slots`,
