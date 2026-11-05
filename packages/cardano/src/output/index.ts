@@ -7,13 +7,7 @@ import { CLAIM_VERSION } from '@thoth/core/claim';
 import type { CanonicalValue } from '@thoth/core/claim-context';
 import { subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
-import {
-  bytes32OfHex,
-  bytes32OfText,
-  bytes32OfUint32,
-  cardanoAddressHashOf,
-  HEX_64,
-} from '../bytes.js';
+import { bytes32OfHex, bytes32OfText, bytes32OfUint32, HEX_64 } from '../bytes.js';
 import {
   addressSchema,
   CARDANO_NETWORKS,
@@ -172,8 +166,6 @@ export type OutputObservedEvidence = OutputLocator & {
 export interface OutputSubjectInput {
   /** The network magic of the chain the output belongs to. */
   networkMagic: number;
-  /** The output's address, lowercase bech32. */
-  address: string;
   /** The transaction hash, 64 lowercase hex characters. */
   txHash: string;
   /** The output's index within the transaction, a uint32. */
@@ -190,8 +182,6 @@ export interface OutputSubjectInput {
 export interface OutputSubject {
   /** The network magic as a 32-byte big-endian uint32, right-aligned. */
   networkMagic: Uint8Array;
-  /** SHA-256 of the lowercase bech32 address. */
-  addressHash: Uint8Array;
   /** The 32 bytes of the transaction hash. */
   txHash: Uint8Array;
   /** The output index as a 32-byte big-endian uint32, right-aligned. */
@@ -209,15 +199,14 @@ export interface OutputSubject {
  */
 export const cardanoOutputSubjectOf = (input: OutputSubjectInput): OutputSubject => ({
   networkMagic: bytes32OfUint32(input.networkMagic),
-  addressHash: cardanoAddressHashOf(input.address),
   txHash: bytes32OfHex(input.txHash),
   outputIndex: bytes32OfUint32(input.outputIndex),
   blockHash: bytes32OfHex(input.blockHash),
 });
 
 /**
- * Hash the event's identity: the network magic, the address, the transaction
- * hash, the output index and the block hash.
+ * Hash the event's identity: the network magic, the transaction hash, the
+ * output index and the block hash.
  *
  * The result equals the circuit's `persistentHash` of the subject struct with
  * these fields in declaration order, so an app can recompute it in-circuit.
@@ -229,7 +218,6 @@ export const cardanoOutputSubjectHashOf = (input: OutputSubjectInput): Uint8Arra
   const subject = cardanoOutputSubjectOf(input);
   return subjectHashOf([
     subject.networkMagic,
-    subject.addressHash,
     subject.txHash,
     subject.outputIndex,
     subject.blockHash,
@@ -301,7 +289,6 @@ export const deriveOutputClaim = (options: {
     windowEnd: BigInt(block.time),
     subjectHash: cardanoOutputSubjectHashOf({
       networkMagic: observation.networkMagic,
-      address: output.address,
       txHash: output.txHash,
       outputIndex: output.outputIndex,
       blockHash: block.hash,
