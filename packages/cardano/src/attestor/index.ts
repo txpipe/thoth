@@ -68,6 +68,7 @@ export function cardanoAttestor<PK, S>(parts: {
         appId: proposed.appId,
         holder: proposed.holder,
         valueSlots: proposed.values.length,
+        byteSlots: proposed.byteValues.length,
       });
       const message = definition.message(claim);
       const signature = await signer.sign(message);

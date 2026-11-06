@@ -15,8 +15,15 @@ const keyPair: KeyPair<string, string, FlatMessage> = {
   signer: { sign: (message) => `signed:${message.join(',')}` },
 };
 
-const claimFor = (observation: OutputObservation = OBSERVATION): Claim<number, 0> =>
-  deriveCardanoClaim({ policy: POLICY, observation, appId: APP_ID, holder: HOLDER, valueSlots: 5 });
+const claimFor = (observation: OutputObservation = OBSERVATION): Claim<number, number> =>
+  deriveCardanoClaim({
+    policy: POLICY,
+    observation,
+    appId: APP_ID,
+    holder: HOLDER,
+    valueSlots: 5,
+    byteSlots: 1,
+  });
 
 const attestorFor = (observation: OutputObservation = OBSERVATION) => {
   const reads: OutputLocator[] = [];
@@ -39,7 +46,7 @@ describe('cardanoAttestor', () => {
     };
     const { attestor, reads } = attestorFor(observed);
     const expected = claimFor(observed);
-    const proposed: Claim<number, 0> = {
+    const proposed: Claim<number, number> = {
       ...claimFor(observed),
       version: 9n,
       policyHash: new Uint8Array(32),

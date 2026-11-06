@@ -24,8 +24,8 @@ import {
   deriveCardanoClaim,
 } from '../index.js';
 
-/** A claim this kind signs: the standard numeric claim, no byte slots. */
-export type CardanoClaim = Claim<number, 0>;
+/** A claim this kind signs: the standard claim, with numeric and byte slots. */
+export type CardanoClaim = Claim<number, number>;
 
 /** The unparsed input the transport forwards; the attestor parses it with its own schemas. */
 export type CardanoAttestationInput = AttestationInput<
@@ -104,6 +104,8 @@ export interface CardanoClientConfig<PK, S> {
   readonly appId: Uint8Array;
   /** The contract's numeric value count. */
   readonly valueSlots: number;
+  /** The contract's byte value count. Defaults to `0`. */
+  readonly byteSlots?: number;
   /** The app's own read of the event; the attestors read it again themselves. */
   readonly read: (locator: CardanoLocator) => CardanoObservation | Promise<CardanoObservation>;
 }
@@ -246,6 +248,11 @@ export const cardanoClient = {
     const policy = cardanoPolicySchema.parse(config.policy);
     const appId = bytes32Schema.parse(config.appId);
     const valueSlots = z.number().int().positive().parse(config.valueSlots);
+    const byteSlots = z
+      .number()
+      .int()
+      .nonnegative()
+      .parse(config.byteSlots ?? 0);
     const { trusted, transport, verifier, read } = config;
 
     return {
@@ -264,6 +271,7 @@ export const cardanoClient = {
             appId,
             holder: options.holder,
             valueSlots,
+            byteSlots,
           }),
         );
         if (Date.now() >= options.expiresAt) {

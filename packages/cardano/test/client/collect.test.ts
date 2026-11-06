@@ -65,6 +65,7 @@ const expectedClaim = deriveCardanoClaim({
   appId: APP_ID,
   holder: HOLDER,
   valueSlots: 5,
+  byteSlots: 1,
 });
 
 const options = (overrides: Partial<CardanoCollectOptions> = {}) => ({
@@ -90,6 +91,7 @@ const clientFor = (
     policy: POLICY,
     appId: APP_ID,
     valueSlots: 5,
+    byteSlots: 1,
     read: parts.read ?? (() => OBSERVATION),
   });
 

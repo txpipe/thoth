@@ -1,7 +1,7 @@
 // Unit tests for the cardano@1 law's verify (`@thoth/cardano/attestor`): the
 // honest observation, one rejection per check, and the derived-message pin.
 
-import { deriveCardanoClaim, type OutputObservation } from '@thoth/cardano';
+import { deriveCardanoClaim, type OutputObservation, type OutputPolicy } from '@thoth/cardano';
 import { createCardanoDefinition } from '@thoth/cardano/attestor';
 import type { Claim } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
@@ -10,15 +10,23 @@ import { APP_ID, BLOCK_HASH, HOLDER, LOCATOR, OBSERVATION, POLICY } from './fixt
 
 const definition = createCardanoDefinition();
 
-const claimFor = (observation: OutputObservation = OBSERVATION): Claim<number, 0> =>
-  deriveCardanoClaim({ policy: POLICY, observation, appId: APP_ID, holder: HOLDER, valueSlots: 5 });
+const claimFor = (observation: OutputObservation = OBSERVATION): Claim<number, number> =>
+  deriveCardanoClaim({
+    policy: POLICY,
+    observation,
+    appId: APP_ID,
+    holder: HOLDER,
+    valueSlots: 5,
+    byteSlots: 1,
+  });
 
 const verify = (options: {
+  policy?: OutputPolicy;
   evidence?: { txHash: string; outputIndex: number; observation?: OutputObservation };
-  claim?: Claim<number, 0>;
+  claim?: Claim<number, number>;
 }): void =>
   definition.verify({
-    policy: POLICY,
+    policy: options.policy ?? POLICY,
     evidence: options.evidence ?? { ...LOCATOR, observation: OBSERVATION },
     claim: options.claim ?? claimFor(),
   });
@@ -81,14 +89,23 @@ describe('cardano verify', () => {
     expect(() => verify({ claim: { ...base, windowEnd: 1n } })).toThrow('claim window');
   });
 
-  it('rejects a claim that does not cover every policy slot', () => {
-    const base = claimFor();
-    const short: Claim<number, 0> = {
-      ...base,
-      present: base.present.slice(0, 4),
-      values: base.values.slice(0, 4),
-    };
-    expect(() => verify({ claim: short })).toThrow("outside the claim's 4 value slots");
+  it('rejects a numeric fact mapped past the claim numeric slots', () => {
+    const badPolicy: OutputPolicy = { ...POLICY, slots: [{ slot: 5, name: 'outputIndex' }] };
+    expect(() => verify({ policy: badPolicy })).toThrow(
+      'policy fact outputIndex at slot 5 targets a byte slot',
+    );
+  });
+
+  it('rejects a byte fact mapped into the numeric region', () => {
+    const badPolicy: OutputPolicy = { ...POLICY, slots: [{ slot: 0, name: 'txHash' }] };
+    expect(() => verify({ policy: badPolicy })).toThrow(
+      'policy fact txHash at slot 0 targets a numeric slot',
+    );
+  });
+
+  it('rejects a fact mapped beyond the claim slots', () => {
+    const badPolicy: OutputPolicy = { ...POLICY, slots: [{ slot: 6, name: 'txHash' }] };
+    expect(() => verify({ policy: badPolicy })).toThrow("outside the claim's 6 value slots");
   });
 
   it('rejects another subject hash', () => {
@@ -109,6 +126,16 @@ describe('cardano verify', () => {
     expect(() => verify({ claim: { ...base, values } })).toThrow('values do not match');
   });
 
+  it('rejects another byte value', () => {
+    const base = claimFor();
+    const byteValues = base.byteValues.map((value) => {
+      const flipped = new Uint8Array(value);
+      flipped[0] ^= 0xff;
+      return flipped;
+    });
+    expect(() => verify({ claim: { ...base, byteValues } })).toThrow('byte values do not match');
+  });
+
   it('rejects another present flag', () => {
     const base = claimFor();
     const present = base.present.map((flag, index) => (index === 3 ? false : flag));
@@ -117,7 +144,7 @@ describe('cardano verify', () => {
 
   it('pins the message derived from the fixed observation', () => {
     expect(claimToMessage(claimFor()).join(',')).toBe(
-      '1,226854911280625642308916404954512140970,226854911280625642308916404954512140970,243693814300268907608013715488367420227,10432000259638639878453247065653963833,1700000000,1700000000,152863117808294749381153575209862223096,255484261701604909417534612838043798448,249540402408688206539808045449963355067,249540402408688206539808045449963355067,50282554025485700236719036188234476089,187213460572670018709882692108604400772,0,1,1,1,1,1,1700000000,123456,1000,5000000,1',
+      '1,226854911280625642308916404954512140970,226854911280625642308916404954512140970,239491174588143157753471590601048204648,253783133056544356928925031460646215332,1700000000,1700000000,152863117808294749381153575209862223096,255484261701604909417534612838043798448,249540402408688206539808045449963355067,249540402408688206539808045449963355067,50282554025485700236719036188234476089,187213460572670018709882692108604400772,2,1,1,1,1,1,1,1,1700000000,123456,1000,5000000,1,273560334191342686313693311856911699405,273560334191342686313693311856911699405',
     );
   });
 });

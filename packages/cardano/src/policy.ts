@@ -47,14 +47,30 @@ export const CARDANO_FACTS = [
   'blockNumber',
   'lovelace',
   'outputIndex',
+  'txHash',
+  'blockHash',
+  'addressHash',
 ] as const;
 
 /** One measurable fact of a cardano@1 event. */
 export type CardanoFact = (typeof CARDANO_FACTS)[number];
 
+/** The byte facts: 32-byte values that fill a byte slot, not a numeric one. */
+export const CARDANO_BYTE_FACTS = ['txHash', 'blockHash', 'addressHash'] as const;
+
+/** A fact that fills a 32-byte byte slot. */
+export type CardanoByteFact = (typeof CARDANO_BYTE_FACTS)[number];
+
+/** A fact that fills a `Uint<64>` numeric slot. */
+export type CardanoNumericFact = Exclude<CardanoFact, CardanoByteFact>;
+
+/** Whether a fact fills a byte slot rather than a numeric one. */
+export const isCardanoByteFact = (name: CardanoFact): name is CardanoByteFact =>
+  (CARDANO_BYTE_FACTS as readonly string[]).includes(name);
+
 /** One claim-slot binding: which fact fills which claim slot. */
 export type CardanoSlot = {
-  /** Index into the claim's numeric value slots, `0..V-1`. */
+  /** Index into the claim's value slots: numeric `0..V-1`, byte `V..V+W-1`. */
   slot: number;
   /** The fact to measure into `slot`. */
   name: CardanoFact;
@@ -163,6 +179,34 @@ export const checkSlotNamesDistinct = (
       message: 'each fact may be mapped once',
       path: ['slots'],
     });
+  }
+};
+
+/**
+ * Require every policy slot to fit the claim's size and its fact's region:
+ * numeric facts in `0..V-1`, byte facts in `V..V+W-1`.
+ *
+ * @throws if a slot is out of range or in the wrong region for its fact.
+ */
+export const assertPolicySlotsInRange = (
+  slots: readonly CardanoSlot[],
+  valueSlots: number,
+  byteSlots: number,
+): void => {
+  const total = valueSlots + byteSlots;
+  const outOfRange = slots.find((entry) => entry.slot >= total);
+  if (outOfRange !== undefined) {
+    throw new Error(`policy slot ${outOfRange.slot} is outside the claim's ${total} value slots`);
+  }
+  const wrongRegion = slots.find((entry) =>
+    isCardanoByteFact(entry.name) ? entry.slot < valueSlots : entry.slot >= valueSlots,
+  );
+  if (wrongRegion !== undefined) {
+    throw new Error(
+      isCardanoByteFact(wrongRegion.name)
+        ? `policy fact ${wrongRegion.name} at slot ${wrongRegion.slot} targets a numeric slot`
+        : `policy fact ${wrongRegion.name} at slot ${wrongRegion.slot} targets a byte slot`,
+    );
   }
 };
 

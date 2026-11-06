@@ -7,18 +7,27 @@ import { CLAIM_VERSION } from '@thoth/core/claim';
 import type { CanonicalValue } from '@thoth/core/claim-context';
 import { subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
-import { bytes32OfHex, bytes32OfText, bytes32OfUint32, HEX_64 } from '../bytes.js';
+import {
+  bytes32OfHex,
+  bytes32OfText,
+  bytes32OfUint32,
+  cardanoAddressHashOf,
+  HEX_64,
+} from '../bytes.js';
 import {
   addressSchema,
+  assertPolicySlotsInRange,
   CARDANO_FACTS,
   CARDANO_NETWORKS,
-  type CardanoFact,
+  type CardanoByteFact,
+  type CardanoNumericFact,
   type CardanoPolicyBase,
   type CardanoSlot,
   checkAddressMatchesNetwork,
   checkNetworkMagic,
   checkSlotIndicesDistinct,
   checkSlotNamesDistinct,
+  isCardanoByteFact,
   MAX_NETWORK_MAGIC,
   numericSlotSchema,
   policyHashOfCardano,
@@ -255,11 +264,12 @@ export const cardanoOutputSaltOf = (
   ]);
 
 /**
- * Derive the claim of one observed output. `appId`, `holder` and the value
- * count come from the proposal; every other field comes from the observation
+ * Derive the claim of one observed output. `appId`, `holder` and the slot
+ * counts come from the proposal; every other field comes from the observation
  * and the policy, never from the proposal.
  *
- * @throws if a policy slot index is outside `valueSlots`.
+ * @throws if a policy slot is out of range or in the wrong region for its
+ *   fact's type.
  */
 export const deriveOutputClaim = (options: {
   policy: OutputPolicy;
@@ -270,27 +280,34 @@ export const deriveOutputClaim = (options: {
   holder: Uint8Array;
   /** The contract's numeric value count, from the proposal's `values.length`. */
   valueSlots: number;
-}): Claim<number, 0> => {
-  const { policy, observation, appId, holder, valueSlots } = options;
+  /** The contract's byte value count, from the proposal's `byteValues.length`. */
+  byteSlots: number;
+}): Claim<number, number> => {
+  const { policy, observation, appId, holder, valueSlots, byteSlots } = options;
   const { block, output } = observation;
-  const present = Array.from({ length: valueSlots }, () => false);
+  assertPolicySlotsInRange(policy.slots, valueSlots, byteSlots);
+  const present = Array.from({ length: valueSlots + byteSlots }, () => false);
   const values = Array.from({ length: valueSlots }, () => 0n);
-  const fill = (slot: number, value: number | bigint): void => {
-    if (slot < 0 || slot >= valueSlots) {
-      throw new Error(`policy slot ${slot} is outside the claim's ${valueSlots} value slots`);
-    }
-    present[slot] = true;
-    values[slot] = BigInt(value);
-  };
-  const factValues: Record<CardanoFact, number | bigint> = {
+  const byteValues: Uint8Array[] = Array.from({ length: byteSlots }, () => new Uint8Array(32));
+  const numericFactValues: Record<CardanoNumericFact, number | bigint> = {
     blockTime: block.time,
     slot: block.slot,
     blockNumber: block.blockNumber,
     lovelace: output.lovelace,
     outputIndex: output.outputIndex,
   };
+  const byteFactValues: Record<CardanoByteFact, Uint8Array> = {
+    txHash: bytes32OfHex(output.txHash),
+    blockHash: bytes32OfHex(block.hash),
+    addressHash: cardanoAddressHashOf(output.address),
+  };
   for (const { slot, name } of policy.slots) {
-    fill(slot, factValues[name]);
+    if (isCardanoByteFact(name)) {
+      byteValues[slot - valueSlots] = byteFactValues[name];
+    } else {
+      values[slot] = BigInt(numericFactValues[name]);
+    }
+    present[slot] = true;
   }
 
   return {
@@ -309,6 +326,6 @@ export const deriveOutputClaim = (options: {
     salt: cardanoOutputSaltOf(observation.networkMagic, output.txHash, output.outputIndex),
     present,
     values,
-    byteValues: [],
+    byteValues,
   };
 };

@@ -50,6 +50,11 @@ describe('cardanoPolicySchema', () => {
     expect(minimal.slots).toEqual([{ slot: 0, name: 'lovelace' }]);
   });
 
+  it('accepts a byte fact', () => {
+    const withByte = parse({ ...OUTPUT, slots: [{ slot: 5, name: 'txHash' }] });
+    expect(withByte.slots).toEqual([{ slot: 5, name: 'txHash' }]);
+  });
+
   it('rejects an empty slot list', () => {
     expect(() => parse({ ...OUTPUT, slots: [] })).toThrow();
   });

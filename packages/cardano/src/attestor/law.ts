@@ -27,5 +27,5 @@ export const createCardanoDefinition = (): CardanoDefinition =>
     evidence: cardanoEvidenceSchema,
     claim: cardanoClaimSchema,
     verify: verifyOutputObservation,
-    message: (claim: Claim<number, 0>): FlatMessage => claimToMessage(claim),
+    message: (claim: Claim<number, number>): FlatMessage => claimToMessage(claim),
   });

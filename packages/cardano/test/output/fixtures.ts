@@ -5,7 +5,7 @@ import type { OutputLocator, OutputObservation, OutputPolicy } from '@thoth/card
 /** A preview payment address at the smallest CIP-19 length; the checksum is a fixture. */
 export const TEST_ADDRESS = `addr_test1${'q'.repeat(53)}`;
 
-/** The canonical output policy: preview, depth 3, all five numeric facts mapped. */
+/** The canonical output policy: preview, depth 3, five numeric facts and one byte fact. */
 export const POLICY: OutputPolicy = {
   kind: 'output',
   network: 'preview',
@@ -18,6 +18,7 @@ export const POLICY: OutputPolicy = {
     { slot: 2, name: 'blockNumber' },
     { slot: 3, name: 'lovelace' },
     { slot: 4, name: 'outputIndex' },
+    { slot: 5, name: 'txHash' },
   ],
 };
 

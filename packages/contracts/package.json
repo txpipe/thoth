@@ -33,8 +33,8 @@
     "README.md"
   ],
   "scripts": {
-    "compact": "compact compile +0.36.1 test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.36.1 test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes",
-    "compact:no-zk": "compact compile +0.36.1 --skip-zk test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.36.1 --skip-zk test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes",
+    "compact": "compact compile +0.34.0 test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.34.0 test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes && compact compile +0.34.0 test/mocks/MockAddressHash.compact artifacts/mock_address_hash",
+    "compact:no-zk": "compact compile +0.34.0 --skip-zk test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.34.0 --skip-zk test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes && compact compile +0.34.0 --skip-zk test/mocks/MockAddressHash.compact artifacts/mock_address_hash",
     "pretest": "npm run compact:no-zk",
     "test": "vitest run",
     "types": "tsc --noEmit",

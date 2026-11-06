@@ -14,8 +14,8 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
-    "compact": "compact compile +0.36.1 packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.36.1 packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes",
-    "compact:no-zk": "compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes",
+    "compact": "compact compile +0.34.0 packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.34.0 packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes && compact compile +0.34.0 packages/contracts/test/mocks/MockAddressHash.compact packages/contracts/artifacts/mock_address_hash",
+    "compact:no-zk": "compact compile +0.34.0 --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.34.0 --skip-zk packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes && compact compile +0.34.0 --skip-zk packages/contracts/test/mocks/MockAddressHash.compact packages/contracts/artifacts/mock_address_hash",
     "pretest": "npm run compact && npm run build",
     "test": "vitest run",
     "build": "npm run build --workspace=packages/core && npm run build --workspace=packages/attestor && npm run build --workspace=packages/client && npm run build --workspace=packages/cardano && npm run build --workspaces --if-present",

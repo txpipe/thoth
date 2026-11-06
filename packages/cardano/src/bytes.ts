@@ -1,7 +1,7 @@
 // Shared 32-byte field encoders for cardano@1 subjects and salts, plus the
 // address hash an app pins in-circuit.
 
-import { createHash } from 'node:crypto';
+import { CompactTypeBytes, persistentHash } from '@midnight-ntwrk/compact-runtime';
 
 const FIELD_BYTES = 32;
 
@@ -55,8 +55,12 @@ export const bytes32OfHex = (hex: string): Uint8Array => {
 };
 
 /**
- * Hash a Cardano address to its subject field: SHA-256 of the lowercase
- * bech32 string. An app pins this value to check an observation's address.
+ * Hash a Cardano address to a 32-byte field: the circuit hash of the lowercase
+ * bech32 string at its exact byte length. The digest equals the circuit's
+ * `persistentHash<Bytes<L>>(pad(L, address))` where `L` is the address's exact
+ * byte length; padding the address to any other length changes the digest.
  */
-export const cardanoAddressHashOf = (address: string): Uint8Array =>
-  new Uint8Array(createHash('sha256').update(address.toLowerCase(), 'utf-8').digest());
+export const cardanoAddressHashOf = (address: string): Uint8Array => {
+  const bytes = new TextEncoder().encode(address.toLowerCase());
+  return persistentHash(new CompactTypeBytes(bytes.length), bytes);
+};

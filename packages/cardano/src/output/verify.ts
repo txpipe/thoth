@@ -3,6 +3,7 @@
 
 import type { AttestationInput } from '@thoth/core';
 import type { Claim } from '@thoth/core/claim';
+import { assertPolicySlotsInRange } from '../policy.js';
 import { deriveOutputClaim, type OutputObservedEvidence, type OutputPolicy } from './index.js';
 
 /**
@@ -16,7 +17,7 @@ import { deriveOutputClaim, type OutputObservedEvidence, type OutputPolicy } fro
  * @throws on the first failed check.
  */
 export const verifyOutputObservation = (
-  input: AttestationInput<OutputPolicy, OutputObservedEvidence, Claim<number, 0>>,
+  input: AttestationInput<OutputPolicy, OutputObservedEvidence, Claim<number, number>>,
 ): void => {
   const { observation } = input.evidence;
   if (observation === undefined) {
@@ -54,13 +55,7 @@ export const verifyOutputObservation = (
     throw new Error(`claim window is not the block time ${block.time}`);
   }
 
-  for (const { slot } of policy.slots) {
-    if (slot >= claim.values.length) {
-      throw new Error(
-        `policy slot ${slot} is outside the claim's ${claim.values.length} value slots`,
-      );
-    }
-  }
+  assertPolicySlotsInRange(policy.slots, claim.values.length, claim.byteValues.length);
 
   const derived = deriveOutputClaim({
     policy,
@@ -68,6 +63,7 @@ export const verifyOutputObservation = (
     appId: claim.appId,
     holder: claim.holder,
     valueSlots: claim.values.length,
+    byteSlots: claim.byteValues.length,
   });
   if (!Buffer.from(claim.subjectHash).equals(derived.subjectHash)) {
     throw new Error('claim subjectHash does not match the observation');
@@ -80,6 +76,15 @@ export const verifyOutputObservation = (
     claim.values.some((value, index) => value !== derived.values[index])
   ) {
     throw new Error('claim values do not match the observation');
+  }
+  if (
+    claim.byteValues.length !== derived.byteValues.length ||
+    claim.byteValues.some((value, index) => {
+      const derivedValue = derived.byteValues[index];
+      return derivedValue === undefined || !Buffer.from(value).equals(derivedValue);
+    })
+  ) {
+    throw new Error('claim byte values do not match the observation');
   }
   if (
     claim.present.length !== derived.present.length ||

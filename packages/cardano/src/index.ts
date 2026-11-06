@@ -23,9 +23,11 @@ import {
   type OutputSubjectInput,
 } from './output/index.js';
 import {
+  CARDANO_BYTE_FACTS,
   CARDANO_FACTS,
   CARDANO_LAW,
   CARDANO_NETWORKS,
+  type CardanoByteFact,
   type CardanoFact,
   type CardanoNetwork,
   type CardanoPolicyBase,
@@ -34,6 +36,7 @@ import {
 } from './policy.js';
 
 export type {
+  CardanoByteFact,
   CardanoFact,
   CardanoNetwork,
   CardanoPolicyBase,
@@ -46,6 +49,7 @@ export type {
   OutputSubjectInput,
 };
 export {
+  CARDANO_BYTE_FACTS,
   CARDANO_FACTS,
   CARDANO_LAW,
   CARDANO_NETWORKS,
@@ -112,11 +116,10 @@ export const cardanoPolicyHashOf = (policy: CardanoPolicy): Uint8Array =>
   policyHashOfCardano(normalizeCardanoPolicy(policy) as CanonicalValue);
 
 /**
- * Runtime validator for a cardano@1 claim: the standard numeric claim, sized
- * by the client's proposal. `verify` checks the proposal covers every policy
- * slot.
+ * Runtime validator for a cardano@1 claim: the standard claim, sized by the
+ * client's proposal. `verify` checks the proposal covers every policy slot.
  */
-export const cardanoClaimSchema = claimSchema<number, 0>();
+export const cardanoClaimSchema = claimSchema<number, number>();
 
 /** The cardano@1 definition, the value `createCardanoDefinition` returns. */
 export interface CardanoDefinition {
@@ -126,17 +129,20 @@ export interface CardanoDefinition {
   readonly evidence: typeof cardanoEvidenceSchema;
   readonly claim: typeof cardanoClaimSchema;
   /** Check a parsed proposal against the observation the attestor read. Throws to reject. */
-  verify(input: AttestationInput<CardanoPolicy, CardanoObservedEvidence, Claim<number, 0>>): void;
+  verify(
+    input: AttestationInput<CardanoPolicy, CardanoObservedEvidence, Claim<number, number>>,
+  ): void;
   /** Encode the parsed claim into the flat signed message. */
-  message(claim: Claim<number, 0>): FlatMessage;
+  message(claim: Claim<number, number>): FlatMessage;
 }
 
 /**
- * Derive the claim of one observed output. `appId`, `holder` and the value
- * count come from the proposal; every other field comes from the observation
+ * Derive the claim of one observed output. `appId`, `holder` and the slot
+ * counts come from the proposal; every other field comes from the observation
  * and the policy, never from the proposal.
  *
- * @throws if a policy slot index is outside `valueSlots`.
+ * @throws if a policy slot is out of range or in the wrong region for its
+ *   fact's type.
  */
 export const deriveCardanoClaim = (options: {
   policy: CardanoPolicy;
@@ -147,11 +153,14 @@ export const deriveCardanoClaim = (options: {
   holder: Uint8Array;
   /** The contract's numeric value count, from the proposal's `values.length`. */
   valueSlots: number;
-}): Claim<number, 0> =>
+  /** The contract's byte value count, from the proposal's `byteValues.length`. */
+  byteSlots: number;
+}): Claim<number, number> =>
   deriveOutputClaim({
     policy: options.policy,
     observation: options.observation,
     appId: options.appId,
     holder: options.holder,
     valueSlots: options.valueSlots,
+    byteSlots: options.byteSlots,
   });
