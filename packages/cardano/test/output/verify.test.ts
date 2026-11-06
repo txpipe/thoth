@@ -6,7 +6,16 @@ import { createCardanoDefinition } from '@thoth/cardano/attestor';
 import type { Claim } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
 import { describe, expect, it } from 'vitest';
-import { APP_ID, BLOCK_HASH, HOLDER, LOCATOR, OBSERVATION, POLICY } from './fixtures.js';
+import {
+  APP_ID,
+  ASSET_OBSERVATION,
+  ASSET_POLICY,
+  BLOCK_HASH,
+  HOLDER,
+  LOCATOR,
+  OBSERVATION,
+  POLICY,
+} from './fixtures.js';
 
 const definition = createCardanoDefinition();
 
@@ -14,6 +23,16 @@ const claimFor = (observation: OutputObservation = OBSERVATION): Claim<number, n
   deriveCardanoClaim({
     policy: POLICY,
     observation,
+    appId: APP_ID,
+    holder: HOLDER,
+    valueSlots: 5,
+    byteSlots: 1,
+  });
+
+const assetClaimFor = (): Claim<number, number> =>
+  deriveCardanoClaim({
+    policy: ASSET_POLICY,
+    observation: ASSET_OBSERVATION,
     appId: APP_ID,
     holder: HOLDER,
     valueSlots: 5,
@@ -67,6 +86,26 @@ describe('cardano verify', () => {
     expect(() =>
       verify({ evidence: { ...LOCATOR, observation }, claim: claimFor(observation) }),
     ).toThrow('network magic');
+  });
+
+  it('accepts an observation that carries the pinned asset', () => {
+    expect(() =>
+      verify({
+        policy: ASSET_POLICY,
+        evidence: { ...LOCATOR, observation: ASSET_OBSERVATION },
+        claim: assetClaimFor(),
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects an observation that lacks the pinned asset', () => {
+    expect(() =>
+      verify({
+        policy: ASSET_POLICY,
+        evidence: { ...LOCATOR, observation: OBSERVATION },
+        claim: claimFor(),
+      }),
+    ).toThrow('policy asset is not in the output');
   });
 
   it('rejects a block that is not deep enough', () => {
@@ -145,6 +184,12 @@ describe('cardano verify', () => {
   it('pins the message derived from the fixed observation', () => {
     expect(claimToMessage(claimFor()).join(',')).toBe(
       '1,226854911280625642308916404954512140970,226854911280625642308916404954512140970,239491174588143157753471590601048204648,253783133056544356928925031460646215332,1700000000,1700000000,152863117808294749381153575209862223096,255484261701604909417534612838043798448,249540402408688206539808045449963355067,249540402408688206539808045449963355067,50282554025485700236719036188234476089,187213460572670018709882692108604400772,2,1,1,1,1,1,1,1,1700000000,123456,1000,5000000,1,273560334191342686313693311856911699405,273560334191342686313693311856911699405',
+    );
+  });
+
+  it('pins the asset claim message derived from the fixed observation', () => {
+    expect(claimToMessage(assetClaimFor()).join(',')).toBe(
+      '1,226854911280625642308916404954512140970,226854911280625642308916404954512140970,186413166010796716303235885276514120894,122469295253021424636434718230330971021,1700000000,1700000000,152863117808294749381153575209862223096,255484261701604909417534612838043798448,249540402408688206539808045449963355067,249540402408688206539808045449963355067,50282554025485700236719036188234476089,187213460572670018709882692108604400772,2,1,1,1,1,1,1,1,1700000000,123456,1000,700,1,273560334191342686313693311856911699405,273560334191342686313693311856911699405',
     );
   });
 });

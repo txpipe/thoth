@@ -8,7 +8,15 @@ import { cardanoAttestor } from '@thoth/cardano/attestor';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
 import { describe, expect, it } from 'vitest';
-import { APP_ID, HOLDER, LOCATOR, OBSERVATION, POLICY } from './fixtures.js';
+import {
+  APP_ID,
+  ASSET_OBSERVATION,
+  ASSET_POLICY,
+  HOLDER,
+  LOCATOR,
+  OBSERVATION,
+  POLICY,
+} from './fixtures.js';
 
 const keyPair: KeyPair<string, string, FlatMessage> = {
   publicKey: 'test-public-key',
@@ -79,6 +87,26 @@ describe('cardanoAttestor', () => {
     expect(attestation.claim.appId).toEqual(appId);
     expect(attestation.claim.holder).toEqual(holder);
     expect(attestation.claim.subjectHash).toEqual(claimFor().subjectHash);
+  });
+
+  it('attests the pinned asset quantity from its own read', async () => {
+    const { attestor } = attestorFor(ASSET_OBSERVATION);
+    const expected = deriveCardanoClaim({
+      policy: ASSET_POLICY,
+      observation: ASSET_OBSERVATION,
+      appId: APP_ID,
+      holder: HOLDER,
+      valueSlots: 5,
+      byteSlots: 1,
+    });
+
+    const attestation = await attestor.attest({
+      policy: ASSET_POLICY,
+      evidence: LOCATOR,
+      claim: expected,
+    });
+
+    expect(attestation.claim).toEqual(expected);
   });
 
   it('refuses a proposal whose window is not the block time', async () => {

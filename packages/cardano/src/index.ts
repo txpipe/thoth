@@ -8,6 +8,7 @@ import type { CanonicalValue } from '@thoth/core/claim-context';
 import { z } from 'zod';
 import { cardanoAddressHashOf } from './bytes.js';
 import {
+  type AssetClass,
   cardanoOutputEvidenceSchema,
   cardanoOutputObservationSchema,
   cardanoOutputPolicySchema,
@@ -15,6 +16,7 @@ import {
   cardanoOutputSubjectHashOf,
   cardanoOutputSubjectOf,
   deriveOutputClaim,
+  type NativeAsset,
   type OutputLocator,
   type OutputObservation,
   type OutputObservedEvidence,
@@ -36,11 +38,13 @@ import {
 } from './policy.js';
 
 export type {
+  AssetClass,
   CardanoByteFact,
   CardanoFact,
   CardanoNetwork,
   CardanoPolicyBase,
   CardanoSlot,
+  NativeAsset,
   OutputLocator,
   OutputObservation,
   OutputObservedEvidence,

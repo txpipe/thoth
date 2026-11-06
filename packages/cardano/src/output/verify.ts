@@ -4,7 +4,12 @@
 import type { AttestationInput } from '@thoth/core';
 import type { Claim } from '@thoth/core/claim';
 import { assertPolicySlotsInRange } from '../policy.js';
-import { deriveOutputClaim, type OutputObservedEvidence, type OutputPolicy } from './index.js';
+import {
+  assetQuantityOf,
+  deriveOutputClaim,
+  type OutputObservedEvidence,
+  type OutputPolicy,
+} from './index.js';
 
 /**
  * Require the proposal to say exactly what the observation shows. The order is
@@ -39,6 +44,9 @@ export const verifyOutputObservation = (
     throw new Error(
       `observation network magic ${observation.networkMagic} is not the policy's ${policy.networkMagic}`,
     );
+  }
+  if (policy.asset !== undefined) {
+    assetQuantityOf(policy.asset, output.assets);
   }
 
   // Depth 0 accepts the tip block. A block above the tip gives a negative

@@ -8,6 +8,9 @@ const FIELD_BYTES = 32;
 /** The lowercase hex pattern every 32-byte hash uses. */
 export const HEX_64 = /^[0-9a-f]{64}$/;
 
+/** Encode bytes as lowercase hex. */
+export const bytesToHex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
+
 /**
  * Encode text as a 32-byte field: UTF-8, left-aligned and zero-padded, the
  * same direction as the circuit's `pad(32, …)`.

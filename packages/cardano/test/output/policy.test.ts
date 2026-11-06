@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest';
  */
 const TEST_ADDRESS = `addr_test1${'q'.repeat(53)}`;
 const MAINNET_ADDRESS = `addr1${'q'.repeat(53)}`;
+const ASSET_PIN = { policyId: 'ab'.repeat(28), assetName: 'cd'.repeat(4) };
 
 const OUTPUT: OutputPolicy = {
   kind: 'output',
@@ -53,6 +54,30 @@ describe('cardanoPolicySchema', () => {
   it('accepts a byte fact', () => {
     const withByte = parse({ ...OUTPUT, slots: [{ slot: 5, name: 'txHash' }] });
     expect(withByte.slots).toEqual([{ slot: 5, name: 'txHash' }]);
+  });
+
+  it('accepts a policy that pins an asset and measures its quantity', () => {
+    const withAsset = parse({
+      ...OUTPUT,
+      asset: ASSET_PIN,
+      slots: [{ slot: 3, name: 'assetQuantity' }],
+    });
+    expect(withAsset.asset).toEqual(ASSET_PIN);
+  });
+
+  it("rejects 'assetQuantity' without the 'asset' pin", () => {
+    expect(() => parse({ ...OUTPUT, slots: [{ slot: 3, name: 'assetQuantity' }] })).toThrow(
+      "requires the 'asset' pin",
+    );
+  });
+
+  it('rejects a malformed asset pin', () => {
+    expect(() => parse({ ...OUTPUT, asset: { ...ASSET_PIN, policyId: 'ab' } })).toThrow(
+      '56 lowercase hex',
+    );
+    expect(() => parse({ ...OUTPUT, asset: { ...ASSET_PIN, assetName: 'zz' } })).toThrow(
+      '64 lowercase hex',
+    );
   });
 
   it('rejects an empty slot list', () => {
@@ -197,6 +222,7 @@ describe('cardanoPolicyHashOf', () => {
       { ...OUTPUT, network: 'devnet', networkMagic: 42 },
       { ...OUTPUT, confirmationDepth: 4 },
       { ...OUTPUT, address: `addr_test1${'p'.repeat(53)}` },
+      { ...OUTPUT, asset: ASSET_PIN },
       { ...OUTPUT, slots: remapped('lovelace', 6) },
       { ...OUTPUT, slots: remapped('blockNumber', 6) },
     ];

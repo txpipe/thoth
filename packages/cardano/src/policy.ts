@@ -47,6 +47,7 @@ export const CARDANO_FACTS = [
   'blockNumber',
   'lovelace',
   'outputIndex',
+  'assetQuantity',
   'txHash',
   'blockHash',
   'addressHash',

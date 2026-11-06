@@ -53,6 +53,7 @@ describe('recorded Dolos fixture', () => {
         outputIndex: 0,
         address: ADDRESS,
         lovelace: 10_000_000_000n,
+        assets: [],
       },
     });
   });

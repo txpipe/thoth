@@ -36,6 +36,32 @@ import {
 /** The overflow bound of a claim value: lovelace is a uint64. */
 const MAX_LOVELACE = 2n ** 64n - 1n;
 
+/** The minting policy id as lowercase hex: 28 bytes. */
+const HEX_56 = /^[0-9a-f]{56}$/;
+
+/** The asset name as lowercase hex: 0 to 32 bytes. */
+const HEX_NAME = /^[0-9a-f]{0,64}$/;
+
+/** The class of one native asset: the minting policy id and the asset name. */
+export type AssetClass = {
+  /** The minting policy id, 56 lowercase hex characters. */
+  policyId: string;
+  /** The asset name, up to 64 lowercase hex characters (0 to 32 bytes). */
+  assetName: string;
+};
+
+/** One native asset of an output: its class and the quantity the output carries. */
+export type NativeAsset = AssetClass & {
+  /** The quantity, a uint64. */
+  quantity: bigint;
+};
+
+/** Runtime validator for one {@link AssetClass}. */
+const assetClassSchema = z.strictObject({
+  policyId: z.string().regex(HEX_56, 'expected 56 lowercase hex characters'),
+  assetName: z.string().regex(HEX_NAME, 'expected up to 64 lowercase hex characters'),
+});
+
 /**
  * One output at the watched address. The `slots` list says which claim slot
  * each measured fact fills (ADR 0009, ADR 0013); the policy hash commits to
@@ -45,6 +71,11 @@ export type OutputPolicy = CardanoPolicyBase & {
   kind: 'output';
   /** The address the app watches, bech32, stored lowercase. */
   address: string;
+  /**
+   * The native asset the policy requires. When set, the attestor requires the
+   * output to carry it, and `assetQuantity` may be measured.
+   */
+  asset?: AssetClass;
   slots: readonly CardanoSlot[];
 };
 
@@ -62,6 +93,7 @@ export const cardanoOutputPolicySchema = z
     confirmationDepth: z.number().int().nonnegative(),
     address: addressSchema,
     kind: z.literal('output'),
+    asset: assetClassSchema.optional(),
     slots: z
       .array(outputSlotSchema)
       .min(1)
@@ -73,6 +105,16 @@ export const cardanoOutputPolicySchema = z
   .superRefine((policy, context) => {
     checkNetworkMagic(policy, context);
     checkAddressMatchesNetwork(policy, context);
+    if (
+      policy.asset === undefined &&
+      policy.slots.some((entry) => entry.name === 'assetQuantity')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: "'assetQuantity' requires the 'asset' pin",
+        path: ['slots'],
+      });
+    }
   })
   .transform((policy) => ({
     ...policy,
@@ -136,6 +178,8 @@ export interface OutputObservation {
     address: string;
     /** The output's lovelace amount, below 2^64. */
     lovelace: bigint;
+    /** The output's native assets, in policy-id/name order as read. */
+    assets: readonly NativeAsset[];
   };
 }
 
@@ -166,6 +210,13 @@ export const cardanoOutputObservationSchema: z.ZodType<OutputObservation> = z.st
         message: 'address must be lowercase bech32',
       }),
     lovelace: z.bigint().min(0n).max(MAX_LOVELACE),
+    assets: z.array(
+      z.strictObject({
+        policyId: z.string().regex(HEX_56, 'expected 56 lowercase hex characters'),
+        assetName: z.string().regex(HEX_NAME, 'expected up to 64 lowercase hex characters'),
+        quantity: z.bigint().min(0n).max(MAX_LOVELACE),
+      }),
+    ),
   }),
 });
 
@@ -264,6 +315,21 @@ export const cardanoOutputSaltOf = (
   ]);
 
 /**
+ * The quantity of the pinned asset in the observed output's assets.
+ *
+ * @throws if the assets do not carry the pinned asset.
+ */
+export const assetQuantityOf = (asset: AssetClass, assets: readonly NativeAsset[]): bigint => {
+  const found = assets.find(
+    (candidate) => candidate.policyId === asset.policyId && candidate.assetName === asset.assetName,
+  );
+  if (found === undefined) {
+    throw new Error('policy asset is not in the output');
+  }
+  return found.quantity;
+};
+
+/**
  * Derive the claim of one observed output. `appId`, `holder` and the slot
  * counts come from the proposal; every other field comes from the observation
  * and the policy, never from the proposal.
@@ -295,6 +361,8 @@ export const deriveOutputClaim = (options: {
     blockNumber: block.blockNumber,
     lovelace: output.lovelace,
     outputIndex: output.outputIndex,
+    // Never read without the pin: the policy schema rejects 'assetQuantity' alone.
+    assetQuantity: policy.asset === undefined ? 0n : assetQuantityOf(policy.asset, output.assets),
   };
   const byteFactValues: Record<CardanoByteFact, Uint8Array> = {
     txHash: bytes32OfHex(output.txHash),

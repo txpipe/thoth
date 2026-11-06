@@ -5,7 +5,8 @@
 import { CardanoQueryClient, CardanoSyncClient } from '@utxorpc/sdk';
 import type { cardano, query } from '@utxorpc/spec';
 import { bech32 } from 'bech32';
-import { bytes32OfHex } from '../bytes.js';
+import { bytes32OfHex, bytesToHex } from '../bytes.js';
+import type { NativeAsset } from '../output/index.js';
 
 /** Connection options for {@link createDolosSource}. */
 export interface DolosSourceOptions {
@@ -52,6 +53,8 @@ export interface RawDolosEvent {
     address: string;
     /** The output's lovelace amount. */
     lovelace: bigint;
+    /** The output's native assets, each policy id and name as lowercase hex. */
+    assets: NativeAsset[];
   };
 }
 
@@ -75,7 +78,7 @@ export const createDolosSource = (options: DolosSourceOptions): DolosSource => {
     fetchBlock: async (ref) => {
       const block = await syncClient.fetchBlock({
         slot: ref.slot.toString(),
-        hash: Buffer.from(ref.hash).toString('hex'),
+        hash: bytesToHex(ref.hash),
       });
       return block.parsedBlock;
     },
@@ -96,7 +99,7 @@ const hashHexOf = (bytes: Uint8Array, name: string): string => {
   if (bytes.length !== 32) {
     throw new Error(`${name} must be 32 bytes, got ${bytes.length}`);
   }
-  return Buffer.from(bytes).toString('hex');
+  return bytesToHex(bytes);
 };
 
 /**
@@ -135,27 +138,31 @@ export const bech32AddressOf = (bytes: Uint8Array): string => {
   return bech32.encode(hrp, bech32.toWords(bytes), 1000);
 };
 
+/** Read a uint64 amount from the UTxO-RPC `BigInt` oneof. */
+const uint64Of = (coin: cardano.BigInt | undefined, what: string): bigint => {
+  if (!coin) {
+    throw new Error(`${what} has no amount`);
+  }
+  switch (coin.bigInt.case) {
+    case 'int':
+      if (coin.bigInt.value < 0n) {
+        throw new Error(`${what} ${coin.bigInt.value} is negative`);
+      }
+      return coin.bigInt.value;
+    case 'bigUInt':
+      return BigInt(`0x${bytesToHex(coin.bigInt.value)}`);
+    default:
+      throw new Error(`${what} is negative or missing`);
+  }
+};
+
 /**
  * Read a lovelace amount from the UTxO-RPC `BigInt` oneof.
  *
  * @throws if the amount is absent or negative.
  */
-export const lovelaceOf = (coin: cardano.BigInt | undefined): bigint => {
-  if (!coin) {
-    throw new Error('output has no lovelace amount');
-  }
-  switch (coin.bigInt.case) {
-    case 'int':
-      if (coin.bigInt.value < 0n) {
-        throw new Error(`output lovelace ${coin.bigInt.value} is negative`);
-      }
-      return coin.bigInt.value;
-    case 'bigUInt':
-      return BigInt(`0x${Buffer.from(coin.bigInt.value).toString('hex')}`);
-    default:
-      throw new Error('output lovelace is negative or missing');
-  }
-};
+export const lovelaceOf = (coin: cardano.BigInt | undefined): bigint =>
+  uint64Of(coin, 'output lovelace');
 
 /**
  * Read one output and its block from a UTxO-RPC source.
@@ -232,6 +239,13 @@ export const readRawEvent = async (options: {
       outputIndex,
       address: bech32AddressOf(output.address),
       lovelace: lovelaceOf(output.coin),
+      assets: output.assets.flatMap((multiasset) =>
+        multiasset.assets.map((asset) => ({
+          policyId: bytesToHex(multiasset.policyId),
+          assetName: bytesToHex(asset.name),
+          quantity: uint64Of(asset.quantity.value, 'output asset quantity'),
+        })),
+      ),
     },
   };
 };

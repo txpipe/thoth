@@ -114,8 +114,29 @@ describe('readRawEvent', () => {
         outputIndex: 0,
         address: ADDRESS,
         lovelace: 5_000_000n,
+        assets: [],
       },
     });
+  });
+
+  it('decodes the output native assets', async () => {
+    const withAssets = output({
+      assets: [
+        new cardano.Multiasset({
+          policyId: Uint8Array.from({ length: 28 }, () => 0xab),
+          assets: [
+            new cardano.Asset({
+              name: Uint8Array.from([0xcd, 0xef]),
+              quantity: { case: 'outputCoin', value: coin(700n) },
+            }),
+          ],
+        }),
+      ],
+    });
+    const event = await read(sourceWith({ response: readTxResponse({ outputs: [withAssets] }) }));
+    expect(event.output.assets).toEqual([
+      { policyId: 'ab'.repeat(28), assetName: 'cdef', quantity: 700n },
+    ]);
   });
 
   it('selects the output at the requested index', async () => {
@@ -240,7 +261,7 @@ describe('lovelaceOf', () => {
   });
 
   it('rejects an absent or negative amount', () => {
-    expect(() => lovelaceOf(undefined)).toThrow('no lovelace amount');
+    expect(() => lovelaceOf(undefined)).toThrow('has no amount');
     expect(() => lovelaceOf(coin(-1n))).toThrow('negative');
     const negative = new cardano.BigInt({
       bigInt: { case: 'bigNInt', value: Uint8Array.from([0x01]) },

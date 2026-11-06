@@ -41,7 +41,31 @@ export const OBSERVATION: OutputObservation = {
     outputIndex: 1,
     address: TEST_ADDRESS,
     lovelace: 5_000_000n,
+    assets: [],
   },
+};
+
+/** The pinned native asset: policy id 28 bytes, name 4 bytes, both lowercase hex. */
+export const ASSET_PIN = { policyId: 'ab'.repeat(28), assetName: 'cd'.repeat(4) };
+
+/** The output policy with the asset pinned and its quantity measured at slot 3. */
+export const ASSET_POLICY: OutputPolicy = {
+  ...POLICY,
+  asset: ASSET_PIN,
+  slots: [
+    { slot: 0, name: 'blockTime' },
+    { slot: 1, name: 'slot' },
+    { slot: 2, name: 'blockNumber' },
+    { slot: 3, name: 'assetQuantity' },
+    { slot: 4, name: 'outputIndex' },
+    { slot: 5, name: 'txHash' },
+  ],
+};
+
+/** The event with the pinned asset present. */
+export const ASSET_OBSERVATION: OutputObservation = {
+  ...OBSERVATION,
+  output: { ...OBSERVATION.output, assets: [{ ...ASSET_PIN, quantity: 700n }] },
 };
 
 /** A fixed app id, 32 bytes. */
