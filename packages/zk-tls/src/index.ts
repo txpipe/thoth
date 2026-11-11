@@ -169,7 +169,10 @@ export type ZkFetchBodyPolicy = 'ignored' | 'non-empty' | { readonly sha256: Uin
 
 /** The policy a zkFetch attestor enforces. */
 export interface ZkFetchPolicy {
-  /** Hosts the attested URL may target: exact, or any subdomain of one. */
+  /**
+   * Hosts the attested URL may target: exact, or any subdomain of one. An
+   * entry is a host, or `host:port` to allow that port instead of 443.
+   */
   allowedHosts: readonly string[];
   slots: readonly ZkFetchSlot[];
   /** The response patterns the witness must have signed. */
@@ -194,6 +197,28 @@ const TEMPLATE_ERROR = 'disclosure rules cannot use {{param}} templates';
 const sha256 = (data: string): Uint8Array =>
   new Uint8Array(createHash('sha256').update(data, 'utf-8').digest());
 
+// A host, or a bracketed IPv6 literal, then an optional port.
+const HOST_ENTRY = /^(\[[0-9a-f:.]+\]|[^\s:/?#@[\]\\]+)(?::(\d{1,5}))?$/;
+
+/**
+ * The canonical form of an `allowedHosts` entry, or `undefined` if it names no
+ * host or a port outside 1–65535. Lowercases, drops trailing dots, and drops
+ * port 443, so `API.example.com.:443` is `api.example.com`. The attested host
+ * is compared in the same form, so an entry without a port admits only 443.
+ */
+const canonicalHostEntry = (entry: string): string | undefined => {
+  const match = HOST_ENTRY.exec(entry.toLowerCase());
+  const name = match?.[1]?.replace(/\.+$/, '');
+  if (match === null || !name) {
+    return undefined;
+  }
+  const port = match[2] === undefined ? 443 : Number(match[2]);
+  if (port < 1 || port > 65535) {
+    return undefined;
+  }
+  return port === 443 ? name : `${name}:${port}`;
+};
+
 /** The empty body's hash, which a `{ sha256 }` policy pin refuses. */
 const EMPTY_BODY_SHA256 = bytesToHex(sha256(''));
 
@@ -202,10 +227,17 @@ const EMPTY_BODY_SHA256 = bytesToHex(sha256(''));
  *
  * Rule entries are strict, so Reclaim's `invert` and `hash` are refused, and
  * rule texts cannot carry `{{param}}` templates. `bodyPolicy` is required; a
- * pin is 32 bytes and not the empty body's hash.
+ * pin is 32 bytes and not the empty body's hash. Every `allowedHosts` entry is
+ * a non-empty host with an optional port in 1–65535.
  */
 export const zkFetchPolicySchema = z.object({
-  allowedHosts: z.array(z.string()).min(1),
+  allowedHosts: z
+    .array(
+      z.string().refine((entry) => canonicalHostEntry(entry) !== undefined, {
+        message: 'an allowedHosts entry must be a non-empty host, optionally with :port',
+      }),
+    )
+    .min(1),
   slots: z
     .array(
       z
@@ -305,7 +337,8 @@ const normalizedRulesOf = (rules: {
 
 /**
  * Parse a policy into the form every hash and check reads: defaults filled,
- * hosts lowercased, deduplicated and sorted, slots sorted by index, the
+ * hosts in canonical form (lowercased, no trailing dot, no port 443),
+ * deduplicated and sorted, slots sorted by index, the
  * disclosure rules canonicalized, and `bodyPolicy` carried through.
  *
  * @throws if the policy fails {@link zkFetchPolicySchema}.
@@ -314,7 +347,9 @@ export const normalizePolicy = (policy: ZkFetchPolicy) => {
   const parsed = zkFetchPolicySchema.parse(policy);
   const rules = normalizedRulesOf(parsed);
   return {
-    allowedHosts: [...new Set(parsed.allowedHosts.map((host) => host.toLowerCase()))].sort(),
+    allowedHosts: [
+      ...new Set(parsed.allowedHosts.flatMap((host) => canonicalHostEntry(host) ?? [])),
+    ].sort(),
     slots: parsed.slots
       .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
       .sort((a, b) => a.slot - b.slot),
@@ -460,12 +495,16 @@ export const signedClaimContextDigestOf = (claim: ProviderClaimData): string => 
   return signed;
 };
 
-const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => {
-  const lower = host.toLowerCase();
-  return allowedHosts.some(
-    (allowed) => lower === allowed.toLowerCase() || lower.endsWith(`.${allowed.toLowerCase()}`),
-  );
-};
+/**
+ * Whether a canonical attested host (see {@link canonicalHostEntry}) is an
+ * entry or a subdomain of one. Both sides carry the port only when it is not
+ * 443, so a suffix match compares the ports too.
+ */
+const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean =>
+  allowedHosts.some((entry) => {
+    const allowed = canonicalHostEntry(entry);
+    return allowed !== undefined && (host === allowed || host.endsWith(`.${allowed}`));
+  });
 
 /**
  * Parse the signed parameters of a claim. Only `url` is validated; each caller
@@ -879,7 +918,8 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
  * The policy is parsed with {@link zkFetchPolicySchema} first, so a missing
  * `bodyPolicy` or the empty body's pin fails here rather than later.
  *
- * @returns the lowercased attested host.
+ * @returns the attested host in canonical form: lowercased, without a
+ *   trailing dot, with its port unless it is 443.
  * @throws on the first failed check.
  */
 export const assertEvidenceMatchesPolicy = (
@@ -909,10 +949,11 @@ export const assertEvidenceMatchesPolicy = (
   if (url.protocol !== 'https:') {
     throw new Error(`attested url must be https, got ${url.protocol}//`);
   }
-  const host = url.hostname.toLowerCase();
-  if (!hostAllowed(host, parsedPolicy.allowedHosts)) {
+  // WHATWG has already dropped port 443 from `url.host`; a host no entry could name fails closed.
+  const host = canonicalHostEntry(url.host);
+  if (host === undefined || !hostAllowed(host, parsedPolicy.allowedHosts)) {
     throw new Error(
-      `attested host ${host} not in allowlist [${parsedPolicy.allowedHosts.join(', ')}]`,
+      `attested host ${url.host} not in allowlist [${parsedPolicy.allowedHosts.join(', ')}]`,
     );
   }
   const request = claimRequestOf(verified.claim);
