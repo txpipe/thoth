@@ -353,7 +353,12 @@ const hostedProver = (client: ReclaimClient): ZkFetchProver => ({
     toCanonicalEvidence(
       await client.zkFetch(
         request.url,
-        { method: request.method, headers: request.publicHeaders, context: request.context },
+        {
+          method: request.method,
+          body: request.body,
+          headers: request.publicHeaders,
+          context: request.context,
+        },
         {
           headers: request.secretHeaders,
           responseMatches: request.responseMatches,

@@ -72,8 +72,6 @@ const verifiedOf = (
   claim,
   attestorAddress: '0xc340fc267cacbb9e3101adced0c7728f7e63b63d',
   disclosedValues,
-  identifier: claim.identifier,
-  canonicalHash: 'ab'.repeat(32),
 });
 
 describe('zkFetchPolicySchema disclosure rules', () => {
@@ -106,6 +104,24 @@ describe('zkFetchPolicySchema disclosure rules', () => {
       responseMatches: [{ type: 'contains', value: 'error', invert: true }],
     } as never;
     expect(() => zkFetchPolicySchema.parse(policy)).toThrow(/[Uu]nrecognized key/);
+  });
+});
+
+describe('zkFetchPolicySchema slots', () => {
+  it('refuses two entries for one claim slot, so no policy hash is unattestable', () => {
+    const policy = {
+      allowedHosts: ['api.github.com'],
+      slots: [
+        { slot: 0, name: 'a', parse: 'int' },
+        { slot: 0, name: 'b', parse: 'int' },
+      ],
+      bodyPolicy: 'ignored',
+      ...DISCLOSURE_RULES,
+    } as const;
+    expect(() => zkFetchPolicySchema.parse(policy)).toThrow(
+      /claim slot 0 is declared more than once/,
+    );
+    expect(() => zkFetchPolicyHashOf(policy as never)).toThrow(/declared more than once/);
   });
 });
 

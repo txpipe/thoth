@@ -103,9 +103,6 @@ export interface VerifiedEvidence {
   responseText?: string;
   /** The values the witness extracted, keyed by named regex group. The claim signature covers them. */
   disclosedValues: Readonly<Record<string, string>>;
-  identifier: string;
-  /** SHA-256 hex over the canonical serialization of the evidence. */
-  canonicalHash: string;
 }
 
 /**
@@ -226,7 +223,22 @@ export const zkFetchPolicySchema = z.object({
           }
         }),
     )
-    .min(1),
+    .min(1)
+    .superRefine((slots, context) => {
+      // Claim derivation keeps the last entry for a slot while verification
+      // checks every entry, so a repeated slot could never be attested.
+      const seen = new Set<number>();
+      for (const [index, { slot }] of slots.entries()) {
+        if (seen.has(slot)) {
+          context.addIssue({
+            code: 'custom',
+            message: `claim slot ${slot} is declared more than once`,
+            path: [index, 'slot'],
+          });
+        }
+        seen.add(slot);
+      }
+    }),
   responseMatches: z
     .array(
       z.strictObject({
@@ -332,10 +344,12 @@ export const normalizePolicy = (policy: ZkFetchPolicy) => {
  *
  * @throws if the policy fails {@link zkFetchPolicySchema}.
  */
-export const zkFetchPolicyHashOf = (policy: ZkFetchPolicy): Uint8Array => {
-  const normalized = normalizePolicy(policy);
-  return policyHashOf(ZK_FETCH_LAW, normalized, normalized.claimVersion);
-};
+export const zkFetchPolicyHashOf = (policy: ZkFetchPolicy): Uint8Array =>
+  hashNormalizedPolicy(normalizePolicy(policy));
+
+/** Hash an already-normalized policy, so a caller holding one skips a second parse. */
+const hashNormalizedPolicy = (normalized: ReturnType<typeof normalizePolicy>): Uint8Array =>
+  policyHashOf(ZK_FETCH_LAW, normalized, normalized.claimVersion);
 
 /**
  * SHA-256 of a request body, as a policy's `bodyPolicy: { sha256 }` pin.
@@ -467,32 +481,25 @@ const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean => 
   );
 };
 
-/**
- * Parse the signed parameters of a claim. Only `url` is validated; each caller
- * validates the fields it uses.
- *
- * @throws if the parameters are not JSON or carry no non-empty `url`.
- */
-const claimParametersOf = (
-  claim: ProviderClaimData,
-): Readonly<{
-  url: string;
+/** The signed request fields this kind reads, as they arrive in `claim.parameters`. */
+type SignedParameters = Readonly<{
+  url?: unknown;
   method?: unknown;
   body?: unknown;
   geoLocation?: unknown;
   proxySessionId?: unknown;
   responseMatches?: unknown;
   responseRedactions?: unknown;
-}> => {
-  let parameters: Readonly<{
-    url?: unknown;
-    method?: unknown;
-    body?: unknown;
-    geoLocation?: unknown;
-    proxySessionId?: unknown;
-    responseMatches?: unknown;
-    responseRedactions?: unknown;
-  }>;
+}>;
+
+/**
+ * Parse the signed parameters of a claim. Only `url` is validated; each caller
+ * validates the fields it uses.
+ *
+ * @throws if the parameters are not JSON or carry no non-empty `url`.
+ */
+const claimParametersOf = (claim: ProviderClaimData): SignedParameters & { url: string } => {
+  let parameters: SignedParameters;
   try {
     parameters = JSON.parse(claim.parameters) as typeof parameters;
   } catch {
@@ -574,9 +581,6 @@ const canonicalJson = (value: unknown): string => {
     return v;
   }) as string;
 };
-
-/** SHA-256 of a UTF-8 string, lower hex. */
-const sha256Hex = (data: string): string => Buffer.from(sha256(data)).toString('hex');
 
 /** The contract's value type is `Uint<64>`; only non-negative values below 2^64 are certifiable. */
 const UINT64_MAX = 1n << 64n;
@@ -752,22 +756,12 @@ export function parseSlotValue(slot: ZkFetchSlot, value: string): bigint | Uint8
  *
  * @throws if the claim context is not JSON.
  */
-export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence => {
-  const canonical = {
-    claim: evidence.claim,
-    signatureHex: evidence.signatureHex,
-    attestorAddress: evidence.attestorAddress,
-    responseText: evidence.responseText ?? null,
-  };
-  return {
-    claim: evidence.claim,
-    attestorAddress: evidence.attestorAddress,
-    responseText: evidence.responseText,
-    disclosedValues: disclosedValuesOf(evidence.claim),
-    identifier: evidence.claim.identifier,
-    canonicalHash: sha256Hex(canonicalJson(canonical)),
-  };
-};
+export const parsedEvidenceView = (evidence: ZkFetchEvidence): VerifiedEvidence => ({
+  claim: evidence.claim,
+  attestorAddress: evidence.attestorAddress,
+  responseText: evidence.responseText,
+  disclosedValues: disclosedValuesOf(evidence.claim),
+});
 
 /**
  * Require every policy slot to fit the requested claim size and its rule's
@@ -852,13 +846,13 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
       byteValues[slot.slot - valueSlots] = value;
     }
   }
-  const { claimVersion } = normalizePolicy(policy);
+  const normalized = normalizePolicy(policy);
   return {
-    version: claimVersion,
+    version: normalized.claimVersion,
     appId,
     holder,
     salt: hexToBytes(signedClaimContextDigestOf(verified.claim)),
-    policyHash: zkFetchPolicyHashOf(policy),
+    policyHash: hashNormalizedPolicy(normalized),
     windowStart,
     windowEnd,
     subjectHash: zkFetchSubjectHashOf(claimRequestOf(verified.claim)),

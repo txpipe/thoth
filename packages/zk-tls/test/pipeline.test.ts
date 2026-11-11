@@ -138,9 +138,8 @@ describe('verifyZkFetchProof', () => {
   it('re-verifies a genuine witnessed proof offline', async () => {
     const evidence = zkFetchEvidenceSchema.parse(fixture);
     const verified = await verifyZkFetchProof(evidence);
-    expect(verified.identifier).toBe(evidence.claim.identifier);
+    expect(verified.claim.identifier).toBe(evidence.claim.identifier);
     expect(verified.disclosedValues).toHaveProperty('data');
-    expect(verified.canonicalHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('rejects an invalid signature', async () => {
