@@ -348,24 +348,39 @@ carries the `witnesses[].url` it used) and retries. Wrap it as a
 `ZkFetchProver` with `toCanonicalEvidence`:
 
 ```ts
-import { ReclaimClient } from '@reclaimprotocol/zk-fetch';
+import { type Options, ReclaimClient } from '@reclaimprotocol/zk-fetch';
 import { toCanonicalEvidence, type ZkFetchProver } from '@thoth/zk-tls/client';
 
 const hostedProver = (client: ReclaimClient): ZkFetchProver => ({
-  prove: async (request) =>
-    toCanonicalEvidence(
-      await client.zkFetch(
-        request.url,
-        { method: request.method, headers: request.publicHeaders, context: request.context },
-        {
-          headers: request.secretHeaders,
-          responseMatches: request.responseMatches,
-          responseRedactions: request.responseRedactions,
-        },
-      ),
-    ),
+  prove: async (request) => {
+    const proof = await client.zkFetch(
+      request.url,
+      {
+        method: request.method ?? 'GET',
+        body: request.body,
+        headers: request.publicHeaders,
+        // zk-fetch types `context` as { contextAddress, contextMessage } but
+        // passes any JSON object to the witness, which signs every key. The
+        // client's claim context digest rides in this object.
+        context: request.context as Options['context'],
+      },
+      {
+        headers: request.secretHeaders,
+        responseMatches: request.responseMatches?.map((match) => ({ ...match })),
+        responseRedactions: request.responseRedactions?.map((rule) => ({ ...rule })),
+      },
+    );
+    if (proof === undefined) {
+      throw new Error('zk-fetch returned no proof');
+    }
+    return toCanonicalEvidence(proof);
+  },
 });
 ```
+
+Leave `useTee` off. The TEE path hands the context to a native library, and
+Thoth has not checked that it keeps the claim context digest; if it drops it,
+the client refuses the evidence.
 
 `collect` reports an error from this prover as `evidence`. To report
 `transport` or `no-match` instead, throw `ZkFetchProverError` with that reason;
