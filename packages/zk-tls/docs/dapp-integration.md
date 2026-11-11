@@ -364,6 +364,10 @@ const hostedProver = (client: ReclaimClient): ZkFetchProver => ({
 });
 ```
 
+`collect` reports an error from this prover as `evidence`. To report
+`transport` or `no-match` instead, throw `ZkFetchProverError` with that reason;
+[Guarantees and limits](../README.md#guarantees-and-limits) lists the reasons.
+
 `@reclaimprotocol/zk-fetch` is AGPL-licensed; this package does not depend on
 it. Reclaim chooses the witness per call, so this path only fits a trusted set
 whose attestors all pin that witness address. Operators who run their own

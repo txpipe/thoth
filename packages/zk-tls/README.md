@@ -122,14 +122,14 @@ When `collect` drops an attestor, its entry in `failures` names one reason:
 
 | Reason | What failed | What to do |
 |--------|-------------|------------|
-| `transport` | The witness was unreachable, or the TLS connection to the source, its certificate, or the network failed. | Check the witness URL and that the witness can reach the source. |
-| `no-match` | The response failed the policy's `responseMatches`, as the client or the witness checked it. A witness reports every claim it refuses this way, a refused proof or timestamp included. | Check the policy against what the source returns. The client runs the same check first, so a witness that refuses what the client accepted usually runs another attestor-core version. |
-| `evidence` | Proving failed otherwise, or the evidence did not fit the request, the policy, the window or the slot counts. | Check the request and the policy. |
+| `transport` | The prover could not reach the witness, or the witness could not reach the source: a network error, a timeout, a proxy failure, a refused connection, or a TLS certificate or handshake failure. | Check the witness URL, and that the witness can reach the source. |
+| `no-match` | The response failed the policy's `responseRedactions` or `responseMatches` when the client checked it. | Check the policy against what the source returns. |
+| `evidence` | Proving failed for another reason, the witness refused the claim, or the evidence did not fit the request, the policy, the window or the slot counts. | Check the request and the policy. The client checks the disclosure rules before the witness does, so a witness that refuses a claim usually runs another attestor-core version, has a skewed clock, or rejected the proof. Check the witness's log. |
 | `secret` | The evidence carried a secret header value. | Check that the response does not echo the secret and the prover redacts it. A very short secret can match unrelated text. |
 | `attestation` | The attestor refused, or its answer did not verify. | Check the attestor's logs and the trusted set's keys. |
 | `timeout` | The attempt passed `attestorTimeoutMs` or `expiresAt`. | Raise the limits, or check the slow witness or attestor. |
 
-A custom `ZkFetchProver` reports `transport` and `no-match` by throwing `ZkFetchProverError`; any other error becomes `evidence`.
+A custom `ZkFetchProver` reports `transport` and `no-match` by throwing `ZkFetchProverError`. Any other error it throws becomes `evidence`.
 
 What it does not check, and what your app must do:
 

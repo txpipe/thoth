@@ -18,6 +18,7 @@ import type {
   ZkFetchResponseRedaction,
 } from '../index.js';
 import { assertPolicySlotsInRange, zkFetchPolicySchema } from '../index.js';
+import { ZkFetchProverError } from '../prover-error.js';
 import type {
   ZkFetchAttestorFailure,
   ZkFetchThresholdAttestment,
@@ -32,7 +33,6 @@ import {
   proveOptionsShape,
   proveWith,
   windowInOrder,
-  ZkFetchProverError,
 } from './proposal.js';
 
 export type { ZkFetchAttestorFailure, ZkFetchThresholdAttestment, ZkFetchThresholdOptions };
@@ -97,9 +97,9 @@ export interface ZkFetchProver {
   /**
    * Fetch `request` and return the canonical evidence it attests.
    *
-   * @throws {@link ZkFetchProverError} if the witness or the source is
-   *   unreachable, or the response fails the request's `responseMatches`; a
-   *   prover that throws it lets `collect` report that reason.
+   * @throws {@link ZkFetchProverError} if the witness or the source cannot be
+   *   reached, or the response fails the request's disclosure rules. Only this
+   *   error gives `collect` a reason other than `evidence`.
    * @throws if the fetch or the witness fails otherwise.
    */
   prove(request: ZkFetchRequest): Promise<ZkFetchEvidence>;
@@ -229,8 +229,8 @@ export interface ZkFetchClient<V extends number, PK, S> {
    * @throws `ZodError` if the holder is not 32 bytes, the window is out of range or
    *   inverted, or a prover returns malformed evidence.
    * @throws `SecretHeaderError` if evidence carries a secret header value.
-   * @throws {@link ZkFetchProverError} if a witness or the source is unreachable, or a
-   *   response fails the policy's `responseMatches`.
+   * @throws {@link ZkFetchProverError} if a witness or the source cannot be reached, or
+   *   a response fails the policy's disclosure rules.
    * @throws `Error` if the request carries disclosure rules other than the policy's or
    *   sets the claim context key, a prover fails or answers for another origin, method,
    *   path or body, evidence fails the policy or does not fit the slot counts, or the

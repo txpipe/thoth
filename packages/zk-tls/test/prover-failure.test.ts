@@ -1,93 +1,50 @@
 // How `zkFetchProver` classifies Reclaim's failures into `ZkFetchProverError`
-// reasons. The receipt errors come from attestor-core's own HTTP provider.
+// reasons. Most cases run attestor-core's real client against a fake witness
+// and a local HTTPS source; the rest stub `createClaimOnAttestor`.
 import { createServer } from 'node:net';
 import type * as AttestorCore from '@reclaimprotocol/attestor-core';
 import { ZkFetchProverError, type ZkFetchRequest } from '@thoth/zk-tls/client';
-import { zkFetchProver } from '@thoth/zk-tls/prover';
+import { type ZkFetchProverConfig, zkFetchProver } from '@thoth/zk-tls/prover';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { startFakeWitness, startSource, type TestServer } from './helpers/fake-witness.js';
 
 type CreateClaim = typeof AttestorCore.createClaimOnAttestor;
 
-/** A stand-in for `createClaimOnAttestor`; unset runs the real one. */
-const stub = vi.hoisted(() => ({ createClaim: undefined as CreateClaim | undefined }));
+const stub = vi.hoisted(() => ({
+  /** A stand-in for `createClaimOnAttestor`; unset runs the real one. */
+  createClaim: undefined as CreateClaim | undefined,
+  /** Skip certificate verification, for the self-signed local source. */
+  insecure: false,
+}));
 
 vi.mock('@reclaimprotocol/attestor-core', async (importOriginal) => {
   const real = await importOriginal<typeof AttestorCore>();
-  const createClaimOnAttestor: CreateClaim = (options) =>
-    (stub.createClaim ?? real.createClaimOnAttestor)(options);
+  const createClaimOnAttestor: CreateClaim = (options) => {
+    if (stub.createClaim !== undefined) {
+      return stub.createClaim(options);
+    }
+    const params = stub.insecure
+      ? { ...options.params, additionalClientOptions: { verifyServerCertificate: false } }
+      : options.params;
+    return real.createClaimOnAttestor({ ...options, params } as typeof options);
+  };
   return { ...real, createClaimOnAttestor };
 });
 
 const core = await import('@reclaimprotocol/attestor-core');
 
-afterEach(() => {
+const servers: TestServer[] = [];
+
+afterEach(async () => {
   stub.createClaim = undefined;
+  stub.insecure = false;
+  await Promise.all(servers.splice(0).map((server) => server.close()));
 });
 
-const REQUEST: ZkFetchRequest = {
-  url: 'https://example.com/price',
-  responseMatches: [{ type: 'regex', value: '"price":(?<price>\\d+)' }],
-  responseRedactions: [{ regex: '"price":\\d+' }],
-};
+const PRICE_MATCH = { type: 'regex' as const, value: '"price":(?<price>\\d+)' };
 
 /** Text that only a remote error carries, so a test can check it never surfaces. */
 const REMOTE_TEXT = 'remote-detail-7f3a';
-
-const silent = {
-  trace: () => undefined,
-  debug: () => undefined,
-  info: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
-  child: () => silent,
-} as unknown as AttestorCore.Logger;
-
-/** The error attestor-core's HTTP provider throws when the response fails `responseMatches`. */
-const receiptNoMatch = async (): Promise<Error> => {
-  const params = {
-    url: REQUEST.url,
-    method: 'GET' as const,
-    responseMatches: [...(REQUEST.responseMatches ?? [])],
-    responseRedactions: [],
-    body: '',
-    paramValues: {},
-  };
-  const secretParams = { cookieStr: '', headers: {}, paramValues: {} };
-  const { data } = core.providers.http.createRequest(secretParams, params, silent);
-  const request = typeof data === 'string' ? new TextEncoder().encode(data) : data;
-  const response = new TextEncoder().encode(
-    'HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\n{"price":"n"}',
-  );
-  const version = core.DEFAULT_METADATA.clientVersion;
-  try {
-    await core.providers.http.assertValidProviderReceipt({
-      clientVersion: version,
-      receipt: [
-        { sender: 'client', message: request },
-        { sender: 'server', message: response },
-      ],
-      params: { ...params, secretParams },
-      logger: silent,
-      ctx: { version },
-    });
-  } catch (error) {
-    return error as Error;
-  }
-  throw new Error('the receipt unexpectedly matched');
-};
-
-/**
- * The response a witness sends for a claim it refuses: its `claimTunnel`
- * handler wraps the error as `ERROR_INVALID_CLAIM` in `error`, and the client
- * decodes it from the wire.
- */
-const witnessRefusal = (error: Error): Awaited<ReturnType<CreateClaim>> => {
-  const { ClaimTunnelResponse } = core.proto;
-  const response = ClaimTunnelResponse.create({
-    error: core.AttestorError.fromError(error, 'ERROR_INVALID_CLAIM').toProto(),
-  });
-  return ClaimTunnelResponse.decode(ClaimTunnelResponse.encode(response).finish());
-};
 
 /** A local port with nothing listening on it. */
 const closedPort = async (): Promise<number> => {
@@ -101,10 +58,21 @@ const closedPort = async (): Promise<number> => {
   return address.port;
 };
 
-/** Prove `REQUEST` and return what the prover threw. */
-const proveError = async (witnessUrl = 'ws://localhost:1/ws'): Promise<unknown> =>
-  zkFetchProver({ witnessUrl })
-    .prove(REQUEST)
+/** A fake witness and a source answering `body`, both closed after the test. */
+const witnessAndSource = async (body = '{"other":1}') => {
+  const witness = await startFakeWitness();
+  const source = await startSource(body);
+  servers.push(witness, source);
+  return { witnessUrl: witness.url, url: `https://localhost:${source.port}/price` };
+};
+
+/** Prove `request` and return what the prover threw. */
+const proveError = async (
+  request: ZkFetchRequest,
+  config: ZkFetchProverConfig = { witnessUrl: 'ws://localhost:1/ws' },
+): Promise<unknown> =>
+  zkFetchProver(config)
+    .prove(request)
     .then(
       () => {
         throw new Error('prove unexpectedly succeeded');
@@ -122,20 +90,84 @@ const failAfter = (steps: readonly AttestorCore.ProofGenerationStep['name'][], e
   };
 };
 
-/** Assert a classified error with `reason` that carries no remote text. */
+/** Assert a classified error with `reason` whose message carries no remote text. */
 const expectReason = (error: unknown, reason: ZkFetchProverError['reason']) => {
   expect(error).toBeInstanceOf(ZkFetchProverError);
   expect(error).toMatchObject({ reason });
   expect((error as Error).message).not.toContain(REMOTE_TEXT);
 };
 
-describe('zkFetchProver failure reasons', () => {
+/** Assert an error the prover left unclassified, which `collect` reports as `evidence`. */
+const expectUnclassified = (error: unknown) => {
+  expect(error).toBeInstanceOf(Error);
+  expect(error).not.toBeInstanceOf(ZkFetchProverError);
+};
+
+describe('zkFetchProver failure reasons, through the real Reclaim client', () => {
   it('reports an unreachable witness as transport', async () => {
-    const error = await proveError(`ws://127.0.0.1:${await closedPort()}/ws`);
+    const witnessUrl = `ws://127.0.0.1:${await closedPort()}/ws`;
+    const error = await proveError({ url: 'https://localhost/price' }, { witnessUrl });
     expectReason(error, 'transport');
     expect((error as Error).cause).toMatchObject({ code: 'ERROR_NETWORK_ERROR' });
   });
 
+  it('reports a source the witness cannot reach as transport', async () => {
+    const witness = await startFakeWitness();
+    servers.push(witness);
+    const url = `https://localhost:${await closedPort()}/price`;
+    const error = await proveError({ url }, { witnessUrl: witness.url });
+    expectReason(error, 'transport');
+    expect((error as Error).cause).toMatchObject({ code: 'ERROR_INTERNAL' });
+  });
+
+  it('reports a source certificate that does not verify as transport', async () => {
+    const { witnessUrl, url } = await witnessAndSource();
+    const error = await proveError({ url }, { witnessUrl });
+    expectReason(error, 'transport');
+    expect((error as Error).cause).toMatchObject({
+      message: expect.stringMatching(/^Missing issuer/),
+    });
+  });
+
+  it.each([
+    { rule: 'regex', redaction: { regex: '"price":\\d+' } },
+    { rule: 'jsonPath', redaction: { jsonPath: '$.price' } },
+  ])('reports a $rule redaction that finds nothing as no-match', async ({ redaction }) => {
+    stub.insecure = true;
+    const { witnessUrl, url } = await witnessAndSource();
+    const request = { url, responseMatches: [PRICE_MATCH], responseRedactions: [redaction] };
+    expectReason(await proveError(request, { witnessUrl }), 'no-match');
+  });
+
+  it('reports a response that fails responseMatches as no-match', async () => {
+    stub.insecure = true;
+    const { witnessUrl, url } = await witnessAndSource();
+    const request = { url, responseMatches: [PRICE_MATCH], responseRedactions: [] };
+    const error = await proveError(request, { witnessUrl });
+    expectReason(error, 'no-match');
+    expect((error as Error).cause).toMatchObject({
+      message: expect.stringMatching(/^Invalid receipt\. /),
+    });
+  });
+
+  it('leaves an unfilled body template unclassified', async () => {
+    stub.insecure = true;
+    const { witnessUrl, url } = await witnessAndSource();
+    const request = { url, method: 'POST' as const, body: '{"q":"{{id}}"}' };
+    expectUnclassified(await proveError(request, { witnessUrl }));
+  });
+
+  it('leaves a rejecting authRequest unclassified', async () => {
+    const { witnessUrl, url } = await witnessAndSource();
+    const signerOffline = new Error('signer offline');
+    const authRequest = async () => {
+      throw signerOffline;
+    };
+    expect(await proveError({ url }, { witnessUrl, authRequest })).toBe(signerOffline);
+  });
+});
+
+describe('zkFetchProver failure reasons, from a stubbed Reclaim client', () => {
   it.each([
     'ERROR_NETWORK_ERROR',
     'ERROR_TIMEOUT',
@@ -143,39 +175,28 @@ describe('zkFetchProver failure reasons', () => {
     'ERROR_PROXY_ERROR',
   ] as const)('reports a thrown %s as transport', async (code) => {
     failAfter(['connecting'], new core.AttestorError(code, REMOTE_TEXT));
-    expectReason(await proveError(), 'transport');
+    expectReason(await proveError({ url: 'https://localhost/price' }), 'transport');
   });
 
-  it('reports a TLS failure during connecting as transport', async () => {
-    failAfter(['connecting'], new Error(`Certificate is not for host ${REMOTE_TEXT}`));
-    expectReason(await proveError(), 'transport');
+  it.each([
+    { code: 'ERROR_INVALID_CLAIM', steps: ['connecting', 'waiting-for-verification'] },
+    { code: 'ERROR_AUTHENTICATION_FAILED', steps: ['connecting'] },
+    { code: 'ERROR_INTERNAL', steps: ['connecting', 'waiting-for-verification'] },
+  ] as const)('leaves a thrown $code after $steps unclassified', async ({ code, steps }) => {
+    const thrown = new core.AttestorError(code, REMOTE_TEXT);
+    failAfter(steps, thrown);
+    expect(await proveError({ url: 'https://localhost/price' })).toBe(thrown);
   });
 
-  it("reports the client's own receipt check as no-match", async () => {
-    const local = await receiptNoMatch();
-    expect(local).not.toBeInstanceOf(core.AttestorError);
-    failAfter(['connecting', 'sending-request-data', 'waiting-for-response'], local);
-    const error = await proveError();
-    expectReason(error, 'no-match');
-    expect((error as Error).cause).toBe(local);
-  });
-
-  it('reports a witness that refuses the match as no-match', async () => {
-    const refusal = witnessRefusal(await receiptNoMatch());
-    expect(refusal.error?.code).toBe(core.proto.ErrorCode.ERROR_INVALID_CLAIM);
+  it('leaves a claim the witness refuses unclassified, even with malformed data', async () => {
+    // The witness's `claimTunnel` handler returns a refusal in `error` as
+    // `ERROR_INVALID_CLAIM`; the client decodes it from the wire.
+    const { ClaimTunnelResponse, ErrorCode } = core.proto;
+    const response = ClaimTunnelResponse.create({
+      error: { code: ErrorCode.ERROR_INVALID_CLAIM, message: REMOTE_TEXT, data: '{not json' },
+    });
+    const refusal = ClaimTunnelResponse.decode(ClaimTunnelResponse.encode(response).finish());
     stub.createClaim = async () => refusal;
-    const error = await proveError();
-    expectReason(error, 'no-match');
-    expect((error as Error).message).not.toMatch(/Invalid receipt|didn't match/);
-  });
-
-  it('keeps any other Reclaim error unclassified', async () => {
-    const auth = new core.AttestorError('ERROR_AUTHENTICATION_FAILED', REMOTE_TEXT);
-    failAfter(['connecting'], auth);
-    expect(await proveError()).toBe(auth);
-
-    const status = new Error('Provider returned error 404');
-    failAfter(['connecting', 'sending-request-data', 'waiting-for-response'], status);
-    expect(await proveError()).toBe(status);
+    expectUnclassified(await proveError({ url: 'https://localhost/price' }));
   });
 });

@@ -6,6 +6,7 @@ import { attestorIdsOf, memberOf } from '@thoth/client';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { z } from 'zod';
 import type { ZkFetchDefinition } from '../index.js';
+import { ZkFetchProverError } from '../prover-error.js';
 import type {
   Attestment,
   ZkFetchClientConfig,
@@ -22,7 +23,6 @@ import {
   proveWith,
   SecretHeaderError,
   windowInOrder,
-  ZkFetchProverError,
 } from './proposal.js';
 
 /** Why one attestor's attempt was dropped. Carries no remote error text. */
@@ -30,24 +30,12 @@ export interface ZkFetchAttestorFailure {
   /** The attestor's registry slot. */
   readonly registryIndex: number;
   /**
-   * What failed, and where to look:
-   *
-   * - `transport`: the witness was unreachable, or the TLS connection to the
-   *   source, its certificate, or the network failed. Check the witness URL
-   *   and that the witness can reach the source.
-   * - `no-match`: the response failed the policy's `responseMatches`. Check the
-   *   policy against what the source returns. A witness reports every claim it
-   *   refuses this way, a refused proof or timestamp included. The client runs
-   *   the same check first, so a witness that refuses what the client accepted
-   *   usually runs another attestor-core version.
-   * - `evidence`: proving failed otherwise, or the evidence did not fit the
-   *   request, the policy, the window or the slot counts.
-   * - `secret`: the evidence carried a secret header value. Check that the
-   *   response does not echo the secret and the prover redacts it.
-   * - `attestation`: the attestor refused, or its answer did not verify.
-   * - `timeout`: the attempt passed `attestorTimeoutMs` or `expiresAt`.
+   * What failed: the prover's own reason (`transport` or `no-match`), or the
+   * step that failed. The README's
+   * [Guarantees and limits](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/README.md#guarantees-and-limits)
+   * says what each reason means and what to do about it.
    */
-  readonly reason: 'transport' | 'no-match' | 'evidence' | 'secret' | 'attestation' | 'timeout';
+  readonly reason: ZkFetchProverError['reason'] | 'evidence' | 'secret' | 'attestation' | 'timeout';
 }
 
 /** An attestment that reached the threshold, plus the attestors that failed. */

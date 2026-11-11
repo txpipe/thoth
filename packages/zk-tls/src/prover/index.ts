@@ -6,9 +6,9 @@ import type {
   ProofGenerationStep,
 } from '@reclaimprotocol/attestor-core';
 import type { ZkFetchProver, ZkFetchRequest } from '../client/index.js';
-import { ZkFetchProverError } from '../client/index.js';
 import { bytesToHex } from '../hex.js';
 import type { ZkFetchEvidence } from '../index.js';
+import { ZkFetchProverError } from '../prover-error.js';
 
 /** The lazily-imported Reclaim client module. */
 type AttestorCore = typeof import('@reclaimprotocol/attestor-core');
@@ -60,45 +60,67 @@ const TRANSPORT_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The reason a Reclaim error code stands for, if any. A witness reports every
- * claim it refuses, its failed `responseMatches` included, as
- * `ERROR_INVALID_CLAIM` with nothing finer than remote text, which is not read.
+ * The messages `@reclaimprotocol/tls` and Reclaim's tunnel build locally when
+ * the TLS handshake with the source fails: a certificate it cannot verify, a
+ * fatal alert, or a connection the source closed. They carry no code.
  */
-const reasonOfCode = (code: string): ZkFetchProverError['reason'] | undefined => {
-  if (TRANSPORT_CODES.has(code)) {
-    return 'transport';
-  }
-  return code === 'ERROR_INVALID_CLAIM' ? 'no-match' : undefined;
-};
+const TLS_FAILURES: readonly RegExp[] = [
+  /^Fatal alert: /,
+  /^Certificate is not for host /,
+  /^Certificate .+ is outside validity$/,
+  /^Missing issuer for certificate /,
+  /^Issuer Cert .+ is not within validity period$/,
+  /^Verification of .+ failed by issuer /,
+  /^TLS connection closed$/,
+];
 
 /**
- * Classify an error `createClaimOnAttestor` threw, given the last step it
- * reported; return the error unchanged when no reason fits.
+ * Whether a local error says the response failed the request's disclosure
+ * rules. Reclaim's client applies them before it sends the claim to the
+ * witness: the redactions first, then `responseMatches`. It builds each
+ * message locally from the rule, so only the exact message for one of this
+ * request's rules counts.
+ */
+const isNoMatch = (message: string, request: ZkFetchRequest): boolean =>
+  // A `responseMatches` failure, for a regex or a contains rule.
+  message.startsWith('Invalid receipt. ') ||
+  (request.responseRedactions ?? []).some(
+    ({ regex, jsonPath, xPath }) =>
+      (Boolean(regex) && message.startsWith(`regexp ${regex} does not match found element `)) ||
+      (Boolean(jsonPath) && message === 'jsonPath not found') ||
+      (Boolean(xPath) && message === `Failed to find XPath: "${xPath}"`),
+  );
+
+/**
+ * Classify an error `createClaimOnAttestor` threw, given the request and the
+ * last step it reported; return the error unchanged when no reason fits.
  */
 const classifyThrown = (
   core: AttestorCore,
   error: unknown,
+  request: ZkFetchRequest,
   step: ProofGenerationStep['name'] | undefined,
 ): unknown => {
   if (error instanceof core.AttestorError) {
-    const reason = reasonOfCode(error.code);
-    return reason === undefined ? error : new ZkFetchProverError(reason, { cause: error });
+    // While connecting, the witness only opens the TCP connection to the source,
+    // relays the handshake and fetches certificates. Its RPC handler answers a
+    // socket error there (connection refused, DNS failure, reset) as
+    // `ERROR_INTERNAL`, so that code in this step is the source being unreachable.
+    if (
+      TRANSPORT_CODES.has(error.code) ||
+      (error.code === 'ERROR_INTERNAL' && step === 'connecting')
+    ) {
+      return new ZkFetchProverError('transport', { cause: error });
+    }
+    return error;
   }
   if (!(error instanceof Error)) {
     return error;
   }
-  // Reclaim's client runs the witness's receipt check locally first, and a
-  // failure there is a plain error with no code. Only its two
-  // `responseMatches` failures (regex and contains) start with this prefix,
-  // and the text is built locally from the policy's rule, never remote.
-  if (error.message.startsWith('Invalid receipt. ')) {
+  if (isNoMatch(error.message, request)) {
     return new ZkFetchProverError('no-match', { cause: error });
   }
-  // In this step Reclaim's client opens the tunnel and runs the TLS handshake,
-  // whose certificate and alert failures `@reclaimprotocol/tls` throws with no
-  // code. It also builds the HTTP request here, which fails only on a
-  // `{{param}}` template in the body, a request every attestor refuses.
-  if (step === 'connecting') {
+  if (step === 'connecting' && TLS_FAILURES.some((failure) => failure.test(error.message))) {
     return new ZkFetchProverError('transport', { cause: error });
   }
   return error;
@@ -130,9 +152,10 @@ export const zkFetchProver = (config: ZkFetchProverConfig): ZkFetchProver => {
     /**
      * Fetch `request` through the configured witness.
      *
-     * @throws {@link ZkFetchProverError} if the witness or the source is
-     *   unreachable, or the response fails `responseMatches`.
-     * @throws if the witness reports another error or returns no signed claim.
+     * @throws {@link ZkFetchProverError} if the witness or the source cannot be
+     *   reached, or the response fails the request's redactions or `responseMatches`.
+     * @throws if the prover fails otherwise, the witness refuses the claim, or it
+     *   returns no signed claim.
      */
     prove: async (request: ZkFetchRequest): Promise<ZkFetchEvidence> => {
       const core = await loadCore();
@@ -167,15 +190,12 @@ export const zkFetchProver = (config: ZkFetchProverConfig): ZkFetchProver => {
           },
         })
         .catch((error: unknown) => {
-          throw classifyThrown(core, error, step);
+          throw classifyThrown(core, error, request, step);
         });
       if (result.error !== undefined) {
-        // The witness answers a claim it refuses with an error instead of throwing.
-        const refusal = core.AttestorError.fromProto(result.error);
-        const reason = reasonOfCode(refusal.code);
-        if (reason !== undefined) {
-          throw new ZkFetchProverError(reason, { cause: refusal });
-        }
+        // A witness returns a claim it refuses, with `ERROR_INVALID_CLAIM` whatever
+        // the cause. The client checked the disclosure rules before sending it, so
+        // a refusal is not a `no-match`; it stays unclassified.
         throw new Error(`zkFetch witness error: ${result.error.message}`);
       }
       const { claim, signatures } = result;

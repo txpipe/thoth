@@ -231,7 +231,7 @@ export const bindRequestToClaimContext = (
  * The prover gets its own copy, so it cannot change the request that other
  * provers or the secret header check read.
  *
- * @throws {@link ZkFetchProverError} as the prover throws it.
+ * @throws `ZkFetchProverError` as the prover throws it.
  * @throws {@link SecretHeaderError} if the evidence carries a secret header value.
  * @throws if the attestor has no prover, the prover fails otherwise, or the
  *   evidence is invalid or for another origin, subject or claim context.
@@ -294,28 +294,6 @@ const containsSecret = (value: unknown, secrets: readonly string[]): boolean => 
   }
   return false;
 };
-
-/**
- * A prover failure with a coarse reason the client can report: `transport`
- * when the witness or the source could not be reached, `no-match` when the
- * response failed the policy's `responseMatches`. Its message carries no
- * remote error text; `collect` reports only the reason.
- */
-export class ZkFetchProverError extends Error {
-  /** Why the prover failed. */
-  readonly reason: 'transport' | 'no-match';
-
-  /**
-   * Build the error from its reason.
-   *
-   * @param options — `cause` is the underlying error, kept for local logs.
-   */
-  constructor(reason: ZkFetchProverError['reason'], options?: ErrorOptions) {
-    super(`zkFetch prover failed: ${reason}`, options);
-    this.name = 'ZkFetchProverError';
-    this.reason = reason;
-  }
-}
 
 /** The evidence carried a secret header value. Carries no value itself. */
 export class SecretHeaderError extends Error {
