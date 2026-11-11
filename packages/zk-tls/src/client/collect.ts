@@ -116,12 +116,21 @@ class AttemptError extends Error {
   }
 }
 
-/** The reason an error carries, or `fallback` for any other error. */
-const reasonOf = (error: unknown, fallback: FailureReason): FailureReason => {
+const PROVER_REASONS: ReadonlySet<FailureReason> = new Set<ZkFetchProverError['reason']>([
+  'transport',
+  'no-match',
+]);
+
+/**
+ * The reason an error carries, or `fallback` for any other error. A prover's
+ * reason counts only from the proving step, and only if it is a known one: a
+ * JS prover can set any `reason` at runtime, and `failures` must not carry it.
+ */
+const reasonOf = (error: unknown, fallback: FailureReason, proving: boolean): FailureReason => {
   if (error instanceof SecretHeaderError) {
     return 'secret';
   }
-  if (error instanceof ZkFetchProverError) {
+  if (proving && error instanceof ZkFetchProverError && PROVER_REASONS.has(error.reason)) {
     return error.reason;
   }
   return fallback;
@@ -168,17 +177,21 @@ const runAttempt = async <V extends number, PK, S>(
 
   /**
    * Run one step, replacing any error with `reason`. A secret-header refusal
-   * and a prover's classified failure keep their own reason, so a leak or an
-   * unreachable witness is not reported as a failed proof. Only the reason
-   * survives, never the error's text. The clock check also catches a step that
-   * blocked the event loop past the deadline.
+   * and, in the proving step, a prover's classified failure keep their own
+   * reason, so a leak or an unreachable witness is not reported as a failed
+   * proof. Only the reason survives, never the error's text. The clock check
+   * also catches a step that blocked the event loop past the deadline.
    */
-  const step = async <T>(reason: FailureReason, run: () => Promise<T>): Promise<T> => {
+  const step = async <T>(
+    reason: FailureReason,
+    run: () => Promise<T>,
+    proving = false,
+  ): Promise<T> => {
     let result: T;
     try {
       result = await run();
     } catch (error) {
-      throw new AttemptError(reasonOf(error, reason));
+      throw new AttemptError(reasonOf(error, reason, proving));
     }
     if (Date.now() >= deadline) {
       throw new AttemptError('timeout');
@@ -187,7 +200,11 @@ const runAttempt = async <V extends number, PK, S>(
   };
 
   const attempt = async () => {
-    const evidence = await step('evidence', () => proveWith(config.provers, attestor, request));
+    const evidence = await step(
+      'evidence',
+      () => proveWith(config.provers, attestor, request),
+      true,
+    );
     const { policy, appId, valueSlots, byteSlots } = config;
     const { holder, windowStart, windowEnd } = options;
     const claim = await step('evidence', () =>

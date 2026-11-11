@@ -102,10 +102,13 @@ const classifyThrown = (
   step: ProofGenerationStep['name'] | undefined,
 ): unknown => {
   if (error instanceof core.AttestorError) {
-    // While connecting, the witness only opens the TCP connection to the source,
+    // While connecting, the witness opens the TCP connection to the source,
     // relays the handshake and fetches certificates. Its RPC handler answers a
     // socket error there (connection refused, DNS failure, reset) as
-    // `ERROR_INTERNAL`, so that code in this step is the source being unreachable.
+    // `ERROR_INTERNAL`, so that code in this step is taken as the source being
+    // unreachable. The witness also checks the app's auth request in this step,
+    // and a malformed signature there surfaces as `ERROR_INTERNAL` too: that
+    // rare app misconfiguration is reported as `transport`.
     if (
       TRANSPORT_CODES.has(error.code) ||
       (error.code === 'ERROR_INTERNAL' && step === 'connecting')

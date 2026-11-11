@@ -35,6 +35,7 @@ import {
   type ZkFetchProver,
   ZkFetchProverError,
   type ZkFetchRequest,
+  ZkFetchThresholdError,
   zkFetchClient,
 } from '@thoth/zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
@@ -576,6 +577,36 @@ describe('zkFetch attestor + client', () => {
       await expect(client.proveReq(collectionRequest, binding())).rejects.toBe(failing);
     },
   );
+
+  it('keeps a prover reason only from the proving step, and only a known one', async () => {
+    const unknown = new ZkFetchProverError('transport');
+    Object.defineProperty(unknown, 'reason', { value: 'remote detail' });
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async () => {
+            throw unknown;
+          },
+        },
+      },
+      transport: {
+        request: async (attestor, input) => {
+          if (attestor.id === 'attestor-1') {
+            throw new ZkFetchProverError('transport');
+          }
+          return transport.request(attestor, input);
+        },
+      },
+    });
+    const error = await client.collect(collectionRequest, options()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ZkFetchThresholdError);
+    const { failures } = error as ZkFetchThresholdError;
+    expect([...failures].sort((a, b) => a.registryIndex - b.registryIndex)).toEqual([
+      { registryIndex: 0, reason: 'evidence' },
+      { registryIndex: 1, reason: 'attestation' },
+    ]);
+  });
 
   it.each([
     { encoding: 'plain', secret: 'Bearer private-token', encode: (json: string) => json },
