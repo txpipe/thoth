@@ -54,16 +54,17 @@
     "witnesses": "bash scripts/start-witnesses.sh"
   },
   "dependencies": {
-    "@reclaimprotocol/attestor-core": "5.0.8",
-    "@reclaimprotocol/tls": "^0.1.4",
+    "@reclaimprotocol/attestor-core": "5.1.6",
+    "@reclaimprotocol/tls": "0.1.5",
     "@thoth/attestor": "*",
     "@thoth/client": "*",
     "@thoth/core": "*",
-    "zod": "^4.5.4"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "ws": "^8.21.3"
   }
 }

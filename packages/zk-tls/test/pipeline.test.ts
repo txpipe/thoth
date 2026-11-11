@@ -4,9 +4,6 @@
 //
 // Uses `examples/demo-attestation/fixtures/` — a genuine, offline-verifiable
 // HTTPS fetch witnessed by a Reclaim witness (no network needed).
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Attestor, KeyPair } from '@thoth/attestor';
 import { descriptorOf } from '@thoth/attestor';
 import type { AttestorTransport } from '@thoth/client';
@@ -33,28 +30,19 @@ import {
   toCanonicalEvidence,
   type ZkFetchAttestorFailure,
   type ZkFetchProver,
+  ZkFetchProverError,
   type ZkFetchRequest,
+  ZkFetchThresholdError,
   zkFetchClient,
 } from '@thoth/zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
+import { DISCLOSURE_RULES, FIXTURE } from './helpers/helper.js';
 import { type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
 const APP_ID = new Uint8Array(32).fill(0xa1);
 
-const THIS_DIR = dirname(fileURLToPath(import.meta.url));
-const FIXTURE_PATH = join(
-  THIS_DIR,
-  '..',
-  '..',
-  '..',
-  'examples',
-  'demo-attestation',
-  'fixtures',
-  'fixture-github-attestor-core-x-0m.json',
-);
-const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Record<string, unknown>;
+const fixture = FIXTURE;
 
 const policy = (
   slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'data', parse: 'float', optional: true }],
@@ -552,6 +540,57 @@ describe('zkFetch attestor + client', () => {
     expect(slots(result)).toEqual([1, 2]);
     expect(result.failures).toEqual([{ registryIndex: 0, reason: 'evidence' }]);
     expect(JSON.stringify(result.failures)).not.toContain('private-token');
+  });
+
+  it.each(['transport', 'no-match'] as const)(
+    'reports a prover %s failure under its own reason',
+    async (reason) => {
+      const failing = new ZkFetchProverError(reason, { cause: new Error('remote detail') });
+      const client = clientWith({
+        provers: {
+          ...provers,
+          'attestor-0': {
+            prove: async () => {
+              throw failing;
+            },
+          },
+        },
+      });
+      const result = await client.collect(collectionRequest, options());
+      expect(slots(result)).toEqual([1, 2]);
+      expect(result.failures).toEqual([{ registryIndex: 0, reason }]);
+      await expect(client.proveReq(collectionRequest, binding())).rejects.toBe(failing);
+    },
+  );
+
+  it('keeps a prover reason only from the proving step, and only a known one', async () => {
+    const unknown = new ZkFetchProverError('transport');
+    Object.defineProperty(unknown, 'reason', { value: 'remote detail' });
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async () => {
+            throw unknown;
+          },
+        },
+      },
+      transport: {
+        request: async (attestor, input) => {
+          if (attestor.id === 'attestor-1') {
+            throw new ZkFetchProverError('transport');
+          }
+          return transport.request(attestor, input);
+        },
+      },
+    });
+    const error = await client.collect(collectionRequest, options()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ZkFetchThresholdError);
+    const { failures } = error as ZkFetchThresholdError;
+    expect([...failures].sort((a, b) => a.registryIndex - b.registryIndex)).toEqual([
+      { registryIndex: 0, reason: 'evidence' },
+      { registryIndex: 1, reason: 'attestation' },
+    ]);
   });
 
   it.each([

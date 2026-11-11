@@ -358,6 +358,43 @@ describe('deriveClaimFromEvidence', () => {
     ).toThrow(/claim context digest/);
   });
 
+  it.each(['__proto__', 'constructor'])(
+    'signs a %s slot unpresent when nothing named it is disclosed',
+    (name) => {
+      const claim = deriveClaimFromEvidence({
+        verified: verifiedOf(claimWith(REQUEST, {}), {}),
+        policy: policy([{ slot: 1, name, parse: 'bytes', optional: true }]),
+        appId: APP_ID,
+        holder: new Uint8Array(32).fill(0xc1),
+        valueSlots: 1,
+        byteSlots: 1,
+        windowStart: 1_786_122_944n,
+        windowEnd: 1_786_122_944n,
+      });
+      expect(claim.present).toEqual([false, false]);
+      expect(claim.byteValues).toEqual([new Uint8Array(32)]);
+    },
+  );
+
+  it('reads a disclosed value whose group is named __proto__', () => {
+    const disclosed = disclosedOf(
+      REQUEST,
+      JSON.parse('{"extractedParameters":{"__proto__":"ab"}}'),
+    );
+    const claim = deriveClaimFromEvidence({
+      verified: verifiedOf(claimWith(REQUEST, {}), disclosed),
+      policy: policy([{ slot: 1, name: '__proto__', parse: 'bytes' }]),
+      appId: APP_ID,
+      holder: new Uint8Array(32).fill(0xc1),
+      valueSlots: 1,
+      byteSlots: 1,
+      windowStart: 1_786_122_944n,
+      windowEnd: 1_786_122_944n,
+    });
+    expect(claim.present).toEqual([false, true]);
+    expect(claim.byteValues).toEqual([parseDisclosedValue('ab', 'bytes')]);
+  });
+
   it('throws when a policy slot exceeds the claim value count', () => {
     const verified = verifiedOf(claimWith(REQUEST, { extractedParameters: { a: '1' } }), {
       a: '1',
@@ -508,6 +545,20 @@ describe('assertClaimMatchesDisclosures', () => {
     ).toThrow(/does not match the disclosed value/);
   });
 
+  it('rejects a __proto__ slot certified present when nothing named it is disclosed', () => {
+    expect(() =>
+      assertClaimMatchesDisclosures({
+        claim: {
+          values: [0n],
+          present: [false, true],
+          byteValues: [parseDisclosedValue('[object Object]', 'bytes')],
+        } as never,
+        disclosures: {},
+        policy: policy([{ slot: 1, name: '__proto__', parse: 'bytes' }]),
+      }),
+    ).toThrow(/does not match the disclosed value/);
+  });
+
   it('checks a hex byte slot against its decoded disclosure', () => {
     const slots: ZkFetchPolicy['slots'] = [{ slot: 1, name: 'id', parse: 'hex' }];
     assertClaimMatchesDisclosures({
@@ -560,6 +611,16 @@ describe('assertEvidenceMatchesPolicy', () => {
       const evidence = { ...verified('https://api.github.com/x'), responseText };
       expect(assertEvidenceMatchesPolicy(evidence, parsed)).toBe('api.github.com');
     }
+  });
+
+  it('rejects a required __proto__ slot when nothing named it is disclosed', () => {
+    const protoPolicy: ZkFetchPolicy = {
+      ...policy,
+      slots: [{ slot: 0, name: '__proto__', parse: 'bytes' }],
+    };
+    expect(() =>
+      assertEvidenceMatchesPolicy(verified('https://api.github.com/x'), protoPolicy),
+    ).toThrow(/did not disclose a parseable value/);
   });
 
   it('accepts an https claim against an allowlisted host', () => {

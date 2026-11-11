@@ -24,7 +24,10 @@ contract. The [package README](../README.md) explains the terms; the
   `zkFetchPolicyHashOf(policy)` as its `policyHash`, and your contract must
   seal that hash at deploy or it rejects the claim.
 - **`appId`.** The 32 bytes naming your app, signed into every claim.
-- **`valueSlots`.** Your contract's `#V`, the numeric slot count.
+- **`valueSlots`.** Your contract's `#V`, the numeric slot count. Each
+  attestor caps the slot counts it accepts; check its
+  [limits](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls#guarantees-and-limits)
+  with its operator.
 - **`byteSlots`.** Optional: half your contract's `#B`, since the contract
   stores each 32-byte value as two 16-byte halves. Defaults to `0`.
 - **`provers`.** Where evidence comes from, keyed by attestor id. Each entry
@@ -296,7 +299,7 @@ There is no method-based default: a policy that fetches both a bodyless GET and
 a POST with a variable body uses one client and policy per body rule (the
 contract seals a set of hashes), or sends the same fixed harmless body for both
 when both requests can carry it. A witness that compared the body
-unconditionally would let `ignored` bind it too, but Reclaim 5.0.8 does not.
+unconditionally would let `ignored` bind it too, but Reclaim 5.1.6 does not.
 
 The policy has no response-size bound: `responseText` is the transcript as the
 client saw it and the witness does not sign it. Limit transport payloads
@@ -378,6 +381,10 @@ const hostedProver = (client: ReclaimClient): ZkFetchProver => ({
 Leave `useTee` off. The TEE path hands the context to a native library, and
 Thoth has not checked that it keeps the claim context digest; if it drops it,
 the client refuses the evidence.
+
+`collect` reports an error from this prover as `evidence`. To report
+`transport` or `no-match` instead, throw `ZkFetchProverError` with that reason;
+[Guarantees and limits](../README.md#guarantees-and-limits) lists the reasons.
 
 `@reclaimprotocol/zk-fetch` is AGPL-licensed; this package does not depend on
 it. Reclaim chooses the witness per call, so this path only fits a trusted set
