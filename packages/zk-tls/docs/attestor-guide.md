@@ -106,10 +106,15 @@ PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start   # ws://localhost:8001/ws
 
 For two witnesses at once, `npm run witnesses --workspace=packages/zk-tls` runs
 `scripts/start-witnesses.sh`: it clones `attestor-core` at a pinned commit
-(`7d8b90c`, 5.1.4), installs it, starts two witnesses on ports 8001 and 8002,
-and prints each one's address. `WITNESS_REF`, `WITNESS_CLONE_DIR`,
-`WITNESS_PORT_A`/`B` and `WITNESS_KEY_A`/`B` override the defaults; Ctrl-C
-stops both.
+(`f451eb3`, the source of the 5.1.6 release `@thoth/zk-tls` depends on),
+installs it, starts two witnesses on ports 8001 and 8002, and prints each one's
+address. `WITNESS_REF`, `WITNESS_CLONE_DIR`, `WITNESS_PORT_A`/`B` and
+`WITNESS_KEY_A`/`B` override the defaults; Ctrl-C stops both.
+
+The npm package ships no witness server, so the script pins a commit by hand.
+When Dependabot bumps `@reclaimprotocol/attestor-core`, `witness-pin.test.ts`
+fails until you set `PINNED_VERSION` and `PINNED_REF` in the script to the
+matching release and run the live check against it.
 
 ## Witness agreement and upgrades
 

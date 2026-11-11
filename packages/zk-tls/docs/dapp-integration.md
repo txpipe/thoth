@@ -296,7 +296,7 @@ There is no method-based default: a policy that fetches both a bodyless GET and
 a POST with a variable body uses one client and policy per body rule (the
 contract seals a set of hashes), or sends the same fixed harmless body for both
 when both requests can carry it. A witness that compared the body
-unconditionally would let `ignored` bind it too, but Reclaim 5.0.8 does not.
+unconditionally would let `ignored` bind it too, but Reclaim 5.1.6 does not.
 
 The policy has no response-size bound: `responseText` is the transcript as the
 client saw it and the witness does not sign it. Limit transport payloads
