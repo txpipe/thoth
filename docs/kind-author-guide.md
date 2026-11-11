@@ -24,6 +24,7 @@ hash (ADR 0002, ADR 0008).
 | Evidence schema | shared | zod | `zkFetchEvidenceSchema` |
 | Claim derivation | shared | `Claim` (`@thoth/core/claim`) | `deriveClaimFromEvidence` |
 | Definition (`verify`, `message`) | attestor | `defineAttestor` (`@thoth/attestor`) | `createZkFetchDefinition` |
+| Input limits | attestor | zod `.max()` | `ZK_FETCH_DEFAULT_LIMITS`, `zkFetchSchemasWithin` |
 | Instance builder | attestor | `buildAttestor` | `zkFetchAttestor` |
 | Client | dApp | `@thoth/client` | `zkFetchClient` |
 
@@ -56,8 +57,11 @@ Never bake an app's policy into an attestor instance.
   (ADR 0010). A value that does not fit, or misses a declared `length`, is not
   certifiable. Numeric rules must target numeric slots; byte rules must target
   byte slots.
-- Keep per-operator trust anchors out of the policy. Which witness an attestor
-  trusts is instance configuration (zkFetch's `witnessAddress`), not law.
+- Keep per-operator configuration out of the policy. Which witness an
+  attestor trusts and how large an input it parses are operator configuration
+  (zkFetch's `witnessAddress` and `limits`), not policy. The definition takes
+  the witness, as [the definition](#6-the-definition) explains; the attestor
+  instance takes the limits.
 - Pin the hash of one fixed policy to its bytes in a test, as
   `packages/zk-tls/test/claim-context.test.ts` does. A change to the canonical
   form then fails loudly.
@@ -96,11 +100,13 @@ decides only the header fields that come from the evidence and the values:
 - `windowStart` and `windowEnd` are the window the client proposed. Sign it
   only if your source's observation falls inside it. When the fact itself
   happened, such as a block height or event time, is a value, not the window
-  (ADR 0005).
+  (ADR 0005). Both bounds are `Uint<32>` Unix seconds.
 - `values` are `Uint<64>`, positional, one per numeric slot of the policy's slot
   map. Set `present[i]` for every measured slot, even when its value is zero. An
   unmeasured slot is `present[i] = false` with value `0`; the contract rejects
-  anything else. Do not guess a value you could not read.
+  anything else. Do not guess a value you could not read. `claimSchema` rejects
+  a value, window bound or version that is negative, fractional, an unsafe
+  integer `number`, or too large for its contract type.
 - `byteValues` are 32-byte values (identifiers, strings), positional, one per
   byte slot. The policy's byte rule canonicalizes a disclosed string into the
   32-byte slot, zero-padding shorter values; a value that does not fit is not
@@ -143,14 +149,21 @@ Validate that `present` has one flag per value slot (`values` plus `byteValues`)
 and that every policy slot fits within the requested numeric and byte counts and
 targets the matching region before proof verification. Then:
 
-1. verify the evidence's own signature;
-2. check the evidence against the policy;
-3. check that the observation falls inside the proposed window;
-4. check that the proposed `subjectHash` is the one of what the evidence signed;
-5. check that the evidence signed the claim context digest of the proposal's
+1. check per-operator trust anchors, such as "the evidence was signed by my
+   witness", before the costlier proof check;
+2. verify the evidence's own signature;
+3. check the evidence against the policy;
+4. check that the observation falls inside the proposed window;
+5. check that the proposed `subjectHash` is the one of what the evidence signed;
+6. check that the evidence signed the claim context digest of the proposal's
    holder and window, and that the proposed salt is the one the evidence fixes;
-6. check that the proposed values, byte values, and `present` say exactly what
+7. check that the proposed values, byte values, and `present` say exactly what
    the evidence showed.
+
+Take the trust anchors as arguments of the function that creates the
+definition, as `createZkFetchDefinition({ witnessAddress })` does. Then `verify`
+checks them, so an operator who pairs the definition with `buildAttestor` keeps
+them.
 
 `message` is `claimToMessage(claim)`. A kind that needs a different message
 shape can return another type, but then it needs its own contract module.
@@ -160,10 +173,12 @@ shape can return another type, but then it needs its own contract module.
 `buildAttestor({ id, definition, keyPair, attest })` pairs the law with a key.
 In your `attest`:
 
-- parse every input with the definition's schemas;
+- parse every input with the definition's schemas, capped to the instance's
+  input limits. The attestor serves untrusted callers, so cap every array and
+  string before any element is parsed, or a request with millions of slots
+  costs you a message with millions of fields. zkFetch takes the operator's
+  `limits` and parses with `zkFetchSchemasWithin(limits)`;
 - run `definition.verify`;
-- check per-instance trust anchors, such as "the evidence was signed by my
-  witness";
 - derive the claim yourself from the verified evidence and sign that, not the
   proposal. Take `appId`, `holder`, the window and the requested numeric and
   byte counts from the proposal, but derive the salt, every value and present

@@ -6,6 +6,7 @@ import { attestorIdsOf, memberOf } from '@thoth/client';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { z } from 'zod';
 import type { ZkFetchDefinition } from '../index.js';
+import { ZkFetchProverError } from '../prover-error.js';
 import type {
   Attestment,
   ZkFetchClientConfig,
@@ -28,8 +29,13 @@ import {
 export interface ZkFetchAttestorFailure {
   /** The attestor's registry slot. */
   readonly registryIndex: number;
-  /** The step that failed. */
-  readonly reason: 'evidence' | 'secret' | 'attestation' | 'timeout';
+  /**
+   * What failed: the prover's own reason (`transport` or `no-match`), or the
+   * step that failed. The README's
+   * [Guarantees and limits](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/README.md#guarantees-and-limits)
+   * says what each reason means and what to do about it.
+   */
+  readonly reason: ZkFetchProverError['reason'] | 'evidence' | 'secret' | 'attestation' | 'timeout';
 }
 
 /** An attestment that reached the threshold, plus the attestors that failed. */
@@ -110,6 +116,26 @@ class AttemptError extends Error {
   }
 }
 
+const PROVER_REASONS: ReadonlySet<FailureReason> = new Set<ZkFetchProverError['reason']>([
+  'transport',
+  'no-match',
+]);
+
+/**
+ * The reason an error carries, or `fallback` for any other error. A prover's
+ * reason counts only from the proving step, and only if it is a known one: a
+ * JS prover can set any `reason` at runtime, and `failures` must not carry it.
+ */
+const reasonOf = (error: unknown, fallback: FailureReason, proving: boolean): FailureReason => {
+  if (error instanceof SecretHeaderError) {
+    return 'secret';
+  }
+  if (proving && error instanceof ZkFetchProverError && PROVER_REASONS.has(error.reason)) {
+    return error.reason;
+  }
+  return fallback;
+};
+
 /** Validate the options; resolve their ids to one candidate per registry slot. */
 const parseOptions = <PK>(
   trusted: TrustedSet<ZkFetchDefinition, PK>,
@@ -151,16 +177,21 @@ const runAttempt = async <V extends number, PK, S>(
 
   /**
    * Run one step, replacing any error with `reason`. A secret-header refusal
-   * keeps its own reason, so a leak is not reported as a failed proof. The
-   * clock check also catches a step that blocked the event loop past the
-   * deadline.
+   * and, in the proving step, a prover's classified failure keep their own
+   * reason, so a leak or an unreachable witness is not reported as a failed
+   * proof. Only the reason survives, never the error's text. The clock check
+   * also catches a step that blocked the event loop past the deadline.
    */
-  const step = async <T>(reason: FailureReason, run: () => Promise<T>): Promise<T> => {
+  const step = async <T>(
+    reason: FailureReason,
+    run: () => Promise<T>,
+    proving = false,
+  ): Promise<T> => {
     let result: T;
     try {
       result = await run();
     } catch (error) {
-      throw new AttemptError(error instanceof SecretHeaderError ? 'secret' : reason);
+      throw new AttemptError(reasonOf(error, reason, proving));
     }
     if (Date.now() >= deadline) {
       throw new AttemptError('timeout');
@@ -169,7 +200,11 @@ const runAttempt = async <V extends number, PK, S>(
   };
 
   const attempt = async () => {
-    const evidence = await step('evidence', () => proveWith(config.provers, attestor, request));
+    const evidence = await step(
+      'evidence',
+      () => proveWith(config.provers, attestor, request),
+      true,
+    );
     const { policy, appId, valueSlots, byteSlots } = config;
     const { holder, windowStart, windowEnd } = options;
     const claim = await step('evidence', () =>

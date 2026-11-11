@@ -33,7 +33,7 @@ A family of attestors that share one law, such as zkFetch. It never appears on-c
 _Avoid_: Type, scheme, provider.
 
 **Law**:
-What a kind implements: its policy, evidence and claim schemas, the `verify` step, and the `message` encoding. Keyless and shareable; many attestor instances run one law. Its versioned tag, such as `zk-fetch@1`, is the kind identifier and is hashed into every policy hash.
+What a kind implements: its policy, evidence and claim schemas, the `verify` step, and the `message` encoding. Keyless and shareable; many attestor instances run one law. A law may take operator configuration with no secret in it, such as the witness zkFetch trusts. Its versioned tag, such as `zk-fetch@1`, is the kind identifier and is hashed into every policy hash.
 _Avoid_: Driver, plugin.
 
 ### The claim

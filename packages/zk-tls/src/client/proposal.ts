@@ -231,9 +231,10 @@ export const bindRequestToClaimContext = (
  * The prover gets its own copy, so it cannot change the request that other
  * provers or the secret header check read.
  *
- * @throws if the attestor has no prover, the evidence is invalid or for
- *   another origin, subject or claim context, or it carries a secret header
- *   value ({@link SecretHeaderError}).
+ * @throws `ZkFetchProverError` as the prover throws it.
+ * @throws {@link SecretHeaderError} if the evidence carries a secret header value.
+ * @throws if the attestor has no prover, the prover fails otherwise, or the
+ *   evidence is invalid or for another origin, subject or claim context.
  */
 export const proveWith = async <PK>(
   provers: ZkFetchClientConfig<number, PK, unknown>['provers'],

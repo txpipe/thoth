@@ -85,7 +85,7 @@ The three entry points:
 
 What the package checks:
 
-- `claimSchema(v, w)` validates the claim shape and lengths, coerces numeric fields to `bigint`, and defaults an omitted `byteValues` to `[]`. Without `v` it skips the exact-length checks but still requires one `present` flag per value.
+- `claimSchema(v, w)` validates the claim shape and lengths, checks each numeric field fits its contract type (`values` are `Uint<64>`, `windowStart` and `windowEnd` are `Uint<32>`, `version` is `Uint<8>`), coerces numeric fields to `bigint`, and defaults an omitted `byteValues` to `[]`. Without `v` it skips the exact-length checks but still requires one `present` flag per value.
 - `claimToMessage` produces the exact message the contract's `buildMessage` rebuilds; the contracts suite checks the parity.
 - `toContractClaim` produces the contract's `Claim` struct from a `Claim`. A dApp always converts, even with `W = 0`.
 - `policyHashOf` and `claimContextDigestOf` are SHA-256 over a canonical JSON serialization: sorted keys, no whitespace, a `bigint` as a quoted decimal string, bytes as lowercase hex. Another implementation reproduces them from those rules alone.
