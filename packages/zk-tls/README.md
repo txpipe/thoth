@@ -97,6 +97,10 @@ const attestment = await client.collect(
 
 What the attestor checks before signing:
 
+- The policy, the evidence and the proposed claim fit the attestor's input limits. Oversized input fails while it is parsed, before the law's `verify` step or the signature runs. Each operator can change any limit ([Input limits](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/attestor-guide.md#input-limits)); the defaults, `ZK_FETCH_DEFAULT_LIMITS`, are below. String lengths count UTF-16 code units.
+  - Claim: 64 numeric slots and 64 byte slots.
+  - Policy: 64 `allowedHosts` of up to 253 characters, one slot entry per claim slot with names up to 128 characters, 32 `responseMatches` and 32 `responseRedactions` with rule texts up to 4096 characters.
+  - Evidence: `claim.parameters` up to 256 KiB, `claim.context` up to 1 MiB, `responseText` up to 4 MiB, and 256 characters for each other string.
 - The witness's ECDSA signature over the Reclaim claim, and that the claim identifier matches its signed content.
 - The witness address is the one the definition was created with, checked before the signature.
 - The signed request carries no `{{param}}` template ([why](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
@@ -147,7 +151,8 @@ What it does not check, and what your app must do:
 - **The signed request carries no `{{param}}` template.** The signed url, body, `geoLocation` and `proxySessionId` cannot contain `{{`, so put a per-user URL in the request as a concrete URL and don't use Reclaim's secret `paramValues` ([Building the request](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
 - **The policy decides how the request body is bound.** `bodyPolicy` is required and part of the policy hash, so there is no method-based default and every attestor enforces the same rule. Reclaim compares the sent body only when the signed body is non-empty, so you choose between a bound body (`non-empty` or a pin) and the explicit unbound `ignored` ([Body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy)).
 - **One policy per trusted set.** N-of-M means N attestors signed the same message, so every attestor must enforce the same policy; different readings produce different messages and never count together. Which witness an attestor trusts is per instance, not part of the policy.
-- **One attestor instance serves any contract.** The slot counts come from each proposal, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
+- **Each attestor sets its own input limits.** They are offchain config that bounds what a request costs the operator. A limit only refuses input and never changes the signed message, so attestors with different limits cost a trusted set liveness, not safety: a request that some attestors refuse may not reach the threshold. Agree on limits with your attestors, as you do on the witness version. The client and the exported schemas cap nothing.
+- **One attestor instance serves any contract.** The slot counts come from each proposal, up to the instance's limits, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
 - **The prover is its own entry point.** `@thoth/zk-tls/prover` loads the Reclaim client libraries lazily, so a client-only build never pulls them. `@thoth/zk-tls/client` imports neither those libraries nor `@thoth/attestor`.
 
 ## License
