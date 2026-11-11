@@ -22,6 +22,9 @@ const loadRe2 = (): Compile | undefined => {
 
 const re2 = loadRe2();
 
+/** CI installs `re2`, so a CI run that cannot load it fails instead of skipping. */
+const re2Required = process.env.CI !== undefined;
+
 const ENGINES: Readonly<Record<string, Compile>> = {
   'RegExp sgi': (source) => new RegExp(source, 'sgi'),
   'RegExp sgiu': (source) => new RegExp(source, 'sgiu'),
@@ -51,6 +54,8 @@ const ACCEPTED = [
   '"volume":\\s*(?<volume>\\d+)',
   'a',
   'b',
+  '"moving_time":\\s*(?<data>[\\d.]+)',
+  '"moving_time":\\s*(?<distance>[\\d.]+)',
   '^HTTP/1\\.1 (\\d{3})$',
   '\\bid\\b:\\B',
   '(?:ab|a)(?:c|bcd)\\w*?',
@@ -59,6 +64,12 @@ const ACCEPTED = [
   '\\x41\\t\\n\\r\\f\\v\\/\\{\\}\\[\\]\\(\\)\\|\\^\\$\\.\\*\\+\\?\\\\',
   '(?<first>[A-Z])(?<second>[a-z]{1,3}?)(?:\\d{2,})?',
   '.{1000}',
+  'a{0}b{0,}c{0,2}[0-9a-f]{10}',
+  '[!--][--/][!---]',
+  '^(?:[0-9]{500}|[a-f]{500})$',
+  'a{1000}b',
+  '(?:a{600}|b{600})',
+  `x${'[a-z]{999}'.repeat(3)}`,
 ];
 
 /**
@@ -79,6 +90,10 @@ const TEXTS = [
   'A\t\n\r\f\v/{}[]()|^$.*+?\\',
   'Kab12 Zz9 Abcd123',
   'x'.repeat(1001),
+  '1'.repeat(500),
+  `${'a'.repeat(1000)}b`,
+  `x${'q'.repeat(2997)}`,
+  'ab{02} 0123456789abcdef!,-./ [\\]^_`',
 ];
 
 const policyWith = (
@@ -130,10 +145,14 @@ describe('the regex subset', () => {
     expect(results['RegExp sgiu']).toEqual(results['RegExp sgi']);
   });
 
-  it.skipIf(re2 === undefined).each(ACCEPTED)('RE2 reads %s like RegExp', (source) => {
-    const results = resultsOf(source, ENGINES);
-    expect(results['RE2 sgiu']).toEqual(results['RegExp sgi']);
-  });
+  it.skipIf(re2 === undefined && !re2Required).each(ACCEPTED)(
+    'RE2 reads %s like RegExp',
+    (source) => {
+      expect(re2, 're2 must load when CI is set').toBeDefined();
+      const results = resultsOf(source, ENGINES);
+      expect(results['RE2 sgiu']).toEqual(results['RegExp sgi']);
+    },
+  );
 
   it.each([
     ['(?=x)a', /lookahead \(\?= at index 0/],
@@ -152,6 +171,7 @@ describe('the regex subset', () => {
     ['\\xE9', /\\x escape above \\x7F/],
     ['\\u0041', /escape \\u/],
     ['\\A', /escape \\A/],
+    ['\\Z', /escape \\Z/],
     ['a\\z', /escape \\z/],
     ['\\-', /escape \\-/],
     ['a{', /unescaped \{/],
@@ -161,12 +181,13 @@ describe('the regex subset', () => {
     ['a)', /unmatched \)/],
     ['(a', /unclosed \(/],
     ['[a', /unclosed \[/],
-    ['[]a]', /empty class/],
-    ['[^]', /empty class/],
+    ['[]a]', /\] first in a class/],
+    ['[^]a]', /\] first in a class/],
+    ['[^]', /\] first in a class/],
     ['[[:alpha:]]', /unescaped \[ in a class/],
     ['[\\b]', /\\b in a class/],
     ['[\\d-z]', /class escape as a range bound/],
-    ['[a-c-e]', /unescaped - that is not first, last or a range/],
+    ['[a-c-e]', /unescaped - that is not first, last or a range bound/],
     ['[z-a]', /bounds are out of order/],
     ['a{2,1}', /maximum is below its minimum/],
     ['a**', /quantifier on a quantifier/],
@@ -180,9 +201,17 @@ describe('the regex subset', () => {
     ['(?<x>a)(?<x>b)', /duplicate group name x/],
     ['(?<x>a)|(?<x>b)', /duplicate group name x/],
     ['(?<1x>a)', /group name that is not an ASCII identifier/],
-    ['a{1001}', /more than 1000 atoms/],
-    ['(?:a{100}){11}', /more than 1000 atoms/],
-    ['.{1000}x', /more than 1000 atoms/],
+    ['[0-9a-f]{02}', /repeat count with a leading zero at index 8/],
+    ['a{00}', /repeat count with a leading zero/],
+    ['a{1,02}', /repeat count with a leading zero/],
+    ['a{01,}', /repeat count with a leading zero/],
+    ['a{1001}', /repeat count above 1000 at index 1/],
+    ['a{0,1001}', /repeat count above 1000/],
+    ['(?:a{100}){11}', /nested repeat counts multiplying past 1000 at index 0/],
+    // Each alternative fits; the third is where the sum passes the cap.
+    [`a|${'\\W{1000}'.repeat(4)}|${'\\W{1000}'.repeat(2)}`, /too large for RE2 .* at index 35/],
+    ['a'.repeat(4097), /more than 4096 characters/],
+    ['('.repeat(101), /groups nested more than 100 deep at index 100/],
     ['a\tb', /control character U\+0009/],
     ['a\\', /trailing \\/],
   ])('refuses %s, naming the construct', (source, construct) => {
@@ -193,6 +222,21 @@ describe('the regex subset', () => {
       expect(messages).toHaveLength(1);
       expect(messages[0]).toMatch(construct);
       expect(messages[0]).toMatch(/regex subset/);
+    }
+  });
+
+  it.each([
+    ['deep non-capturing groups', `${'(?:'.repeat(3000)}a${')'.repeat(3000)}`],
+    ['deep capture groups', '('.repeat(3000)],
+    ['deep groups under the length cap', `${'(?:'.repeat(1000)}a${')'.repeat(1000)}`],
+    ['many empty named groups', Array.from({ length: 40_000 }, (_, i) => `(?<g${i}>)`).join('')],
+  ])('refuses %s without throwing out of safeParse', (_label, source) => {
+    for (const policy of [matchPolicy(source), redactionPolicy(source)]) {
+      const started = performance.now();
+      const parsed = zkFetchPolicySchema.safeParse(policy);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]?.message).toMatch(/regex subset/);
+      expect(performance.now() - started).toBeLessThan(250);
     }
   });
 
@@ -218,8 +262,12 @@ describe('the regex subset', () => {
       ...['\\d', '\\D', '\\w', '\\W', '\\s', '\\S', '\\b', '\\B', '\\x2d', '\\]', '\\{'],
       ...['[a-c]', '[^a]', '[\\d.]', '[^"]', '[A-z]', '[Z-a]', '[-a]', '[\\w-]', '[--a]'],
       ...['[^\\W]', '[^\\s]', '[k-s]', '[\\x00-\\x7f]', '{', ']', '\\1', '(?=a)', '\\p{L}'],
+      ...['[!--]', '[--/]', '[!---]', '[]a]', '[^]a]', '[\\[-`]', '\\Z', '\\[', '\\\\', '`'],
     ];
-    const QUANTIFIERS = ['', '', '', '*', '+', '?', '*?', '+?', '??', '{2}', '{0,2}', '{1,}'];
+    const QUANTIFIERS = [
+      ...['', '', '', '*', '+', '?', '*?', '+?', '??', '{2}', '{0,2}', '{1,}', '{0}', '{0,}'],
+      ...['{10}', '{0,12}', '{12,}', '{2,10}?', '{02}', '{00}', '{1,02}', '{01,}', '{2,1}'],
+    ];
     const generate = (depth: number): string => {
       let source = '';
       for (let term = 0; term < 1 + Math.floor(random() * 3); term += 1) {
@@ -232,7 +280,7 @@ describe('the regex subset', () => {
       }
       return source;
     };
-    const ALPHABET = [...'aAbkKsS_- ":.\t\n\r\f/{}]^$x019'];
+    const ALPHABET = [...'aAbkKsS_- ":.\t\n\r\f/{}[]^$`\\,x0129'];
     const texts = Array.from({ length: 40 }, () =>
       Array.from({ length: Math.floor(random() * 8) }, () => pick(ALPHABET)).join(''),
     );

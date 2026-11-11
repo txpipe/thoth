@@ -271,12 +271,13 @@ The subset is an allowlist. A regex may use:
 | Literals | printable ASCII, space to `~`, except the syntax characters `^ $ \ . * + ? ( ) [ ] { } \|` |
 | Escapes | `\` before a syntax character or `/`; `\t \n \r \f \v`; `\x00` to `\x7F` |
 | Character classes | `.`, `\d \D \w \W \s \S` |
-| Brackets | `[…]` and `[^…]` holding literals, escapes, `\-`, character classes and ranges such as `a-z`; a bare `-` only first, last or in a range |
+| Brackets | `[…]` and `[^…]` holding literals, escapes, `\-`, character classes and ranges such as `a-z`; a bare `-` only first, last, or as a range's upper bound (`[!--]`); a `]` only escaped |
 | Anchors | `^`, `$`, `\b`, `\B` |
-| Groups | `(…)`, `(?:…)`, and `(?<name>…)` with an ASCII identifier used once |
-| Quantifiers | `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`, each optionally lazy with a trailing `?` |
+| Groups | `(…)`, `(?:…)`, and `(?<name>…)` with an ASCII identifier used once, nested at most 100 deep |
+| Quantifiers | `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`, each optionally lazy with a trailing `?`; counts are at most 1000 and have no leading zero (`{0}` is fine, `{02}` is not) |
 
-Three rules limit how these combine:
+A regex is at most 4096 characters long, and these rules limit how the
+constructs combine:
 
 - A quantifier cannot apply to a capture group or to a group that holds one:
   `(?:(?<x>a)|b)+` is refused. RegExp clears the captures on every repetition
@@ -284,15 +285,19 @@ Three rules limit how these combine:
 - A quantifier cannot apply to something that can match the empty string:
   `(?:a*)+`, `(?:|a)*` and `^*` are refused. The engines handle an empty
   repetition differently.
-- With every counted quantifier written out at its largest count (its minimum
-  when it has no maximum), the regex holds at most 1000 characters, classes,
-  escapes and anchors. `.{1000}` is accepted and `a{1000}b` is not, because RE2
-  refuses large programs.
+- Nested counted quantifiers multiply to at most 1000, counting each at its
+  maximum (its minimum when it has no maximum): `(?:a{10}){100}` is accepted
+  and `(?:a{100}){11}` is not. RE2 refuses the rest.
+- The regex must fit RE2's memory budget once every counted quantifier is
+  written out. A character or anchor counts 1, and `.`, a class escape such as
+  `\W`, or a bracket class counts 8, plus 1 for each member of the bracket
+  class. The total, summed over sequences and alternatives, is at most 40,000:
+  `x[a-z]{999}[a-z]{999}[a-z]{999}` counts 26,974 and is accepted.
 
 Everything else is refused, among it lookahead and lookbehind, backreferences
 (`\1`, `\k<name>`), `\p{…}` and `\P{…}`, `(?P<name>…)`, inline flags such as
-`(?i)`, `\A`, `\z`, `A`, POSIX classes such as `[[:alpha:]]`, and any
-non-ASCII character. Write a literal syntax character escaped (`\{`, `\]`),
+`(?i)`, `\A`, `\z`, `\Z`, `\u0041`, POSIX classes such as `[[:alpha:]]`, and
+any non-ASCII character. Write a literal syntax character escaped (`\{`, `\]`),
 never bare.
 
 The subset fixes how the pattern is read, not the text it reads: response
