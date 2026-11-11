@@ -252,13 +252,15 @@ signed rules carry them is refused too.
 ### Regex subset
 
 Reclaim compiles every `regex` match and every non-empty redaction `regex`
-case-insensitively, with `.` matching line breaks. It uses RE2 when its
-optional native `re2` module has loaded, and JavaScript's `RegExp` otherwise,
-with or without the `u` flag depending on the attestor-core version. Whether
-`re2` loads differs between machines, and it loads asynchronously, so one
-process can use both engines. `zkFetchPolicySchema` therefore accepts only
-regexes in a subset that every one of these engines compiles and reads the same
-way. It names the first construct outside it:
+case-insensitively, with `.` matching line breaks. attestor-core 5.1.x, which
+the witness and the client run, uses RE2 with flags `sgiu` when its optional
+native `re2` module has loaded, and JavaScript's `RegExp` with `sgi` otherwise.
+attestor-core 5.0.8 falls back to `RegExp` with `sgiu` instead. Whether `re2`
+loads differs between machines, and it loads asynchronously, so one process can
+use both engines. `zkFetchPolicySchema` therefore accepts only regexes in a
+subset that all three engines compile and read the same way, so the subset does
+not depend on the attestor-core version you pin. It names the first construct
+outside it:
 
 ```
 regex uses lookahead (?= at index 3, which the regex subset does not allow

@@ -1,9 +1,8 @@
 // The regex subset: zkFetchPolicySchema accepts a regex only when RE2 and RegExp, under the
 // flags Reclaim compiles with, accept it and match it the same way.
 //
-// Reclaim compiles with RE2 ('sgiu') when the optional native `re2` module loaded, else with
-// RegExp: 'sgiu' in attestor-core 5.0.x, 'sgi' in 5.1.x. The RE2 side skips when `re2` does not
-// load on this machine.
+// The three engines are the ones the dApp guide's "Regex subset" section names. The RE2 side
+// skips when `re2` does not load on this machine, except under CI.
 
 import { createRequire } from 'node:module';
 import { type ZkFetchPolicy, zkFetchPolicySchema } from '@thoth/zk-tls';
