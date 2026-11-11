@@ -1,6 +1,6 @@
 // The Dolos UTxO-RPC source: one read of a Cardano transaction, its block and
 // the chain tip, returned as the kind's validated observation. This module
-// only speaks UTxO-RPC; the check it cannot make is in `readRawEvent`'s doc.
+// only speaks UTxO-RPC.
 
 import { CardanoQueryClient, CardanoSyncClient } from '@utxorpc/sdk';
 import type { cardano, query } from '@utxorpc/spec';
@@ -139,15 +139,15 @@ export const lovelaceOf = (coin: cardano.BigInt | undefined): bigint =>
 /**
  * Read one output and its block from a UTxO-RPC source, as the kind's
  * observation, validated by its schema. The source is trusted to describe its
- * own chain (ADR 0003); the spec's transaction carries no hash, so the reader
- * cannot check that the endpoint returned the transaction it was asked for —
- * an operator's endpoint is trusted to answer its queries, not only to tell
- * the truth about the chain.
+ * own chain (ADR 0003); the reader checks the response's transaction hash
+ * against the requested one, so an endpoint that answers a different query is
+ * caught here.
  *
- * @throws if the transaction is missing, not Cardano, failed, has no such
- *   output or block reference, the genesis magic is missing, the block time is
- *   missing or not whole seconds, the tip block has no header, or the result
- *   does not fit the observation schema.
+ * @throws if the transaction is missing, not Cardano, carries no hash or a
+ *   hash other than the requested one, failed, has no such output or block
+ *   reference, the genesis magic is missing, the block time is missing or not
+ *   whole seconds, the tip block has no header, or the result does not fit the
+ *   observation schema.
  */
 export const readRawEvent = async (options: {
   source: DolosSource;
@@ -170,6 +170,14 @@ export const readRawEvent = async (options: {
     throw new Error('readTx returned a non-Cardano transaction');
   }
   const tx = anyTx.chain.value;
+  // The response carries its transaction's hash; require it to be the one the
+  // caller asked for, so an endpoint cannot answer with another transaction.
+  if (tx.hash.length !== 32) {
+    throw new Error(`transaction ${txHash} response carries no hash`);
+  }
+  if (bytesToHex(tx.hash) !== txHash) {
+    throw new Error(`response is transaction ${bytesToHex(tx.hash)}, not ${txHash}`);
+  }
   if (!tx.successful) {
     throw new Error(`transaction ${txHash} is not successful`);
   }

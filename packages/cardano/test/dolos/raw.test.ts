@@ -44,6 +44,8 @@ const readTxResponse = (
   options: {
     outputs?: cardano.TxOutput[];
     successful?: boolean;
+    /** The response's transaction hash; defaults to the requested one. */
+    hash?: Uint8Array;
     blockRef?: query.ChainPoint;
     /** `null` omits the ledger tip, so the source's `readTip` is used. */
     ledgerTip?: query.ChainPoint | null;
@@ -59,6 +61,7 @@ const readTxResponse = (
             value: new cardano.Tx({
               outputs: options.outputs ?? [output()],
               successful: options.successful ?? true,
+              hash: options.hash ?? Uint8Array.from(Buffer.from(TX_HASH, 'hex')),
             }),
           },
       blockRef: options.blockRef ?? point(),
@@ -160,6 +163,16 @@ describe('readRawEvent', () => {
     await expect(read(sourceWith({ response }))).rejects.toThrow('not successful');
   });
 
+  it('rejects a response whose transaction hash is not the requested one', async () => {
+    const response = readTxResponse({ hash: Uint8Array.from(Buffer.from(BLOCK_HASH, 'hex')) });
+    await expect(read(sourceWith({ response }))).rejects.toThrow(`not ${TX_HASH}`);
+  });
+
+  it('rejects a response whose transaction carries no hash', async () => {
+    const response = readTxResponse({ hash: new Uint8Array(0) });
+    await expect(read(sourceWith({ response }))).rejects.toThrow('carries no hash');
+  });
+
   it('rejects a transaction that is not Cardano', async () => {
     const response = readTxResponse({ omitChain: true });
     await expect(read(sourceWith({ response }))).rejects.toThrow('non-Cardano');
@@ -175,7 +188,11 @@ describe('readRawEvent', () => {
       tx: new query.AnyChainTx({
         chain: {
           case: 'cardano',
-          value: new cardano.Tx({ outputs: [output()], successful: true }),
+          value: new cardano.Tx({
+            outputs: [output()],
+            successful: true,
+            hash: Uint8Array.from(Buffer.from(TX_HASH, 'hex')),
+          }),
         },
       }),
       ledgerTip: point(),
