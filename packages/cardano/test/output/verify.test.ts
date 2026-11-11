@@ -144,7 +144,33 @@ describe('cardano verify', () => {
 
   it('rejects a fact mapped beyond the claim slots', () => {
     const badPolicy: OutputPolicy = { ...POLICY, slots: [{ slot: 6, name: 'txHash' }] };
-    expect(() => verify({ policy: badPolicy })).toThrow("outside the claim's 6 value slots");
+    expect(() => verify({ policy: badPolicy })).toThrow("outside the claim's 6 slots");
+  });
+
+  it('rejects a claim whose policyHash does not match the policy', () => {
+    const base = claimFor();
+    expect(() => verify({ claim: { ...base, policyHash: new Uint8Array(32) } })).toThrow(
+      'policyHash',
+    );
+  });
+
+  it('rejects a claim whose version is not 1', () => {
+    const base = claimFor();
+    expect(() => verify({ claim: { ...base, version: 2n } })).toThrow('version');
+  });
+
+  it('refuses to derive an asset quantity without the asset pin', () => {
+    const handBuilt: OutputPolicy = { ...POLICY, slots: [{ slot: 3, name: 'assetQuantity' }] };
+    expect(() =>
+      deriveCardanoClaim({
+        policy: handBuilt,
+        observation: OBSERVATION,
+        appId: APP_ID,
+        holder: HOLDER,
+        valueSlots: 5,
+        byteSlots: 1,
+      }),
+    ).toThrow("requires the 'asset' pin");
   });
 
   it('rejects another subject hash', () => {

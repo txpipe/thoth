@@ -47,23 +47,18 @@ const attestorFor = (observation: OutputObservation = OBSERVATION) => {
 };
 
 describe('cardanoAttestor', () => {
-  it('attests the claim derived from its own read, not the proposal', async () => {
+  it('signs the claim derived from its own read', async () => {
     const observed = {
       ...OBSERVATION,
       output: { ...OBSERVATION.output, lovelace: 7_000_000n },
     };
     const { attestor, reads } = attestorFor(observed);
     const expected = claimFor(observed);
-    const proposed: Claim<number, number> = {
-      ...claimFor(observed),
-      version: 9n,
-      policyHash: new Uint8Array(32),
-    };
 
     const attestation = await attestor.attest({
       policy: POLICY,
       evidence: LOCATOR,
-      claim: proposed,
+      claim: expected,
     });
 
     expect(reads).toEqual([LOCATOR]);
@@ -71,6 +66,18 @@ describe('cardanoAttestor', () => {
     expect(attestation.message).toEqual(claimToMessage(expected));
     expect(attestation.publicKey).toBe('test-public-key');
     expect(attestation.signature).toBe(`signed:${claimToMessage(expected).join(',')}`);
+  });
+
+  it('refuses a proposal another read would derive', async () => {
+    const observed = {
+      ...OBSERVATION,
+      output: { ...OBSERVATION.output, lovelace: 7_000_000n },
+    };
+    const { attestor } = attestorFor(observed);
+
+    await expect(
+      attestor.attest({ policy: POLICY, evidence: LOCATOR, claim: claimFor(OBSERVATION) }),
+    ).rejects.toThrow('values do not match');
   });
 
   it('keeps appId and holder from the proposal', async () => {

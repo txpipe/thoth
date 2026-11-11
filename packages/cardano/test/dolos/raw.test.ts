@@ -1,5 +1,6 @@
 // Unit tests for the raw Dolos UTxO-RPC source: one output read from synthetic
-// protocol messages, with one rejection per check. No network is used.
+// protocol messages as the kind's observation, with one rejection per check.
+// No network is used.
 
 import { cardano, query } from '@utxorpc/spec';
 import { describe, expect, it } from 'vitest';
@@ -213,6 +214,25 @@ describe('readRawEvent', () => {
     await expect(
       readRawEvent({ source: sourceWith(), txHash: TX_HASH.toUpperCase(), outputIndex: 0 }),
     ).rejects.toThrow('64 lowercase hex');
+  });
+
+  it('rejects a read whose assets do not fit the observation schema', async () => {
+    const badAsset = output({
+      assets: [
+        new cardano.Multiasset({
+          policyId: Uint8Array.from({ length: 32 }, () => 0xab),
+          assets: [
+            new cardano.Asset({
+              name: Uint8Array.from([0xcd]),
+              quantity: { case: 'outputCoin', value: coin(1n) },
+            }),
+          ],
+        }),
+      ],
+    });
+    await expect(
+      read(sourceWith({ response: readTxResponse({ outputs: [badAsset] }) })),
+    ).rejects.toThrow('56 lowercase hex');
   });
 });
 

@@ -133,23 +133,46 @@ describe('cardanoClient', () => {
     });
   });
 
-  it('reports a timeout without failing a threshold the other attestor met', async () => {
+  it('recovers from a timed-out attestor to meet the threshold', async () => {
     const attestors = [makeAttestor('attestor-0'), makeAttestor('attestor-1')];
     const transport = transportFor(attestors);
     const slow: AttestorTransport<CardanoDefinition, FakePublicKey, FakeSignature> = {
       request: (descriptor, input) =>
-        descriptor.id === 'attestor-1'
+        descriptor.id === 'attestor-0'
           ? new Promise<Attestation<typeof expectedClaim, FakePublicKey, FakeSignature>>(() => {})
           : transport.request(descriptor, input),
     };
 
     const attestment = await clientFor(attestors, { transport: slow }).collect(
       LOCATOR,
-      options({ threshold: 1, attestorTimeoutMs: 10 }),
+      options({ threshold: 1, attestorTimeoutMs: 10, attestorIds: ['attestor-0', 'attestor-1'] }),
+    );
+
+    expect(collectedSlots(attestment)).toEqual([1]);
+    expect(attestment.failures).toEqual([{ registryIndex: 0, reason: 'timeout' }]);
+  });
+
+  it('returns at the threshold without waiting for the remaining candidates', async () => {
+    const attestors = [
+      makeAttestor('attestor-0'),
+      makeAttestor('attestor-1'),
+      makeAttestor('attestor-2'),
+    ];
+    const transport = transportFor(attestors);
+    const slow: AttestorTransport<CardanoDefinition, FakePublicKey, FakeSignature> = {
+      request: (descriptor, input) =>
+        descriptor.id === 'attestor-2'
+          ? new Promise<Attestation<typeof expectedClaim, FakePublicKey, FakeSignature>>(() => {})
+          : transport.request(descriptor, input),
+    };
+
+    const attestment = await clientFor(attestors, { transport: slow }).collect(
+      LOCATOR,
+      options({ threshold: 1, attestorTimeoutMs: 5_000 }),
     );
 
     expect(collectedSlots(attestment)).toEqual([0]);
-    expect(attestment.failures).toEqual([{ registryIndex: 1, reason: 'timeout' }]);
+    expect(attestment.failures).toEqual([]);
   });
 
   it('drops an attestor that signs another claim', async () => {
@@ -175,7 +198,7 @@ describe('cardanoClient', () => {
 
     const attestment = await clientFor(attestors, { transport: tampered }).collect(
       LOCATOR,
-      options({ threshold: 1 }),
+      options({ threshold: 1, attestorIds: ['attestor-1', 'attestor-0'] }),
     );
 
     expect(collectedSlots(attestment)).toEqual([0]);
@@ -186,7 +209,7 @@ describe('cardanoClient', () => {
     const attestors = [makeAttestor('attestor-0'), makeAttestor('attestor-1')];
     const attestment = await clientFor(attestors, {
       verifier: verifier(['attestor-1']),
-    }).collect(LOCATOR, options({ threshold: 1 }));
+    }).collect(LOCATOR, options({ threshold: 1, attestorIds: ['attestor-1', 'attestor-0'] }));
 
     expect(collectedSlots(attestment)).toEqual([0]);
     expect(attestment.failures).toEqual([{ registryIndex: 1, reason: 'attestation' }]);
@@ -226,5 +249,34 @@ describe('cardanoClient', () => {
     });
 
     await expect(client.collect(LOCATOR, options())).rejects.toThrow('read failed');
+  });
+
+  it('rejects its own read that is not at the policy address', async () => {
+    const attestors = [makeAttestor('attestor-0')];
+    const client = clientFor(attestors, {
+      read: () => ({
+        ...OBSERVATION,
+        output: { ...OBSERVATION.output, address: `addr_test1${'p'.repeat(53)}` },
+      }),
+    });
+
+    await expect(client.collect(LOCATOR, options({ threshold: 1 }))).rejects.toThrow(
+      'is not the policy address',
+    );
+  });
+
+  it('rejects at init a policy whose slots do not fit the claim size', () => {
+    expect(() =>
+      cardanoClient.init({
+        trusted: trustedOf([makeAttestor('attestor-0')]),
+        transport: transportFor([makeAttestor('attestor-0')]),
+        verifier: verifier(),
+        policy: POLICY,
+        appId: APP_ID,
+        valueSlots: 2,
+        byteSlots: 0,
+        read: () => OBSERVATION,
+      }),
+    ).toThrow("outside the claim's 2 slots");
   });
 });

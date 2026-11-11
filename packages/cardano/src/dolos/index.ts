@@ -1,12 +1,12 @@
 // The Dolos UTxO-RPC source: one read of a Cardano transaction, its block and
-// the chain tip, as raw fields. Mapping them to the kind's observation is a
-// separate step; this module only speaks UTxO-RPC.
+// the chain tip, returned as the kind's validated observation. This module
+// only speaks UTxO-RPC; the check it cannot make is in `readRawEvent`'s doc.
 
 import { CardanoQueryClient, CardanoSyncClient } from '@utxorpc/sdk';
 import type { cardano, query } from '@utxorpc/spec';
 import { bech32 } from 'bech32';
 import { bytes32OfHex, bytesToHex } from '../bytes.js';
-import type { NativeAsset } from '../output/index.js';
+import { cardanoOutputObservationSchema, type OutputObservation } from '../output/index.js';
 
 /** Connection options for {@link createDolosSource}. */
 export interface DolosSourceOptions {
@@ -26,36 +26,6 @@ export interface DolosSource {
   readTip(): Promise<{ slot: bigint; hash: Uint8Array }>;
   /** Read the block at `ref`. */
   fetchBlock(ref: { slot: bigint; hash: Uint8Array }): Promise<cardano.Block>;
-}
-
-/** One output and the block it landed in, as raw UTxO-RPC fields. */
-export interface RawDolosEvent {
-  /** The network magic the endpoint reported. */
-  networkMagic: number;
-  /** The chain tip's height at read time. */
-  tipBlockNumber: number;
-  block: {
-    /** The block hash, 64 lowercase hex characters. */
-    hash: string;
-    /** The block's absolute slot. */
-    slot: number;
-    /** The block's height. */
-    blockNumber: number;
-    /** The block's Unix time in seconds. */
-    time: number;
-  };
-  output: {
-    /** The transaction hash, 64 lowercase hex characters. */
-    txHash: string;
-    /** The output's index within the transaction. */
-    outputIndex: number;
-    /** The output's address, lowercase bech32. */
-    address: string;
-    /** The output's lovelace amount. */
-    lovelace: bigint;
-    /** The output's native assets, each policy id and name as lowercase hex. */
-    assets: NativeAsset[];
-  };
 }
 
 /**
@@ -114,6 +84,8 @@ export const bech32AddressOf = (bytes: Uint8Array): string => {
     throw new Error('output address is empty');
   }
   const type = header >> 4;
+  // Byron-era addresses (header 0x82...) are rejected: they use a CBOR
+  // encoding, never bech32, so this reader cannot attest their outputs.
   if (type > 7) {
     throw new Error(`output address type ${type} is not a payment address`);
   }
@@ -165,14 +137,17 @@ export const lovelaceOf = (coin: cardano.BigInt | undefined): bigint =>
   uint64Of(coin, 'output lovelace');
 
 /**
- * Read one output and its block from a UTxO-RPC source.
- *
- * This returns raw fields; mapping them to the kind's observation shape is a
- * separate step. The source is trusted to describe its own chain (ADR 0003).
+ * Read one output and its block from a UTxO-RPC source, as the kind's
+ * observation, validated by its schema. The source is trusted to describe its
+ * own chain (ADR 0003); the spec's transaction carries no hash, so the reader
+ * cannot check that the endpoint returned the transaction it was asked for —
+ * an operator's endpoint is trusted to answer its queries, not only to tell
+ * the truth about the chain.
  *
  * @throws if the transaction is missing, not Cardano, failed, has no such
  *   output or block reference, the genesis magic is missing, the block time is
- *   missing or not whole seconds, or the tip block has no header.
+ *   missing or not whole seconds, the tip block has no header, or the result
+ *   does not fit the observation schema.
  */
 export const readRawEvent = async (options: {
   source: DolosSource;
@@ -180,7 +155,7 @@ export const readRawEvent = async (options: {
   txHash: string;
   /** The output's index within the transaction, a uint32. */
   outputIndex: number;
-}): Promise<RawDolosEvent> => {
+}): Promise<OutputObservation> => {
   const { source, txHash, outputIndex } = options;
   if (!Number.isInteger(outputIndex) || outputIndex < 0 || outputIndex > 2 ** 32 - 1) {
     throw new Error(`output index must be a uint32, got ${outputIndex}`);
@@ -225,7 +200,7 @@ export const readRawEvent = async (options: {
     throw new Error(`block timestamp ${blockRef.timestamp} is not whole seconds`);
   }
 
-  return {
+  return cardanoOutputObservationSchema.parse({
     networkMagic: genesis.networkMagic,
     tipBlockNumber: safeNumberOf(tipHeader.height, 'tip block height'),
     block: {
@@ -247,5 +222,5 @@ export const readRawEvent = async (options: {
         })),
       ),
     },
-  };
+  });
 };

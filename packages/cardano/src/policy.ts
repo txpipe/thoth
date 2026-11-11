@@ -197,7 +197,7 @@ export const assertPolicySlotsInRange = (
   const total = valueSlots + byteSlots;
   const outOfRange = slots.find((entry) => entry.slot >= total);
   if (outOfRange !== undefined) {
-    throw new Error(`policy slot ${outOfRange.slot} is outside the claim's ${total} value slots`);
+    throw new Error(`policy slot ${outOfRange.slot} is outside the claim's ${total} slots`);
   }
   const wrongRegion = slots.find((entry) =>
     isCardanoByteFact(entry.name) ? entry.slot < valueSlots : entry.slot >= valueSlots,

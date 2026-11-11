@@ -23,6 +23,8 @@ import {
   cardanoPolicySchema,
   deriveCardanoClaim,
 } from '../index.js';
+import { checkLocatorMatchesObservation, checkObservationMatchesPolicy } from '../output/verify.js';
+import { assertPolicySlotsInRange } from '../policy.js';
 
 /** A claim this kind signs: the standard claim, with numeric and byte slots. */
 export type CardanoClaim = Claim<number, number>;
@@ -48,7 +50,7 @@ export interface CardanoAttestment<PK, S> {
   readonly claim: CardanoClaim;
   /** The vetting results, sorted by registry slot. */
   readonly collected: readonly CollectedAttestation<CardanoClaim, PK, S>[];
-  /** Attestors that failed. Valid signatures over another message are not failures. */
+  /** Attestors that failed, including ones whose signature was over another message. */
   readonly failures: readonly CardanoAttestorFailure[];
 }
 
@@ -148,8 +150,9 @@ type CollectedOutcome<PK, S> = {
   readonly registryIndex: number;
   readonly collected: CollectedAttestation<CardanoClaim, PK, S>;
 };
-type FailedOutcome = { readonly registryIndex: number; readonly reason: FailureReason };
-type Outcome<PK, S> = CollectedOutcome<PK, S> | FailedOutcome;
+type Outcome<PK, S> =
+  | CollectedOutcome<PK, S>
+  | { readonly registryIndex: number; readonly reason: FailureReason };
 
 /** Rejects one attestor's attempt at its deadline. */
 class AttemptTimeout extends Error {}
@@ -223,6 +226,11 @@ const runAttempt = async <PK, S>(
       });
     };
     const collected = await Promise.race([attempt(), timeout]);
+    // The timer fires at the deadline; re-check the clock so a transport that
+    // resolved after the deadline but before the timer is not counted.
+    if (Date.now() >= deadline) {
+      return { registryIndex, reason: 'timeout' };
+    }
     return { registryIndex, collected };
   } catch (error) {
     return {
@@ -238,10 +246,13 @@ const runAttempt = async <PK, S>(
  * Build a cardano@1 client.
  *
  * The policy, app id and value count are fixed at init; a collection reads the
- * event, derives the claim, asks every trusted attestor, and keeps only the
- * replies that equal the derived claim and verify against their pinned key.
+ * event, checks its own read against the locator and policy, derives the
+ * claim, asks the trusted attestors until a threshold signs it, and keeps only
+ * the replies that equal the derived claim and verify against their pinned
+ * key.
  *
- * @throws if the policy, app id or value count fails its schema at init.
+ * @throws if the policy, app id or value count fails its schema, or a policy
+ *   slot does not fit the claim size, at init.
  */
 export const cardanoClient = {
   init<PK, S>(config: CardanoClientConfig<PK, S>): CardanoClient<PK, S> {
@@ -253,17 +264,25 @@ export const cardanoClient = {
       .int()
       .nonnegative()
       .parse(config.byteSlots ?? 0);
+    // Same guard `deriveCardanoClaim` enforces later; fail at init instead of
+    // on the first collect.
+    assertPolicySlotsInRange(policy.slots, valueSlots, byteSlots);
     const { trusted, transport, verifier, read } = config;
 
     return {
       collect: async (locator, supplied) => {
         const options = parseOptions(supplied);
-        const candidates = candidatesOf(trusted, options);
         if (Date.now() >= options.expiresAt) {
           throw new CardanoThresholdError('expired');
         }
+        const candidates = candidatesOf(trusted, options);
 
         const observation = cardanoObservationSchema.parse(await read(locator));
+        // Fail fast on a read the attestors would reject anyway; the depth is
+        // the attestors' alone, since this client's tip can differ without a
+        // fork.
+        checkLocatorMatchesObservation(locator, observation);
+        checkObservationMatchesPolicy(policy, observation);
         const claim = cardanoClaimSchema.parse(
           deriveCardanoClaim({
             policy,
@@ -278,22 +297,42 @@ export const cardanoClient = {
           throw new CardanoThresholdError('expired');
         }
 
-        const outcomes = await Promise.all(
-          candidates.map((member) =>
-            runAttempt({ trusted, transport, verifier, policy }, locator, claim, options, member),
-          ),
-        );
-        const collected = outcomes
-          .filter((outcome): outcome is CollectedOutcome<PK, S> => 'collected' in outcome)
-          .map((outcome) => outcome.collected)
-          .sort((a, b) => a.registryIndex - b.registryIndex);
-        const failures = outcomes
-          .filter((outcome): outcome is FailedOutcome => 'reason' in outcome)
-          .map((outcome) => ({ registryIndex: outcome.registryIndex, reason: outcome.reason }));
+        const collected: CollectedAttestation<CardanoClaim, PK, S>[] = [];
+        const failures: CardanoAttestorFailure[] = [];
+        const queue = [...candidates];
+        // One worker per signature still needed. A worker that fails takes
+        // the next candidate; a worker that succeeds ends, so no attempt runs
+        // beyond the threshold.
+        const worker = async () => {
+          while (queue.length > 0) {
+            const member = queue.shift();
+            if (member === undefined) {
+              return;
+            }
+            const outcome = await runAttempt(
+              { trusted, transport, verifier, policy },
+              locator,
+              claim,
+              options,
+              member,
+            );
+            if ('reason' in outcome) {
+              failures.push({ registryIndex: outcome.registryIndex, reason: outcome.reason });
+              if (Date.now() >= options.expiresAt) {
+                throw new CardanoThresholdError('expired', failures);
+              }
+              continue;
+            }
+            collected.push(outcome.collected);
+            return;
+          }
+        };
 
+        await Promise.all(Array.from({ length: options.threshold }, worker));
         if (collected.length < options.threshold) {
           throw new CardanoThresholdError('threshold', failures);
         }
+        collected.sort((a, b) => a.registryIndex - b.registryIndex);
         return { claim, collected, failures };
       },
     };

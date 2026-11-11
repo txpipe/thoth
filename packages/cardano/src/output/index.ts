@@ -361,7 +361,8 @@ export const deriveOutputClaim = (options: {
     blockNumber: block.blockNumber,
     lovelace: output.lovelace,
     outputIndex: output.outputIndex,
-    // Never read without the pin: the policy schema rejects 'assetQuantity' alone.
+    // Never read without the pin: the slot loop throws before this fallback
+    // can reach a claim, and the policy schema rejects the combination.
     assetQuantity: policy.asset === undefined ? 0n : assetQuantityOf(policy.asset, output.assets),
   };
   const byteFactValues: Record<CardanoByteFact, Uint8Array> = {
@@ -370,6 +371,11 @@ export const deriveOutputClaim = (options: {
     addressHash: cardanoAddressHashOf(output.address),
   };
   for (const { slot, name } of policy.slots) {
+    if (name === 'assetQuantity' && policy.asset === undefined) {
+      // The policy schema refuses this combination; this guard is for a caller
+      // that passes a hand-built policy and must not get a claim signing 0.
+      throw new Error("'assetQuantity' requires the 'asset' pin");
+    }
     if (isCardanoByteFact(name)) {
       byteValues[slot - valueSlots] = byteFactValues[name];
     } else {
