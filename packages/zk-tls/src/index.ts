@@ -109,20 +109,12 @@ export const ZK_FETCH_DEFAULT_LIMITS: ZkFetchLimits = Object.freeze({
  * No caps. The exported schemas use it: the client and the hash helpers must
  * accept any input some attestor's limits allow.
  */
-const UNCAPPED: ZkFetchLimits = {
-  valueSlots: Number.POSITIVE_INFINITY,
-  byteSlots: Number.POSITIVE_INFINITY,
-  allowedHosts: Number.POSITIVE_INFINITY,
-  responseMatches: Number.POSITIVE_INFINITY,
-  responseRedactions: Number.POSITIVE_INFINITY,
-  hostLength: Number.POSITIVE_INFINITY,
-  slotNameLength: Number.POSITIVE_INFINITY,
-  ruleLength: Number.POSITIVE_INFINITY,
-  parametersLength: Number.POSITIVE_INFINITY,
-  contextLength: Number.POSITIVE_INFINITY,
-  responseTextLength: Number.POSITIVE_INFINITY,
-  fieldLength: Number.POSITIVE_INFINITY,
-};
+const UNCAPPED = Object.fromEntries(
+  Object.keys(ZK_FETCH_DEFAULT_LIMITS).map((key) => [key, Number.POSITIVE_INFINITY]),
+) as unknown as ZkFetchLimits;
+
+/** The most claim slots under `limits`, numeric and byte together. */
+const maxSlots = (limits: ZkFetchLimits): number => limits.valueSlots + limits.byteSlots;
 
 /** The evidence schema with every string capped by `limits`. */
 const evidenceSchemaWithin = (limits: ZkFetchLimits) => {
@@ -154,33 +146,36 @@ const claimSchemaWithin = (limits: ZkFetchLimits) => {
   const slotArrayLimits = [
     ['values', limits.valueSlots],
     ['byteValues', limits.byteSlots],
-    ['present', limits.valueSlots + limits.byteSlots],
+    ['present', maxSlots(limits)],
   ] as const;
   return z.preprocess<
     unknown,
     ReturnType<typeof claimSchema<number, number>>,
     ClaimInput<number, number>
   >((input: unknown, context) => {
-    // Counted before any element is parsed: zod's `.max()` runs only after
-    // every element, and the signed message has one field per slot, so an
-    // uncapped count is a cheap CPU and memory attack.
-    const record: Readonly<Record<string, unknown>> =
-      typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
+    if (typeof input !== 'object' || input === null) return input;
+    // `claimSchema()` exposes no arrays to cap, so the counts are checked here,
+    // before any element is parsed: the signed message has one field per slot.
+    // The schema then parses these copies, so a getter or Proxy cannot pass the
+    // count with one array and hand the parser a larger one.
+    const bounded: Record<string, unknown> = { ...input };
     for (const [key, max] of slotArrayLimits) {
-      const entries = record[key];
-      if (Array.isArray(entries) && entries.length > max) {
+      const entries = bounded[key];
+      if (!Array.isArray(entries)) continue;
+      const copy = entries.slice(0, max + 1);
+      bounded[key] = copy;
+      if (copy.length > max) {
         context.addIssue({
           code: 'too_big',
           origin: 'array',
           maximum: max,
           inclusive: true,
-          input: entries,
+          input: copy,
           path: [key],
-          message: `${key} has ${entries.length} entries; at most ${max} allowed`,
         });
       }
     }
-    return input;
+    return bounded;
   }, claimSchema<number, number>());
 };
 
@@ -343,7 +338,7 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
           }),
       )
       .min(1)
-      .max(limits.valueSlots + limits.byteSlots),
+      .max(maxSlots(limits)),
     responseMatches: z
       .array(
         z.strictObject({

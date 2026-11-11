@@ -2,6 +2,9 @@
 // drift apart. The disclosure rules below mirror the prover's default
 // whole-response match (`(?<data>.*)`, see `src/prover/index.ts`).
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { ZkFetchPolicy } from '@thoth/zk-tls';
 
 /**
@@ -13,3 +16,24 @@ export const DISCLOSURE_RULES: Pick<ZkFetchPolicy, 'responseMatches' | 'response
   responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
   responseRedactions: [],
 };
+
+/**
+ * The recorded evidence in `examples/demo-attestation/fixtures/`: a genuine,
+ * offline-verifiable HTTPS fetch a Reclaim witness signed.
+ */
+export const FIXTURE = JSON.parse(
+  readFileSync(
+    join(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      '..',
+      '..',
+      'examples',
+      'demo-attestation',
+      'fixtures',
+      'fixture-github-attestor-core-x-0m.json',
+    ),
+    'utf-8',
+  ),
+) as { claim: Record<string, unknown> } & Record<string, unknown>;

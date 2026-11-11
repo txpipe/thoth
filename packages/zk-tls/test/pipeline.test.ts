@@ -4,9 +4,6 @@
 //
 // Uses `examples/demo-attestation/fixtures/` — a genuine, offline-verifiable
 // HTTPS fetch witnessed by a Reclaim witness (no network needed).
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Attestor, KeyPair } from '@thoth/attestor';
 import { descriptorOf } from '@thoth/attestor';
 import type { AttestorTransport } from '@thoth/client';
@@ -37,24 +34,13 @@ import {
   zkFetchClient,
 } from '@thoth/zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
+import { DISCLOSURE_RULES, FIXTURE } from './helpers/helper.js';
 import { type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
 const APP_ID = new Uint8Array(32).fill(0xa1);
 
-const THIS_DIR = dirname(fileURLToPath(import.meta.url));
-const FIXTURE_PATH = join(
-  THIS_DIR,
-  '..',
-  '..',
-  '..',
-  'examples',
-  'demo-attestation',
-  'fixtures',
-  'fixture-github-attestor-core-x-0m.json',
-);
-const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as Record<string, unknown>;
+const fixture = FIXTURE;
 
 const policy = (
   slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'data', parse: 'float', optional: true }],

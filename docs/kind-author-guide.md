@@ -24,6 +24,7 @@ hash (ADR 0002, ADR 0008).
 | Evidence schema | shared | zod | `zkFetchEvidenceSchema` |
 | Claim derivation | shared | `Claim` (`@thoth/core/claim`) | `deriveClaimFromEvidence` |
 | Definition (`verify`, `message`) | attestor | `defineAttestor` (`@thoth/attestor`) | `createZkFetchDefinition` |
+| Input limits | attestor | zod `.max()` | `ZK_FETCH_DEFAULT_LIMITS`, `zkFetchSchemasWithin` |
 | Instance builder | attestor | `buildAttestor` | `zkFetchAttestor` |
 | Client | dApp | `@thoth/client` | `zkFetchClient` |
 
@@ -56,8 +57,9 @@ Never bake an app's policy into an attestor instance.
   (ADR 0010). A value that does not fit, or misses a declared `length`, is not
   certifiable. Numeric rules must target numeric slots; byte rules must target
   byte slots.
-- Keep per-operator trust anchors out of the policy. Which witness an attestor
-  trusts is instance configuration (zkFetch's `witnessAddress`), not law.
+- Keep per-operator configuration out of the policy. Which witness an
+  attestor trusts and how large an input it parses are instance configuration
+  (zkFetch's `witnessAddress` and `limits`), not law.
 - Pin the hash of one fixed policy to its bytes in a test, as
   `packages/zk-tls/test/claim-context.test.ts` does. A change to the canonical
   form then fails loudly.
@@ -160,7 +162,11 @@ shape can return another type, but then it needs its own contract module.
 `buildAttestor({ id, definition, keyPair, attest })` pairs the law with a key.
 In your `attest`:
 
-- parse every input with the definition's schemas;
+- parse every input with the definition's schemas, capped to the instance's
+  input limits. The attestor serves untrusted callers, so cap every array and
+  string before any element is parsed, or a request with millions of slots
+  costs you a message with millions of fields. zkFetch takes the operator's
+  `limits` and parses with `zkFetchSchemasWithin(limits)`;
 - run `definition.verify`;
 - check per-instance trust anchors, such as "the evidence was signed by my
   witness";

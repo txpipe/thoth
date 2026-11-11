@@ -27,6 +27,9 @@ import {
   type ZkFetchLimits,
   type ZkFetchPolicy,
   zkFetchClaimContextDigestOf,
+  zkFetchClaimSchema,
+  zkFetchEvidenceSchema,
+  zkFetchPolicySchema,
   zkFetchSchemasWithin,
   zkFetchSubjectHashOf,
 } from '../index.js';
@@ -190,21 +193,19 @@ const resolveZkFetchLimits = (limits: Partial<ZkFetchLimits> = {}): ZkFetchLimit
 };
 
 /**
- * Create the zkFetch kind's shareable definition: the three schemas, capped by
- * `limits`, a `verify` that runs every check in this module in order, and a
- * `message` that encodes the claim with `claimToMessage`.
+ * Create the zkFetch kind's shareable definition: the three schemas, a
+ * `verify` that runs every check in this module in order, and a `message`
+ * that encodes the claim with `claimToMessage`.
  *
- * Instantiate it with {@link zkFetchAttestor}.
- *
- * @param limits - Overrides for {@link ZK_FETCH_DEFAULT_LIMITS}; an unset
- *   limit keeps its default.
- * @throws if a `limits` key is not a {@link ZkFetchLimits} field, or a value
- *   is not a positive integer.
+ * The schemas cap no size; input limits are per-instance config, applied by
+ * {@link zkFetchAttestor}.
  */
-export function createZkFetchDefinition(limits?: Partial<ZkFetchLimits>): ZkFetchDefinition {
+export function createZkFetchDefinition(): ZkFetchDefinition {
   return defineAttestor({
     kind: ZK_FETCH_LAW,
-    ...zkFetchSchemasWithin(resolveZkFetchLimits(limits)),
+    policy: zkFetchPolicySchema,
+    evidence: zkFetchEvidenceSchema,
+    claim: zkFetchClaimSchema,
     verify: async (
       input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number, number>>,
     ) => {
@@ -265,19 +266,22 @@ export function zkFetchAttestor<PK, S>(parts: {
 }): Attestor<ZkFetchDefinition, PK, S> {
   const { id, keyPair, witnessAddress, limits } = parts;
   const trustedWitnessAddress = witnessAddress.toLowerCase();
-  const definition = createZkFetchDefinition(limits);
+  // The instance parses with its own capped schemas, not the definition's
+  // uncapped ones, so an oversized request costs no more than its parse.
+  const capped = zkFetchSchemasWithin(resolveZkFetchLimits(limits));
+  const definition = createZkFetchDefinition();
   const publicKey = keyPair.publicKey;
   return buildAttestor({
     id,
     definition,
     keyPair,
     attest: async (definition, signer, input) => {
-      const policy = definition.policy.parse(input.policy);
-      const evidence = definition.evidence.parse(input.evidence);
+      const policy = capped.policy.parse(input.policy);
+      const evidence = capped.evidence.parse(input.evidence);
       // The claim schema parses with `claimSchema()`, whose parsed claim owns its byte
       // arrays, so the caller cannot change the holder between `verify` and the
       // signature.
-      const proposed = definition.claim.parse(input.claim);
+      const proposed = capped.claim.parse(input.claim);
       await definition.verify({ policy, evidence, claim: proposed });
       if (evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
         throw new Error(

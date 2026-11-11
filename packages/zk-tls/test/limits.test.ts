@@ -1,9 +1,5 @@
-// The attestor's input limits: an oversized claim, policy or evidence is
-// rejected while it is parsed, before the proof check or the signature runs.
-// The operator sets them per attestor; unset ones keep the defaults.
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+// The attestor's per-instance input limits: oversized input is rejected while
+// it is parsed, before the proof check or the signature runs.
 import type { KeyPair } from '@thoth/attestor';
 import type { FlatMessage } from '@thoth/core/claim';
 import {
@@ -12,25 +8,13 @@ import {
   type ZkFetchPolicy,
   zkFetchClaimSchema,
   zkFetchPolicyHashOf,
+  zkFetchSchemasWithin,
 } from '@thoth/zk-tls';
-import { createZkFetchDefinition, zkFetchAttestor } from '@thoth/zk-tls/attestor';
+import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { describe, expect, it, vi } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
+import { DISCLOSURE_RULES, FIXTURE } from './helpers/helper.js';
 
-const THIS_DIR = dirname(fileURLToPath(import.meta.url));
-const FIXTURE_PATH = join(
-  THIS_DIR,
-  '..',
-  '..',
-  '..',
-  'examples',
-  'demo-attestation',
-  'fixtures',
-  'fixture-github-attestor-core-x-0m.json',
-);
-const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8')) as {
-  claim: Record<string, unknown>;
-} & Record<string, unknown>;
+const fixture = FIXTURE;
 
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.github.com'],
@@ -91,9 +75,7 @@ describe('zkFetch attestor default input limits', () => {
     const count = ZK_FETCH_DEFAULT_LIMITS.valueSlots + 1;
     await expectRejectedUnverified(
       { claim: { ...claim, values: repeat(count, 0), present: repeat(count, false) } },
-      new RegExp(
-        `values has ${count} entries; at most ${ZK_FETCH_DEFAULT_LIMITS.valueSlots} allowed`,
-      ),
+      new RegExp(`"values"[\\s\\S]*<=${ZK_FETCH_DEFAULT_LIMITS.valueSlots} items`),
     );
   });
 
@@ -107,16 +89,42 @@ describe('zkFetch attestor default input limits', () => {
           present: repeat(count + 1, false),
         },
       },
-      new RegExp(
-        `byteValues has ${count} entries; at most ${ZK_FETCH_DEFAULT_LIMITS.byteSlots} allowed`,
-      ),
+      new RegExp(`"byteValues"[\\s\\S]*<=${ZK_FETCH_DEFAULT_LIMITS.byteSlots} items`),
     );
+  });
+
+  it('counts the array the claim schema parses, so a getter cannot swap in a longer one', () => {
+    const huge = repeat(1_000_000, 0);
+    let reads = 0;
+    const input = {
+      ...claim,
+      present: repeat(1, false),
+      get values() {
+        reads += 1;
+        return reads === 1 ? [0] : huge;
+      },
+    };
+    const parsed = zkFetchSchemasWithin(ZK_FETCH_DEFAULT_LIMITS).claim.parse(input);
+    expect(reads).toBe(1);
+    expect(parsed.values).toHaveLength(1);
+  });
+
+  it('counts a Proxy array once, and rejects it when that count is over the limit', () => {
+    const count = ZK_FETCH_DEFAULT_LIMITS.valueSlots + 1;
+    const values = new Proxy(repeat(count, 0), {});
+    expect(() =>
+      zkFetchSchemasWithin(ZK_FETCH_DEFAULT_LIMITS).claim.parse({
+        ...claim,
+        values,
+        present: repeat(count, false),
+      }),
+    ).toThrow(/"values"[\s\S]*Too big/);
   });
 
   it('parses a claim at every slot limit', () => {
     const values = ZK_FETCH_DEFAULT_LIMITS.valueSlots;
     const bytes = ZK_FETCH_DEFAULT_LIMITS.byteSlots;
-    const parsed = createZkFetchDefinition().claim.parse({
+    const parsed = zkFetchSchemasWithin(ZK_FETCH_DEFAULT_LIMITS).claim.parse({
       ...claim,
       values: repeat(values, 0),
       byteValues: repeat(bytes, new Uint8Array(32)),
@@ -237,7 +245,7 @@ describe('zkFetch attestor configured input limits', () => {
   it('rejects input over a lowered limit before verifying or signing', async () => {
     await expectRejectedUnverified(
       { claim: { ...claim, values: repeat(3, 0), present: repeat(3, false) } },
-      /values has 3 entries; at most 2 allowed/,
+      /"values"[\s\S]*<=2 items/,
       { valueSlots: 2 },
     );
     await expectRejectedUnverified(
@@ -258,7 +266,7 @@ describe('zkFetch attestor configured input limits', () => {
         evidence: fixture as never,
         claim: { ...claim, values: repeat(count, 0), present: repeat(count, false) } as never,
       }),
-    ).rejects.not.toThrow(/entries; at most/);
+    ).rejects.not.toThrow(/Too big/);
     expect(verify).toHaveBeenCalledOnce();
   });
 
