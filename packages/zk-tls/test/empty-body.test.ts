@@ -1,5 +1,5 @@
-// Reclaim 5.0.8 skips the sent-body comparison for an empty signed body
-// (lib/index.js:7239-7242), so a caller can sign no body and send one.
+// Reclaim 5.1.6 skips the sent-body comparison for an empty signed body
+// (lib/index.js:7468-7471), so a caller can sign no body and send one.
 import { randomBytes } from 'node:crypto';
 import {
   CURRENT_ATTESTOR_VERSION,

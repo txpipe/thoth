@@ -16,6 +16,7 @@ import {
   claimRequestOf,
   deriveClaimFromEvidence,
   isByteRule,
+  lookupDisclosedValue,
   parsedEvidenceView,
   parseSlotValue,
   signedClaimContextDigestOf,
@@ -97,7 +98,7 @@ export const assertClaimMatchesDisclosures = (options: {
   const { claim, disclosures, policy } = options;
   const valueSlots = claim.values.length;
   for (const slot of policy.slots) {
-    const raw = disclosures[slot.name];
+    const raw = lookupDisclosedValue(disclosures, slot.name);
     const proposedPresent = claim.present[slot.slot] ?? false;
     if (isByteRule(slot.parse)) {
       const parsed = raw === undefined ? null : parseSlotValue({ ...slot, parse: slot.parse }, raw);
@@ -171,6 +172,9 @@ export const assertClaimMatchesContext = (options: {
   }
 };
 
+/** A witness address: `0x` and 40 hex digits. */
+const WITNESS_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
+
 /**
  * Merge an operator's limits over {@link ZK_FETCH_DEFAULT_LIMITS}. An
  * `undefined` entry keeps its default.
@@ -193,14 +197,29 @@ const resolveZkFetchLimits = (limits: Partial<ZkFetchLimits> = {}): ZkFetchLimit
 };
 
 /**
- * Create the zkFetch kind's shareable definition: the three schemas, a
+ * Create the zkFetch kind's definition for one operator: the three schemas, a
  * `verify` that runs every check in this module in order, and a `message`
  * that encodes the claim with `claimToMessage`.
  *
+ * `verify` rejects evidence from any witness but `witnessAddress`, before the
+ * proof check, so an attestor built from it with `buildAttestor` checks the
+ * witness too.
+ * {@link zkFetchAttestor} builds the deployable attestor on top of it.
+ *
  * The schemas cap no size; input limits are per-instance config, applied by
  * {@link zkFetchAttestor}.
+ *
+ * @param options.witnessAddress The operator's own Reclaim witness address,
+ *   `0x` + 40 hex. Compared case-insensitively.
+ * @throws if `witnessAddress` is not `0x` and 40 hex digits.
  */
-export function createZkFetchDefinition(): ZkFetchDefinition {
+export function createZkFetchDefinition(options: { witnessAddress: string }): ZkFetchDefinition {
+  if (!WITNESS_ADDRESS_PATTERN.test(options.witnessAddress)) {
+    throw new Error(
+      `witnessAddress must be 0x and 40 hex digits, got ${JSON.stringify(options.witnessAddress)}`,
+    );
+  }
+  const trustedWitnessAddress = options.witnessAddress.toLowerCase();
   return defineAttestor({
     kind: ZK_FETCH_LAW,
     policy: zkFetchPolicySchema,
@@ -214,6 +233,14 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
         input.claim.values.length,
         input.claim.byteValues.length,
       );
+      // The proof check only shows that the evidence's own `attestorAddress`
+      // signed it. Without this check, a client could run its own witness, sign
+      // any response, and have it certified.
+      if (input.evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
+        throw new Error(
+          `evidence signed by witness ${input.evidence.attestorAddress}, not this attestor's witness ${trustedWitnessAddress}`,
+        );
+      }
       const verified = await verifyZkFetchProof(input.evidence);
       assertEvidenceMatchesPolicy(verified, input.policy);
       assertObservationInWindow({ claim: input.claim, verified });
@@ -232,9 +259,10 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
 /**
  * Build a deployable zkFetch attestor.
  *
- * It accepts evidence only from the witness at `witnessAddress`, runs the
- * definition's `verify`, then derives its own claim from the evidence, sized
- * to the proposal's `values` and `byteValues` lengths, and signs that.
+ * It runs the `verify` of `createZkFetchDefinition({ witnessAddress })`, which
+ * accepts evidence only from the witness at `witnessAddress`, then derives its
+ * own claim from the evidence, sized to the proposal's `values` and
+ * `byteValues` lengths, and signs that.
  * Input larger than its limits fails while it is parsed, before `verify`.
  *
  * @example
@@ -249,8 +277,8 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  * });
  * ```
  *
- * @throws if a `limits` key is not a {@link ZkFetchLimits} field, or a value
- *   is not a positive integer.
+ * @throws if `witnessAddress` is not `0x` and 40 hex digits, a `limits` key is
+ *   not a {@link ZkFetchLimits} field, or a limit is not a positive integer.
  */
 export function zkFetchAttestor<PK, S>(parts: {
   id: string;
@@ -265,11 +293,10 @@ export function zkFetchAttestor<PK, S>(parts: {
   limits?: Partial<ZkFetchLimits>;
 }): Attestor<ZkFetchDefinition, PK, S> {
   const { id, keyPair, witnessAddress, limits } = parts;
-  const trustedWitnessAddress = witnessAddress.toLowerCase();
   // The instance parses with its own capped schemas, not the definition's
   // uncapped ones, so an oversized request costs no more than its parse.
   const capped = zkFetchSchemasWithin(resolveZkFetchLimits(limits));
-  const definition = createZkFetchDefinition();
+  const definition = createZkFetchDefinition({ witnessAddress });
   const publicKey = keyPair.publicKey;
   return buildAttestor({
     id,
@@ -283,11 +310,6 @@ export function zkFetchAttestor<PK, S>(parts: {
       // signature.
       const proposed = capped.claim.parse(input.claim);
       await definition.verify({ policy, evidence, claim: proposed });
-      if (evidence.attestorAddress.toLowerCase() !== trustedWitnessAddress) {
-        throw new Error(
-          `evidence signed by witness ${evidence.attestorAddress}, not this attestor's witness ${trustedWitnessAddress}`,
-        );
-      }
       const verified = parsedEvidenceView(evidence);
       const claim = deriveClaimFromEvidence({
         verified,

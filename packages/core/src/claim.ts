@@ -52,7 +52,8 @@ export interface Claim<V extends number, W extends number = 0> {
 
 /**
  * The raw form of a {@link Claim}, the zod input of {@link claimSchema}: numeric
- * fields accept `number | bigint`, `version` and `byteValues` may be omitted.
+ * fields accept a safe-integer `number` or a `bigint`, and `version` and
+ * `byteValues` may be omitted.
  */
 // biome-ignore lint/correctness/noUnusedVariables: phantom type param — carries the claim's numeric value count `V`.
 export interface ClaimInput<V extends number, W extends number = 0> {
@@ -94,9 +95,29 @@ export const bytes32Schema = z
   .transform((bytes) => new Uint8Array(bytes))
   .refine((bytes) => bytes.length === 32, { message: 'expected 32 bytes' });
 
+// A non-negative integer below 2^bits, as a safe-integer `number` or a `bigint`,
+// coerced to `bigint`. The bound is the field's Compact type in
+// `attestation.compact`, so a claim that parses never reaches a signer or the
+// contract out of range.
+function uintSchema(bits: number) {
+  const bound = 1n << BigInt(bits);
+  return z
+    .union([z.int(), z.bigint()])
+    .transform((value) => BigInt(value))
+    .refine((value) => value >= 0n && value < bound, {
+      message: `expected an integer in [0, 2^${bits})`,
+    });
+}
+
+const versionSchema = uintSchema(8);
+const windowSchema = uintSchema(32);
+const valueSchema = uintSchema(64);
+
 /**
  * Zod schema for a claim with `V` numeric and `W` byte slots: validates the
- * shape, coerces the numeric fields to `bigint`, and defaults an omitted
+ * shape, checks each numeric field fits its contract type (`values` below 2^64,
+ * `windowStart` and `windowEnd` below 2^32, `version` below 2^8), coerces the
+ * numeric fields to `bigint`, and defaults an omitted
  * `byteValues` to `[]`. The parsed claim owns copies of every byte array, so
  * the caller cannot change it between an attestor's checks and its signature.
  *
@@ -112,19 +133,16 @@ export function claimSchema<V extends number = number, W extends number = 0>(
   const byteCount = w ?? 0;
   const schema = z
     .object({
-      version: z.union([z.number(), z.bigint()]).default(CLAIM_VERSION),
+      version: versionSchema.default(CLAIM_VERSION),
       appId: bytes32Schema,
       policyHash: bytes32Schema,
-      windowStart: z.union([z.number(), z.bigint()]),
-      windowEnd: z.union([z.number(), z.bigint()]),
+      windowStart: windowSchema,
+      windowEnd: windowSchema,
       subjectHash: bytes32Schema,
       holder: bytes32Schema,
       salt: bytes32Schema,
       present: v === undefined ? z.array(z.boolean()) : z.array(z.boolean()).length(v + byteCount),
-      values:
-        v === undefined
-          ? z.array(z.union([z.number(), z.bigint()]))
-          : z.array(z.union([z.number(), z.bigint()])).length(v),
+      values: v === undefined ? z.array(valueSchema) : z.array(valueSchema).length(v),
       byteValues:
         v === undefined
           ? z.array(bytes32Schema).default([])
@@ -133,20 +151,7 @@ export function claimSchema<V extends number = number, W extends number = 0>(
     .refine((input) => input.present.length === input.values.length + input.byteValues.length, {
       message: 'present must have one flag per value: values.length + byteValues.length',
       path: ['present'],
-    })
-    .transform((input) => ({
-      version: BigInt(input.version),
-      appId: input.appId,
-      policyHash: input.policyHash,
-      windowStart: BigInt(input.windowStart),
-      windowEnd: BigInt(input.windowEnd),
-      subjectHash: input.subjectHash,
-      holder: input.holder,
-      salt: input.salt,
-      present: input.present,
-      values: input.values.map((value) => BigInt(value)),
-      byteValues: input.byteValues,
-    }));
+    });
   return schema as unknown as z.ZodType<
     Claim<V, W>,
     z.core.$ZodTypeInternals<Claim<V, W>, ClaimInput<V, W>>

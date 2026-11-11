@@ -102,9 +102,9 @@ What the attestor checks before signing:
   - Policy: 64 `allowedHosts` of up to 253 characters, one slot entry per claim slot with names up to 128 characters, 32 `responseMatches` and 32 `responseRedactions` with rule texts up to 4096 characters.
   - Evidence: `claim.parameters` up to 256 KiB, `claim.context` up to 1 MiB, `responseText` up to 4 MiB, and 256 characters for each other string.
 - The witness's ECDSA signature over the Reclaim claim, and that the claim identifier matches its signed content.
-- The witness address is the one the instance was built with.
+- The witness address is the one the definition was created with, checked before the signature.
 - The signed request carries no `{{param}}` template ([why](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
-- The attested URL is HTTPS on an allowed host.
+- The attested URL is HTTPS on an allowed host. An `allowedHosts` entry admits that host and its subdomains on port 443 only. To allow another port, name it in the entry, as in `api.example.com:8443`. Case and a trailing dot do not change a match. The policy schema refuses an entry that is empty, carries a path or whitespace, or names a port outside 1–65535.
 - The signed request body carries no `*` and satisfies the policy's [body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy).
 - The disclosure rules the witness signed equal the policy's, so a slot cannot be pointed at a different field than the policy intends. Array order, the order of a rule's keys, empty redaction keys and an absent array are inert; every other difference, including Reclaim's `invert` and `hash`, rejects.
 - Every required slot is certifiable: disclosed and parseable under its rule and `length` pin. An optional slot that is absent or unparseable is signed unpresent.
