@@ -15,7 +15,7 @@ Thoth is a private N-of-M attestation system for Midnight. Three layers:
   interfaces attestor kinds implement to provide attestation. Kinds verify
   evidence and sign a canonical claim. `packages/client` holds the dApp side
   (the trusted set and the attestation checks), and `packages/zk-tls` is the
-  zkFetch kind.
+  zkFetch kind. `packages/cardano` is the cardano@1 chain-event kind.
 
 Attestors certify facts, not decisions: a claim is a canonical statement of
 what was observed; the application defines the predicate over it.

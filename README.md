@@ -43,8 +43,10 @@ Attestors certify facts, not decisions: a claim states what was observed, and
 your app defines the predicate over it.
 
 Claim values are private witness data and are not stored on-chain. The public
-nullifier hashes them with a secret [salt](CONTEXT.md#the-claim), so an outsider
-cannot confirm a guessed value from it; the contracts README
+nullifier hashes them with a [salt](CONTEXT.md#the-claim). In zkFetch the salt is
+secret, so an outsider cannot confirm a guessed value from it; a chain-event
+kind's salt is public instead, since its values already sit on the chain
+([ADR 0013](docs/adr/0013-chain-event-kinds.md)). The contracts README
 [says what is public and who holds the salt](packages/contracts/README.md#guarantees-and-limits).
 
 ## Which package to use
@@ -53,12 +55,14 @@ cannot confirm a guessed value from it; the contracts README
 |---------|-----------|
 | [`@thoth/contracts`](packages/contracts/README.md) | Embed N-of-M verification in your Midnight contract |
 | [`@thoth/zk-tls`](packages/zk-tls/README.md) | Attest a web fact with zkFetch, as a dApp or as an attestor operator |
+| [`@thoth/cardano`](packages/cardano/README.md) | Attest a Cardano chain event, as a dApp or as an attestor operator |
 | [`@thoth/client`](packages/client/README.md) | Write a kind's client: the trusted set and the attestation checks |
 | [`@thoth/attestor`](packages/attestor/README.md) | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
 | [`@thoth/core`](packages/core/README.md) | Write a kind's law against the shared claim types |
 
 If you are building a dApp on web data, start with `@thoth/contracts` and
-`@thoth/zk-tls`. To add a new kind of attestor, follow
+`@thoth/zk-tls`; on chain data, start with `@thoth/contracts` and
+`@thoth/cardano`. To add a new kind of attestor, follow
 [docs/kind-author-guide.md](docs/kind-author-guide.md).
 
 ## Quickstart
