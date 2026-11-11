@@ -20,14 +20,14 @@ import {
   parseSlotValue,
   signedClaimContextDigestOf,
   type VerifiedEvidence,
+  ZK_FETCH_DEFAULT_LIMITS,
   ZK_FETCH_LAW,
   type ZkFetchDefinition,
   type ZkFetchEvidence,
+  type ZkFetchLimits,
   type ZkFetchPolicy,
   zkFetchClaimContextDigestOf,
-  zkFetchClaimSchema,
-  zkFetchEvidenceSchema,
-  zkFetchPolicySchema,
+  zkFetchSchemasWithin,
   zkFetchSubjectHashOf,
 } from '../index.js';
 
@@ -169,18 +169,42 @@ export const assertClaimMatchesContext = (options: {
 };
 
 /**
- * Create the zkFetch kind's shareable definition: the three schemas, a
- * `verify` that runs every check in this module in order, and a `message`
- * that encodes the claim with `claimToMessage`.
+ * Merge an operator's limits over {@link ZK_FETCH_DEFAULT_LIMITS}. An
+ * `undefined` entry keeps its default.
+ */
+const resolveZkFetchLimits = (limits: Partial<ZkFetchLimits> = {}): ZkFetchLimits => {
+  const resolved: { -readonly [K in keyof ZkFetchLimits]: number } = { ...ZK_FETCH_DEFAULT_LIMITS };
+  for (const [key, value] of Object.entries(limits)) {
+    // Limits often come from a config file, so a misspelled key must not
+    // silently leave its default in place.
+    if (!Object.hasOwn(ZK_FETCH_DEFAULT_LIMITS, key)) {
+      throw new Error(`unknown zkFetch limit '${key}'`);
+    }
+    if (value === undefined) continue;
+    if (!Number.isSafeInteger(value) || value < 1) {
+      throw new Error(`zkFetch limit '${key}' must be a positive integer, got ${String(value)}`);
+    }
+    resolved[key as keyof ZkFetchLimits] = value;
+  }
+  return resolved;
+};
+
+/**
+ * Create the zkFetch kind's shareable definition: the three schemas, capped by
+ * `limits`, a `verify` that runs every check in this module in order, and a
+ * `message` that encodes the claim with `claimToMessage`.
  *
  * Instantiate it with {@link zkFetchAttestor}.
+ *
+ * @param limits - Overrides for {@link ZK_FETCH_DEFAULT_LIMITS}; an unset
+ *   limit keeps its default.
+ * @throws if a `limits` key is not a {@link ZkFetchLimits} field, or a value
+ *   is not a positive integer.
  */
-export function createZkFetchDefinition(): ZkFetchDefinition {
+export function createZkFetchDefinition(limits?: Partial<ZkFetchLimits>): ZkFetchDefinition {
   return defineAttestor({
     kind: ZK_FETCH_LAW,
-    policy: zkFetchPolicySchema,
-    evidence: zkFetchEvidenceSchema,
-    claim: zkFetchClaimSchema,
+    ...zkFetchSchemasWithin(resolveZkFetchLimits(limits)),
     verify: async (
       input: AttestationInput<ZkFetchPolicy, ZkFetchEvidence, Claim<number, number>>,
     ) => {
@@ -210,6 +234,7 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  * It accepts evidence only from the witness at `witnessAddress`, runs the
  * definition's `verify`, then derives its own claim from the evidence, sized
  * to the proposal's `values` and `byteValues` lengths, and signs that.
+ * Input larger than its limits fails while it is parsed, before `verify`.
  *
  * @example
  * ```ts
@@ -219,18 +244,28 @@ export function createZkFetchDefinition(): ZkFetchDefinition {
  *   id: 'zkFetch-strava-1',
  *   keyPair, // the attestor's signing key, not the witness's
  *   witnessAddress: '0x…', // the public address of your Reclaim witness
+ *   limits: { valueSlots: 128 }, // optional; the rest keep ZK_FETCH_DEFAULT_LIMITS
  * });
  * ```
+ *
+ * @throws if a `limits` key is not a {@link ZkFetchLimits} field, or a value
+ *   is not a positive integer.
  */
 export function zkFetchAttestor<PK, S>(parts: {
   id: string;
   keyPair: KeyPair<PK, S, FlatMessage>;
   /** The operator's own Reclaim witness address, `0x` + 40 hex. Compared case-insensitively. */
   witnessAddress: string;
+  /**
+   * This attestor's input limits, merged over {@link ZK_FETCH_DEFAULT_LIMITS}.
+   * They are offchain operator config: they only refuse input, and never
+   * change what the attestor signs.
+   */
+  limits?: Partial<ZkFetchLimits>;
 }): Attestor<ZkFetchDefinition, PK, S> {
-  const { id, keyPair, witnessAddress } = parts;
+  const { id, keyPair, witnessAddress, limits } = parts;
   const trustedWitnessAddress = witnessAddress.toLowerCase();
-  const definition = createZkFetchDefinition();
+  const definition = createZkFetchDefinition(limits);
   const publicKey = keyPair.publicKey;
   return buildAttestor({
     id,
@@ -239,7 +274,7 @@ export function zkFetchAttestor<PK, S>(parts: {
     attest: async (definition, signer, input) => {
       const policy = definition.policy.parse(input.policy);
       const evidence = definition.evidence.parse(input.evidence);
-      // `zkFetchClaimSchema` parses with `claimSchema()`, whose parsed claim owns its byte
+      // The claim schema parses with `claimSchema()`, whose parsed claim owns its byte
       // arrays, so the caller cannot change the holder between `verify` and the
       // signature.
       const proposed = definition.claim.parse(input.claim);

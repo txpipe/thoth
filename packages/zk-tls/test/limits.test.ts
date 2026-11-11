@@ -1,12 +1,19 @@
 // The attestor's input limits: an oversized claim, policy or evidence is
 // rejected while it is parsed, before the proof check or the signature runs.
+// The operator sets them per attestor; unset ones keep the defaults.
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { KeyPair } from '@thoth/attestor';
 import type { FlatMessage } from '@thoth/core/claim';
-import { ZK_FETCH_LIMITS, type ZkFetchPolicy, zkFetchClaimSchema } from '@thoth/zk-tls';
-import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
+import {
+  ZK_FETCH_DEFAULT_LIMITS,
+  type ZkFetchLimits,
+  type ZkFetchPolicy,
+  zkFetchClaimSchema,
+  zkFetchPolicyHashOf,
+} from '@thoth/zk-tls';
+import { createZkFetchDefinition, zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { describe, expect, it, vi } from 'vitest';
 import { DISCLOSURE_RULES } from './helpers/helper.js';
 
@@ -46,13 +53,14 @@ const claim = {
 };
 
 /** An attestor whose proof check and signer record whether they ran. */
-const watchedAttestor = () => {
+const watchedAttestor = (limits?: Partial<ZkFetchLimits>) => {
   const sign = vi.fn((message: FlatMessage) => `sig:${message.length}`);
   const keyPair: KeyPair<string, string, FlatMessage> = { publicKey: 'pk', signer: { sign } };
   const attestor = zkFetchAttestor({
     id: 'attestor-0',
     keyPair,
     witnessAddress: fixture.attestorAddress as string,
+    ...(limits === undefined ? {} : { limits }),
   });
   const verify = vi.spyOn(attestor.definition, 'verify');
   return { attestor, verify, sign };
@@ -62,8 +70,9 @@ const watchedAttestor = () => {
 const expectRejectedUnverified = async (
   input: { policy?: unknown; evidence?: unknown; claim?: unknown },
   error: RegExp,
+  limits?: Partial<ZkFetchLimits>,
 ) => {
-  const { attestor, verify, sign } = watchedAttestor();
+  const { attestor, verify, sign } = watchedAttestor(limits);
   await expect(
     attestor.attest({
       policy: (input.policy ?? policy) as ZkFetchPolicy,
@@ -77,17 +86,19 @@ const expectRejectedUnverified = async (
 
 const repeat = <T>(count: number, item: T): T[] => Array.from({ length: count }, () => item);
 
-describe('zkFetch attestor input limits', () => {
+describe('zkFetch attestor default input limits', () => {
   it('rejects more numeric slots than the limit before verifying or signing', async () => {
-    const count = ZK_FETCH_LIMITS.valueSlots + 1;
+    const count = ZK_FETCH_DEFAULT_LIMITS.valueSlots + 1;
     await expectRejectedUnverified(
       { claim: { ...claim, values: repeat(count, 0), present: repeat(count, false) } },
-      new RegExp(`values has ${count} entries; at most ${ZK_FETCH_LIMITS.valueSlots} allowed`),
+      new RegExp(
+        `values has ${count} entries; at most ${ZK_FETCH_DEFAULT_LIMITS.valueSlots} allowed`,
+      ),
     );
   });
 
   it('rejects more byte slots than the limit before verifying or signing', async () => {
-    const count = ZK_FETCH_LIMITS.byteSlots + 1;
+    const count = ZK_FETCH_DEFAULT_LIMITS.byteSlots + 1;
     await expectRejectedUnverified(
       {
         claim: {
@@ -96,14 +107,16 @@ describe('zkFetch attestor input limits', () => {
           present: repeat(count + 1, false),
         },
       },
-      new RegExp(`byteValues has ${count} entries; at most ${ZK_FETCH_LIMITS.byteSlots} allowed`),
+      new RegExp(
+        `byteValues has ${count} entries; at most ${ZK_FETCH_DEFAULT_LIMITS.byteSlots} allowed`,
+      ),
     );
   });
 
   it('parses a claim at every slot limit', () => {
-    const values = ZK_FETCH_LIMITS.valueSlots;
-    const bytes = ZK_FETCH_LIMITS.byteSlots;
-    const parsed = zkFetchClaimSchema.parse({
+    const values = ZK_FETCH_DEFAULT_LIMITS.valueSlots;
+    const bytes = ZK_FETCH_DEFAULT_LIMITS.byteSlots;
+    const parsed = createZkFetchDefinition().claim.parse({
       ...claim,
       values: repeat(values, 0),
       byteValues: repeat(bytes, new Uint8Array(32)),
@@ -114,12 +127,15 @@ describe('zkFetch attestor input limits', () => {
   });
 
   it.each([
-    ['allowedHosts', { allowedHosts: repeat(ZK_FETCH_LIMITS.allowedHosts + 1, 'api.github.com') }],
+    [
+      'allowedHosts',
+      { allowedHosts: repeat(ZK_FETCH_DEFAULT_LIMITS.allowedHosts + 1, 'api.github.com') },
+    ],
     [
       'slots',
       {
         slots: Array.from(
-          { length: ZK_FETCH_LIMITS.valueSlots + ZK_FETCH_LIMITS.byteSlots + 1 },
+          { length: ZK_FETCH_DEFAULT_LIMITS.valueSlots + ZK_FETCH_DEFAULT_LIMITS.byteSlots + 1 },
           (_, slot) => ({ slot, name: 'data', parse: 'int' }),
         ),
       },
@@ -127,7 +143,7 @@ describe('zkFetch attestor input limits', () => {
     [
       'responseMatches',
       {
-        responseMatches: repeat(ZK_FETCH_LIMITS.responseMatches + 1, {
+        responseMatches: repeat(ZK_FETCH_DEFAULT_LIMITS.responseMatches + 1, {
           type: 'contains',
           value: 'x',
         }),
@@ -135,7 +151,9 @@ describe('zkFetch attestor input limits', () => {
     ],
     [
       'responseRedactions',
-      { responseRedactions: repeat(ZK_FETCH_LIMITS.responseRedactions + 1, { regex: 'x' }) },
+      {
+        responseRedactions: repeat(ZK_FETCH_DEFAULT_LIMITS.responseRedactions + 1, { regex: 'x' }),
+      },
     ],
   ])('rejects a policy whose %s exceeds its limit', async (field, override) => {
     await expectRejectedUnverified(
@@ -145,18 +163,29 @@ describe('zkFetch attestor input limits', () => {
   });
 
   it.each([
-    ['allowedHosts', { allowedHosts: [`${'a'.repeat(ZK_FETCH_LIMITS.hostLength - 2)}.io`] }],
+    [
+      'allowedHosts',
+      { allowedHosts: [`${'a'.repeat(ZK_FETCH_DEFAULT_LIMITS.hostLength - 2)}.io`] },
+    ],
     [
       'slots',
-      { slots: [{ slot: 0, name: 'd'.repeat(ZK_FETCH_LIMITS.slotNameLength + 1), parse: 'int' }] },
+      {
+        slots: [
+          { slot: 0, name: 'd'.repeat(ZK_FETCH_DEFAULT_LIMITS.slotNameLength + 1), parse: 'int' },
+        ],
+      },
     ],
     [
       'responseMatches',
-      { responseMatches: [{ type: 'regex', value: 'x'.repeat(ZK_FETCH_LIMITS.ruleLength + 1) }] },
+      {
+        responseMatches: [
+          { type: 'regex', value: 'x'.repeat(ZK_FETCH_DEFAULT_LIMITS.ruleLength + 1) },
+        ],
+      },
     ],
     [
       'responseRedactions',
-      { responseRedactions: [{ jsonPath: 'x'.repeat(ZK_FETCH_LIMITS.ruleLength + 1) }] },
+      { responseRedactions: [{ jsonPath: 'x'.repeat(ZK_FETCH_DEFAULT_LIMITS.ruleLength + 1) }] },
     ],
   ])('rejects a policy string in %s over its limit', async (field, override) => {
     await expectRejectedUnverified(
@@ -170,22 +199,110 @@ describe('zkFetch attestor input limits', () => {
   it.each([
     [
       'parameters',
-      { claim: { ...fixture.claim, parameters: oversized(ZK_FETCH_LIMITS.parametersLength) } },
+      {
+        claim: {
+          ...fixture.claim,
+          parameters: oversized(ZK_FETCH_DEFAULT_LIMITS.parametersLength),
+        },
+      },
     ],
-    ['context', { claim: { ...fixture.claim, context: oversized(ZK_FETCH_LIMITS.contextLength) } }],
-    ['provider', { claim: { ...fixture.claim, provider: oversized(ZK_FETCH_LIMITS.fieldLength) } }],
-    ['owner', { claim: { ...fixture.claim, owner: oversized(ZK_FETCH_LIMITS.fieldLength) } }],
+    [
+      'context',
+      { claim: { ...fixture.claim, context: oversized(ZK_FETCH_DEFAULT_LIMITS.contextLength) } },
+    ],
+    [
+      'provider',
+      { claim: { ...fixture.claim, provider: oversized(ZK_FETCH_DEFAULT_LIMITS.fieldLength) } },
+    ],
+    [
+      'owner',
+      { claim: { ...fixture.claim, owner: oversized(ZK_FETCH_DEFAULT_LIMITS.fieldLength) } },
+    ],
     [
       'identifier',
-      { claim: { ...fixture.claim, identifier: oversized(ZK_FETCH_LIMITS.fieldLength) } },
+      { claim: { ...fixture.claim, identifier: oversized(ZK_FETCH_DEFAULT_LIMITS.fieldLength) } },
     ],
-    ['signatureHex', { signatureHex: oversized(ZK_FETCH_LIMITS.fieldLength) }],
-    ['attestorAddress', { attestorAddress: oversized(ZK_FETCH_LIMITS.fieldLength) }],
-    ['responseText', { responseText: oversized(ZK_FETCH_LIMITS.responseTextLength) }],
+    ['signatureHex', { signatureHex: oversized(ZK_FETCH_DEFAULT_LIMITS.fieldLength) }],
+    ['attestorAddress', { attestorAddress: oversized(ZK_FETCH_DEFAULT_LIMITS.fieldLength) }],
+    ['responseText', { responseText: oversized(ZK_FETCH_DEFAULT_LIMITS.responseTextLength) }],
   ])('rejects an evidence %s over its limit', async (field, override) => {
     await expectRejectedUnverified(
       { evidence: { ...fixture, ...override } },
       new RegExp(`"${field}"[\\s\\S]*Too big`),
     );
+  });
+});
+
+describe('zkFetch attestor configured input limits', () => {
+  it('rejects input over a lowered limit before verifying or signing', async () => {
+    await expectRejectedUnverified(
+      { claim: { ...claim, values: repeat(3, 0), present: repeat(3, false) } },
+      /values has 3 entries; at most 2 allowed/,
+      { valueSlots: 2 },
+    );
+    await expectRejectedUnverified(
+      { evidence: { ...fixture, responseText: 'x'.repeat(11) } },
+      /"responseText"[\s\S]*Too big/,
+      { responseTextLength: 10 },
+    );
+  });
+
+  it('accepts input over a default limit once the operator raises it', async () => {
+    const count = ZK_FETCH_DEFAULT_LIMITS.valueSlots + 1;
+    const { attestor, verify } = watchedAttestor({ valueSlots: count });
+    // Past the parse, the fixture's policy has one slot, so `verify` rejects
+    // the extra slots; reaching it is what this test checks.
+    await expect(
+      attestor.attest({
+        policy,
+        evidence: fixture as never,
+        claim: { ...claim, values: repeat(count, 0), present: repeat(count, false) } as never,
+      }),
+    ).rejects.not.toThrow(/entries; at most/);
+    expect(verify).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the default for every limit left unset', async () => {
+    await expectRejectedUnverified(
+      {
+        policy: {
+          ...policy,
+          allowedHosts: repeat(ZK_FETCH_DEFAULT_LIMITS.allowedHosts + 1, 'a.io'),
+        },
+      },
+      /"allowedHosts"[\s\S]*Too big/,
+      { valueSlots: 128 },
+    );
+  });
+
+  it.each([
+    [{ valueSlots: 0 }, /'valueSlots' must be a positive integer, got 0/],
+    [{ hostLength: 1.5 }, /'hostLength' must be a positive integer, got 1.5/],
+    [{ fieldLength: Number.POSITIVE_INFINITY }, /'fieldLength' must be a positive integer/],
+    [{ valueSlot: 128 } as Partial<ZkFetchLimits>, /unknown zkFetch limit 'valueSlot'/],
+  ])('refuses the limits %o when the attestor is built', (limits, error) => {
+    expect(() =>
+      zkFetchAttestor({
+        id: 'attestor-0',
+        keyPair: { publicKey: 'pk', signer: { sign: () => 'sig' } },
+        witnessAddress: fixture.attestorAddress as string,
+        limits,
+      }),
+    ).toThrow(error);
+  });
+
+  it('leaves the exported schemas uncapped, so a client accepts what any attestor allows', () => {
+    const count = ZK_FETCH_DEFAULT_LIMITS.allowedHosts + 1;
+    expect(() =>
+      zkFetchPolicyHashOf({ ...policy, allowedHosts: repeat(count, 'api.github.com') }),
+    ).not.toThrow();
+    const values = ZK_FETCH_DEFAULT_LIMITS.valueSlots + 1;
+    expect(
+      zkFetchClaimSchema.parse({
+        ...claim,
+        values: repeat(values, 0),
+        present: repeat(values, false),
+      }).values,
+    ).toHaveLength(values);
   });
 });

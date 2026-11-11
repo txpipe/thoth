@@ -28,8 +28,30 @@ Serve `attestor.attest(input)` to dApps over the transport you choose;
 The instance takes no registry slot and no slot counts, so one instance
 serves any dApp ([why](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
 Each claim proposal carries the slot counts of the contract it is for, up to
-the [limits](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls#guarantees-and-limits)
-every zkFetch attestor enforces.
+your [input limits](#input-limits).
+
+### Input limits
+
+The instance rejects a request larger than its limits while parsing it,
+before it checks the proof or signs. `ZK_FETCH_DEFAULT_LIMITS` holds the
+defaults ([the list](../README.md#guarantees-and-limits)). Override any of
+them with `limits`; the rest keep their defaults:
+
+```ts
+const attestor = zkFetchAttestor({
+  id: 'zkFetch-strava-1',
+  keyPair,
+  witnessAddress: '0x…',
+  limits: { valueSlots: 128, responseTextLength: 8 * 1024 * 1024 },
+});
+```
+
+Raise a limit when a dApp you serve needs more slots or a bigger response,
+and lower one to fit your machine. A limit only refuses input; it never
+changes what you sign. Tell the dApps that pin you what your limits are: an
+attestor that refuses a request does not count toward the threshold.
+`zkFetchAttestor` throws on an unknown key or a value that is not a positive
+integer.
 
 ### The witness address
 
