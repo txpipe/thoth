@@ -96,10 +96,19 @@ Self-host a witness from the
 
 ```bash
 git clone --depth 1 https://github.com/reclaimprotocol/attestor-core
-cd attestor-core && npm install
+cd attestor-core
+npm install --ignore-scripts && npm rebuild re2
+node -e "require('re2')"   # fails if re2 did not build
 PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start   # ws://localhost:8001/ws
 ```
 
+- The witness needs the native `re2` module. It compiles your policy's regexes
+  with `re2`, and if `re2` fails to load it falls back to JavaScript `RegExp`
+  with only a `Failed to load RE2` warning in its log.
+- `--ignore-scripts` skips the dependencies' install scripts and the build,
+  which the witness doesn't need because it runs from source. `npm rebuild re2`
+  then runs the one install script it does need, which downloads a prebuilt
+  `re2` binary or, if none matches your platform, builds it with `node-gyp`.
 - `PRIVATE_KEY` is the witness's secp256k1 key. Keep it on the witness host
   and give the attestor only the address, as above.
 - `AUTHENTICATION_PUBLIC_KEY`, the matching compressed public key, makes the
@@ -111,9 +120,12 @@ PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start   # ws://localhost:8001/ws
 For two witnesses at once, `npm run witnesses --workspace=packages/zk-tls` runs
 `scripts/start-witnesses.sh`: it clones `attestor-core` at a pinned commit
 (`f451eb3`, the source of the 5.1.6 release `@thoth/zk-tls` depends on),
-installs it, starts two witnesses on ports 8001 and 8002, and prints each one's
-address. `WITNESS_REF`, `WITNESS_CLONE_DIR`, `WITNESS_PORT_A`/`B` and
-`WITNESS_KEY_A`/`B` override the defaults; Ctrl-C stops both.
+installs it as above, starts two witnesses on ports 8001 and 8002, and prints
+each one's address. It stops before starting them if `re2` doesn't load, and
+after starting them if either one logs `Failed to load RE2`, so the live check
+never runs on `RegExp`. `WITNESS_REF`, `WITNESS_CLONE_DIR`,
+`WITNESS_PORT_A`/`B` and `WITNESS_KEY_A`/`B` override the defaults; Ctrl-C
+stops both.
 
 The npm package ships no witness server, so the script pins a commit by hand.
 When Dependabot bumps `@reclaimprotocol/attestor-core`, `witness-pin.test.ts`

@@ -35,8 +35,26 @@ if [ "$(git -C "$CLONE_DIR" rev-parse HEAD)" != "$PINNED_REF" ]; then
 fi
 
 if [ ! -d "$CLONE_DIR/node_modules" ]; then
-  log "installing dependencies (install scripts skipped, no build needed)"
+  log "installing dependencies (install scripts skipped)"
   (cd "$CLONE_DIR" && npm install --ignore-scripts --no-audit --no-fund >/dev/null)
+fi
+
+# The witness compiles policy regexes with re2 and, when re2 fails to load,
+# falls back to RegExp with only a log warning. re2's is the one install script
+# the witness needs, so it is the only one that runs. The load check also
+# repairs a clone installed without re2.
+re2_error() {
+  (cd "$CLONE_DIR" && node -e "try { require('re2') } catch (error) { console.log(error.message.split('\n')[0]) }")
+}
+if [ -n "$(re2_error)" ]; then
+  log "building re2"
+  (cd "$CLONE_DIR" && npm rebuild re2 >/dev/null) || true
+fi
+RE2_ERROR=$(re2_error)
+if [ -n "$RE2_ERROR" ]; then
+  log "re2 does not load in $CLONE_DIR: $RE2_ERROR"
+  log "the witnesses would fall back to RegExp, so they are not started"
+  exit 1
 fi
 
 start_witness() {
@@ -76,6 +94,12 @@ if ! wait_for "$PORT_B"; then
   log "witness B failed to start, see $LOG_B"
   exit 1
 fi
+for logfile in "$LOG_A" "$LOG_B"; do
+  if grep -q 'Failed to load RE2' "$logfile"; then
+    log "a witness fell back to RegExp because re2 failed to load, see $logfile"
+    exit 1
+  fi
+done
 
 witness_address() {
   node -e "fetch('http://localhost:' + process.argv[1] + '/address').then(async response => {
