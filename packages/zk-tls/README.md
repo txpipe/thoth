@@ -118,6 +118,19 @@ What the client checks:
 - `collect` counts one signature per registry slot inside one exact-message group, starts `threshold` attempts, and contacts a spare only when the attempts in flight cannot reach the threshold any more. A spare that is never needed does not receive the request. Set `expiresAt` to at least twice `attestorTimeoutMs` after the start, so a spare can still prove after one attestor hangs.
 - Evidence that carries a secret header value, as written, percent-encoded, or JSON-escaped, is refused before it reaches an attestor. A very short secret can match unrelated text and drop a healthy attestor as `secret`.
 
+When `collect` drops an attestor, its entry in `failures` names one reason:
+
+| Reason | What failed | What to do |
+|--------|-------------|------------|
+| `transport` | The witness was unreachable, or the TLS connection to the source, its certificate, or the network failed. | Check the witness URL and that the witness can reach the source. |
+| `no-match` | The response failed the policy's `responseMatches`, as the client or the witness checked it. A witness reports every claim it refuses this way, a refused proof or timestamp included. | Check the policy against what the source returns. The client runs the same check first, so a witness that refuses what the client accepted usually runs another attestor-core version. |
+| `evidence` | Proving failed otherwise, or the evidence did not fit the request, the policy, the window or the slot counts. | Check the request and the policy. |
+| `secret` | The evidence carried a secret header value. | Check that the response does not echo the secret and the prover redacts it. A very short secret can match unrelated text. |
+| `attestation` | The attestor refused, or its answer did not verify. | Check the attestor's logs and the trusted set's keys. |
+| `timeout` | The attempt passed `attestorTimeoutMs` or `expiresAt`. | Raise the limits, or check the slow witness or attestor. |
+
+A custom `ZkFetchProver` reports `transport` and `no-match` by throwing `ZkFetchProverError`; any other error becomes `evidence`.
+
 What it does not check, and what your app must do:
 
 - The window is not the exact fetch time: the fetch happened no earlier than about 10 minutes before `windowStart`. Do not read it as the time of the fact ([Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) explains why).
@@ -126,7 +139,7 @@ What it does not check, and what your app must do:
 - `responseText` is the transcript as the client saw it. The witness does not sign it, and no check reads it.
 - The secret header check cannot recognize every transformation of a secret. The prover must still redact.
 - An attempt that times out keeps running in the background: Reclaim's `createClaimOnAttestor` takes no abort signal. Its late result is never counted.
-- Errors carry registry slots and step reasons, never remote error text.
+- Errors carry registry slots and reasons, never remote error text.
 - `threshold` is yours to set; the client cannot read the contract's N.
 - The claim's values are not source-bound on-chain unless your circuit recomputes `subjectHash` from the subject fields (ADR 0001).
 - Reusing a holder secret links claims. Thoth promises no cross-claim unlinkability (ADR 0004).

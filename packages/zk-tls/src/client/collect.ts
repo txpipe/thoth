@@ -22,14 +22,32 @@ import {
   proveWith,
   SecretHeaderError,
   windowInOrder,
+  ZkFetchProverError,
 } from './proposal.js';
 
 /** Why one attestor's attempt was dropped. Carries no remote error text. */
 export interface ZkFetchAttestorFailure {
   /** The attestor's registry slot. */
   readonly registryIndex: number;
-  /** The step that failed. */
-  readonly reason: 'evidence' | 'secret' | 'attestation' | 'timeout';
+  /**
+   * What failed, and where to look:
+   *
+   * - `transport`: the witness was unreachable, or the TLS connection to the
+   *   source, its certificate, or the network failed. Check the witness URL
+   *   and that the witness can reach the source.
+   * - `no-match`: the response failed the policy's `responseMatches`. Check the
+   *   policy against what the source returns. A witness reports every claim it
+   *   refuses this way, a refused proof or timestamp included. The client runs
+   *   the same check first, so a witness that refuses what the client accepted
+   *   usually runs another attestor-core version.
+   * - `evidence`: proving failed otherwise, or the evidence did not fit the
+   *   request, the policy, the window or the slot counts.
+   * - `secret`: the evidence carried a secret header value. Check that the
+   *   response does not echo the secret and the prover redacts it.
+   * - `attestation`: the attestor refused, or its answer did not verify.
+   * - `timeout`: the attempt passed `attestorTimeoutMs` or `expiresAt`.
+   */
+  readonly reason: 'transport' | 'no-match' | 'evidence' | 'secret' | 'attestation' | 'timeout';
 }
 
 /** An attestment that reached the threshold, plus the attestors that failed. */
@@ -110,6 +128,17 @@ class AttemptError extends Error {
   }
 }
 
+/** The reason an error carries, or `fallback` for any other error. */
+const reasonOf = (error: unknown, fallback: FailureReason): FailureReason => {
+  if (error instanceof SecretHeaderError) {
+    return 'secret';
+  }
+  if (error instanceof ZkFetchProverError) {
+    return error.reason;
+  }
+  return fallback;
+};
+
 /** Validate the options; resolve their ids to one candidate per registry slot. */
 const parseOptions = <PK>(
   trusted: TrustedSet<ZkFetchDefinition, PK>,
@@ -151,16 +180,17 @@ const runAttempt = async <V extends number, PK, S>(
 
   /**
    * Run one step, replacing any error with `reason`. A secret-header refusal
-   * keeps its own reason, so a leak is not reported as a failed proof. The
-   * clock check also catches a step that blocked the event loop past the
-   * deadline.
+   * and a prover's classified failure keep their own reason, so a leak or an
+   * unreachable witness is not reported as a failed proof. Only the reason
+   * survives, never the error's text. The clock check also catches a step that
+   * blocked the event loop past the deadline.
    */
   const step = async <T>(reason: FailureReason, run: () => Promise<T>): Promise<T> => {
     let result: T;
     try {
       result = await run();
     } catch (error) {
-      throw new AttemptError(error instanceof SecretHeaderError ? 'secret' : reason);
+      throw new AttemptError(reasonOf(error, reason));
     }
     if (Date.now() >= deadline) {
       throw new AttemptError('timeout');

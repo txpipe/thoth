@@ -33,6 +33,7 @@ import {
   toCanonicalEvidence,
   type ZkFetchAttestorFailure,
   type ZkFetchProver,
+  ZkFetchProverError,
   type ZkFetchRequest,
   zkFetchClient,
 } from '@thoth/zk-tls/client';
@@ -554,6 +555,27 @@ describe('zkFetch attestor + client', () => {
     expect(result.failures).toEqual([{ registryIndex: 0, reason: 'evidence' }]);
     expect(JSON.stringify(result.failures)).not.toContain('private-token');
   });
+
+  it.each(['transport', 'no-match'] as const)(
+    'reports a prover %s failure under its own reason',
+    async (reason) => {
+      const failing = new ZkFetchProverError(reason, { cause: new Error('remote detail') });
+      const client = clientWith({
+        provers: {
+          ...provers,
+          'attestor-0': {
+            prove: async () => {
+              throw failing;
+            },
+          },
+        },
+      });
+      const result = await client.collect(collectionRequest, options());
+      expect(slots(result)).toEqual([1, 2]);
+      expect(result.failures).toEqual([{ registryIndex: 0, reason }]);
+      await expect(client.proveReq(collectionRequest, binding())).rejects.toBe(failing);
+    },
+  );
 
   it.each([
     { encoding: 'plain', secret: 'Bearer private-token', encode: (json: string) => json },
