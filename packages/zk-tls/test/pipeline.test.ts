@@ -30,7 +30,9 @@ import {
   toCanonicalEvidence,
   type ZkFetchAttestorFailure,
   type ZkFetchProver,
+  ZkFetchProverError,
   type ZkFetchRequest,
+  ZkFetchThresholdError,
   zkFetchClient,
 } from '@thoth/zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
@@ -539,6 +541,57 @@ describe('zkFetch attestor + client', () => {
     expect(slots(result)).toEqual([1, 2]);
     expect(result.failures).toEqual([{ registryIndex: 0, reason: 'evidence' }]);
     expect(JSON.stringify(result.failures)).not.toContain('private-token');
+  });
+
+  it.each(['transport', 'no-match'] as const)(
+    'reports a prover %s failure under its own reason',
+    async (reason) => {
+      const failing = new ZkFetchProverError(reason, { cause: new Error('remote detail') });
+      const client = clientWith({
+        provers: {
+          ...provers,
+          'attestor-0': {
+            prove: async () => {
+              throw failing;
+            },
+          },
+        },
+      });
+      const result = await client.collect(collectionRequest, options());
+      expect(slots(result)).toEqual([1, 2]);
+      expect(result.failures).toEqual([{ registryIndex: 0, reason }]);
+      await expect(client.proveReq(collectionRequest, binding())).rejects.toBe(failing);
+    },
+  );
+
+  it('keeps a prover reason only from the proving step, and only a known one', async () => {
+    const unknown = new ZkFetchProverError('transport');
+    Object.defineProperty(unknown, 'reason', { value: 'remote detail' });
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async () => {
+            throw unknown;
+          },
+        },
+      },
+      transport: {
+        request: async (attestor, input) => {
+          if (attestor.id === 'attestor-1') {
+            throw new ZkFetchProverError('transport');
+          }
+          return transport.request(attestor, input);
+        },
+      },
+    });
+    const error = await client.collect(collectionRequest, options()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ZkFetchThresholdError);
+    const { failures } = error as ZkFetchThresholdError;
+    expect([...failures].sort((a, b) => a.registryIndex - b.registryIndex)).toEqual([
+      { registryIndex: 0, reason: 'evidence' },
+      { registryIndex: 1, reason: 'attestation' },
+    ]);
   });
 
   it.each([
