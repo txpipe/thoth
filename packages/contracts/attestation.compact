@@ -1,5 +1,5 @@
 // Thoth attestation module: verifies an N-of-M attested `Claim`, rejects
-// replays and out-of-window claims, and vaults it under
+// claims for another app, replays and out-of-window claims, and vaults it under
 // `persistentCommit(claim, rand)`. The registry counts the signatures that
 // verify; this module applies the threshold #N and defines the signed message.
 //
@@ -79,6 +79,9 @@ module attestation<#K, #V, #B, #N, #M> {
     bytePresent: Vector<B, Boolean>;
   }
 
+  /// The app this contract accepts claims for, sealed by the top-level
+  /// constructor (ADR 0013).
+  export sealed ledger appId: Bytes<32>;
   /// Seconds after `windowEnd` a claim stays submittable, sealed by the
   /// top-level constructor. 0 does not disable the check: the claim must then
   /// land inside its window.
@@ -182,6 +185,7 @@ module attestation<#K, #V, #B, #N, #M> {
   export circuit verifyAttestation(): [] {
     const [claim, sigs, rand] = getAttestationWitness();
     assert(claim.version == 1, "Unsupported claim version");
+    assert(claim.appId == appId, "App id mismatch");
     assert(policyHashes.member(disclose(claim.policyHash)), "Unaccepted policy");
 
     const msg = buildMessage(claim);

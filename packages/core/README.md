@@ -94,7 +94,7 @@ What the package checks:
 What it does not do:
 
 - It verifies no evidence and signs nothing. `verify` is the kind's job; signing is `@thoth/attestor`'s.
-- It does not check `appId`. An app that must refuse another app's claims compares it in its own predicate.
+- It does not check `appId`. The contract checks it against the app id it seals at deploy.
 - It does not derive or check the salt. Your kind's law derives it from the evidence and keeps it secret ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#5-the-claim)).
 - It does not bind a claim context to evidence. `claimContextDigestOf` only hashes it; your kind has its [witness](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles) sign the digest and its `verify` check it ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#5-the-claim)).
 

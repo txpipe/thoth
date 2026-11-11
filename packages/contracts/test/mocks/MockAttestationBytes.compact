@@ -11,7 +11,7 @@ import "../../attestor_registry"<3, 24> prefix R_;
 
 export { B_Claim, B_ClaimEntry };
 
-export { B_freshnessWindow, B_maxWindow, B_policyHashes, B_claimsVault, B_nullifiers };
+export { B_appId, B_freshnessWindow, B_maxWindow, B_policyHashes, B_claimsVault, B_nullifiers };
 
 export circuit verifyAttestation(): [] {
   B_verifyAttestation();
@@ -48,6 +48,8 @@ export circuit openAndReadBytes(id: Bytes<32>, expected: Bytes<32>): [] {
   assert(Bytes[...c.byteHalves[0], ...c.byteHalves[1]] == expected, "byteValue[0] mismatch");
 }
 
+witness seedAppId(): Bytes<32>;
+
 witness freshWindow(): Uint<64>;
 
 witness maxWin(): Uint<64>;
@@ -55,6 +57,7 @@ witness maxWin(): Uint<64>;
 witness seedPolicies(): Vector<2, Bytes<32>>;
 
 constructor() {
+  B_appId = disclose(seedAppId());
   B_freshnessWindow = disclose(freshWindow());
   B_maxWindow = disclose(maxWin());
   for (const h of seedPolicies()) {

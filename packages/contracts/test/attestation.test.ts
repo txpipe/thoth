@@ -10,6 +10,7 @@ import {
   idOf,
   makeClaim,
   makeNotaryKey,
+  OTHER_APP_ID,
   POLICY_A,
   POLICY_B,
   signClaim,
@@ -234,6 +235,25 @@ describe('mock attestation', () => {
       ).rejects.toThrow('Unsupported claim version');
     });
 
+    it("rejects a claim stored in one app when replayed into another app's contract", async () => {
+      const claim = makeClaim();
+      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      await sim.call('verifyAttestation', ps(signed));
+      const otherApp = await MockAttestationSim.create(createPrivateState(holder), registryKeys, {
+        appId: OTHER_APP_ID,
+      });
+      await expect(otherApp.call('verifyAttestation', ps(signed))).rejects.toThrow(
+        'App id mismatch',
+      );
+    });
+
+    it('seals the deploy-time app id', async () => {
+      const deployed = await MockAttestationSim.create(createPrivateState(holder), registryKeys, {
+        appId: OTHER_APP_ID,
+      });
+      expect(deployed.ledgerView().A_appId).toEqual(OTHER_APP_ID);
+    });
+
     it('rejects a claim whose policyHash is not in the sealed set', async () => {
       const claim = makeClaim({ policyHash: UNSEALED_POLICY });
       const signed = signClaim(claim, notaryKeys, randomBytes(32));
@@ -302,7 +322,6 @@ describe('mock attestation', () => {
     });
 
     it.each([
-      { name: 'appId', mutate: (c: A_Claim) => ({ ...c, appId: flip(c.appId, 31) }) },
       { name: 'policyHash', mutate: (c: A_Claim) => ({ ...c, policyHash: POLICY_B }) },
       {
         name: 'subjectHash',
