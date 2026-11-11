@@ -2,10 +2,12 @@
 # Start two Reclaim witnesses (attestor-core sidecars) for the live check in
 # packages/zk-tls/test/live.test.ts. Runs in the foreground; Ctrl-C stops both.
 #
-# The clone is pinned so the live check does not drift with upstream. Keep the
-# version equal to @reclaimprotocol/attestor-core in package.json, and bump the
-# commit with it once a newer witness is verified. Upstream's package.json still
-# reads 5.1.4 at this commit; it carries the same source as the npm 5.1.6 release.
+# The clone is pinned so the live check does not drift with upstream. Upstream
+# has no release tags, so the commit is set by hand: PINNED_VERSION must equal
+# @reclaimprotocol/attestor-core in package.json (test/witness-pin.test.ts fails
+# otherwise), and PINNED_REF moves with it once a newer witness is verified.
+# Upstream's package.json still reads 5.1.4 at this commit; it carries the same
+# source as the npm 5.1.6 release.
 set -euo pipefail
 
 REPO=https://github.com/reclaimprotocol/attestor-core

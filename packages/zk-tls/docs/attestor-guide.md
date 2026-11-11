@@ -111,6 +111,11 @@ installs it, starts two witnesses on ports 8001 and 8002, and prints each one's
 address. `WITNESS_REF`, `WITNESS_CLONE_DIR`, `WITNESS_PORT_A`/`B` and
 `WITNESS_KEY_A`/`B` override the defaults; Ctrl-C stops both.
 
+The npm package ships no witness server, so the script pins a commit by hand.
+When Dependabot bumps `@reclaimprotocol/attestor-core`, `witness-pin.test.ts`
+fails until you set `PINNED_VERSION` and `PINNED_REF` in the script to the
+matching release and run the live check against it.
+
 ## Witness agreement and upgrades
 
 Every operator in one trusted set must run the same witness version and
