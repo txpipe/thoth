@@ -20,6 +20,7 @@ import {
   claimUrl,
   deriveClaimFromEvidence,
   parsedEvidenceView,
+  signedClaimContextDigestOf,
   ZK_FETCH_CLAIM_CONTEXT_KEY,
   zkFetchClaimContextDigestOf,
   zkFetchEvidenceSchema,
@@ -82,26 +83,16 @@ const assertEvidenceMatchesRequest = (evidence: ZkFetchEvidence, request: ZkFetc
  * compares the client's own value; recomputing the digest stays the attestor's
  * job.
  *
- * @throws if the evidence's signed context carries another digest.
+ * @throws if the evidence's signed context is not JSON, or carries no digest
+ *   or another one.
  */
 const assertEvidenceMatchesClaimContext = (
   evidence: ZkFetchEvidence,
   request: ZkFetchRequest,
 ): void => {
-  const bound = request.context?.[ZK_FETCH_CLAIM_CONTEXT_KEY];
-  if (bound === undefined) {
-    return;
-  }
-  let signed: unknown;
-  try {
-    signed = (JSON.parse(evidence.claim.context) as Record<string, unknown> | null)?.[
-      ZK_FETCH_CLAIM_CONTEXT_KEY
-    ];
-  } catch {
-    // Not JSON: the claim proposal and the attestor refuse it.
-    return;
-  }
-  if (signed !== bound) {
+  if (
+    signedClaimContextDigestOf(evidence.claim) !== request.context?.[ZK_FETCH_CLAIM_CONTEXT_KEY]
+  ) {
     throw new Error('prover returned evidence for another claim context than requested');
   }
 };
