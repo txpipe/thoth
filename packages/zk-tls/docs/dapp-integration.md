@@ -249,6 +249,56 @@ the order of a rule's keys, empty redaction keys and an absent array are inert. 
 Reclaim's `invert` and `hash` and any `{{param}}` template, so evidence whose
 signed rules carry them is refused too.
 
+### Regex subset
+
+Reclaim compiles every `regex` match and every non-empty redaction `regex`
+case-insensitively, with `.` matching line breaks. It uses RE2 when its
+optional native `re2` module has loaded, and JavaScript's `RegExp` otherwise,
+with or without the `u` flag depending on the attestor-core version. Whether
+`re2` loads differs between machines, and it loads asynchronously, so one
+process can use both engines. `zkFetchPolicySchema` therefore accepts only
+regexes in a subset that every one of these engines compiles and reads the same
+way. It names the first construct outside it:
+
+```
+regex uses lookahead (?= at index 3, which the regex subset does not allow
+```
+
+The subset is an allowlist. A regex may use:
+
+| Construct | Allowed |
+|-----------|---------|
+| Literals | printable ASCII, space to `~`, except the syntax characters `^ $ \ . * + ? ( ) [ ] { } \|` |
+| Escapes | `\` before a syntax character or `/`; `\t \n \r \f \v`; `\x00` to `\x7F` |
+| Character classes | `.`, `\d \D \w \W \s \S` |
+| Brackets | `[…]` and `[^…]` holding literals, escapes, `\-`, character classes and ranges such as `a-z`; a bare `-` only first, last or in a range |
+| Anchors | `^`, `$`, `\b`, `\B` |
+| Groups | `(…)`, `(?:…)`, and `(?<name>…)` with an ASCII identifier used once |
+| Quantifiers | `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`, each optionally lazy with a trailing `?` |
+
+Three rules limit how these combine:
+
+- A quantifier cannot apply to a capture group or to a group that holds one:
+  `(?:(?<x>a)|b)+` is refused. RegExp clears the captures on every repetition
+  and RE2 keeps the last ones.
+- A quantifier cannot apply to something that can match the empty string:
+  `(?:a*)+`, `(?:|a)*` and `^*` are refused. The engines handle an empty
+  repetition differently.
+- With every counted quantifier written out at its largest count (its minimum
+  when it has no maximum), the regex holds at most 1000 characters, classes,
+  escapes and anchors. `.{1000}` is accepted and `a{1000}b` is not, because RE2
+  refuses large programs.
+
+Everything else is refused, among it lookahead and lookbehind, backreferences
+(`\1`, `\k<name>`), `\p{…}` and `\P{…}`, `(?P<name>…)`, inline flags such as
+`(?i)`, `\A`, `\z`, `A`, POSIX classes such as `[[:alpha:]]`, and any
+non-ASCII character. Write a literal syntax character escaped (`\{`, `\]`),
+never bare.
+
+The subset fixes how the pattern is read, not the text it reads: response
+text that isn't ASCII can still match differently, as the README's
+[Guarantees and limits](../README.md#guarantees-and-limits) describes.
+
 ### Body policy
 
 `bodyPolicy` is required and part of the policy hash. It decides which signed
