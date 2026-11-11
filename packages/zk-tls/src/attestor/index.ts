@@ -16,6 +16,7 @@ import {
   claimRequestOf,
   deriveClaimFromEvidence,
   isByteRule,
+  lookupDisclosedValue,
   parsedEvidenceView,
   parseSlotValue,
   signedClaimContextDigestOf,
@@ -94,7 +95,7 @@ export const assertClaimMatchesDisclosures = (options: {
   const { claim, disclosures, policy } = options;
   const valueSlots = claim.values.length;
   for (const slot of policy.slots) {
-    const raw = disclosures[slot.name];
+    const raw = lookupDisclosedValue(disclosures, slot.name);
     const proposedPresent = claim.present[slot.slot] ?? false;
     if (isByteRule(slot.parse)) {
       const parsed = raw === undefined ? null : parseSlotValue({ ...slot, parse: slot.parse }, raw);

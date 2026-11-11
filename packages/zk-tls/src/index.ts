@@ -594,6 +594,21 @@ const disclosedValuesOf = (claim: ProviderClaimData): Readonly<Record<string, st
   return context.extractedParameters ?? {};
 };
 
+/**
+ * The value disclosed under a group name, or `undefined` when none was.
+ *
+ * Disclosures are plain objects parsed from JSON, so an indexed read of a name
+ * like `__proto__` returns `Object.prototype`, which a `bytes` slot would sign.
+ * Only an own string property counts as disclosed.
+ */
+export const lookupDisclosedValue = (
+  disclosures: Readonly<Record<string, string>>,
+  name: string,
+): string | undefined => {
+  const value: unknown = Object.hasOwn(disclosures, name) ? disclosures[name] : undefined;
+  return typeof value === 'string' ? value : undefined;
+};
+
 /** Deterministic JSON for hashing; `bigint` and `Uint8Array` survive. Rejects cycles. */
 const canonicalJson = (value: unknown): string => {
   const seen = new WeakSet<object>();
@@ -876,7 +891,7 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
     () => new Uint8Array(BYTE_VALUE_BYTES),
   );
   for (const slot of policy.slots) {
-    const raw = verified.disclosedValues[slot.name];
+    const raw = lookupDisclosedValue(verified.disclosedValues, slot.name);
     if (raw === undefined) {
       continue;
     }
@@ -990,7 +1005,7 @@ export const assertEvidenceMatchesPolicy = (
     if (slot.optional) {
       continue;
     }
-    const raw = verified.disclosedValues[slot.name];
+    const raw = lookupDisclosedValue(verified.disclosedValues, slot.name);
     if (raw === undefined || parseSlotValue(slot, raw) === null) {
       throw new Error(
         `policy requires a certifiable value for "${slot.name}" but the proof did not disclose a parseable value`,
