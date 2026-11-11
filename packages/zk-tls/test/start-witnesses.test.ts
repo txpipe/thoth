@@ -1,6 +1,6 @@
 // Runs scripts/start-witnesses.sh offline against a fake attestor-core clone whose
 // re2 and witness server the test controls, to check the script's startup gates.
-import { execFileSync, spawn } from 'node:child_process';
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -29,9 +29,12 @@ createServer((_, response) => {
 
 // A git hook, such as the pre-push test run, exports GIT_DIR and friends. They
 // would point these git calls, and the script's, at this repository instead.
-const baseEnv = Object.fromEntries(
-  Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
-);
+// The caller's global git config and npm cache stay out too.
+const baseEnv: Record<string, string | undefined> = {
+  ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'))),
+  GIT_CONFIG_GLOBAL: '/dev/null',
+  GIT_CONFIG_NOSYSTEM: '1',
+};
 
 let root: string;
 let cloneDir: string;
@@ -39,6 +42,7 @@ let ref: string;
 
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), 'thoth-start-witnesses-'));
+  baseEnv.npm_config_cache = join(root, 'npm-cache');
   cloneDir = join(root, 'attestor-core');
   mkdirSync(join(cloneDir, 'node_modules/re2'), { recursive: true });
   mkdirSync(join(cloneDir, 'src/scripts'), { recursive: true });
@@ -51,12 +55,17 @@ beforeAll(() => {
   git('init', '--quiet');
   git(
     ...['-c', 'user.name=test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false'],
-    ...['commit', '--allow-empty', '--quiet', '-m', 'fake'],
+    ...['commit', '--allow-empty', '--no-verify', '--quiet', '-m', 'fake'],
   );
   ref = git('rev-parse', 'HEAD');
 });
 
+// A test that times out leaves its script running; stop it before the
+// directory its witnesses run from is removed.
+const running = new Set<ChildProcess>();
+
 afterAll(() => {
+  for (const child of running) child.kill('SIGTERM');
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -106,6 +115,8 @@ function run(env: Record<string, string>, stopOn?: string): Promise<Run> {
     child.stderr.on('data', onData);
     child.once('error', reject);
     child.once('close', (code) => resolve({ code, output }));
+    running.add(child);
+    child.once('close', () => running.delete(child));
   });
 }
 
@@ -116,7 +127,7 @@ describe.concurrent('start-witnesses.sh', { timeout: 30_000 }, () => {
     const { code, output } = await run({ ...ports, FAKE_WITNESS: 'serve' }, 'Ctrl-C stops');
     expect(output).toContain(`witness A public address: 0xfake${a}`);
     expect(output).toContain(`witness B public address: 0xfake${b}`);
-    expect(code).toBe(130);
+    expect(code).toBe(143);
     const [serverA, serverB] = [await listen(a), await listen(b)];
     serverA.close();
     serverB.close();

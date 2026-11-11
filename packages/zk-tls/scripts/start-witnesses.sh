@@ -96,17 +96,22 @@ wait_for() {
   return 1
 }
 
+# Set the traps before starting the witnesses, so a signal in between cannot
+# leave them running.
+WITNESS_A_PID=
+WITNESS_B_PID=
+cleanup() {
+  kill ${WITNESS_A_PID:+"$WITNESS_A_PID"} ${WITNESS_B_PID:+"$WITNESS_B_PID"} 2>/dev/null || true
+  wait 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 start_witness "$KEY_A" "$PORT_A" "$LOG_A" &
 WITNESS_A_PID=$!
 start_witness "$KEY_B" "$PORT_B" "$LOG_B" &
 WITNESS_B_PID=$!
-
-cleanup() {
-  kill "$WITNESS_A_PID" "$WITNESS_B_PID" 2>/dev/null || true
-  wait 2>/dev/null || true
-}
-trap cleanup EXIT
-trap 'exit 130' INT TERM
 
 if ! wait_for "$PORT_A" "$WITNESS_A_PID"; then
   log "witness A failed to start, see $LOG_A"

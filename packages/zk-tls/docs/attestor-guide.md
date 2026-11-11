@@ -99,13 +99,16 @@ git clone --depth 1 https://github.com/reclaimprotocol/attestor-core
 cd attestor-core
 npm install --ignore-scripts --include=dev
 npm rebuild re2 --ignore-scripts=false
-node -e "require('re2')" && # refuses to start the witness without re2
-  PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start   # ws://localhost:8001/ws
+node -e "require('re2')" &&
+  PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start
 ```
+
+The witness listens on `ws://localhost:8001/ws`.
 
 - The witness needs the native `re2` module. It compiles your policy's regexes
   with `re2`. If `re2` doesn't load, it falls back to JavaScript `RegExp` and
-  only logs a `Failed to load RE2` warning.
+  only logs a `Failed to load RE2` warning. The `require('re2')` check before
+  `npm run start` stops the start instead.
 - `--ignore-scripts` skips every install script, including the witness's own
   build. The witness runs from source, so the only script it needs is
   `re2`'s.
