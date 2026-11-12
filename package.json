@@ -26,6 +26,9 @@
     "check:fix:biome": "biome check . --write",
     "check:compact": "compact format -c packages/contracts",
     "check:fix:compact": "compact format packages/contracts",
+    "changeset": "changeset",
+    "changeset:status": "changeset status --since=origin/main",
+    "changeset:version": "changeset version && npm install --package-lock-only",
     "prepare": "husky"
   },
   "keywords": [
@@ -36,6 +39,7 @@
   ],
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",
+    "@changesets/cli": "3.0.3",
     "@midnight-ntwrk/compact-runtime": "0.21.0",
     "@types/node": "^26.2.0",
     "husky": "^9.1.7",

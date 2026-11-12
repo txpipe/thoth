@@ -33,6 +33,7 @@ thoth/
 │   │   └── test/                      # simulator tests, mock contracts, helpers
 │   ├── core/                   # @txpipe/thoth-core: keyless claim and law types
 │   └── zk-tls/                 # @txpipe/thoth-zk-tls: the zkFetch kind (attestor, client, prover)
+├── .changeset/                 # pending changesets and their config
 ├── docs/
 │   ├── DESIGN.md               # architecture, the claim and its wire order
 │   ├── kind-author-guide.md    # how to add an attestor kind
@@ -60,6 +61,8 @@ Run them from the repo root:
 | `npm run build` | Builds every package into its `dist/` |
 | `npm run compact` | Compiles the mock contracts with proving keys |
 | `npm run compact:no-zk` | Compiles the mock contracts without proving keys (faster) |
+| `npm run changeset` | Adds a changeset for your change |
+| `npm run changeset:status` | Lists the changesets on your branch and the bumps they make |
 
 For one package: `npm run <script> --workspace=packages/<name>`.
 
@@ -72,6 +75,23 @@ N type argument(s)".
 `packages/zk-tls/test/live.test.ts` runs against two real witnesses and skips
 unless `WITNESS_URLS` names them; see the attestor guide's
 [live check](packages/zk-tls/docs/attestor-guide.md#live-check).
+
+## Adding a changeset
+
+A change that a user of `@txpipe/thoth-core`, `-attestor`, `-client` or
+`-zk-tls` would notice needs a changeset, which becomes the package's version
+bump and changelog entry. Add one with your pull request:
+
+```bash
+npm run changeset
+```
+
+Pick the packages you changed and the bump for each, and write the entry for
+the people who use the package. While a package is below `1.0.0`, a breaking
+change is a `minor` bump. Commit the file it writes to `.changeset/`. Each
+package versions on its own; a package that depends on a bumped one gets a
+`patch` bump. `@txpipe/thoth-contracts` is private and takes no changesets.
+A change with no user-facing effect, such as a test or a CI tweak, needs none.
 
 ## CI and commits
 

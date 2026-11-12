@@ -57,6 +57,11 @@ file.
 - **Claim types are keyless.** `@txpipe/thoth-core` carries no signing key; anything
   that commits to a message delegates to the kind's `message()`. Keep it that
   way.
+- **Published packages carry a changeset.** A user-facing change to `core`,
+  `attestor`, `client` or `zk-tls` adds one (`npm run changeset`); internal
+  dependencies between them use a `^` range, never `*`, which changesets
+  would publish as is
+  ([`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-changeset)).
 - **`registryIndex` is positional and app-owned.** `attestor_registry.compact`
   verifies signatures positionally (`signatures[i]` against `keys[i]`). The slot
   lives only on the client's `TrustedSet` member (`{ attestor, registryIndex }`,

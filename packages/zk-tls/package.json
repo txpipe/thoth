@@ -30,6 +30,10 @@
     "dist",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -56,9 +60,9 @@
   "dependencies": {
     "@reclaimprotocol/attestor-core": "5.1.6",
     "@reclaimprotocol/tls": "0.1.5",
-    "@txpipe/thoth-attestor": "*",
-    "@txpipe/thoth-client": "*",
-    "@txpipe/thoth-core": "*",
+    "@txpipe/thoth-attestor": "^0.0.0",
+    "@txpipe/thoth-client": "^0.0.0",
+    "@txpipe/thoth-core": "^0.0.0",
     "re2": "1.27.0",
     "zod": "^4.6.7"
   },
