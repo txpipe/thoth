@@ -116,11 +116,13 @@ you certify a reading the evidence does not support.
 ## Running a Reclaim witness
 
 Self-host a witness from the
-[`attestor-core`](https://github.com/reclaimprotocol/attestor-core) repo:
+[`attestor-core`](https://github.com/reclaimprotocol/attestor-core) repo, at
+the commit `@thoth/zk-tls` pins:
 
 ```bash
-git clone --depth 1 https://github.com/reclaimprotocol/attestor-core
+git clone --filter=blob:none https://github.com/reclaimprotocol/attestor-core
 cd attestor-core
+git checkout --detach f451eb3c3038efcf7c11b2497d7540d8f1e95752
 npm install --ignore-scripts --include=dev
 npm rebuild re2 --ignore-scripts=false
 node -e "require('re2')" &&
@@ -129,6 +131,8 @@ node -e "require('re2')" &&
 
 The witness listens on `ws://localhost:8001/ws`.
 
+- The commit is the source of the 5.1.6 release `@thoth/zk-tls` depends on.
+  Upstream has no release tags, so the pin is a commit.
 - The witness needs the native `re2` module. It compiles your policy's regexes
   with `re2`. If `re2` doesn't load, it falls back to JavaScript `RegExp` and
   only logs a `Failed to load RE2` warning. The `require('re2')` check before
@@ -150,10 +154,9 @@ The witness listens on `ws://localhost:8001/ws`.
   at a reverse proxy.
 
 For two witnesses at once, run `npm run witnesses --workspace=packages/zk-tls`.
-It runs `scripts/start-witnesses.sh`, which clones `attestor-core` at a pinned
-commit: `f451eb3`, the source of the 5.1.6 release `@thoth/zk-tls` depends on.
-The script installs the clone as above and starts two witnesses on ports 8001
-and 8002. It stops with an error if `re2` doesn't load or a port is already in
+It runs `scripts/start-witnesses.sh`, which clones `attestor-core` at the same
+commit. The script installs the clone as above and starts two witnesses on
+ports 8001 and 8002. It stops with an error if `re2` doesn't load or a port is already in
 use. It also stops if a witness logs `Failed to load RE2` or exits. Once both
 witnesses answer, it prints each one's address. `WITNESS_REF`,
 `WITNESS_CLONE_DIR`, `WITNESS_PORT_A`/`B` and `WITNESS_KEY_A`/`B` override the
@@ -162,7 +165,9 @@ defaults. Ctrl-C stops both witnesses.
 The npm package ships no witness server, so the script pins a commit by hand.
 When Dependabot bumps `@reclaimprotocol/attestor-core`, `witness-pin.test.ts`
 fails until you set `PINNED_VERSION` and `PINNED_REF` in the script to the
-matching release and run the live check against it.
+matching release. `PINNED_REF` must be a full 40-character commit that no
+earlier release used. Run the live check against it, then record the commit in
+the test's `VERIFIED_PINS` and in the manual setup above.
 
 ## Witness agreement and upgrades
 
