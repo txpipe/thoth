@@ -147,7 +147,7 @@ What it does not check, and what your app must do:
 - `responseText` is the transcript as the client saw it. The witness does not sign it, and no check reads it.
 - The secret header check cannot recognize every transformation of a secret. The prover must still redact.
 - An attempt that times out keeps running in the background: Reclaim's `createClaimOnAttestor` takes no abort signal. Its late result is never counted.
-- Errors from `proveReq` and `collect` never carry remote error text. `collect`'s carry registry slots and reasons.
+- Errors from `proveReq` and `collect` carry no remote error text; a `collect` failure carries only its registry slot and reason.
 - `threshold` is yours to set; the client cannot read the contract's N.
 - The claim's values are not source-bound on-chain unless your circuit recomputes `subjectHash` from the subject fields (ADR 0001).
 - Reusing a holder secret links claims. Thoth promises no cross-claim unlinkability (ADR 0004).
