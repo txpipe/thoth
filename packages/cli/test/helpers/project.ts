@@ -2,7 +2,15 @@
 // inside it. The project links the repo's node_modules, so its config and the
 // generated files resolve the workspace packages.
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,7 +58,10 @@ export function makeProject(): Project {
     dir,
     path,
     read: (relative) => readFileSync(path(relative), 'utf8'),
-    write: (relative, content) => writeFileSync(path(relative), content),
+    write: (relative, content) => {
+      mkdirSync(dirname(path(relative)), { recursive: true });
+      writeFileSync(path(relative), content);
+    },
     thoth: (...args) => {
       const run = spawnSync(process.execPath, [bin, ...args], { cwd: dir, encoding: 'utf8' });
       return { status: run.status, stdout: run.stdout, stderr: run.stderr };
