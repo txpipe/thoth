@@ -209,9 +209,9 @@ export interface ZkFetchProveOptions {
    * the commitment on-chain: it is the only secret input to the claim's salt.
    */
   readonly holder: Uint8Array;
-  /** Inclusive start of the signed observation window, Unix seconds. */
+  /** Inclusive start of the signed observation window, Unix seconds, at most 2^32 - 1. */
   readonly windowStart: bigint;
-  /** Inclusive end of the signed observation window, Unix seconds. */
+  /** Inclusive end of the signed observation window, Unix seconds, at most 2^32 - 1. */
   readonly windowEnd: bigint;
 }
 

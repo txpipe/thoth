@@ -36,6 +36,7 @@ import {
   zkFetchClient,
 } from '@thoth/zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import { DISCLOSURE_RULES, FIXTURE } from './helpers/helper.js';
 import { type TestWitness, testWitness } from './helpers/witness.js';
 
@@ -774,6 +775,11 @@ describe('zkFetch attestor + client', () => {
     { expiresAt: Number.NaN },
     { holder: new Uint8Array(31) },
     { windowStart: BigInt(BASE_TIMESTAMP_S + 61) },
+    { windowEnd: 2n ** 32n },
+    {
+      windowStart: BigInt(BASE_TIMESTAMP_S) * 1_000n,
+      windowEnd: BigInt(BASE_TIMESTAMP_S + 60) * 1_000n,
+    },
     { attestorIds: ['attestor-0', 'attestor-0'] },
     { attestorIds: ['unknown'] },
   ])('rejects invalid options or selection before contacting witnesses: %o', async (override) => {
@@ -788,6 +794,24 @@ describe('zkFetch attestor + client', () => {
     await expect(
       client.collect(collectionRequest, { ...options(), ...override }),
     ).rejects.toMatchObject({ reason: 'invalid-options' });
+    expect(contacted).toBe(false);
+  });
+
+  it('refuses a millisecond window in proveReq before contacting any prover', async () => {
+    let contacted = false;
+    const client = clientWith({
+      provers: proversWith({
+        onProve: () => {
+          contacted = true;
+        },
+      }),
+    });
+    const milliseconds = {
+      ...binding(),
+      windowStart: BigInt(BASE_TIMESTAMP_S) * 1_000n,
+      windowEnd: BigInt(BASE_TIMESTAMP_S + 60) * 1_000n,
+    };
+    await expect(client.proveReq(collectionRequest, milliseconds)).rejects.toThrow(ZodError);
     expect(contacted).toBe(false);
   });
 

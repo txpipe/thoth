@@ -34,11 +34,16 @@ import type {
   ZkFetchRequest,
 } from './index.js';
 
+// The claim's window is `Uint<32>`, so a wider value could never be encoded.
+// Refusing it here reports it as bad options instead of after every witness
+// has proved.
+const MAX_WINDOW = 2n ** 32n - 1n;
+
 /** The fields of {@link ZkFetchProveOptions}, shared with the `collect` options schema. */
 export const proveOptionsShape = {
   holder: bytes32Schema,
-  windowStart: z.bigint().nonnegative(),
-  windowEnd: z.bigint().max(2n ** 64n - 1n),
+  windowStart: z.bigint().nonnegative().max(MAX_WINDOW),
+  windowEnd: z.bigint().nonnegative().max(MAX_WINDOW),
 };
 
 /** Whether a window starts no later than it ends. */
