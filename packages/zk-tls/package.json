@@ -50,6 +50,10 @@
     "./prover": {
       "types": "./dist/prover/index.d.ts",
       "import": "./dist/prover/index.js"
+    },
+    "./thoth": {
+      "types": "./dist/thoth/index.d.ts",
+      "import": "./dist/thoth/index.js"
     }
   },
   "scripts": {
@@ -58,6 +62,7 @@
     "witnesses": "bash scripts/start-witnesses.sh"
   },
   "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.21.0",
     "@reclaimprotocol/attestor-core": "5.1.6",
     "@reclaimprotocol/tls": "0.1.5",
     "@thoth/attestor": "*",

@@ -17,7 +17,13 @@ import type {
   ZkFetchResponseMatch,
   ZkFetchResponseRedaction,
 } from '../index.js';
-import { assertPolicySlotsInRange, zkFetchPolicySchema } from '../index.js';
+import {
+  assertPolicySlotsInRange,
+  ZK_FETCH_LAW,
+  zkFetchClaimSchema,
+  zkFetchEvidenceSchema,
+  zkFetchPolicySchema,
+} from '../index.js';
 import { ZkFetchProverError } from '../prover-error.js';
 import type {
   ZkFetchAttestorFailure,
@@ -37,6 +43,27 @@ import {
 
 export type { ZkFetchAttestorFailure, ZkFetchThresholdAttestment, ZkFetchThresholdOptions };
 export { ZkFetchProverError, ZkFetchThresholdError };
+
+/**
+ * The zkFetch definition a dApp pins in each attestor's descriptor: the kind's
+ * schemas and its `message`, without the attestor side.
+ *
+ * Its `verify` always rejects, because a client never verifies evidence. An
+ * attestor builds its own definition with `createZkFetchDefinition` from
+ * `@thoth/zk-tls/attestor`, which checks its witness.
+ */
+export const zkFetchClientDefinition: ZkFetchDefinition = Object.freeze({
+  kind: ZK_FETCH_LAW,
+  policy: zkFetchPolicySchema,
+  evidence: zkFetchEvidenceSchema,
+  claim: zkFetchClaimSchema,
+  verify: async () => {
+    throw new Error(
+      'zkFetchClientDefinition does not verify evidence; an attestor uses createZkFetchDefinition',
+    );
+  },
+  message: (claim: Claim<number, number>): FlatMessage => claimToMessage(claim),
+});
 
 /** Byte length of a claim's `appId`. */
 const APP_ID_BYTES = 32;
