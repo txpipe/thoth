@@ -155,8 +155,9 @@ The witness listens on `ws://localhost:8001/ws`.
 
 For two witnesses at once, run `npm run witnesses --workspace=packages/zk-tls`.
 It runs `scripts/start-witnesses.sh`, which clones `attestor-core` at the same
-commit. The script installs the clone as above and starts two witnesses on
-ports 8001 and 8002. It stops with an error if `re2` doesn't load or a port is already in
+commit. The script installs the clone as above, and installs it again when
+the commit changes, so a new pin never runs on the old dependencies. It starts
+two witnesses on ports 8001 and 8002. It stops with an error if `re2` doesn't load or a port is already in
 use. It also stops if a witness logs `Failed to load RE2` or exits. Once both
 witnesses answer, it prints each one's address. `WITNESS_REF`,
 `WITNESS_CLONE_DIR`, `WITNESS_PORT_A`/`B` and `WITNESS_KEY_A`/`B` override the

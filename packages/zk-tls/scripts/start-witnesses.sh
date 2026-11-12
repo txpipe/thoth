@@ -34,9 +34,14 @@ if [ "$(git -C "$CLONE_DIR" rev-parse HEAD)" != "$PINNED_REF" ]; then
   git -C "$CLONE_DIR" checkout --quiet --detach "$PINNED_REF"
 fi
 
-if [ ! -d "$CLONE_DIR/node_modules/re2" ]; then
+# The stamp records the commit the dependencies were installed for, so a new
+# pin never runs on the previous commit's node_modules.
+STAMP="$CLONE_DIR/node_modules/.thoth-installed-ref"
+HEAD_REF=$(git -C "$CLONE_DIR" rev-parse HEAD)
+if [ "$(cat "$STAMP" 2>/dev/null || true)" != "$HEAD_REF" ]; then
   log "installing dependencies (install scripts skipped)"
   (cd "$CLONE_DIR" && npm install --ignore-scripts --include=dev --no-audit --no-fund >/dev/null)
+  printf '%s\n' "$HEAD_REF" >"$STAMP"
 fi
 
 # The witness needs re2; see "Running a Reclaim witness" in docs/attestor-guide.md.

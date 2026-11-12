@@ -1,7 +1,7 @@
 // Runs scripts/start-witnesses.sh offline against a fake attestor-core clone whose
 // re2 and witness server the test controls, to check the script's startup gates.
 import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -40,24 +40,45 @@ let root: string;
 let cloneDir: string;
 let ref: string;
 
+/** Runs git in `dir`, outside any repository a hook points at. */
+const gitIn = (dir: string, ...args: string[]): string =>
+  execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', env: baseEnv }).trim();
+
+/** Writes `files` under `dir`, creating their directories. */
+const writeFiles = (dir: string, files: Readonly<Record<string, string>>): void => {
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(join(dir, path, '..'), { recursive: true });
+    writeFileSync(join(dir, path), content);
+  }
+};
+
+/** Commits everything in `dir` and returns the commit. */
+const commitAll = (dir: string, message: string): string => {
+  gitIn(dir, 'add', '--all');
+  gitIn(
+    dir,
+    ...['-c', 'user.name=test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false'],
+    ...['commit', '--allow-empty', '--no-verify', '--quiet', '-m', message],
+  );
+  return gitIn(dir, 'rev-parse', 'HEAD');
+};
+
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), 'thoth-start-witnesses-'));
   baseEnv.npm_config_cache = join(root, 'npm-cache');
   cloneDir = join(root, 'attestor-core');
-  mkdirSync(join(cloneDir, 'node_modules/re2'), { recursive: true });
-  mkdirSync(join(cloneDir, 'src/scripts'), { recursive: true });
-  writeFileSync(join(cloneDir, 'package.json'), '{ "type": "module" }\n');
-  writeFileSync(join(cloneDir, 'node_modules/re2/package.json'), '{ "name": "re2" }\n');
-  writeFileSync(join(cloneDir, 'node_modules/re2/index.js'), FAKE_RE2);
-  writeFileSync(join(cloneDir, 'src/scripts/start-server.ts'), FAKE_SERVER);
-  const git = (...args: string[]) =>
-    execFileSync('git', ['-C', cloneDir, ...args], { encoding: 'utf8', env: baseEnv }).trim();
-  git('init', '--quiet');
-  git(
-    ...['-c', 'user.name=test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false'],
-    ...['commit', '--allow-empty', '--no-verify', '--quiet', '-m', 'fake'],
-  );
-  ref = git('rev-parse', 'HEAD');
+  mkdirSync(cloneDir);
+  gitIn(cloneDir, 'init', '--quiet');
+  ref = commitAll(cloneDir, 'fake');
+  // An installed clone: its dependencies are in place for `ref`, so the
+  // script does not run npm.
+  writeFiles(cloneDir, {
+    'package.json': '{ "type": "module" }\n',
+    'node_modules/re2/package.json': '{ "name": "re2" }\n',
+    'node_modules/re2/index.js': FAKE_RE2,
+    'node_modules/.thoth-installed-ref': `${ref}\n`,
+    'src/scripts/start-server.ts': FAKE_SERVER,
+  });
 });
 
 // A test that times out leaves its script running; stop it before the
@@ -93,7 +114,10 @@ interface Run {
   output: string;
 }
 
-/** Runs the script; `stopOn` sends SIGTERM once the output contains it. */
+/**
+ * Runs the script against `cloneDir` at `ref`, unless `env` overrides them;
+ * `stopOn` sends SIGTERM once the output contains it.
+ */
 function run(env: Record<string, string>, stopOn?: string): Promise<Run> {
   const logDir = mkdtempSync(join(root, 'run-'));
   return new Promise((resolve, reject) => {
@@ -172,6 +196,59 @@ describe.concurrent('start-witnesses.sh', { timeout: 30_000 }, () => {
     const { code, output } = await run(env);
     expect(code).toBe(1);
     expect(output).toContain('witness A failed to start');
+  });
+
+  it('reinstalls the dependencies when the pinned commit changes', async () => {
+    // A clone of its own, whose dependencies npm installs offline from local
+    // directories. Its second commit adds a dependency.
+    const dir = mkdtempSync(join(root, 'reinstall-'));
+    gitIn(dir, 'init', '--quiet');
+    gitIn(dir, 'remote', 'add', 'origin', dir);
+    const dependencies = { re2: 'file:./fake-re2' };
+    writeFiles(dir, {
+      'package.json': JSON.stringify({ type: 'module', dependencies }),
+      'fake-re2/package.json': '{ "name": "re2" }\n',
+      'fake-re2/index.js': FAKE_RE2,
+      'marker/package.json': '{ "name": "marker" }\n',
+      'src/scripts/start-server.ts': FAKE_SERVER,
+    });
+    const first = commitAll(dir, 'first');
+    writeFiles(dir, {
+      'package.json': JSON.stringify({
+        type: 'module',
+        dependencies: { ...dependencies, marker: 'file:./marker' },
+      }),
+    });
+    const second = commitAll(dir, 'second');
+
+    const [a, b] = await freePorts();
+    const startAt = (commit: string) =>
+      run(
+        {
+          WITNESS_CLONE_DIR: dir,
+          WITNESS_REF: commit,
+          WITNESS_PORT_A: String(a),
+          WITNESS_PORT_B: String(b),
+          FAKE_WITNESS: 'serve',
+          npm_config_offline: 'true',
+        },
+        'Ctrl-C stops',
+      );
+
+    const installed = await startAt(first);
+    expect(installed.output).toContain('installing dependencies');
+    expect(installed.code).toBe(143);
+    expect(existsSync(join(dir, 'node_modules/marker'))).toBe(false);
+
+    const again = await startAt(first);
+    expect(again.output).not.toContain('installing dependencies');
+    expect(again.code).toBe(143);
+
+    const moved = await startAt(second);
+    expect(moved.output).toContain(`checking out ${second}`);
+    expect(moved.output).toContain('installing dependencies');
+    expect(moved.code).toBe(143);
+    expect(existsSync(join(dir, 'node_modules/marker'))).toBe(true);
   });
 
   it('fails when a witness exits after startup', async () => {
