@@ -276,7 +276,7 @@ observed even if its block is rolled back. Your app owns finality: set a depth
 that covers the risk you accept, and, if you need stronger finality, measure
 the block number or slot and bound it in the predicate.
 
-[ADR 0013](../../../docs/adr/0013-chain-event-kinds.md) has the reasoning; the
+[ADR 0014](../../../docs/adr/0014-chain-event-kinds.md) has the reasoning; the
 README lists depth `0` under
 [Guarantees and limits](../README.md#guarantees-and-limits).
 
@@ -300,7 +300,7 @@ grants the event to a user, bind the claimant. The README's
   its parameters and its checks
 - [attestation.compact](../../contracts/attestation.compact): the `Claim`
   struct, `buildMessage` and the wire layout
-- [ADR 0013](../../../docs/adr/0013-chain-event-kinds.md): the chain-event kind
+- [ADR 0014](../../../docs/adr/0014-chain-event-kinds.md): the chain-event kind
   contract
 - [CONTEXT.md](../../../CONTEXT.md): the glossary
 - [cardano acceptance test](../../contracts/test/acceptance-cardano.test.ts):

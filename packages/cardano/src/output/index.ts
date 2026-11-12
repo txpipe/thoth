@@ -64,7 +64,7 @@ const assetClassSchema = z.strictObject({
 
 /**
  * One output at the watched address. The `slots` list says which claim slot
- * each measured fact fills (ADR 0009, ADR 0013); the policy hash commits to
+ * each measured fact fills (ADR 0009, ADR 0014); the policy hash commits to
  * it, so every attestor fills the same slots.
  */
 export type OutputPolicy = CardanoPolicyBase & {
@@ -297,7 +297,7 @@ const SALT_TAG = 'thoth:cardano-salt:v1';
 /**
  * Derive the salt of one observed output: a tagged hash of the network magic,
  * the transaction hash and the output index. Replay is stopped by the
- * nullifier; the salt itself is public (ADR 0013).
+ * nullifier; the salt itself is public (ADR 0014).
  *
  * @throws if the network magic or output index is not a uint32, or the
  *   transaction hash is not 64 lowercase hex characters.

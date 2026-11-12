@@ -37,7 +37,7 @@ What a kind implements: its policy, evidence and claim schemas, the `verify` ste
 _Avoid_: Driver, plugin.
 
 **Locator**:
-The evidence a chain-event client sends: the minimal fields an attestor needs to find the event, such as the transaction hash and output index of one Cardano output (an output reference; `TxIn` in the ledger). The attestor re-reads the event from its own source, so the locator can only choose which event to attest, never shape the claim (ADR 0013).
+The evidence a chain-event client sends: the minimal fields an attestor needs to find the event, such as the transaction hash and output index of one Cardano output (an output reference; `TxIn` in the ledger). The attestor re-reads the event from its own source, so the locator can only choose which event to attest, never shape the claim (ADR 0014).
 _Avoid_: Pointer, outpoint, payload.
 
 ### The claim
@@ -87,7 +87,7 @@ A per-claim commitment, not a user id. Only the owner of that claim's secret can
 _Avoid_: Owner, user, account, identity.
 
 **Salt**:
-A 32-byte value the claim carries and the nullifier hashes. In zkFetch it is secret, so the nullifier cannot confirm a guessed value. The kind fixes it from the evidence, so the client cannot change it without new evidence. zkFetch uses the claim context digest, so the salt follows the holder and window the client binds before proving. A chain-event kind's salt is public instead: a tagged hash of the event's identity, since the event's values are public chain data (ADR 0013). It never appears on-chain (ADR 0012).
+A 32-byte value the claim carries and the nullifier hashes. In zkFetch it is secret, so the nullifier cannot confirm a guessed value. The kind fixes it from the evidence, so the client cannot change it without new evidence. zkFetch uses the claim context digest, so the salt follows the holder and window the client binds before proving. A chain-event kind's salt is public instead: a tagged hash of the event's identity, since the event's values are public chain data (ADR 0014). It never appears on-chain (ADR 0012).
 _Avoid_: Nonce, randomness.
 
 **Window**:

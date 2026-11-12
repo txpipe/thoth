@@ -88,7 +88,7 @@ export const cardanoObservationSchema = cardanoOutputObservationSchema;
 
 /**
  * The policy a cardano@1 attestor enforces. The variant tag rides in the
- * policy hash, so adding a variant is additive (ADR 0013).
+ * policy hash, so adding a variant is additive (ADR 0014).
  */
 export type CardanoPolicy = OutputPolicy;
 

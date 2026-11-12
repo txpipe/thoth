@@ -35,7 +35,7 @@ proof that an HTTPS response was fetched and not forged; in that kind each
 attestor trusts its own Reclaim witness. cardano@1, shipped as
 [`@thoth/cardano`](../packages/cardano/README.md), attests that a chain event
 such as one Cardano output was observed
-([ADR 0013](adr/0013-chain-event-kinds.md)). The contract knows nothing about
+([ADR 0014](adr/0014-chain-event-kinds.md)). The contract knows nothing about
 kinds: the claim's `policyHash` stands in for the kind ([ADR 0002](adr/0002-no-kind-on-chain-policy-hash.md)), so a new
 kind needs no contract change. To add one, see
 [kind-author-guide.md](kind-author-guide.md).

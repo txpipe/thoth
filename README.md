@@ -46,7 +46,7 @@ Claim values are private witness data and are not stored on-chain. The public
 nullifier hashes them with a [salt](CONTEXT.md#the-claim). In zkFetch the salt is
 secret, so an outsider cannot confirm a guessed value from it; a chain-event
 kind's salt is public instead, since its values already sit on the chain
-([ADR 0013](docs/adr/0013-chain-event-kinds.md)). The contracts README
+([ADR 0014](docs/adr/0014-chain-event-kinds.md)). The contracts README
 [says what is public and who holds the salt](packages/contracts/README.md#guarantees-and-limits).
 
 ## Which package to use
