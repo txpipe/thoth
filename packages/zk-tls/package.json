@@ -54,6 +54,7 @@
     "witnesses": "bash scripts/start-witnesses.sh"
   },
   "dependencies": {
+    "@eslint-community/regexpp": "4.12.2",
     "@reclaimprotocol/attestor-core": "5.1.6",
     "@reclaimprotocol/tls": "0.1.5",
     "@thoth/attestor": "*",

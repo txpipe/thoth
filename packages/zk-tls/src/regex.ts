@@ -1,6 +1,8 @@
 // The regex subset a zkFetch policy may use: syntax that RE2 and RegExp, under the flags
 // Reclaim compiles with, both accept and read the same way. The dApp guide lists it.
 
+import { type AST, RegExpParser, RegExpSyntaxError } from '@eslint-community/regexpp';
+
 /** Thrown when a regex uses syntax outside the regex subset. */
 export class RegexSubsetError extends Error {
   /** The refused construct, as the message names it. */
@@ -23,460 +25,192 @@ export interface RegexSubsetScan {
 }
 
 // The attestor parses a caller-supplied policy before any proof check, so the scan is bounded
-// in time and stack before it reads anything.
+// in time and stack before it reads anything. The parser recurses once per group and overflows
+// the stack near a few thousand, and every group opens with `(`, so counting `(` bounds it.
 const MAX_LENGTH = 4096;
-const MAX_DEPTH = 100;
+const MAX_PARENTHESES = 100;
 
-// RE2's own limits, which RegExp does not have: a counted repeat above 1000, and nested counted
-// repeats whose counts multiply past 1000, fail to compile.
-const MAX_REPEAT = 1000;
+// RE2 writes out every counted repeat and refuses a program over its memory budget; RegExp has
+// no such limit. Holding counted repeats to single atoms whose counts sum to at most 1000 keeps
+// the costliest regex in the subset near a sixth of that budget.
+const MAX_REPEAT_TOTAL = 1000;
 
-// RE2 also refuses a compiled program over its memory budget. Weights bound each atom's
-// measured share of it from above: RE2 fails near 125,000 for the costliest atoms (a negated
-// class of 47 alternating characters, `\W`), so the cap keeps a margin of three.
-const MAX_PROGRAM = 40_000;
-const CHARACTER_WEIGHT = 1;
-const WIDE_WEIGHT = 8;
+// Strict `u` mode is the strictest of the three dialects: it already refuses a lone `{`, `}`
+// or `]`, identity escapes such as `\A`, `(?P<`, a class escape as a range bound and an
+// out-of-order range. ES2018 adds named groups but predates inline modifiers and duplicate
+// group names, so the parser refuses those too.
+const parser = new RegExpParser({ ecmaVersion: 2018, strict: true });
 
-/** Characters that need a backslash to be literal, outside a class. */
-const SYNTAX_CHARACTERS = '^$\\.*+?()[]{}|/';
+/** The escapes a Character may be written as; everything else is refused by its raw text. */
+const CHARACTER_ESCAPE = /^\\(?:[tnvfr^$\\.*+?()[\]{}|/]|x[0-7][0-9A-Fa-f])$/;
 
-const CONTROL_ESCAPES: Readonly<Record<string, number>> = {
-  t: 0x09,
-  n: 0x0a,
-  v: 0x0b,
-  f: 0x0c,
-  r: 0x0d,
-};
-
-const CLASS_ESCAPES = 'dDwWsS';
-
-// Sticky, so a match reads at `lastIndex` without copying the rest of the source. A count has
-// no leading zero: RE2 reads `{02}` as literal text.
-const COUNTED_QUANTIFIER = /\{(0|[1-9]\d*)(,(0|[1-9]\d*)?)?\}/y;
-const ANY_COUNTED_QUANTIFIER = /\{\d+(,\d*)?\}/y;
-const GROUP_NAME = /([A-Za-z_][A-Za-z0-9_]*)>/y;
-const HEX_PAIR = /[0-9A-Fa-f]{2}/y;
-
-/** What the parser knows about a parsed piece of the pattern. */
+/** What the walk knows about a node. */
 interface Shape {
   /** Whether it can match the empty string. */
   readonly nullable: boolean;
   /** Whether it holds a capture group. */
   readonly captures: boolean;
-  /** The largest product of counted repeats along any nesting path inside it, as RE2 counts. */
-  readonly repeat: number;
-  /** Its weighted size once every counted repeat is written out; see {@link MAX_PROGRAM}. */
-  readonly weight: number;
 }
 
-/** A quantifier's bounds; `max` is undefined when unbounded. */
-interface Counts {
-  readonly min: number;
-  readonly max: number | undefined;
-  readonly counted: boolean;
-}
-
-/** One class member: a single character, or a set such as `\d` that cannot bound a range. */
-type ClassMember = { readonly code: number } | { readonly set: true };
-
-const atomShape = (nullable: boolean, weight: number): Shape => ({
-  nullable,
-  captures: false,
-  repeat: 1,
-  weight,
-});
-
-const isAsciiDigit = (char: string | undefined): boolean =>
-  char !== undefined && char >= '0' && char <= '9';
+const ATOM: Shape = { nullable: false, captures: false };
+const ASSERTION: Shape = { nullable: true, captures: false };
 
 const codePointLabel = (code: number): string =>
   `U+${code.toString(16).toUpperCase().padStart(4, '0')}`;
 
-class Scanner {
-  private position = 0;
-  private depth = 0;
-  private readonly groupNames = new Set<string>();
-  private readonly source: string;
+const fail = (construct: string, index: number): never => {
+  throw new RegexSubsetError(construct, index);
+};
 
-  constructor(source: string) {
-    this.source = source;
+/** Allow a printable ASCII character or one of the escapes all three dialects read alike. */
+const checkCharacter = (node: AST.Character, inClass: boolean): void => {
+  const code = node.raw.codePointAt(0) ?? 0;
+  if (code !== 0x5c) {
+    if (code > 0x7e) fail(`the non-ASCII character ${codePointLabel(code)}`, node.start);
+    if (code < 0x20 || code === 0x7f) {
+      fail(`the control character ${codePointLabel(code)}; escape it`, node.start);
+    }
+    return;
   }
-
-  scan(): RegexSubsetScan {
-    if (this.source.length > MAX_LENGTH) {
-      this.fail(`more than ${MAX_LENGTH} characters`, MAX_LENGTH);
-    }
-    this.disjunction();
-    if (this.position < this.source.length) {
-      // disjunction() stops only at the end or at a `)` no group opened.
-      this.fail('an unmatched )', this.position);
-    }
-    return { groupNames: [...this.groupNames] };
+  if (CHARACTER_ESCAPE.test(node.raw) || (inClass && node.raw === '\\-')) {
+    return;
   }
+  fail(`the escape ${node.raw}`, node.start);
+};
 
-  private fail(construct: string, index: number): never {
-    throw new RegexSubsetError(construct, index);
-  }
+class Walk {
+  readonly groupNames: string[] = [];
+  private repeatTotal = 0;
 
-  private peek(offset = 0): string | undefined {
-    return this.source[this.position + offset];
-  }
-
-  /** Run a sticky pattern at the current position. */
-  private read(pattern: RegExp): RegExpExecArray | null {
-    pattern.lastIndex = this.position;
-    return pattern.exec(this.source);
-  }
-
-  /** Refuse a weight past {@link MAX_PROGRAM}, naming the construct that starts at `index`. */
-  private weighed(weight: number, index: number): number {
-    if (weight > MAX_PROGRAM) {
-      this.fail('a pattern too large for RE2 once counted repeats are written out', index);
-    }
-    return weight;
-  }
-
-  private disjunction(): Shape {
-    let shape = this.alternative();
-    while (this.peek() === '|') {
-      this.position += 1;
-      const start = this.position;
-      const next = this.alternative();
-      shape = {
-        nullable: shape.nullable || next.nullable,
-        captures: shape.captures || next.captures,
-        repeat: Math.max(shape.repeat, next.repeat),
-        weight: this.weighed(shape.weight + next.weight, start),
-      };
-    }
-    return shape;
-  }
-
-  private alternative(): Shape {
-    let nullable = true;
-    let captures = false;
-    let repeat = 1;
-    let weight = 0;
-    while (this.peek() !== undefined && this.peek() !== '|' && this.peek() !== ')') {
-      const start = this.position;
-      const term = this.term();
-      nullable &&= term.nullable;
-      captures ||= term.captures;
-      repeat = Math.max(repeat, term.repeat);
-      weight = this.weighed(weight + term.weight, start);
-    }
-    return { nullable, captures, repeat, weight };
-  }
-
-  private term(): Shape {
-    const start = this.position;
-    const atom = this.atom();
-    const quantifierStart = this.position;
-    const counts = this.quantifier();
-    if (counts === undefined) {
-      return atom;
-    }
-    // RegExp resets a group's captures on every iteration and refuses an empty one; RE2
-    // keeps the last captures and takes the empty one. Both change what a match returns.
-    if (atom.captures) {
-      this.fail('a quantifier on a capture group', quantifierStart);
-    }
-    if (atom.nullable) {
-      this.fail('a quantifier on something that can match the empty string', quantifierStart);
-    }
-    if (!counts.counted) {
-      return { ...atom, nullable: counts.min === 0 };
-    }
-    if (counts.min > MAX_REPEAT || (counts.max ?? 0) > MAX_REPEAT) {
-      this.fail(`a repeat count above ${MAX_REPEAT}`, quantifierStart);
-    }
-    // RE2 counts the maximum, else the minimum, and skips a zero.
-    const factor = Math.max(counts.max ?? counts.min, 1);
-    const repeat = atom.repeat * factor;
-    if (repeat > MAX_REPEAT) {
-      this.fail(`nested repeat counts multiplying past ${MAX_REPEAT}`, start);
-    }
+  disjunction(alternatives: readonly AST.Alternative[]): Shape {
+    const shapes = alternatives.map((alternative) => this.alternative(alternative));
     return {
-      nullable: counts.min === 0,
-      captures: false,
-      repeat,
-      weight: this.weighed(atom.weight * factor, start),
+      nullable: shapes.some((shape) => shape.nullable),
+      captures: shapes.some((shape) => shape.captures),
     };
   }
 
-  /** Parse a quantifier if one follows. */
-  private quantifier(): Counts | undefined {
-    const start = this.position;
-    let counts: Counts;
-    switch (this.peek()) {
-      case '*':
-        counts = { min: 0, max: undefined, counted: false };
-        this.position += 1;
-        break;
-      case '+':
-        counts = { min: 1, max: undefined, counted: false };
-        this.position += 1;
-        break;
-      case '?':
-        counts = { min: 0, max: 1, counted: false };
-        this.position += 1;
-        break;
-      case '{':
-        counts = this.countedQuantifier();
-        break;
+  private alternative(node: AST.Alternative): Shape {
+    const shapes = node.elements.map((element) => this.element(element));
+    return {
+      nullable: shapes.every((shape) => shape.nullable),
+      captures: shapes.some((shape) => shape.captures),
+    };
+  }
+
+  private element(node: AST.Element): Shape {
+    switch (node.type) {
+      case 'Quantifier':
+        return this.quantifier(node);
+      case 'Assertion':
+        if (node.kind === 'lookahead' || node.kind === 'lookbehind') {
+          return fail(`${node.negate ? 'negative ' : ''}${node.kind}`, node.start);
+        }
+        return ASSERTION;
+      case 'Backreference':
+        return fail(`the backreference ${node.raw}`, node.start);
+      case 'Character':
+        checkCharacter(node, false);
+        return ATOM;
+      case 'CharacterSet':
+        if (node.kind === 'property') {
+          return fail(`the Unicode property escape ${node.raw.slice(0, 2)}`, node.start);
+        }
+        return ATOM;
+      case 'CharacterClass':
+        this.characterClass(node);
+        return ATOM;
+      case 'Group':
+      case 'CapturingGroup':
+        return this.group(node);
       default:
-        return undefined;
-    }
-    if (this.peek() === '?') {
-      this.position += 1;
-    }
-    const next = this.peek();
-    if (next === '*' || next === '+' || next === '?' || next === '{') {
-      this.fail('a quantifier on a quantifier', start);
-    }
-    return counts;
-  }
-
-  private countedQuantifier(): Counts {
-    const start = this.position;
-    const match = this.read(COUNTED_QUANTIFIER);
-    if (match === null) {
-      this.fail(
-        this.read(ANY_COUNTED_QUANTIFIER) === null
-          ? 'an unescaped {'
-          : 'a repeat count with a leading zero',
-        start,
-      );
-    }
-    this.position += match[0].length;
-    const min = Number(match[1]);
-    const max =
-      match[2] === undefined ? min : match[3] === undefined ? undefined : Number(match[3]);
-    if (max !== undefined && max < min) {
-      this.fail('a repeat range whose maximum is below its minimum', start);
-    }
-    return { min, max, counted: true };
-  }
-
-  private atom(): Shape {
-    const start = this.position;
-    const char = this.peek();
-    switch (char) {
-      case '^':
-      case '$':
-        this.position += 1;
-        return atomShape(true, CHARACTER_WEIGHT);
-      case '.':
-        this.position += 1;
-        return atomShape(false, WIDE_WEIGHT);
-      case '(':
-        return this.group();
-      case '[':
-        return atomShape(false, this.characterClass());
-      case '\\':
-        return this.escape();
-      case '*':
-      case '+':
-      case '?':
-        return this.fail('a quantifier with nothing to repeat', start);
-      case '{':
-      case '}':
-      case ']':
-        return this.fail(`an unescaped ${char}`, start);
-      default:
-        this.literal();
-        return atomShape(false, CHARACTER_WEIGHT);
+        return fail(`the construct ${node.raw}`, node.start);
     }
   }
 
-  /** Consume one literal character, refusing anything but printable ASCII. */
-  private literal(): number {
-    const start = this.position;
-    const code = this.source.codePointAt(start) ?? 0;
-    if (code > 0x7e) {
-      this.fail(`the non-ASCII character ${codePointLabel(code)}`, start);
+  private group(node: AST.Group | AST.CapturingGroup): Shape {
+    if (node.type === 'CapturingGroup' && node.name !== null) {
+      this.groupNames.push(node.name);
     }
-    if (code < 0x20 || code === 0x7f) {
-      this.fail(`the control character ${codePointLabel(code)}; escape it`, start);
-    }
-    this.position += 1;
-    return code;
+    const body = this.disjunction(node.alternatives);
+    return { ...body, captures: node.type === 'CapturingGroup' || body.captures };
   }
 
-  private group(): Shape {
-    const start = this.position;
-    if (this.depth >= MAX_DEPTH) {
-      this.fail(`groups nested more than ${MAX_DEPTH} deep`, start);
+  private quantifier(node: AST.Quantifier): Shape {
+    const atom = this.element(node.element);
+    const quantifierStart = node.element.end;
+    // RegExp resets a group's captures on every iteration and refuses an empty one; RE2
+    // keeps the last captures and takes the empty one. Both change what a match returns.
+    if (atom.captures) {
+      fail('a quantifier on a capture group', quantifierStart);
     }
-    this.position += 1;
-    let captures = true;
-    if (this.peek() === '?') {
-      const kind = this.peek(1);
-      const after = this.peek(2);
-      if (kind === ':') {
-        captures = false;
-        this.position += 2;
-      } else if (kind === '<' && after !== '=' && after !== '!') {
-        this.position += 2;
-        this.groupName(start);
-      } else if (kind === '=') {
-        this.fail('lookahead (?=', start);
-      } else if (kind === '!') {
-        this.fail('negative lookahead (?!', start);
-      } else if (kind === '<') {
-        this.fail(after === '=' ? 'lookbehind (?<=' : 'negative lookbehind (?<!', start);
-      } else if (kind === 'P') {
-        this.fail('a (?P group', start);
-      } else {
-        this.fail('inline flags or an unknown group (?', start);
+    if (atom.nullable) {
+      fail('a quantifier on something that can match the empty string', quantifierStart);
+    }
+    const text = node.raw.slice(node.element.end - node.start);
+    if (text.startsWith('{')) {
+      this.countedRepeat(node, text, quantifierStart);
+    }
+    return { ...atom, nullable: node.min === 0 };
+  }
+
+  private countedRepeat(node: AST.Quantifier, text: string, start: number): void {
+    if (node.element.type === 'Group' || node.element.type === 'CapturingGroup') {
+      fail('a counted repeat on a group', start);
+    }
+    // RE2 reads `{02}` as literal text; RegExp reads it as a count.
+    if (/[{,]0\d/.test(text)) {
+      fail('a repeat count with a leading zero', start);
+    }
+    // RE2 writes the maximum out, else the minimum.
+    this.repeatTotal += Number.isFinite(node.max) ? node.max : node.min;
+    if (this.repeatTotal > MAX_REPEAT_TOTAL) {
+      fail(`repeat counts adding up past ${MAX_REPEAT_TOTAL}`, start);
+    }
+  }
+
+  private characterClass(node: AST.CharacterClass): void {
+    // RE2 reads `[]a]` as a class holding `]` and `a`; RegExp reads `[]` as matching nothing.
+    if (node.elements.length === 0) {
+      fail('an empty class', node.start);
+    }
+    node.elements.forEach((element, position) => {
+      switch (element.type) {
+        case 'Character':
+          checkCharacter(element, true);
+          // RE2 refuses `[a-c-e]`; RegExp reads the middle `-` as a literal.
+          if (element.raw === '-' && position > 0 && position < node.elements.length - 1) {
+            fail('an unescaped - that is not first, last or a range bound', element.start);
+          }
+          return;
+        case 'CharacterClassRange':
+          checkCharacter(element.min, true);
+          checkCharacter(element.max, true);
+          return;
+        case 'CharacterSet':
+          if (element.kind === 'property') {
+            fail(`the Unicode property escape ${element.raw.slice(0, 2)}`, element.start);
+          }
+          return;
+        default:
+          fail(`the class member ${element.raw}`, element.start);
       }
-    }
-    this.depth += 1;
-    const body = this.disjunction();
-    this.depth -= 1;
-    if (this.peek() !== ')') {
-      this.fail('an unclosed (', start);
-    }
-    this.position += 1;
-    return { ...body, captures: captures || body.captures };
-  }
-
-  private groupName(groupStart: number): void {
-    const match = this.read(GROUP_NAME);
-    if (match === null) {
-      this.fail('a group name that is not an ASCII identifier', groupStart);
-    }
-    const name = match[1] as string;
-    if (this.groupNames.has(name)) {
-      this.fail(`the duplicate group name ${name}`, groupStart);
-    }
-    this.groupNames.add(name);
-    this.position += match[0].length;
-  }
-
-  private escape(): Shape {
-    const char = this.peek(1);
-    if (char === 'b' || char === 'B') {
-      this.position += 2;
-      return atomShape(true, CHARACTER_WEIGHT);
-    }
-    const member = this.escapedCharacter(false);
-    return atomShape(false, 'set' in member ? WIDE_WEIGHT : CHARACTER_WEIGHT);
-  }
-
-  /**
-   * Consume an escape that stands for one character or a class such as `\d`. `inClass` adds
-   * `\-` and refuses `\b`, which a class reads as a backspace in RegExp and refuses in RE2.
-   */
-  private escapedCharacter(inClass: boolean): ClassMember {
-    const start = this.position;
-    const char = this.peek(1);
-    if (char === undefined) {
-      this.fail('a trailing \\', start);
-    }
-    this.position += 2;
-    if (CLASS_ESCAPES.includes(char)) {
-      return { set: true };
-    }
-    const control = CONTROL_ESCAPES[char];
-    if (control !== undefined) {
-      return { code: control };
-    }
-    if (SYNTAX_CHARACTERS.includes(char) || (inClass && char === '-')) {
-      return { code: char.charCodeAt(0) };
-    }
-    if (char === 'x') {
-      const digits = this.read(HEX_PAIR);
-      if (digits === null) {
-        this.fail('an incomplete \\x escape', start);
-      }
-      const code = Number.parseInt(digits[0], 16);
-      if (code > 0x7f) {
-        this.fail('a \\x escape above \\x7F', start);
-      }
-      this.position += 2;
-      return { code };
-    }
-    if (isAsciiDigit(char)) {
-      this.fail(char === '0' ? 'the escape \\0' : `the backreference \\${char}`, start);
-    }
-    if (char === 'k') {
-      this.fail('the named backreference \\k', start);
-    }
-    if (char === 'p' || char === 'P') {
-      this.fail(`the Unicode property escape \\${char}`, start);
-    }
-    const code = this.source.codePointAt(start + 1) ?? 0;
-    if (code > 0x7e || code < 0x20) {
-      this.fail(`the escape of ${codePointLabel(code)}`, start);
-    }
-    return this.fail(`the escape \\${char}`, start);
-  }
-
-  /** Consume a bracket class and return its weight: a wide atom plus one per member. */
-  private characterClass(): number {
-    const start = this.position;
-    this.position += 1;
-    if (this.peek() === '^') {
-      this.position += 1;
-    }
-    if (this.peek() === ']') {
-      // RE2 reads a leading `]` as a member, RegExp as the end of an empty class.
-      this.fail('a ] first in a class; escape it as \\]', this.position);
-    }
-    let members = 0;
-    while (this.peek() !== ']') {
-      if (this.peek() === undefined) {
-        this.fail('an unclosed [', start);
-      }
-      members += 1;
-      const memberStart = this.position;
-      const low = this.classMember(members === 1);
-      if (this.peek() !== '-' || this.peek(1) === ']' || this.peek(1) === undefined) {
-        continue;
-      }
-      if (!('code' in low)) {
-        this.fail('a class escape as a range bound', memberStart);
-      }
-      this.position += 1;
-      const highStart = this.position;
-      // A bare `-` may end a range: `[!--]` is `!` to `-` in every engine.
-      const high = this.peek() === '-' ? this.literalDash() : this.classMember(false);
-      if (!('code' in high)) {
-        this.fail('a class escape as a range bound', highStart);
-      }
-      if (high.code < low.code) {
-        this.fail('a range whose bounds are out of order', memberStart);
-      }
-    }
-    this.position += 1;
-    return WIDE_WEIGHT + members;
-  }
-
-  private literalDash(): ClassMember {
-    this.position += 1;
-    return { code: 0x2d };
-  }
-
-  private classMember(first: boolean): ClassMember {
-    const start = this.position;
-    const char = this.peek();
-    if (char === '\\') {
-      if (this.peek(1) === 'b' || this.peek(1) === 'B') {
-        this.fail(`\\${this.peek(1)} in a class`, start);
-      }
-      return this.escapedCharacter(true);
-    }
-    if (char === '[') {
-      this.fail('an unescaped [ in a class', start);
-    }
-    if (char === '-' && !first && this.peek(1) !== ']') {
-      this.fail('an unescaped - that is not first, last or a range bound', start);
-    }
-    return { code: this.literal() };
+    });
   }
 }
+
+const parse = (source: string): AST.Pattern => {
+  try {
+    return parser.parsePattern(source, 0, source.length, { unicode: true });
+  } catch (error) {
+    if (error instanceof RegExpSyntaxError) {
+      // The parser's message repeats the whole pattern; keep only its reason.
+      const reason = error.message.replace(/^Invalid regular expression: \/.*\/u?: /s, '');
+      return fail(`invalid syntax (${reason})`, error.index);
+    }
+    throw error;
+  }
+};
 
 /**
  * Check a regex against the regex subset and read its named groups. The subset is listed in the
@@ -485,4 +219,18 @@ class Scanner {
  * @throws {RegexSubsetError} if the regex is outside the subset, naming the first construct
  *   outside it.
  */
-export const scanRegexSubset = (source: string): RegexSubsetScan => new Scanner(source).scan();
+export const scanRegexSubset = (source: string): RegexSubsetScan => {
+  if (source.length > MAX_LENGTH) {
+    fail(`more than ${MAX_LENGTH} characters`, MAX_LENGTH);
+  }
+  let parentheses = 0;
+  for (let index = source.indexOf('('); index !== -1; index = source.indexOf('(', index + 1)) {
+    parentheses += 1;
+    if (parentheses > MAX_PARENTHESES) {
+      fail(`more than ${MAX_PARENTHESES} ( characters`, index);
+    }
+  }
+  const walk = new Walk();
+  walk.disjunction(parse(source).alternatives);
+  return { groupNames: walk.groupNames };
+};

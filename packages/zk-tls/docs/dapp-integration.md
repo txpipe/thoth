@@ -267,8 +267,11 @@ not depend on the attestor-core version you pin. It names the first construct
 outside it:
 
 ```
-regex uses lookahead (?= at index 3, which the regex subset does not allow
+regex uses lookahead at index 3, which the regex subset does not allow
 ```
+
+A regex that JavaScript can't parse with the `u` flag is refused with the
+parser's reason, such as `invalid syntax (Nothing to repeat)`.
 
 The subset is an allowlist. A regex may use:
 
@@ -277,13 +280,13 @@ The subset is an allowlist. A regex may use:
 | Literals | printable ASCII, space to `~`, except the syntax characters `^ $ \ . * + ? ( ) [ ] { } \|` |
 | Escapes | `\` before a syntax character or `/`; `\t \n \r \f \v`; `\x00` to `\x7F` |
 | Character classes | `.`, `\d \D \w \W \s \S` |
-| Brackets | `[…]` and `[^…]` holding literals, escapes, `\-`, character classes and ranges such as `a-z`; a bare `-` only first, last, or as a range's upper bound (`[!--]`); a `]` only escaped |
+| Brackets | `[…]` and `[^…]` holding literals, escapes, `\-`, character classes and ranges such as `a-z`; a bare `-` only first, last, or as a range's upper bound (`[!--]`); a `]` only escaped; never empty (`[]`, `[^]`) |
 | Anchors | `^`, `$`, `\b`, `\B` |
-| Groups | `(…)`, `(?:…)`, and `(?<name>…)` with an ASCII identifier used once, nested at most 100 deep |
-| Quantifiers | `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`, each optionally lazy with a trailing `?`; counts are at most 1000 and have no leading zero (`{0}` is fine, `{02}` is not) |
+| Groups | `(…)`, `(?:…)`, and `(?<name>…)` with an ASCII identifier used once |
+| Quantifiers | `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`, each optionally lazy with a trailing `?`; counts have no leading zero (`{0}` is fine, `{02}` is not) |
 
-A regex is at most 4096 characters long, and these rules limit how the
-constructs combine:
+A regex is at most 4096 characters long and holds at most 100 `(` characters,
+escaped or not. These rules limit how the constructs combine:
 
 - A quantifier cannot apply to a capture group or to a group that holds one:
   `(?:(?<x>a)|b)+` is refused. RegExp clears the captures on every repetition
@@ -291,14 +294,13 @@ constructs combine:
 - A quantifier cannot apply to something that can match the empty string:
   `(?:a*)+`, `(?:|a)*` and `^*` are refused. The engines handle an empty
   repetition differently.
-- Nested counted quantifiers multiply to at most 1000, counting each at its
-  maximum (its minimum when it has no maximum): `(?:a{10}){100}` is accepted
-  and `(?:a{100}){11}` is not. RE2 refuses the rest.
-- The regex must fit RE2's memory budget once every counted quantifier is
-  written out. A character or anchor counts 1, and `.`, a class escape such as
-  `\W`, or a bracket class counts 8, plus 1 for each member of the bracket
-  class. The total, summed over sequences and alternatives, is at most 40,000:
-  `x[a-z]{999}[a-z]{999}[a-z]{999}` counts 26,974 and is accepted.
+- A counted quantifier (`{n}`, `{n,}`, `{n,m}`) applies to one literal,
+  escape, `.` or bracket class, never to a group: `(?:ab){2}` is refused; write
+  `abab`, or `(?:ab)+` when the count doesn't matter.
+- The counts of a regex's counted quantifiers add up to at most 1000, counting
+  each at its maximum (its minimum when it has no maximum): `a{600}b{400}` is
+  accepted and `a{600}b{401}` is not. RE2 writes every counted quantifier out
+  and refuses a regex that outgrows its memory budget; RegExp has no such limit.
 
 Everything else is refused, among it lookahead and lookbehind, backreferences
 (`\1`, `\k<name>`), `\p{…}` and `\P{…}`, `(?P<name>…)`, inline flags such as
