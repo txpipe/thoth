@@ -22,9 +22,9 @@ import {
 } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { type ZkFetchProver, type ZkFetchRequest, zkFetchClient } from '@thoth/zk-tls/client';
+import { testWitness } from '@thoth/zk-tls/dev';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DISCLOSURE_RULES } from '../../zk-tls/test/helpers/helper.js';
-import { testWitness } from '../../zk-tls/test/helpers/witness.js';
 import type { B_Claim } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import {

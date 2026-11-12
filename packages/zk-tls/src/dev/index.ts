@@ -1,7 +1,5 @@
-// Test-key witness: a local secp256k1 key that signs provider claim data the
-// way a Reclaim witness does, so tests can mint canonical zkFetch evidence
-// offline. Signing goes through attestor-core's own `SIGNATURES` and
-// `createSignDataForClaim`, so the attestor's check runs unchanged.
+// An offline witness for local development and tests: a local secp256k1 key that
+// signs claim data the way a Reclaim witness does. Never trust it with real value.
 import {
   canonicalStringify,
   createSignDataForClaim,
@@ -9,7 +7,7 @@ import {
   SelectedServiceSignatureType,
   SIGNATURES,
 } from '@reclaimprotocol/attestor-core';
-import type { ProviderClaimData, ZkFetchEvidence } from '@thoth/zk-tls';
+import type { ProviderClaimData, ZkFetchEvidence } from '../index.js';
 
 const scheme = SIGNATURES[SelectedServiceSignatureType];
 
@@ -37,11 +35,17 @@ export interface TestWitness {
 }
 
 /**
- * A witness backed by a local test key.
+ * A witness backed by a local test key. It signs through attestor-core's own
+ * `SIGNATURES` and `createSignDataForClaim`, so an attestor checks its
+ * evidence exactly as it checks a real witness's.
+ *
+ * Its evidence proves nothing: whoever holds the key signs any observation.
+ * Use it only offline, with an attestor that trusts its `address`.
  *
  * @param privateKey — `0x`-prefixed 32-byte hex secp256k1 key.
  * @returns the witness address (lowercase `0x` + 40 hex) and a signer that
  *   turns an {@link Observation} into canonical {@link ZkFetchEvidence}.
+ * @throws if `privateKey` is not a valid secp256k1 private key.
  */
 export const testWitness = (privateKey: string): TestWitness => {
   const address = scheme.getAddress(scheme.getPublicKey(privateKey));

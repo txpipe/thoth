@@ -43,6 +43,10 @@
       "types": "./dist/client/index.d.ts",
       "import": "./dist/client/index.js"
     },
+    "./dev": {
+      "types": "./dist/dev/index.d.ts",
+      "import": "./dist/dev/index.js"
+    },
     "./prover": {
       "types": "./dist/prover/index.d.ts",
       "import": "./dist/prover/index.js"

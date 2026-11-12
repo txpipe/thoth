@@ -9,9 +9,9 @@ import {
   zkFetchClaimContextDigestOf,
   zkFetchPolicyHashOf,
 } from '@thoth/zk-tls';
+import { testWitness } from '@thoth/zk-tls/dev';
 import { describe, expect, it } from 'vitest';
 import { DISCLOSURE_RULES } from './helpers/helper.js';
-import { testWitness } from './helpers/witness.js';
 
 const witness = testWitness(`0x${'11'.repeat(32)}`);
 
