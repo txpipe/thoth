@@ -1,5 +1,6 @@
 import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js';
+import { DEFAULT_HOLDER_SECRET } from './fixtures.js';
 
 /**
  * Private state the simulator threads through a mock contract's witnesses.
@@ -21,4 +22,10 @@ export const createPrivateState = <Claim = A_Claim>(
   signatures: [],
   commitRand: new Uint8Array(32),
   holderSecret,
+});
+
+/** The numeric mock's private state for `DEFAULT_HOLDER_SECRET`, with `overrides` applied. */
+export const privateStateWith = (overrides: Partial<PrivateState> = {}): PrivateState => ({
+  ...createPrivateState(DEFAULT_HOLDER_SECRET),
+  ...overrides,
 });

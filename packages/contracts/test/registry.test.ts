@@ -18,16 +18,11 @@ import {
   makeNotaryKey,
   signClaim,
 } from './helpers/fixtures.js';
-import { createPrivateState, type PrivateState } from './helpers/private-state.js';
+import { createPrivateState, privateStateWith } from './helpers/private-state.js';
 import { MockAttestationSim } from './helpers/sim.js';
 
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 const holder = DEFAULT_HOLDER_SECRET;
-
-const ps = (overrides: Partial<PrivateState> = {}): PrivateState => ({
-  ...createPrivateState(holder),
-  ...overrides,
-});
 
 describe('registry init', () => {
   const [a, b, c] = notaryKeys;
@@ -68,7 +63,7 @@ describe('registry init', () => {
     const sim = await MockAttestationSim.create(createPrivateState(holder), [a.pk, b.pk, empty]);
     const claim = makeClaim();
     const signed = signClaim(claim, [a, b, null], randomBytes(32));
-    await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+    await sim.call('verifyAttestation', privateStateWith({ ...signed, holderSecret: holder }));
     expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
   });
 
@@ -90,7 +85,7 @@ describe('registry init', () => {
     ).toBe(true);
     const signed = signClaim(claim, [a, null, null], randomBytes(32));
     await expect(
-      sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
+      sim.call('verifyAttestation', privateStateWith({ ...signed, holderSecret: holder })),
     ).rejects.toThrow('Insufficient valid signatures');
   });
 });
