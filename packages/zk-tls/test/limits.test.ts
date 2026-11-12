@@ -12,7 +12,7 @@ import {
 } from '@thoth/zk-tls';
 import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { describe, expect, it, vi } from 'vitest';
-import { DISCLOSURE_RULES, FIXTURE } from './helpers/helper.js';
+import { APP_ID, DISCLOSURE_RULES, FIXTURE, HOLDER } from './helpers/helper.js';
 
 const fixture = FIXTURE;
 
@@ -25,8 +25,8 @@ const policy: ZkFetchPolicy = {
 
 const claim = {
   version: 1,
-  appId: new Uint8Array(32).fill(0xa1),
-  holder: new Uint8Array(32).fill(0xc1),
+  appId: APP_ID,
+  holder: HOLDER,
   salt: new Uint8Array(32).fill(0xcd),
   policyHash: new Uint8Array(32),
   windowStart: 1_786_122_944,

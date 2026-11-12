@@ -16,7 +16,7 @@ import { assertClaimMatchesContext, verifyZkFetchProof } from '@thoth/zk-tls/att
 import type { ZkFetchRequest } from '@thoth/zk-tls/client';
 import { zkFetchProver } from '@thoth/zk-tls/prover';
 import { describe, expect, it } from 'vitest';
-import { APP_ID, HOLDER, WITNESS_URLS } from './helpers/helper.js';
+import { APP_ID, HOLDER, hex, WITNESS_URLS } from './helpers/helper.js';
 
 const TARGET_URL = process.env.LIVE_URL ?? 'https://api.github.com/repos/txpipe/dolos';
 
@@ -158,8 +158,8 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
       expect(claim.present).toEqual([true, true]);
     }
     const derived = claims.map((claim) => claim.byteValues[0]);
-    expect(derived.map((value) => Buffer.from(value ?? []).toString('hex'))).toEqual(
-      names.map((name) => Buffer.from(name ?? []).toString('hex')),
+    expect(derived.map((value) => hex(value ?? new Uint8Array()))).toEqual(
+      names.map((name) => hex(name ?? new Uint8Array())),
     );
   }, 180_000);
 });

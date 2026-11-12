@@ -30,21 +30,20 @@ import {
   assertClaimMatchesSubject,
 } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
-import { APP_ID, DISCLOSURE_RULES, hex, padded } from './helpers/helper.js';
+import {
+  APP_ID,
+  DISCLOSURE_RULES,
+  HOLDER,
+  hex,
+  padded,
+  policyWithSlots,
+} from './helpers/helper.js';
 
 /** The signed request parameters of a claim that only needs a subject. */
 const REQUEST = { url: 'https://api.github.com/repos/x', method: 'GET', body: '' };
 
 /** The claim context digest every crafted claim's context carries. */
 const SIGNED_DIGEST = 'cd'.repeat(32);
-
-/** An api.github.com policy declaring `slots`, with the default disclosure rules. */
-const policyWithSlots = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
-  allowedHosts: ['api.github.com'],
-  slots,
-  bodyPolicy: 'ignored',
-  ...DISCLOSURE_RULES,
-});
 
 /**
  * A signed-shape claim whose parameters/context are JSON I control. The context
@@ -163,7 +162,7 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
         ...DISCLOSURE_RULES,
       },
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       valueSlots: 1,
       windowStart: 1_786_122_944n,
       windowEnd: 1_786_122_944n,
@@ -281,7 +280,7 @@ describe('deriveClaimFromEvidence', () => {
       verified,
       policy: policyWithSlots([{ slot: 0, name: 'distance', parse: 'float' }]),
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       valueSlots: 2,
       windowStart: 1_786_122_944n,
       windowEnd: 1_786_122_944n,
@@ -299,7 +298,7 @@ describe('deriveClaimFromEvidence', () => {
       verified,
       policy: policyWithSlots([{ slot: 0, name: 'time', parse: 'int' }]),
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       valueSlots: 2,
       windowStart: 1_786_122_944n,
       windowEnd: 1_786_122_944n,
@@ -317,7 +316,7 @@ describe('deriveClaimFromEvidence', () => {
       verified,
       policy: activePolicy,
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       valueSlots: 1,
       windowStart: 1_786_122_944n,
       windowEnd: 1_786_122_944n,
@@ -338,7 +337,7 @@ describe('deriveClaimFromEvidence', () => {
         bodyPolicy: 'non-empty',
       },
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       valueSlots: 1,
       windowStart: 1_786_122_944n,
       windowEnd: 1_786_122_944n,
@@ -352,12 +351,12 @@ describe('deriveClaimFromEvidence', () => {
       verified,
       policy: policyWithSlots([{ slot: 0, name: 'a', parse: 'int', optional: true }]),
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       valueSlots: 1,
       windowStart: 1_786_122_944n,
       windowEnd: 1_786_122_944n,
     });
-    expect(Buffer.from(claim.salt).toString('hex')).toBe(SIGNED_DIGEST);
+    expect(hex(claim.salt)).toBe(SIGNED_DIGEST);
   });
 
   it.each([
@@ -370,7 +369,7 @@ describe('deriveClaimFromEvidence', () => {
         verified: verifiedOf(claim, {}),
         policy: policyWithSlots([{ slot: 0, name: 'a', parse: 'int', optional: true }]),
         appId: APP_ID,
-        holder: new Uint8Array(32).fill(0xc1),
+        holder: HOLDER,
         valueSlots: 1,
         windowStart: 1_786_122_944n,
         windowEnd: 1_786_122_944n,
@@ -385,7 +384,7 @@ describe('deriveClaimFromEvidence', () => {
         verified: verifiedOf(claimWith(REQUEST, {}), {}),
         policy: policyWithSlots([{ slot: 1, name, parse: 'bytes', optional: true }]),
         appId: APP_ID,
-        holder: new Uint8Array(32).fill(0xc1),
+        holder: HOLDER,
         valueSlots: 1,
         byteSlots: 1,
         windowStart: 1_786_122_944n,
@@ -405,7 +404,7 @@ describe('deriveClaimFromEvidence', () => {
       verified: verifiedOf(claimWith(REQUEST, {}), disclosed),
       policy: policyWithSlots([{ slot: 1, name: '__proto__', parse: 'bytes' }]),
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       valueSlots: 1,
       byteSlots: 1,
       windowStart: 1_786_122_944n,
@@ -424,7 +423,7 @@ describe('deriveClaimFromEvidence', () => {
         verified,
         policy: policyWithSlots([{ slot: 1, name: 'a', parse: 'int' }]),
         appId: APP_ID,
-        holder: new Uint8Array(32).fill(0xc1),
+        holder: HOLDER,
         valueSlots: 1,
         windowStart: 1_786_122_944n,
         windowEnd: 1_786_122_944n,
@@ -830,7 +829,7 @@ describe('byte value parse rules', () => {
       verified: verifiedOf(claimWith(PARAMS, {}), { id }),
       policy: policyWithSlots(slots),
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       valueSlots: 1,
       byteSlots: 1,
       windowStart: 1_786_122_944n,

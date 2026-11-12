@@ -10,7 +10,7 @@ import {
   zkFetchPolicyHashOf,
 } from '@thoth/zk-tls';
 import { describe, expect, it } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
+import { DISCLOSURE_RULES, HOLDER } from './helpers/helper.js';
 import { testWitness } from './helpers/witness.js';
 
 const witness = testWitness(`0x${'11'.repeat(32)}`);
@@ -34,7 +34,7 @@ const check = async (allowedHosts: string[], url: string): Promise<string> => {
       [ZK_FETCH_CLAIM_CONTEXT_KEY]: zkFetchClaimContextDigestOf({
         policy,
         request: { url, method: 'GET', body: '' },
-        holder: new Uint8Array(32).fill(0xc1),
+        holder: HOLDER,
         windowStart: 1_786_000_000n,
         windowEnd: 1_786_000_010n,
       }),

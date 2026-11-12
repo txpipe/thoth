@@ -18,7 +18,7 @@ import {
 } from '@thoth/zk-tls';
 import { createZkFetchDefinition, zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { APP_ID, DISCLOSURE_RULES, HOLDER } from './helpers/helper.js';
+import { APP_ID, DISCLOSURE_RULES, HOLDER, hex } from './helpers/helper.js';
 import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
 
 const alice = testWitness(`0x${'11'.repeat(32)}`);
@@ -260,7 +260,7 @@ describe('test-key witness', () => {
 
   it('signs the claim context digest the witness signed as the salt', async () => {
     const attestation = await attestWith(aliceAttestor, await observe(alice));
-    expect(Buffer.from(attestation.claim.salt).toString('hex')).toBe(digestOf());
+    expect(hex(attestation.claim.salt)).toBe(digestOf());
   });
 
   it('rejects a proposal with another salt than the witness signed', async () => {

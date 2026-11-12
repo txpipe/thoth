@@ -37,19 +37,21 @@ import {
 } from '@thoth/zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import { APP_ID, DISCLOSURE_RULES, FIXTURE, padded } from './helpers/helper.js';
+import {
+  APP_ID,
+  DISCLOSURE_RULES,
+  FIXTURE,
+  HOLDER,
+  padded,
+  policyWithSlots,
+} from './helpers/helper.js';
 import { type TestWitness, testWitness } from './helpers/witness.js';
 
 const fixture = FIXTURE;
 
 const policy = (
   slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'data', parse: 'float', optional: true }],
-): ZkFetchPolicy => ({
-  allowedHosts: ['api.github.com'],
-  slots,
-  bodyPolicy: 'ignored',
-  ...DISCLOSURE_RULES,
-});
+): ZkFetchPolicy => policyWithSlots(slots);
 
 type FakePublicKey = { id: string };
 type FakeSignature = string;
@@ -149,7 +151,7 @@ describe('zkFetch claim schema', () => {
     const claim = {
       version: 1,
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       salt: new Uint8Array(32).fill(0xcd),
       policyHash: new Uint8Array(32),
       windowStart: 1_786_122_944,
@@ -179,7 +181,7 @@ describe('zkFetch claim schema', () => {
     const claim = zkFetchClaimSchema.parse({
       version: 1,
       appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
+      holder: HOLDER,
       salt: new Uint8Array(32).fill(0xcd),
       policyHash: new Uint8Array(32),
       windowStart: 1_786_122_944,
@@ -308,7 +310,7 @@ describe('zkFetch attestor + client', () => {
     });
 
   /** The holder and window a claim is proved for. */
-  const binding = (holder = new Uint8Array(32).fill(0xc1)) => ({
+  const binding = (holder = HOLDER) => ({
     holder,
     windowStart: BigInt(BASE_TIMESTAMP_S),
     windowEnd: BigInt(BASE_TIMESTAMP_S + 60),
