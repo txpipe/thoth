@@ -38,6 +38,14 @@ const REQUEST = { url: 'https://api.github.com/repos/x', method: 'GET', body: ''
 /** The claim context digest every crafted claim's context carries. */
 const SIGNED_DIGEST = 'cd'.repeat(32);
 
+/** An api.github.com policy declaring `slots`, with the default disclosure rules. */
+const policyWithSlots = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
+  allowedHosts: ['api.github.com'],
+  slots,
+  bodyPolicy: 'ignored',
+  ...DISCLOSURE_RULES,
+});
+
 /**
  * A signed-shape claim whose parameters/context are JSON I control. The context
  * also carries {@link SIGNED_DIGEST}.
@@ -264,13 +272,6 @@ describe('disclosedValuesOf via parsedEvidenceView', () => {
 });
 
 describe('deriveClaimFromEvidence', () => {
-  const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
-    allowedHosts: ['api.github.com'],
-    slots,
-    bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
-  });
-
   it('maps disclosed values into the declared slots', () => {
     const verified = verifiedOf(
       claimWith(REQUEST, { extractedParameters: { distance: '12.4', time: '300' } }),
@@ -278,7 +279,7 @@ describe('deriveClaimFromEvidence', () => {
     );
     const claim = deriveClaimFromEvidence({
       verified,
-      policy: policy([{ slot: 0, name: 'distance', parse: 'float' }]),
+      policy: policyWithSlots([{ slot: 0, name: 'distance', parse: 'float' }]),
       appId: APP_ID,
       holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 2,
@@ -296,7 +297,7 @@ describe('deriveClaimFromEvidence', () => {
     );
     const claim = deriveClaimFromEvidence({
       verified,
-      policy: policy([{ slot: 0, name: 'time', parse: 'int' }]),
+      policy: policyWithSlots([{ slot: 0, name: 'time', parse: 'int' }]),
       appId: APP_ID,
       holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 2,
@@ -311,7 +312,7 @@ describe('deriveClaimFromEvidence', () => {
     const verified = verifiedOf(claimWith(REQUEST, { extractedParameters: { a: '1' } }), {
       a: '1',
     });
-    const activePolicy = policy([{ slot: 0, name: 'a', parse: 'int' }]);
+    const activePolicy = policyWithSlots([{ slot: 0, name: 'a', parse: 'int' }]);
     const claim = deriveClaimFromEvidence({
       verified,
       policy: activePolicy,
@@ -333,7 +334,7 @@ describe('deriveClaimFromEvidence', () => {
     const claim = deriveClaimFromEvidence({
       verified,
       policy: {
-        ...policy([{ slot: 0, name: 'a', parse: 'int' }]),
+        ...policyWithSlots([{ slot: 0, name: 'a', parse: 'int' }]),
         bodyPolicy: 'non-empty',
       },
       appId: APP_ID,
@@ -349,7 +350,7 @@ describe('deriveClaimFromEvidence', () => {
     const verified = verifiedOf(claimWith(REQUEST, {}), {});
     const claim = deriveClaimFromEvidence({
       verified,
-      policy: policy([{ slot: 0, name: 'a', parse: 'int', optional: true }]),
+      policy: policyWithSlots([{ slot: 0, name: 'a', parse: 'int', optional: true }]),
       appId: APP_ID,
       holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 1,
@@ -367,7 +368,7 @@ describe('deriveClaimFromEvidence', () => {
     expect(() =>
       deriveClaimFromEvidence({
         verified: verifiedOf(claim, {}),
-        policy: policy([{ slot: 0, name: 'a', parse: 'int', optional: true }]),
+        policy: policyWithSlots([{ slot: 0, name: 'a', parse: 'int', optional: true }]),
         appId: APP_ID,
         holder: new Uint8Array(32).fill(0xc1),
         valueSlots: 1,
@@ -382,7 +383,7 @@ describe('deriveClaimFromEvidence', () => {
     (name) => {
       const claim = deriveClaimFromEvidence({
         verified: verifiedOf(claimWith(REQUEST, {}), {}),
-        policy: policy([{ slot: 1, name, parse: 'bytes', optional: true }]),
+        policy: policyWithSlots([{ slot: 1, name, parse: 'bytes', optional: true }]),
         appId: APP_ID,
         holder: new Uint8Array(32).fill(0xc1),
         valueSlots: 1,
@@ -402,7 +403,7 @@ describe('deriveClaimFromEvidence', () => {
     );
     const claim = deriveClaimFromEvidence({
       verified: verifiedOf(claimWith(REQUEST, {}), disclosed),
-      policy: policy([{ slot: 1, name: '__proto__', parse: 'bytes' }]),
+      policy: policyWithSlots([{ slot: 1, name: '__proto__', parse: 'bytes' }]),
       appId: APP_ID,
       holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 1,
@@ -421,7 +422,7 @@ describe('deriveClaimFromEvidence', () => {
     expect(() =>
       deriveClaimFromEvidence({
         verified,
-        policy: policy([{ slot: 1, name: 'a', parse: 'int' }]),
+        policy: policyWithSlots([{ slot: 1, name: 'a', parse: 'int' }]),
         appId: APP_ID,
         holder: new Uint8Array(32).fill(0xc1),
         valueSlots: 1,
@@ -529,18 +530,11 @@ describe('assertClaimMatchesContext', () => {
 });
 
 describe('assertClaimMatchesDisclosures', () => {
-  const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
-    allowedHosts: ['api.github.com'],
-    slots,
-    bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
-  });
-
   it('accepts a claim that reflects the disclosures', () => {
     assertClaimMatchesDisclosures({
       claim: { values: [12n, 0n], present: [true, false] } as never,
       disclosures: { distance: '12.4' },
-      policy: policy([{ slot: 0, name: 'distance', parse: 'float' }]),
+      policy: policyWithSlots([{ slot: 0, name: 'distance', parse: 'float' }]),
     });
   });
 
@@ -549,7 +543,7 @@ describe('assertClaimMatchesDisclosures', () => {
       assertClaimMatchesDisclosures({
         claim: { values: [13n, 0n], present: [true, false] } as never,
         disclosures: { distance: '12.4' },
-        policy: policy([{ slot: 0, name: 'distance', parse: 'float' }]),
+        policy: policyWithSlots([{ slot: 0, name: 'distance', parse: 'float' }]),
       }),
     ).toThrow(/does not match the disclosed value/);
   });
@@ -559,7 +553,7 @@ describe('assertClaimMatchesDisclosures', () => {
       assertClaimMatchesDisclosures({
         claim: { values: [0n, 0n], present: [true, false] } as never,
         disclosures: {},
-        policy: policy([{ slot: 0, name: 'distance', parse: 'float' }]),
+        policy: policyWithSlots([{ slot: 0, name: 'distance', parse: 'float' }]),
       }),
     ).toThrow(/does not match the disclosed value/);
   });
@@ -573,7 +567,7 @@ describe('assertClaimMatchesDisclosures', () => {
           byteValues: [parseDisclosedValue('[object Object]', 'bytes')],
         } as never,
         disclosures: {},
-        policy: policy([{ slot: 1, name: '__proto__', parse: 'bytes' }]),
+        policy: policyWithSlots([{ slot: 1, name: '__proto__', parse: 'bytes' }]),
       }),
     ).toThrow(/does not match the disclosed value/);
   });
@@ -587,7 +581,7 @@ describe('assertClaimMatchesDisclosures', () => {
         byteValues: [parseDisclosedValue('abcd', 'hex')],
       } as never,
       disclosures: { id: '0xABCD' },
-      policy: policy(slots),
+      policy: policyWithSlots(slots),
     });
     expect(() =>
       assertClaimMatchesDisclosures({
@@ -597,7 +591,7 @@ describe('assertClaimMatchesDisclosures', () => {
           byteValues: [new Uint8Array(32)],
         } as never,
         disclosures: { id: 'abcd' },
-        policy: policy(slots),
+        policy: policyWithSlots(slots),
       }),
     ).toThrow(/does not match the disclosed value/);
   });
@@ -823,13 +817,6 @@ describe('assertEvidenceMatchesPolicy', () => {
 });
 
 describe('byte value parse rules', () => {
-  const policy = (slots: ZkFetchPolicy['slots']): ZkFetchPolicy => ({
-    allowedHosts: ['api.github.com'],
-    slots,
-    bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
-  });
-
   const pad32 = (bytes: Uint8Array): Uint8Array => {
     const out = new Uint8Array(32);
     out.set(bytes);
@@ -841,7 +828,7 @@ describe('byte value parse rules', () => {
   const derive = (slots: ZkFetchPolicy['slots'], id: string) =>
     deriveClaimFromEvidence({
       verified: verifiedOf(claimWith(PARAMS, {}), { id }),
-      policy: policy(slots),
+      policy: policyWithSlots(slots),
       appId: APP_ID,
       holder: new Uint8Array(32).fill(0xc1),
       valueSlots: 1,
@@ -890,9 +877,9 @@ describe('byte value parse rules', () => {
   });
 
   it('is pinned by the policy hash', () => {
-    const intPolicy = policy([{ slot: 0, name: 'id', parse: 'int' }]);
-    const bytesPolicy = policy([{ slot: 0, name: 'id', parse: 'bytes' }]);
-    const pinnedPolicy = policy([{ slot: 0, name: 'id', parse: 'bytes', length: 32 }]);
+    const intPolicy = policyWithSlots([{ slot: 0, name: 'id', parse: 'int' }]);
+    const bytesPolicy = policyWithSlots([{ slot: 0, name: 'id', parse: 'bytes' }]);
+    const pinnedPolicy = policyWithSlots([{ slot: 0, name: 'id', parse: 'bytes', length: 32 }]);
     expect(hex(zkFetchPolicyHashOf(bytesPolicy))).not.toEqual(hex(zkFetchPolicyHashOf(intPolicy)));
     expect(hex(zkFetchPolicyHashOf(pinnedPolicy))).not.toEqual(
       hex(zkFetchPolicyHashOf(bytesPolicy)),
