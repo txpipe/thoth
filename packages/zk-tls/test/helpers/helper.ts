@@ -6,9 +6,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ZkFetchPolicy } from '@thoth/zk-tls';
 
-/** The app id every claim in the test suites is for. */
+/** The default app id: the suites use it unless a test needs another. */
 export const APP_ID = new Uint8Array(32).fill(0xa1);
-/** The holder every claim in the test suites is for. */
+/** The default holder: the suites use it unless a test needs another. */
 export const HOLDER = new Uint8Array(32).fill(0xc1);
 
 /**
