@@ -6,7 +6,7 @@ You need:
 
 - Node.js 24 (the version in `.nvmrc`).
 - The [Compact CLI](https://github.com/midnightntwrk/compact) with compiler
-  `0.34.0` (`compact update 0.34.0`).
+  `0.36.1` (`compact update 0.36.1`).
 
 Then, from the repo root:
 
@@ -15,7 +15,7 @@ npm install
 npm test
 ```
 
-`@midnight-ntwrk/compact-runtime` is pinned to `0.19.0` in every workspace.
+`@midnight-ntwrk/compact-runtime` is pinned to `0.21.0` in every workspace.
 Off-chain code that mirrors an in-circuit primitive matches the circuit only
 at that version, so bump it everywhere at once, together with the compiler.
 

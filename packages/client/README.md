@@ -88,7 +88,7 @@ const collected = await resolveAttestation({
 
 - **Registry slots belong to the trusted set, not to the attestor.** One attestor serves many apps at different slots, so each app records the slot its own registry assigned. `resolveAttestation` takes the trusted member itself, so a result only carries a slot the set assigned, and transports see only the descriptor.
 - **Signatures are verified before collection.** A broken or malicious transport could otherwise return a forged signature with the right key and message, and the transaction would fail after submission and cost fees.
-- **The verifier is pluggable, and the main entry point imports no crypto library.** `@thoth/client/jubjub` ships the contracts' Jubjub Schnorr scheme on Compact runtime `0.19.0`, the version the contracts pin.
+- **The verifier is pluggable, and the main entry point imports no crypto library.** `@thoth/client/jubjub` ships the contracts' Jubjub Schnorr scheme on Compact runtime `0.21.0`, the version the contracts pin.
 - **The response carries no kind label.** The pinned definition is the kind; for zkFetch the signed policy hash commits to the law tag, policy and wire version ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
 
 ## Links

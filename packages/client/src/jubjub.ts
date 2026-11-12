@@ -10,7 +10,7 @@ import type { FlatMessage } from '@thoth/core/claim';
 import type { AttestationVerifier } from './index.js';
 
 /**
- * Verify flat-message Jubjub Schnorr signatures with Compact runtime 0.19.0,
+ * Verify flat-message Jubjub Schnorr signatures with Compact runtime 0.21.0,
  * the version the contracts pin. A malformed key, message or signature fails
  * verification instead of throwing.
  */

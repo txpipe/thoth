@@ -77,8 +77,9 @@ describe('registry init', () => {
     const claim = makeClaim();
     const msg = pureCircuits.message(claim);
     // The dummy is a valid Schnorr signature for the identity point (the
-    // empty key), so only `slotValid`'s empty-slot skip keeps it from
-    // counting; without that skip this claim would pass.
+    // empty key) off-chain, so only `slotValid`'s empty-slot skip keeps it
+    // from counting: without that skip the compiled verifier rejects the
+    // identity key and aborts instead.
     expect(
       jubjubSchnorrVerify(
         new CompactTypeVector(msg.length, CompactTypeField),
