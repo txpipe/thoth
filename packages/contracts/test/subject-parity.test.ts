@@ -10,8 +10,7 @@
 import { subjectHashOf } from '@thoth/core/claim-context';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
-
-const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
+import { filled } from './helpers/fixtures.js';
 
 describe('subjectHashOf circuit parity', () => {
   it('matches persistentHash<Subject> for the struct the pinned vector came from', () => {

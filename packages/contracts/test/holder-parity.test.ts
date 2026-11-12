@@ -10,8 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { holderCommitmentOf } from '@thoth/core/claim-context';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
-
-const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
+import { filled } from './helpers/fixtures.js';
 
 /** Read 32 bytes as an unsigned integer, big-endian or little-endian. */
 const asInteger = (bytes: Uint8Array, littleEndian: boolean): bigint => {
