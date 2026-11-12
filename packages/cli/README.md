@@ -91,9 +91,9 @@ npx thoth compile --skip-zk    # flags go to `compact compile`
 ```
 
 `thoth compile` prepends `contract.modules` to `COMPACT_PATH` and refuses to
-compile a generated file that was edited or that an older config produced.
-Keep `out.compact` and `out.ts` out of your formatter: a reformatted file
-counts as edited.
+compile a generated Compact file that was edited or that an older config
+produced. Keep `out.compact` and `out.ts` out of your formatter: a reformatted
+file counts as edited.
 
 | File | What it holds |
 |------|---------------|

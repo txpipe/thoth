@@ -69,8 +69,7 @@ Workspaces import each other through their built `dist/`. The root `build` and
 if you add a package that another workspace imports, add it to that chain too.
 `cli` comes last because nothing imports it, and its tests run the built
 `thoth` bin. A stale `dist/` shows up as confusing type errors such as
-"Generic type requires
-N type argument(s)".
+"Generic type requires N type argument(s)".
 
 `packages/zk-tls/test/live.test.ts` runs against two real witnesses and skips
 unless `WITNESS_URLS` names them; see the attestor guide's
