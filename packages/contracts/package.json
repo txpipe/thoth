@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "Thoth Compact modules: N-of-M attestation and attestor registry.",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": true,
   "author": "TxPipe-Shop",
   "keywords": [

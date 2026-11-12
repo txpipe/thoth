@@ -11,7 +11,7 @@
   ],
   "description": "Private N-of-M attestation for Midnight — a TypeScript monorepo.",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "scripts": {
     "compact": "compact compile +0.36.1 packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.36.1 packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes",
     "compact:no-zk": "compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes",

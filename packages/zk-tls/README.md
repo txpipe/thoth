@@ -175,7 +175,7 @@ What it does not check, and what your app must do:
 
 ## License
 
-AGPL-3.0-only: this package links Reclaim Protocol's [attestor-core](https://github.com/reclaimprotocol/attestor-core), which is AGPL-3.0-only. An app that incorporates this package must offer the combined work under AGPL; the rest of Thoth stays MIT. If AGPL doesn't fit your app, don't include this package, or get a commercial license from Reclaim. Third-party code: attestor-core AGPL-3.0-only © Reclaim Protocol; [tls](https://github.com/reclaimprotocol/tls) MIT © CreatorOS Inc.
+AGPL-3.0-only: this package links Reclaim Protocol's [attestor-core](https://github.com/reclaimprotocol/attestor-core), which is AGPL-3.0-only. An app that incorporates this package must offer the combined work under AGPL; the rest of Thoth is Apache-2.0. If AGPL doesn't fit your app, don't include this package, or get a commercial license from Reclaim. Third-party code: attestor-core AGPL-3.0-only © Reclaim Protocol; [tls](https://github.com/reclaimprotocol/tls) MIT © CreatorOS Inc.
 
 ## Links
 
