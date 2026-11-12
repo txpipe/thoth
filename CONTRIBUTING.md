@@ -46,6 +46,9 @@ thoth/
 Every directory under `packages/` is one package. A package is built and
 type-checked only once it is listed in the root `package.json` `workspaces`.
 
+Keep one copy of a test helper per package, in that package's test-helper
+module (`test/helpers/`); there is no cross-package test utility.
+
 ## Commands
 
 Run them from the repo root:
