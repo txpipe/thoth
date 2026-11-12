@@ -7,10 +7,10 @@ Agent-facing guide for the Thoth monorepo. Human-oriented docs live in
 
 Thoth is a private N-of-M attestation system for Midnight. Three layers:
 
-- **Contract layer** — `packages/contracts` (`@txpipe/thoth-contracts`): embeddable
-  Compact modules that verify N-of-M signatures over a flat signed message
-  (`attestation.compact`), count valid signatures against a pinned key vector
-  (`attestor_registry.compact`) with the stdlib `jubjubSchnorrVerify`.
+- **Contract layer** — `packages/contracts` (`@txpipe/thoth-contracts`):
+  embeddable Compact modules that verify N-of-M signatures over a flat signed
+  message (`attestation.compact`), count valid signatures against a pinned key
+  vector (`attestor_registry.compact`) with the stdlib `jubjubSchnorrVerify`.
 - **Attestor SDK** — `packages/attestor` + `packages/core`: the types and
   interfaces attestor kinds implement to provide attestation. Kinds verify
   evidence and sign a canonical claim. `packages/client` holds the dApp side
@@ -49,14 +49,12 @@ file.
   placeholder and is not compiled
   ([`CONTRIBUTING.md`](CONTRIBUTING.md#repository-layout)).
 - **`@midnight-ntwrk/compact-runtime` stays pinned to `0.21.0`** in every
-  workspace, with Compact compiler `0.36.1` (the `compact` scripts in the root
-  and contracts `package.json`, `.github/actions/setup-compact`,
-  `CONTRIBUTING.md` and the contracts README).
-  Never bump one workspace alone; [`CONTRIBUTING.md`](CONTRIBUTING.md#dev-setup)
-  says why.
-- **Claim types are keyless.** `@txpipe/thoth-core` carries no signing key; anything
-  that commits to a message delegates to the kind's `message()`. Keep it that
-  way.
+  workspace, with Compact compiler `0.36.1`. Never bump one workspace alone;
+  [`CONTRIBUTING.md`](CONTRIBUTING.md#dev-setup) says why and lists every
+  place the compiler is pinned.
+- **Claim types are keyless.** `@txpipe/thoth-core` carries no signing key;
+  anything that commits to a message delegates to the kind's `message()`. Keep
+  it that way.
 - **Published packages carry a changeset.** A user-facing change to `core`,
   `attestor`, `client` or `zk-tls` adds one (`npm run changeset`); internal
   dependencies between them use a `^` range, never `*`, which changesets
@@ -76,8 +74,9 @@ file.
   (import from `./claim.js`, not `./claim`). Shared config in
   `tsconfig.base.json`.
 - **Biome** is the formatter/linter (`biome.json`). Notable rules:
-  - `noBarrelFile` / `noReExportAll` are errors (except `*.config.*`). Never
-    add `export *` barrels; use subpath exports instead (see `@txpipe/thoth-core/claim`).
+  - `noBarrelFile` / `noReExportAll` are errors (except `*.config.*`). Never add
+    `export *` barrels; use subpath exports instead (see
+    `@txpipe/thoth-core/claim`).
   - `noUnusedImports`, `noUnusedVariables`, `useErrorMessage` are errors.
   - 100-column line width, single quotes, semicolons.
 - **Compact**: `pragma language_version >= 0.22`; follow the style in
@@ -141,7 +140,8 @@ Voice, for every doc and comment:
 Package README template, headings in this order (skip a section only if it
 would be empty):
 
-1. `# @txpipe/thoth-<name>`, then one sentence saying what it is and who it's for.
+1. `# @txpipe/thoth-<name>`, then one sentence saying what it is and who it's
+   for.
 2. The status line, identical in every README and the root:
    > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 3. `## Install`: how to install or use it today. A package with an npm name
@@ -163,9 +163,9 @@ Where decisions live: a decision that changes how you use a package goes in
 that package's "Design decisions", written as its consequence for the reader.
 A decision that spans packages is an ADR in `docs/adr/`, linked from every
 README it affects. A decision that is local to one package and has no ADR
-lives only in that package's README. `docs/kind-author-guide.md` spans
-packages: update it when an interface a kind implements changes
-(`@txpipe/thoth-core`, `@txpipe/thoth-attestor`, `@txpipe/thoth-client`, or the claim).
+lives only in that package's README. `docs/kind-author-guide.md` spans packages:
+update it when an interface a kind implements changes (`@txpipe/thoth-core`,
+`@txpipe/thoth-attestor`, `@txpipe/thoth-client`, or the claim).
 
 The roadmap lives in GitHub: the `v0` and `Next` milestones and the `frozen`
 label. The root README's Roadmap section only links those three; package

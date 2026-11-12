@@ -19,11 +19,16 @@ npm test
 Off-chain code that mirrors an in-circuit primitive matches the circuit only
 at that version, so bump it everywhere at once, together with the compiler.
 
-CI installs the Compact CLI and compiler through
+CI installs the Compact CLI `0.5.3` and compiler `0.36.1` through
 [`.github/actions/setup-compact`](.github/actions/setup-compact/action.yml),
-which pins the CLI release and its SHA-256. Dependabot can't bump these pins:
-when you move to a new compiler, update that action, the `+<version>` in the
-`compact` scripts and this section together.
+which pins the CLI tarball by its SHA-256. Dependabot can't bump these pins.
+To move to a new compiler, update in one change:
+
+- the compiler version in `setup-compact` (and the CLI version and SHA-256,
+  if the new compiler needs a newer CLI);
+- the `+<version>` in the `compact` scripts of the root and
+  `packages/contracts` `package.json`;
+- this section and the contracts README.
 
 ## Repository layout
 
@@ -85,9 +90,10 @@ unless `WITNESS_URLS` names them; see the attestor guide's
 
 ## Adding a changeset
 
-A change that a user of `@txpipe/thoth-core`, `-attestor`, `-client` or
-`-zk-tls` would notice needs a changeset, which becomes the package's version
-bump and changelog entry. Add one with your pull request:
+A change that a user of `@txpipe/thoth-core`, `@txpipe/thoth-attestor`,
+`@txpipe/thoth-client` or `@txpipe/thoth-zk-tls` would notice needs a changeset,
+which becomes the package's version bump and changelog entry. Add one with your
+pull request:
 
 ```bash
 npm run changeset
@@ -110,17 +116,20 @@ The [release workflow](.github/workflows/release.yml) runs on every push to
 - once that pull request merges, publishes the new versions to npm through
   trusted publishing, with provenance, and tags them.
 
-Publishing runs only when the repository variable `NPM_PUBLISH` is `true`. It
-uses no npm token: npm trusts this repository's `release.yml` workflow in the
-`npm` environment.
+Publishing runs only from `main` and only when the repository variable
+`NPM_PUBLISH` is `true`. It uses no npm token: npm trusts this repository's
+`release.yml` workflow in the `npm` environment, which deploys only from
+`main`. The Version Packages pull request is opened with the workflow's own
+token, so CI doesn't run on it by itself; close and reopen it to run the
+checks.
 
 ## CI and commits
 
 CI (`.github/workflows/`) compiles the Compact contracts and runs the type
 check, vitest and Biome on every push and pull request. Every action is pinned
-to a commit SHA, with its version in a comment, and Dependabot bumps both. Locally, the
-pre-commit hook runs Biome on the staged files and the Compact format check,
-and the pre-push hook runs Biome, the contract compilation, the type check,
-the build and vitest.
+to a commit SHA, with its version in a comment, and Dependabot bumps both.
+Locally, the pre-commit hook runs Biome on the staged files and the Compact
+format check, and the pre-push hook runs Biome, the contract compilation, the
+type check, the build and vitest.
 
 Conventions for code, comments and docs are in [AGENTS.md](AGENTS.md).

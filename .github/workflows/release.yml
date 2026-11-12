@@ -18,39 +18,9 @@ concurrency:
 jobs:
   test:
     name: Build and test
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
     permissions:
       contents: read
-    steps:
-      - name: Check out code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: '.nvmrc'
-          package-manager-cache: false
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Set up Compact
-        uses: ./.github/actions/setup-compact
-
-      - name: Compile contract artifacts
-        run: npm run compact:no-zk
-
-      - name: Build
-        run: npm run build
-
-      - name: Run type checks
-        run: npm run types
-
-      - name: Run tests
-        run: npx vitest run
+    uses: ./.github/workflows/test.yml
 
   select-mode:
     name: Select release mode
@@ -74,7 +44,8 @@ jobs:
           package-manager-cache: false
 
       - name: Install dependencies
-        run: npm ci
+        # No install scripts: nothing here needs a native build, and publish holds an OIDC token.
+        run: npm ci --ignore-scripts
 
       - name: Select Changesets mode
         id: select-mode
@@ -92,6 +63,9 @@ jobs:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # changeset version reads the history behind each changeset, and this checkout
+          # keeps no credentials to fetch more of it.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node.js
@@ -101,7 +75,8 @@ jobs:
           package-manager-cache: false
 
       - name: Install dependencies
-        run: npm ci
+        # No install scripts: nothing here needs a native build, and publish holds an OIDC token.
+        run: npm ci --ignore-scripts
 
       - name: Version packages
         uses: changesets/action/version@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
@@ -112,7 +87,10 @@ jobs:
   pack:
     name: Pack packages
     needs: select-mode
-    if: needs.select-mode.outputs.mode == 'publish' && vars.NPM_PUBLISH == 'true'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      needs.select-mode.outputs.mode == 'publish' &&
+      vars.NPM_PUBLISH == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -131,7 +109,8 @@ jobs:
           package-manager-cache: false
 
       - name: Install dependencies
-        run: npm ci
+        # No install scripts: nothing here needs a native build, and publish holds an OIDC token.
+        run: npm ci --ignore-scripts
 
       - name: Build
         run: npm run build
@@ -163,11 +142,10 @@ jobs:
           package-manager-cache: false
 
       - name: Install dependencies
-        run: npm ci
+        # No install scripts: nothing here needs a native build, and publish holds an OIDC token.
+        run: npm ci --ignore-scripts
 
       - name: Publish packages
         uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
-        env:
-          NPM_CONFIG_PROVENANCE: 'true'
         with:
           pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
