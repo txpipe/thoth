@@ -74,8 +74,8 @@ const makeSimClass = <PS extends { signatures: JubjubSchnorrSignature[] }, L>(op
       this.state = state;
     }
 
-    // Deploy is async under runtime 0.19 (`initialState` returns a Promise), so
-    // construction goes through this factory.
+    // Deploy is async (`initialState` returns a Promise), so construction goes
+    // through this factory.
     static async create(
       privateState: PS,
       registryKeys: JubjubPoint[],
@@ -87,17 +87,14 @@ const makeSimClass = <PS extends { signatures: JubjubSchnorrSignature[] }, L>(op
     }
 
     async call(name: string, ps: PS, ...args: unknown[]): Promise<unknown> {
-      const ctx = createCircuitContext(
-        name,
-        ADDR,
-        COIN_PK,
-        this.state,
-        ps,
-        undefined, // stateProvider
-        undefined, // gasLimit
-        undefined, // costModel
-        this.now ?? undefined,
-      );
+      const ctx = createCircuitContext({
+        circuitId: name,
+        contractAddress: ADDR,
+        coinPublicKeyOrZswapState: COIN_PK,
+        contractState: this.state,
+        privateState: ps,
+        time: this.now ?? undefined,
+      });
       const circuit = this.contract.circuits[name] as
         | ((
             context: CircuitContext<PS>,

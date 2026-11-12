@@ -10,8 +10,8 @@ in-circuit, for dApp developers who consume Thoth claims on-chain.
 The package is not on npm. Use the modules from a checkout of this repo: point
 `COMPACT_PATH` at `packages/contracts`, or vendor `attestation.compact` and
 `attestor_registry.compact` unchanged into your project (they import each
-other as siblings). Compile with Compact `0.34.0` and pin
-`@midnight-ntwrk/compact-runtime` to `0.19.0` in the driver: the off-chain
+other as siblings). Compile with Compact `0.36.1` and pin
+`@midnight-ntwrk/compact-runtime` to `0.21.0` in the driver: the off-chain
 message encoder matches the circuit only at that version.
 
 ## Usage

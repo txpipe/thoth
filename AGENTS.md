@@ -48,8 +48,10 @@ file.
   built goes into the root `workspaces` array; a directory left out of it is a
   placeholder and is not compiled
   ([`CONTRIBUTING.md`](CONTRIBUTING.md#repository-layout)).
-- **`@midnight-ntwrk/compact-runtime` stays pinned to `0.19.0`** in every
-  workspace, with Compact compiler `0.34.0` (README and both CI workflows).
+- **`@midnight-ntwrk/compact-runtime` stays pinned to `0.21.0`** in every
+  workspace, with Compact compiler `0.36.1` (the `compact` scripts in the root
+  and contracts `package.json`, both CI workflows, `CONTRIBUTING.md` and the
+  contracts README).
   Never bump one workspace alone; [`CONTRIBUTING.md`](CONTRIBUTING.md#dev-setup)
   says why.
 - **Claim types are keyless.** `@thoth/core` carries no signing key; anything
