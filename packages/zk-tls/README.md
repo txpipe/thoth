@@ -83,7 +83,7 @@ const attestment = await client.collect(
 
 `attestment.collected[i]` carries each signature with its registry slot; hand them to the contract as the dApp guide's [last section](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#handing-it-to-the-contract) shows.
 
-Each descriptor's `definition` is `zkFetchClientDefinition` from `@thoth/zk-tls/client`, so the dApp never loads the attestor side:
+Build each descriptor's `definition` with `zkFetchClientDefinition` from `@thoth/zk-tls/client`, so the dApp never loads the attestor side:
 
 ```ts
 import { zkFetchClientDefinition } from '@thoth/zk-tls/client';
@@ -185,7 +185,7 @@ What it does not check, and what your app must do:
 - **One policy per trusted set.** N-of-M means N attestors signed the same message, so every attestor must enforce the same policy; different readings produce different messages and never count together. Which witness an attestor trusts is per instance, not part of the policy.
 - **Each attestor sets its own input limits.** They are offchain config that bounds what a request costs the operator. A limit only refuses input and never changes the signed message, so attestors with different limits cost a trusted set liveness, not safety: a request that some attestors refuse may not reach the threshold. Agree on limits with your attestors, as you do on the witness version. The client and the exported schemas cap nothing.
 - **One attestor instance serves any contract.** The slot counts come from each proposal, up to the instance's limits, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
-- **The tooling export and the offline witness are their own entry points.** Tooling such as the `thoth` CLI drives zkFetch through `zkTls` from `@thoth/zk-tls/thoth`: the policy hash, the claim layout a policy implies, the client, an attestor per operator and an offline evidence source ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#10-the-thoth-entry)). `@thoth/zk-tls/dev` exports `testWitness`, the offline witness `zkTls.devEvidence` pairs with each operator's attestor. Both load `@thoth/attestor` and attestor-core, so a dApp imports `@thoth/zk-tls/client` instead.
+- **The tooling export and the offline witness are their own entry points.** Tooling such as the `thoth` CLI drives zkFetch through `zkTls` from `@thoth/zk-tls/thoth`: the policy hash, the claim layout a policy implies, the client, an attestor per operator and an offline evidence source ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#10-the-thoth-entry)). `@thoth/zk-tls/dev` exports `testWitness`, the offline witness `zkTls.devEvidence` pairs with each operator's attestor. Both load attestor-core, and `./thoth` also loads `@thoth/attestor`, so a dApp imports `@thoth/zk-tls/client` instead.
 - **The descriptor's definition never verifies.** `zkFetchClientDefinition` carries the schemas and `message` a client needs, and its `verify` always rejects. An attestor builds its own definition with `createZkFetchDefinition`, which checks its witness.
 - **The prover is its own entry point.** `@thoth/zk-tls/prover` loads the Reclaim client libraries lazily, so a client-only build never pulls them. `@thoth/zk-tls/client` imports neither those libraries nor `@thoth/attestor`.
 
