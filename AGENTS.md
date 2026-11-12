@@ -50,8 +50,8 @@ file.
   ([`CONTRIBUTING.md`](CONTRIBUTING.md#repository-layout)).
 - **`@midnight-ntwrk/compact-runtime` stays pinned to `0.21.0`** in every
   workspace, with Compact compiler `0.36.1` (the `compact` scripts in the root
-  and contracts `package.json`, both CI workflows, `CONTRIBUTING.md` and the
-  contracts README).
+  and contracts `package.json`, `.github/actions/setup-compact`,
+  `CONTRIBUTING.md` and the contracts README).
   Never bump one workspace alone; [`CONTRIBUTING.md`](CONTRIBUTING.md#dev-setup)
   says why.
 - **Claim types are keyless.** `@txpipe/thoth-core` carries no signing key; anything

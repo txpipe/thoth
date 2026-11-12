@@ -19,6 +19,12 @@ npm test
 Off-chain code that mirrors an in-circuit primitive matches the circuit only
 at that version, so bump it everywhere at once, together with the compiler.
 
+CI installs the Compact CLI and compiler through
+[`.github/actions/setup-compact`](.github/actions/setup-compact/action.yml),
+which pins the CLI release and its SHA-256. Dependabot can't bump these pins:
+when you move to a new compiler, update that action, the `+<version>` in the
+`compact` scripts and this section together.
+
 ## Repository layout
 
 ```
@@ -34,6 +40,7 @@ thoth/
 │   ├── core/                   # @txpipe/thoth-core: keyless claim and law types
 │   └── zk-tls/                 # @txpipe/thoth-zk-tls: the zkFetch kind (attestor, client, prover)
 ├── .changeset/                 # pending changesets and their config
+├── .github/                    # CI and release workflows, setup-compact action
 ├── docs/
 │   ├── DESIGN.md               # architecture, the claim and its wire order
 │   ├── kind-author-guide.md    # how to add an attestor kind
@@ -96,7 +103,8 @@ A change with no user-facing effect, such as a test or a CI tweak, needs none.
 ## CI and commits
 
 CI (`.github/workflows/`) compiles the Compact contracts and runs the type
-check, vitest and Biome on every push and pull request. Locally, the
+check, vitest and Biome on every push and pull request. Every action is pinned
+to a commit SHA, with its version in a comment, and Dependabot bumps both. Locally, the
 pre-commit hook runs Biome on the staged files and the Compact format check,
 and the pre-push hook runs Biome, the contract compilation, the type check,
 the build and vitest.
