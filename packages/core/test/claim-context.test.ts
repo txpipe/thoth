@@ -17,10 +17,10 @@ import {
   subjectHashOf,
 } from '@thoth/core/claim-context';
 import { describe, expect, it } from 'vitest';
+import { filled } from './helpers/fixtures.js';
 
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 const sha256 = (text: string): string => createHash('sha256').update(text, 'utf-8').digest('hex');
-const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
 
 describe('policyHashOf', () => {
   it('hashes the law tag, the wire version, and the canonical policy', () => {
