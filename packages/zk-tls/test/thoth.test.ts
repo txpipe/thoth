@@ -103,6 +103,15 @@ describe('zkTls.definition', () => {
   });
 });
 
+describe('zkTls.clientEntry', () => {
+  it('names a client-only module whose export builds the same client side', async () => {
+    const entry = await import(zkTls.clientEntry.module);
+    const client = entry[zkTls.clientEntry.export];
+    expect(client.law).toBe(zkTls.law);
+    expect(client.definition()).toBe(zkTls.definition());
+  });
+});
+
 describe('zkTls end to end', () => {
   const policy = policyWith([
     { slot: 0, name: 'stars', parse: 'int' },

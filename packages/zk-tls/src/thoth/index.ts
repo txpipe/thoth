@@ -1,20 +1,13 @@
 // What zkFetch exports to tooling: the object the `thoth` CLI drives zkFetch
 // through. It loads the attestor side, so a dApp imports `./client` instead.
 import { createHash } from 'node:crypto';
-import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import { defineKind, denseLayout, type KindAttestorKey } from '@thoth/core/kind';
 import { zkFetchAttestor } from '../attestor/index.js';
-import {
-  type ZkFetchClientConfig,
-  type ZkFetchProver,
-  zkFetchClient,
-  zkFetchClientDefinition,
-} from '../client/index.js';
+import { type ZkFetchProver, zkTlsKindClient } from '../client/index.js';
 import { testWitness } from '../dev/index.js';
 import {
   isByteRule,
   normalizePolicy,
-  ZK_FETCH_LAW,
   type ZkFetchLimits,
   type ZkFetchPolicy,
   zkFetchPolicyHashOf,
@@ -46,7 +39,8 @@ export interface ZkFetchDevInput {
  * nothing: use it only offline.
  */
 export const zkTls = defineKind({
-  law: ZK_FETCH_LAW,
+  ...zkTlsKindClient,
+  clientEntry: { module: '@thoth/zk-tls/client', export: 'zkTlsKindClient' },
   policySchema: zkFetchPolicySchema,
   policyHashOf: zkFetchPolicyHashOf,
   layoutOf: (policy: ZkFetchPolicy) =>
@@ -58,9 +52,6 @@ export const zkTls = defineKind({
         optional: slot.optional,
       })),
     ),
-  definition: () => zkFetchClientDefinition,
-  client: (config: ZkFetchClientConfig<number, JubjubPoint, JubjubSchnorrSignature>) =>
-    zkFetchClient.init(config),
   attestor: (config: KindAttestorKey & ZkFetchAttestorAnchors) => zkFetchAttestor(config),
   devEvidence: (policy: ZkFetchPolicy, operators: number, input: ZkFetchDevInput) => {
     const { responseMatches, responseRedactions } = normalizePolicy(policy);
