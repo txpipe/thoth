@@ -125,6 +125,28 @@ describe('zkFetchPolicySchema slots', () => {
   });
 });
 
+describe('zkFetchPolicySchema claimVersion', () => {
+  const policyWith = (claimVersion: bigint) => ({
+    allowedHosts: ['api.github.com'],
+    slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+    bodyPolicy: 'ignored',
+    ...DISCLOSURE_RULES,
+    claimVersion,
+  });
+
+  it.each([0n, 1n, 255n])('accepts claimVersion %s', (claimVersion) => {
+    expect(() => zkFetchPolicySchema.parse(policyWith(claimVersion))).not.toThrow();
+  });
+
+  it.each([-1n, 256n])('refuses claimVersion %s outside the claim Uint<8>', (claimVersion) => {
+    const parsed = zkFetchPolicySchema.safeParse(policyWith(claimVersion));
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.path)).toEqual([['claimVersion']]);
+    }
+  });
+});
+
 describe('parse law (through deriveClaimFromEvidence)', () => {
   const derived = (value: string, parse: 'int' | 'float'): { present: boolean; value: bigint } => {
     const claim = deriveClaimFromEvidence({

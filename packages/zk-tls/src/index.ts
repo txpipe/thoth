@@ -297,7 +297,7 @@ export interface ZkFetchPolicy {
    * policy hash commits to it, so every attestor enforces the same rule.
    */
   bodyPolicy: ZkFetchBodyPolicy;
-  /** The claim version the attestor signs. Defaults to 1. */
+  /** The claim version the attestor signs, 0–255 (the claim's `Uint<8>`). Defaults to 1. */
   claimVersion?: bigint;
 }
 
@@ -439,7 +439,7 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
           message: "a body pin cannot be the empty body; use bodyPolicy: 'ignored'",
         }),
     ]),
-    claimVersion: z.bigint().optional(),
+    claimVersion: z.bigint().min(0n).max(255n).optional(),
   });
 };
 
@@ -453,6 +453,7 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
  * native `re2` module does not load. `bodyPolicy` is
  * required; a pin is 32 bytes and not the empty body's hash. Every
  * `allowedHosts` entry is a non-empty host with an optional port in 1–65535.
+ * `claimVersion` is 0–255, the claim's `Uint<8>` range.
  * It caps no size; an attestor parses with its own {@link ZkFetchLimits}.
  */
 export const zkFetchPolicySchema = policySchemaWithin(UNCAPPED);
