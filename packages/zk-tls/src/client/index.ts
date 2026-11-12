@@ -226,11 +226,15 @@ export interface ZkFetchClient<V extends number, PK, S> {
    * claim before any attestor is contacted. Every witness signs the holder and
    * window through the claim context digest.
    *
+   * Like `collect`'s, its errors carry no remote error text. A prover's error
+   * is rethrown without its message or cause: as a `ZkFetchProverError` with
+   * the same reason, or as an `Error` that says only that the prover failed.
+   *
    * @throws `ZodError` if the holder is not 32 bytes, the window is out of range or
    *   inverted, or a prover returns malformed evidence.
    * @throws `SecretHeaderError` if evidence carries a secret header value.
    * @throws {@link ZkFetchProverError} if a witness or the source cannot be reached, or
-   *   a response fails the policy's disclosure rules.
+   *   a response fails the policy's disclosure rules. It carries no cause.
    * @throws `Error` if the request carries disclosure rules other than the policy's or
    *   sets the claim context key, a prover fails or answers for another origin, method,
    *   path or body, evidence fails the policy or does not fit the slot counts, or the

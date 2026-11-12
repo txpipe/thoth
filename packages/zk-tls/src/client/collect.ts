@@ -116,21 +116,16 @@ class AttemptError extends Error {
   }
 }
 
-const PROVER_REASONS: ReadonlySet<FailureReason> = new Set<ZkFetchProverError['reason']>([
-  'transport',
-  'no-match',
-]);
-
 /**
  * The reason an error carries, or `fallback` for any other error. A prover's
- * reason counts only from the proving step, and only if it is a known one: a
- * JS prover can set any `reason` at runtime, and `failures` must not carry it.
+ * reason counts only from the proving step; `proveWith` has already dropped
+ * any reason that is not a known one.
  */
 const reasonOf = (error: unknown, fallback: FailureReason, proving: boolean): FailureReason => {
   if (error instanceof SecretHeaderError) {
     return 'secret';
   }
-  if (proving && error instanceof ZkFetchProverError && PROVER_REASONS.has(error.reason)) {
+  if (proving && error instanceof ZkFetchProverError) {
     return error.reason;
   }
   return fallback;

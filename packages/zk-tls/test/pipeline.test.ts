@@ -560,9 +560,39 @@ describe('zkFetch attestor + client', () => {
       const result = await client.collect(collectionRequest, options());
       expect(slots(result)).toEqual([1, 2]);
       expect(result.failures).toEqual([{ registryIndex: 0, reason }]);
-      await expect(client.proveReq(collectionRequest, binding())).rejects.toBe(failing);
+      const error = await client.proveReq(collectionRequest, binding()).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ZkFetchProverError);
+      expect(error).toMatchObject({ reason });
+      expect((error as Error).cause).toBeUndefined();
     },
   );
+
+  it.each([
+    { thrown: 'a witness error', error: new Error('zkFetch witness error: remote detail') },
+    {
+      thrown: 'an unknown prover reason',
+      error: Object.defineProperty(new ZkFetchProverError('transport'), 'reason', {
+        value: 'remote detail',
+      }),
+    },
+    { thrown: 'a non-Error value', error: 'remote detail' },
+  ])('rethrows $thrown from proveReq without the remote text', async ({ error }) => {
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async () => {
+            throw error;
+          },
+        },
+      },
+    });
+    const thrown = await client.proveReq(collectionRequest, binding()).catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown).not.toBeInstanceOf(ZkFetchProverError);
+    expect((thrown as Error).message).not.toContain('remote detail');
+    expect((thrown as Error).cause).toBeUndefined();
+  });
 
   it('keeps a prover reason only from the proving step, and only a known one', async () => {
     const unknown = new ZkFetchProverError('transport');

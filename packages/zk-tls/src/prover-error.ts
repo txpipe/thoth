@@ -13,7 +13,8 @@ export class ZkFetchProverError extends Error {
   /**
    * Build the error from its reason.
    *
-   * @param options — `cause` is the underlying error, kept for local logs; `collect` drops it.
+   * @param options — `cause` is the underlying error, kept for local logs; `collect` and
+   *   `proveReq` drop it.
    */
   constructor(reason: ZkFetchProverError['reason'], options?: ErrorOptions) {
     super(`zkFetch prover failed: ${reason}`, options);
