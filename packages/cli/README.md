@@ -15,7 +15,7 @@ by path, with the packages the generated code imports:
 git clone https://github.com/txpipe-shop/thoth && cd thoth
 npm install && npm run build
 cd /path/to/your-app
-npm install /path/to/thoth/packages/{cli,core,client,zk-tls} @midnight-ntwrk/compact-runtime@0.21.0
+npm install /path/to/thoth/packages/{cli,core,client,attestor,zk-tls} @midnight-ntwrk/compact-runtime@0.21.0
 ```
 
 `thoth compile` runs the [Compact CLI](https://github.com/midnightntwrk/compact)
