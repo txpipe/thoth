@@ -7,6 +7,7 @@ import type { CanonicalValue } from '@thoth/core/claim-context';
 import { claimContextDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
 import { bytesToHex, hexToBytes } from './hex.js';
+import { re2CompileError } from './regex.js';
 
 /** The zkFetch kind's law tag, also its kind identifier. */
 export const ZK_FETCH_LAW = 'zk-fetch@1';
@@ -305,6 +306,18 @@ export interface ZkFetchPolicy {
 const noTemplate = (rule: string): boolean => !/\{\{[^{}]+\}\}/.test(rule);
 const TEMPLATE_ERROR = 'disclosure rules cannot use {{param}} templates';
 
+/** Add an issue at `path` when RE2 does not compile `regex`. */
+const refineRe2 = (regex: string, context: z.RefinementCtx, path: string[]): void => {
+  const reason = re2CompileError(regex);
+  if (reason !== undefined) {
+    context.addIssue({
+      code: 'custom',
+      message: `regex does not compile under RE2: ${reason}`,
+      path,
+    });
+  }
+};
+
 /** SHA-256 of a UTF-8 string, raw bytes. */
 const sha256 = (data: string): Uint8Array =>
   new Uint8Array(createHash('sha256').update(data, 'utf-8').digest());
@@ -388,20 +401,33 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
       }),
     responseMatches: z
       .array(
-        z.strictObject({
-          type: z.enum(['regex', 'contains']),
-          value: ruleText.min(1).refine(noTemplate, TEMPLATE_ERROR),
-        }),
+        z
+          .strictObject({
+            type: z.enum(['regex', 'contains']),
+            value: ruleText.min(1).refine(noTemplate, TEMPLATE_ERROR),
+          })
+          .superRefine((match, context) => {
+            if (match.type === 'regex') {
+              refineRe2(match.value, context, ['value']);
+            }
+          }),
       )
       .min(1)
       .max(limits.responseMatches),
     responseRedactions: z
       .array(
-        z.strictObject({
-          regex: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
-          jsonPath: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
-          xPath: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
-        }),
+        z
+          .strictObject({
+            regex: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
+            jsonPath: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
+            xPath: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
+          })
+          .superRefine((redaction, context) => {
+            // Reclaim compiles a redaction regex only when it is non-empty.
+            if (redaction.regex !== undefined && redaction.regex !== '') {
+              refineRe2(redaction.regex, context, ['regex']);
+            }
+          }),
       )
       .max(limits.responseRedactions),
     bodyPolicy: z.union([
@@ -421,10 +447,13 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
  * Runtime validator for {@link ZkFetchPolicy}.
  *
  * Rule entries are strict, so Reclaim's `invert` and `hash` are refused, and
- * rule texts cannot carry `{{param}}` templates. `bodyPolicy` is required; a
- * pin is 32 bytes and not the empty body's hash. Every `allowedHosts` entry is
- * a non-empty host with an optional port in 1–65535. It caps no size; an
- * attestor parses with its own {@link ZkFetchLimits}.
+ * rule texts cannot carry `{{param}}` templates. Every `regex` match and
+ * redaction regex must compile under RE2, the engine the prover and the
+ * witnesses run it with (the dApp guide's "Regex engine"); parsing throws if the
+ * native `re2` module does not load. `bodyPolicy` is
+ * required; a pin is 32 bytes and not the empty body's hash. Every
+ * `allowedHosts` entry is a non-empty host with an optional port in 1–65535.
+ * It caps no size; an attestor parses with its own {@link ZkFetchLimits}.
  */
 export const zkFetchPolicySchema = policySchemaWithin(UNCAPPED);
 

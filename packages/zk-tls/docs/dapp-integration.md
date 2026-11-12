@@ -253,6 +253,28 @@ the order of a rule's keys, empty redaction keys and an absent array are inert. 
 Reclaim's `invert` and `hash` and any `{{param}}` template, so evidence whose
 signed rules carry them is refused too.
 
+### Regex engine
+
+Reclaim compiles every `regex` match and every non-empty redaction `regex`
+case-insensitively, with `.` matching line breaks. attestor-core uses RE2 with
+flags `sgiu` when its optional native `re2` module has loaded, and JavaScript's
+`RegExp` otherwise. The two read some patterns differently, so Thoth pins the
+engine to RE2:
+
+- `@thoth/zk-tls` depends on `re2`. The prover waits for it before its first
+  proof and refuses to prove without it.
+- Every witness loads `re2` too
+  ([attestor guide](attestor-guide.md#running-a-reclaim-witness)).
+- `zkFetchPolicySchema` refuses a regex RE2 can't compile, with RE2's reason:
+
+```
+regex does not compile under RE2: invalid perl operator: (?=
+```
+
+Write policy regexes in [RE2 syntax](https://github.com/google/re2/wiki/Syntax).
+It has no lookaround and no backreferences, and a counted repeat is at most
+1000.
+
 ### Body policy
 
 `bodyPolicy` is required and part of the policy hash. It decides which signed

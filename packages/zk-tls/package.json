@@ -59,6 +59,7 @@
     "@thoth/attestor": "*",
     "@thoth/client": "*",
     "@thoth/core": "*",
+    "re2": "1.27.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
