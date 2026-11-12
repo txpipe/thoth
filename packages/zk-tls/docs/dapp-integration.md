@@ -302,7 +302,7 @@ Under every mode, the client and the attestor refuse a signed body that
 contains `*`. Reclaim's comparison treats a signed `*` as equal to a `*` in the
 transcript, and the caller chooses which request bytes it redacts to `*`, so
 each one would leave a sent byte unbound. A body that needs a literal `*`
-escapes it, for example as `*` in JSON. `zkFetchBodyHashOf` refuses such
+escapes it, for example as `\u002a` in JSON. `zkFetchBodyHashOf` refuses such
 a body too.
 
 An endpoint that accepts a body but has nothing to say in it should send a
