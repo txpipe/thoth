@@ -432,7 +432,7 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
               });
             }
             // Reclaim compiles a redaction regex only when it is non-empty.
-            if (redaction.regex !== undefined && redaction.regex !== '') {
+            if (redaction.regex) {
               refineRe2(redaction.regex, context, ['regex']);
             }
           }),
@@ -456,13 +456,12 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
  *
  * Rule entries are strict, so Reclaim's `invert` and `hash` are refused, and
  * rule texts cannot carry `{{param}}` templates. A redaction needs a non-empty
- * `regex`, `jsonPath` or `xPath`. Every `regex` match and
- * redaction regex must compile under RE2, the engine the prover and the
- * witnesses run it with (the dApp guide's "Regex engine"); parsing throws if the
- * native `re2` module does not load. `bodyPolicy` is
- * required; a pin is 32 bytes and not the empty body's hash. Every
- * `allowedHosts` entry is a non-empty host with an optional port in 1–65535.
- * `claimVersion` is 0–255, the claim's `Uint<8>` range.
+ * `regex`, `jsonPath` or `xPath`. Every `regex` match and redaction regex must
+ * compile under RE2, the engine the prover and the witnesses run it with (the
+ * dApp guide's "Regex engine"); parsing throws if the native `re2` module does
+ * not load. `bodyPolicy` is required; a pin is 32 bytes and not the empty
+ * body's hash. Every `allowedHosts` entry is a non-empty host with an optional
+ * port in 1–65535. `claimVersion` is 0–255, the claim's `Uint<8>` range.
  * It caps no size; an attestor parses with its own {@link ZkFetchLimits}.
  */
 export const zkFetchPolicySchema = policySchemaWithin(UNCAPPED);

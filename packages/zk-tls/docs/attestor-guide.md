@@ -131,8 +131,8 @@ node -e "require('re2')" &&
 
 The witness listens on `ws://localhost:8001/ws`.
 
-- The commit is the source of the 5.1.6 release `@thoth/zk-tls` depends on.
-  Upstream has no release tags, so the pin is a commit.
+- The commit is the source of the attestor-core release `@thoth/zk-tls`
+  depends on. Upstream has no release tags, so the pin is a commit.
 - The witness needs the native `re2` module. It compiles your policy's regexes
   with `re2`. If `re2` doesn't load, it falls back to JavaScript `RegExp` and
   only logs a `Failed to load RE2` warning. The `require('re2')` check before
@@ -157,9 +157,10 @@ For two witnesses at once, run `npm run witnesses --workspace=packages/zk-tls`.
 It runs `scripts/start-witnesses.sh`, which clones `attestor-core` at the same
 commit. The script installs the clone as above, and installs it again when
 the commit changes, so a new pin never runs on the old dependencies. It starts
-two witnesses on ports 8001 and 8002. It stops with an error if `re2` doesn't load or a port is already in
-use. It also stops if a witness logs `Failed to load RE2` or exits. Once both
-witnesses answer, it prints each one's address. `WITNESS_REF`,
+two witnesses on ports 8001 and 8002. It stops with an error if `re2` doesn't
+load or a port is already in use. It also stops if a witness logs
+`Failed to load RE2` or exits. Once both witnesses answer, it prints each
+one's address. `WITNESS_REF`,
 `WITNESS_CLONE_DIR`, `WITNESS_PORT_A`/`B` and `WITNESS_KEY_A`/`B` override the
 defaults. Ctrl-C stops both witnesses.
 

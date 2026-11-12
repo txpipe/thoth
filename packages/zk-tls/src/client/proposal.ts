@@ -166,12 +166,13 @@ export const buildClaimProposal = async <V extends number>(options: {
 };
 
 /**
- * Copy a request with its own `secretHeaders`, `context` and disclosure rules,
- * so a prover cannot change the original's secrets or claim context digest, or
- * the policy's rules, which the request's rule objects may be.
+ * Copy a request with its own headers, `context` and disclosure rules, so a
+ * prover cannot change the original's headers or claim context digest, or the
+ * policy's rules, which the request's rule objects may be.
  */
 export const copyRequest = (request: ZkFetchRequest): ZkFetchRequest => ({
   ...request,
+  publicHeaders: request.publicHeaders && { ...request.publicHeaders },
   secretHeaders: { ...request.secretHeaders },
   context: request.context && { ...request.context },
   responseMatches: request.responseMatches?.map((match) => ({ ...match })),
@@ -245,8 +246,9 @@ export const bindRequestToClaimContext = (
  * @throws `ZkFetchProverError` with the prover's reason and no cause, if the
  *   prover throws one with a known reason.
  * @throws {@link SecretHeaderError} if the evidence carries a secret header value.
- * @throws if the attestor has no prover, the prover fails otherwise, or the
- *   evidence is invalid or for another origin, subject or claim context.
+ * @throws `ZodError` if the evidence is malformed.
+ * @throws `Error` if the attestor has no prover, the prover fails otherwise, or
+ *   the evidence is for another origin, subject or claim context.
  */
 export const proveWith = async <PK>(
   provers: ZkFetchClientConfig<number, PK, unknown>['provers'],
@@ -264,7 +266,7 @@ export const proveWith = async <PK>(
     if (error instanceof ZkFetchProverError && PROVER_REASONS.has(error.reason)) {
       throw new ZkFetchProverError(error.reason);
     }
-    throw new Error('zkFetch prover failed');
+    throw new Error(`zkFetch prover for attestor ${attestor.id} failed`);
   }
   const evidence = zkFetchEvidenceSchema.parse(proved);
   assertEvidenceMatchesRequest(evidence, request);

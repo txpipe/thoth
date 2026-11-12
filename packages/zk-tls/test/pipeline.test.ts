@@ -1363,21 +1363,48 @@ describe('zkFetch attestor + client', () => {
     }
   });
 
-  it("keeps the policy's disclosure rules out of a prover's reach", async () => {
-    const received: ZkFetchRequest['responseMatches'][] = [];
-    const client = clientWith({
-      provers: proversWith({
-        onProve: (id, request) => {
-          received.push(structuredClone(request.responseMatches));
-          if (id === 'attestor-0') {
-            const [match] = request.responseMatches ?? [];
-            (match as { value: string }).value = '(?<data>tampered)';
-          }
-        },
-      }),
-    });
-    await client.proveReq(collectionRequest, binding());
-    await client.proveReq(collectionRequest, binding());
-    expect(received).toEqual(Array(6).fill(policy().responseMatches));
+  it("keeps the policy's rules and the caller's headers out of a prover's reach", async () => {
+    const withRedaction: ZkFetchPolicy = {
+      ...policy(),
+      responseRedactions: [{ jsonPath: '$.data' }],
+    };
+    const request = { ...collectionRequest, publicHeaders: { accept: 'application/json' } };
+    type Seen = Pick<ZkFetchRequest, 'responseMatches' | 'responseRedactions' | 'publicHeaders'>;
+    const received: Seen[] = [];
+    // Each prover signs the rules it received, then attestor-0 edits its request.
+    const editing = Object.fromEntries(
+      Object.entries(witnessById).map(([id, witness]) => [
+        id,
+        {
+          prove: (sent: ZkFetchRequest) => {
+            const { responseMatches, responseRedactions, publicHeaders } = sent;
+            const seen = structuredClone({ responseMatches, responseRedactions, publicHeaders });
+            received.push(seen);
+            if (id === 'attestor-0') {
+              (responseMatches?.[0] as { value: string }).value = '(?<data>tampered)';
+              (responseRedactions?.[0] as { jsonPath: string }).jsonPath = '$.tampered';
+              (publicHeaders as Record<string, string>).accept = 'text/html';
+            }
+            return witness.sign({
+              values: { data: 'HTTP/1.1 200 OK' },
+              timestampS: BASE_TIMESTAMP_S,
+              parameters: { url: sent.url, method: 'GET', body: '', ...seen },
+              context: sent.context,
+            });
+          },
+        } satisfies ZkFetchProver,
+      ]),
+    );
+    const client = clientWith({ policy: withRedaction, provers: editing });
+    await client.proveReq(request, binding());
+    await client.proveReq(request, binding());
+    const { responseMatches, responseRedactions } = withRedaction;
+    const untouched = {
+      responseMatches,
+      responseRedactions,
+      publicHeaders: { accept: 'application/json' },
+    };
+    // Two calls, one request per attestor each.
+    expect(received).toEqual(Array(2 * ids.length).fill(untouched));
   });
 });

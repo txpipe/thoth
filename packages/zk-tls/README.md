@@ -136,7 +136,7 @@ When `collect` drops an attestor, its entry in `failures` names one reason:
 | `attestation` | The attestor refused, or its answer did not verify. | Check the attestor's logs and the trusted set's keys. |
 | `timeout` | The attempt passed `attestorTimeoutMs` or `expiresAt`. | Raise the limits, or check the slow witness or attestor. |
 
-A custom `ZkFetchProver` reports `transport` and `no-match` by throwing `ZkFetchProverError`. Any other error it throws becomes `evidence`. `proveReq` rethrows a prover's error without its message or cause: as a `ZkFetchProverError` with the same reason, or as an `Error` that says only that the prover failed.
+A custom `ZkFetchProver` reports `transport` and `no-match` by throwing `ZkFetchProverError`. Any other error it throws becomes `evidence`. `proveReq` rethrows a prover's error without its message or cause: as a `ZkFetchProverError` with the same reason, or as an `Error` that names only the attestor whose prover failed.
 
 What it does not check, and what your app must do:
 
