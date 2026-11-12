@@ -11,7 +11,7 @@ import "../attestor_registry"<3, 24> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
-export { A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
+export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
 
 export circuit verifyAttestation(): [] {
   A_verifyAttestation();
@@ -29,7 +29,9 @@ export pure circuit message(a: A_Claim): Vector<24, Field> {
 // The policy hashes the app accepts, one per policy it serves.
 witness seedPolicies(): Vector<1, Bytes<32>>;
 
-constructor() {
+// appId names this app; the contract rejects claims signed for any other.
+constructor(appId: Bytes<32>) {
+  A_appId = disclose(appId);
   A_freshnessWindow = disclose(3600); // submittable up to an hour after the window ends
   A_maxWindow = disclose(300); // an observation spans at most five minutes
   for (const h of seedPolicies()) {

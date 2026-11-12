@@ -24,6 +24,7 @@ hash (ADR 0002, ADR 0008).
 | Evidence schema | shared | zod | `zkFetchEvidenceSchema` |
 | Claim derivation | shared | `Claim` (`@thoth/core/claim`) | `deriveClaimFromEvidence` |
 | Definition (`verify`, `message`) | attestor | `defineAttestor` (`@thoth/attestor`) | `createZkFetchDefinition` |
+| Input limits | attestor | zod `.max()` | `ZK_FETCH_DEFAULT_LIMITS`, `zkFetchSchemasWithin` |
 | Instance builder | attestor | `buildAttestor` | `zkFetchAttestor` |
 | Client | dApp | `@thoth/client` | `zkFetchClient` |
 
@@ -56,9 +57,11 @@ Never bake an app's policy into an attestor instance.
   (ADR 0010). A value that does not fit, or misses a declared `length`, is not
   certifiable. Numeric rules must target numeric slots; byte rules must target
   byte slots.
-- Keep per-operator trust anchors out of the policy. Which witness an attestor
-  trusts is operator configuration (zkFetch's `witnessAddress`), not policy;
-  the definition takes it, as [the definition](#6-the-definition) explains.
+- Keep per-operator configuration out of the policy. Which witness an
+  attestor trusts and how large an input it parses are operator configuration
+  (zkFetch's `witnessAddress` and `limits`), not policy. The definition takes
+  the witness, as [the definition](#6-the-definition) explains; the attestor
+  instance takes the limits.
 - Pin the hash of one fixed policy to its bytes in a test, as
   `packages/zk-tls/test/claim-context.test.ts` does. A change to the canonical
   form then fails loudly.
@@ -114,8 +117,8 @@ decides only the header fields that come from the evidence and the values:
   `getAttestationWitness`, never your claim itself, even with `W = 0`, whose
   empty `bytePresent`/`byteHalves` the contract still requires.
 - `appId` and `holder` come from the claim proposal. The contract checks
-  `holder` against the caller's secret; `appId` is compared by the app's own
-  predicate, not by the module.
+  `holder` against the caller's secret and `appId` against the app id it
+  seals.
 - Bind the holder and window to the evidence. Have the
   [witness](../CONTEXT.md#roles) sign `claimContextDigestOf` of the
   [claim context](../CONTEXT.md#the-claim) (`@thoth/core/claim-context`), and
@@ -170,7 +173,11 @@ shape can return another type, but then it needs its own contract module.
 `buildAttestor({ id, definition, keyPair, attest })` pairs the law with a key.
 In your `attest`:
 
-- parse every input with the definition's schemas;
+- parse every input with the definition's schemas, capped to the instance's
+  input limits. The attestor serves untrusted callers, so cap every array and
+  string before any element is parsed, or a request with millions of slots
+  costs you a message with millions of fields. zkFetch takes the operator's
+  `limits` and parses with `zkFetchSchemasWithin(limits)`;
 - run `definition.verify`;
 - derive the claim yourself from the verified evidence and sign that, not the
   proposal. Take `appId`, `holder`, the window and the requested numeric and

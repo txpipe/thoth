@@ -16,6 +16,8 @@ cd /path/to/your-app && npm install /path/to/thoth/packages/zk-tls
 
 Its package name is `@thoth/zk-tls`; that name may change until the npm scope is settled.
 
+It depends on [`re2`](https://github.com/uhop/node-re2), a native Node module. `npm install` downloads a prebuilt binary for common platforms and otherwise builds one, which needs a C++ toolchain. The prover and the policy schema refuse to run without it ([Regex engine](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#regex-engine)).
+
 ## Usage
 
 An operator builds an attestor from a signing key pair and the address of the Reclaim witness it trusts, then serves `attestor.attest(input)` to dApps ([attestor guide](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/attestor-guide.md)):
@@ -97,11 +99,16 @@ const attestment = await client.collect(
 
 What the attestor checks before signing:
 
+- The policy, the evidence and the proposed claim fit the attestor's input limits. Oversized input fails while it is parsed, before the law's `verify` step or the signature runs. Each operator can change any limit ([Input limits](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/attestor-guide.md#input-limits)); the defaults, `ZK_FETCH_DEFAULT_LIMITS`, are below. String lengths count UTF-16 code units.
+  - Claim: 64 numeric slots and 64 byte slots.
+  - Policy: 64 `allowedHosts` of up to 253 characters, one slot entry per claim slot with names up to 128 characters, 32 `responseMatches` and 32 `responseRedactions` with rule texts up to 4096 characters.
+  - Evidence: `claim.parameters` up to 256 KiB, `claim.context` up to 1 MiB, `responseText` up to 4 MiB, and 256 characters for each other string.
 - The witness's ECDSA signature over the Reclaim claim, and that the claim identifier matches its signed content.
 - The witness address is the one the definition was created with, checked before the signature.
 - The signed request carries no `{{param}}` template ([why](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
 - The attested URL is HTTPS on an allowed host. An `allowedHosts` entry admits that host and its subdomains on port 443 only. To allow another port, name it in the entry, as in `api.example.com:8443`. Case and a trailing dot do not change a match. The policy schema refuses an entry that is empty, carries a path or whitespace, or names a port outside 1–65535.
 - The signed request body carries no `*` and satisfies the policy's [body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy).
+- The policy's regexes compile under RE2, the engine the prover runs them with ([Regex engine](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#regex-engine)).
 - The disclosure rules the witness signed equal the policy's, so a slot cannot be pointed at a different field than the policy intends. Array order, the order of a rule's keys, empty redaction keys and an absent array are inert; every other difference, including Reclaim's `invert` and `hash`, rejects.
 - Every required slot is certifiable: disclosed and parseable under its rule and `length` pin. An optional slot that is absent or unparseable is signed unpresent.
 - The witness's observation time falls inside the proposed window, bounds included.
@@ -118,15 +125,29 @@ What the client checks:
 - `collect` counts one signature per registry slot inside one exact-message group, starts `threshold` attempts, and contacts a spare only when the attempts in flight cannot reach the threshold any more. A spare that is never needed does not receive the request. Set `expiresAt` to at least twice `attestorTimeoutMs` after the start, so a spare can still prove after one attestor hangs.
 - Evidence that carries a secret header value, as written, percent-encoded, or JSON-escaped, is refused before it reaches an attestor. A very short secret can match unrelated text and drop a healthy attestor as `secret`.
 
+When `collect` drops an attestor, its entry in `failures` names one reason:
+
+| Reason | What failed | What to do |
+|--------|-------------|------------|
+| `transport` | The prover could not reach the witness, or the witness could not reach the source: a network error, a timeout, a proxy failure, a refused connection, or a TLS certificate or handshake failure. | Check the witness URL, and that the witness can reach the source. If the witness requires a signed auth request, also check that yours is well formed: the witness reports a malformed one the same way. |
+| `no-match` | The response failed the policy's `responseRedactions` or `responseMatches` when the client checked it. | Check the policy against what the source returns. |
+| `evidence` | Proving failed for another reason, such as a non-2xx status from the source, the witness refused the claim, or the evidence did not fit the request, the policy, the window or the slot counts. | Check the request and the policy. The client checks the disclosure rules before the witness does, so a witness that refuses a claim usually runs another attestor-core version, has a skewed clock, or rejected the proof. Check the witness's log. |
+| `secret` | The evidence carried a secret header value. | Check that the response does not echo the secret and the prover redacts it. A very short secret can match unrelated text. |
+| `attestation` | The attestor refused, or its answer did not verify. | Check the attestor's logs and the trusted set's keys. |
+| `timeout` | The attempt passed `attestorTimeoutMs` or `expiresAt`. | Raise the limits, or check the slow witness or attestor. |
+
+A custom `ZkFetchProver` reports `transport` and `no-match` by throwing `ZkFetchProverError`. Any other error it throws becomes `evidence`.
+
 What it does not check, and what your app must do:
 
 - The window is not the exact fetch time: the fetch happened no earlier than about 10 minutes before `windowStart`. Do not read it as the time of the fact ([Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) explains why).
 - `bodyPolicy: 'ignored'` does not bind the body the witness sent: a caller can send a body while every witness signs an empty one, including on a GET. Use it only when a body cannot change the endpoint's response at any layer ([Body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy)).
 - The client does not re-verify the witness signature; each attestor does, and the contract enforces the threshold.
+- Thoth can't check which engine a witness runs. A witness without `re2` falls back to RegExp. When that changes what it extracts, the witnesses disagree and the client fails closed, but a trusted set whose witnesses all lack `re2` agrees on RegExp's reading. Run every witness with `re2` ([attestor guide](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/attestor-guide.md#running-a-reclaim-witness)).
 - `responseText` is the transcript as the client saw it. The witness does not sign it, and no check reads it.
 - The secret header check cannot recognize every transformation of a secret. The prover must still redact.
 - An attempt that times out keeps running in the background: Reclaim's `createClaimOnAttestor` takes no abort signal. Its late result is never counted.
-- Errors carry registry slots and step reasons, never remote error text.
+- Errors carry registry slots and reasons, never remote error text.
 - `threshold` is yours to set; the client cannot read the contract's N.
 - The claim's values are not source-bound on-chain unless your circuit recomputes `subjectHash` from the subject fields (ADR 0001).
 - Reusing a holder secret links claims. Thoth promises no cross-claim unlinkability (ADR 0004).
@@ -144,10 +165,12 @@ What it does not check, and what your app must do:
 - **The claim does not commit to the Reclaim evidence.** You cannot audit a claim against its transcript offline; the claim commits to the values your app reads ([ADR 0007](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0007-no-evidence-commitment.md)).
 - **Byte rules decode the representation.** `hex` and `base64` fold only what carries no data, so separators and whitespace stay data; the [Byte slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) entry has the rules ([ADR 0010](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0010-encoded-byte-rules.md)).
 - **The disclosure rules are part of the policy.** The client proves with the policy's rules, the attestor requires the signed rules to equal them, and the policy hash commits to them. A rule cannot use `{{param}}` templates, because the witness would sign the template and run the substitution.
+- **Policy regexes are RE2.** The package depends on the native `re2` module and refuses to prove or parse a policy without it, so the prover and the witnesses run your regexes with one engine. Write them in [RE2 syntax](https://github.com/google/re2/wiki/Syntax). `re2` is a Node module, so the prover and the policy schema run only on Node.
 - **The signed request carries no `{{param}}` template.** The signed url, body, `geoLocation` and `proxySessionId` cannot contain `{{`, so put a per-user URL in the request as a concrete URL and don't use Reclaim's secret `paramValues` ([Building the request](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#building-the-request)).
 - **The policy decides how the request body is bound.** `bodyPolicy` is required and part of the policy hash, so there is no method-based default and every attestor enforces the same rule. Reclaim compares the sent body only when the signed body is non-empty, so you choose between a bound body (`non-empty` or a pin) and the explicit unbound `ignored` ([Body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy)).
 - **One policy per trusted set.** N-of-M means N attestors signed the same message, so every attestor must enforce the same policy; different readings produce different messages and never count together. Which witness an attestor trusts is per instance, not part of the policy.
-- **One attestor instance serves any contract.** The slot counts come from each proposal, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
+- **Each attestor sets its own input limits.** They are offchain config that bounds what a request costs the operator. A limit only refuses input and never changes the signed message, so attestors with different limits cost a trusted set liveness, not safety: a request that some attestors refuse may not reach the threshold. Agree on limits with your attestors, as you do on the witness version. The client and the exported schemas cap nothing.
+- **One attestor instance serves any contract.** The slot counts come from each proposal, up to the instance's limits, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
 - **The prover is its own entry point.** `@thoth/zk-tls/prover` loads the Reclaim client libraries lazily, so a client-only build never pulls them. `@thoth/zk-tls/client` imports neither those libraries nor `@thoth/attestor`.
 
 ## License

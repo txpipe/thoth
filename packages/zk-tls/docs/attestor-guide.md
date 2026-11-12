@@ -27,7 +27,31 @@ Serve `attestor.attest(input)` to dApps over the transport you choose;
 
 The instance takes no registry slot and no slot counts, so one instance
 serves any dApp ([why](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
-Each claim proposal carries the slot counts of the contract it is for.
+Each claim proposal carries the slot counts of the contract it is for, up to
+your [input limits](#input-limits).
+
+### Input limits
+
+The instance rejects a request larger than its limits while parsing it,
+before it checks the proof or signs. `ZK_FETCH_DEFAULT_LIMITS` holds the
+defaults ([the list](../README.md#guarantees-and-limits)). Override any of
+them with `limits`; the rest keep their defaults:
+
+```ts
+const attestor = zkFetchAttestor({
+  id: 'zkFetch-strava-1',
+  keyPair,
+  witnessAddress: '0x…',
+  limits: { valueSlots: 128, responseTextLength: 8 * 1024 * 1024 },
+});
+```
+
+Raise a limit when a dApp you serve needs more slots or a bigger response,
+and lower one to fit your machine. A limit only refuses input; it never
+changes what you sign. Tell the dApps that pin you what your limits are: an
+attestor that refuses a request does not count toward the threshold.
+`zkFetchAttestor` throws on an unknown key or a value that is not a positive
+integer.
 
 ### The witness address
 
@@ -143,7 +167,7 @@ matching release and run the live check against it.
 ## Witness agreement and upgrades
 
 Every operator in one trusted set must run the same witness version and
-behavior. Witnesses agree only when they add identical context fields to the
+behavior, with `re2` loaded. Witnesses agree only when they add identical context fields to the
 Reclaim claim identifier for the same request and disclosures. Thoth does not
 pin witness behavior, so an upstream change can split a trusted set: the
 client fails closed, `proveReq` with `witnesses disagree` before any attestor

@@ -84,7 +84,8 @@ const attestors = [
 ];
 
 // 2. You deploy your contract: its registry pins the attestors' public keys
-//    (seedKeys) and it seals zkFetchPolicyHashOf(policy) (policyHashes).
+//    (seedKeys) and it seals your appId and zkFetchPolicyHashOf(policy)
+//    (policyHashes).
 
 // 3. Your dApp collects 2 signatures and places each at its registry slot.
 const client = zkFetchClient.init({
