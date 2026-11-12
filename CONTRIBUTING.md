@@ -25,6 +25,7 @@ at that version, so bump it everywhere at once, together with the compiler.
 thoth/
 ├── packages/                   # npm workspace packages
 │   ├── attestor/               # @thoth/attestor: pairs a kind's law with a signing key
+│   ├── cli/                    # @thoth/cli: the thoth command (generate, compile)
 │   ├── client/                 # @thoth/client: trusted set, transport, attestation checks
 │   ├── contracts/              # @thoth/contracts: Compact modules
 │   │   ├── attestation.compact        # N-of-M verification, replay and window checks, claims vault
@@ -64,9 +65,11 @@ Run them from the repo root:
 For one package: `npm run <script> --workspace=packages/<name>`.
 
 Workspaces import each other through their built `dist/`. The root `build` and
-`types` scripts build `core`, `attestor`, `client` and `zk-tls` first; if you
-add a package that another workspace imports, add it to that chain too. A
-stale `dist/` shows up as confusing type errors such as "Generic type requires
+`types` scripts build `core`, `attestor`, `client`, `zk-tls` and `cli` first;
+if you add a package that another workspace imports, add it to that chain too.
+`cli` comes last because nothing imports it, and its tests run the built
+`thoth` bin. A stale `dist/` shows up as confusing type errors such as
+"Generic type requires
 N type argument(s)".
 
 `packages/zk-tls/test/live.test.ts` runs against two real witnesses and skips
