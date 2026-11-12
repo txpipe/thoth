@@ -16,6 +16,7 @@ import {
   DEFAULT_BYTE_VALUE,
   DEFAULT_HOLDER_SECRET,
   DUMMY_SIGNATURE,
+  filled,
   flip,
   makeByteClaim,
   makeClaim,
@@ -129,16 +130,15 @@ describe('bytes claim wire', () => {
   it('pins the numeric-only (B = 0) vault id against serialization drift', () => {
     // For B = 0 the empty byte vectors contribute no fields, so this is the
     // numeric-only module's id; a struct reorder or added field turns it red.
-    const b = (byte: number) => new Uint8Array(32).fill(byte);
     const claim: A_Claim = {
       version: 1n,
-      appId: b(0x11),
-      policyHash: b(0x22),
+      appId: filled(0x11),
+      policyHash: filled(0x22),
       windowStart: 100n,
       windowEnd: 200n,
-      subjectHash: b(0x33),
-      holder: b(0x44),
-      salt: b(0x55),
+      subjectHash: filled(0x33),
+      holder: filled(0x44),
+      salt: filled(0x55),
       present: [true, false, true],
       values: [7n, 8n, 9n],
       bytePresent: [],

@@ -24,12 +24,12 @@ export const DEFAULT_MAX_WINDOW = 300n;
 
 /** A 32-byte value with every byte set to `byte`. */
 export const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
+/** Fixed test secret; claim fixtures bind to this caller unless overridden. */
+export const DEFAULT_HOLDER_SECRET = filled(0xc1);
 
 // The app id and the two policy hashes the mock seals at deploy. A second app
 // id and a third, unsealed hash stand in for another app's claim and a laxer
 // policy a requester might substitute.
-/** Fixed test secret; claim fixtures bind to this caller unless overridden. */
-export const DEFAULT_HOLDER_SECRET = new Uint8Array(32).fill(0xc1);
 export const APP_ID = filled(0xa1);
 export const OTHER_APP_ID = filled(0xa2);
 export const POLICY_A = filled(0xb1);

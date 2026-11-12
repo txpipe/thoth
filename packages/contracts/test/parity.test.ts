@@ -15,6 +15,7 @@ import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import {
   DEFAULT_HOLDER_SECRET,
   DUMMY_SIGNATURE,
+  filled,
   idOf,
   makeClaim,
   makeNotaryKey,
@@ -32,12 +33,12 @@ const claims = [
   makeClaim(),
   makeClaim({ holder: new Uint8Array(32) }),
   makeClaim({ holder: Uint8Array.from({ length: 32 }, (_, i) => i) }),
-  makeClaim({ holder: new Uint8Array(32).fill(0xff) }),
+  makeClaim({ holder: filled(0xff) }),
   makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] }),
   makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] }),
   makeClaim({ values: [0n, 200n, 0n], present: [false, true, false] }),
-  makeClaim({ appId: new Uint8Array(32).fill(0xa2), policyHash: POLICY_B }),
-  makeClaim({ appId: new Uint8Array(32), policyHash: new Uint8Array(32).fill(0xff) }),
+  makeClaim({ appId: filled(0xa2), policyHash: POLICY_B }),
+  makeClaim({ appId: new Uint8Array(32), policyHash: filled(0xff) }),
   makeClaim({ windowStart: 0n, windowEnd: 0n }),
   makeClaim({ windowStart: 1_800_000_000n, windowEnd: 0xffff_ffffn }),
 ];
