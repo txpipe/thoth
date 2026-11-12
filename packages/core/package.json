@@ -42,6 +42,10 @@
     "./claim-context": {
       "types": "./dist/claim-context.d.ts",
       "import": "./dist/claim-context.js"
+    },
+    "./kind": {
+      "types": "./dist/kind.d.ts",
+      "import": "./dist/kind.js"
     }
   },
   "scripts": {
