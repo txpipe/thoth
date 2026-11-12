@@ -56,6 +56,12 @@ const main = async (argv: readonly string[]): Promise<number> => {
 try {
   process.exitCode = await main(process.argv.slice(2));
 } catch (error) {
-  process.stderr.write(`thoth: ${error instanceof Error ? error.message : String(error)}\n`);
+  // Print the cause chain too: it names the underlying failure, such as a module not found.
+  let message = '';
+  for (let cause: unknown = error; cause !== undefined; ) {
+    message += `${message === '' ? 'thoth: ' : '\n  caused by: '}${cause instanceof Error ? cause.message : String(cause)}`;
+    cause = cause instanceof Error ? cause.cause : undefined;
+  }
+  process.stderr.write(`${message}\n`);
   process.exitCode = 1;
 }

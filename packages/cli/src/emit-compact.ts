@@ -12,19 +12,24 @@ export interface CompactInput {
   readonly freshnessWindow: number;
   readonly maxWindow: number;
   readonly accessors: readonly SlotAccessors[];
+  /** `configFingerprint` of the config, which `thoth compile` checks. */
+  readonly fingerprint: string;
 }
 
-const A = ATTESTATION_PREFIX;
-const R = REGISTRY_PREFIX;
+/** The line that records the config fingerprint in the generated Compact file. */
+export const FINGERPRINT_LINE = /^\/\/ Config fingerprint: ([0-9a-f]{64})$/m;
+
+const thoth = ATTESTATION_PREFIX;
+const registry = REGISTRY_PREFIX;
 
 const numericAccessors = ({ slot, value, present }: SlotAccessors): string => {
   const i = slot.index;
   return `// Slot '${slot.name}': numeric value ${i}${slot.optional ? ', optional' : ''}.
-pure circuit ${present}(c: ${A}Claim): Boolean {
+pure circuit ${present}(c: ${thoth}Claim): Boolean {
   return c.present[${i}];
 }
 
-pure circuit ${value}(c: ${A}Claim): Uint<64> {
+pure circuit ${value}(c: ${thoth}Claim): Uint<64> {
   assert(c.present[${i}], "${slot.name} not measured");
   return c.values[${i}];
 }`;
@@ -35,11 +40,11 @@ const byteAccessors = ({ slot, value, present }: SlotAccessors): string => {
   const low = 2 * slot.index;
   const high = low + 1;
   return `// Slot '${slot.name}': byte value ${slot.index}, halves ${low} and ${high}${slot.optional ? ', optional' : ''}.
-pure circuit ${present}(c: ${A}Claim): Boolean {
+pure circuit ${present}(c: ${thoth}Claim): Boolean {
   return c.bytePresent[${low}] && c.bytePresent[${high}];
 }
 
-pure circuit ${value}(c: ${A}Claim): Bytes<32> {
+pure circuit ${value}(c: ${thoth}Claim): Bytes<32> {
   assert(${present}(c), "${slot.name} not measured");
   return Bytes[...c.byteHalves[${low}], ...c.byteHalves[${high}]];
 }`;
@@ -52,6 +57,7 @@ export function emitCompact(input: CompactInput): string {
     accessor.slot.region === 'numeric' ? numericAccessors(accessor) : byteAccessors(accessor),
   );
   return `// Kind ${input.law}: V=${V}, W=${W}, B=${B}, K=${K}, ${N}-of-${M}.
+// Config fingerprint: ${input.fingerprint}
 // Include it at the top of your contract and call thothInit() from your constructor.
 pragma language_version >= 0.22;
 
@@ -60,43 +66,43 @@ import CompactStandardLibrary;
 // Bare module names: imports in an included file resolve from the including
 // file's directory, so \`thoth compile\` finds the modules through COMPACT_PATH.
 //       K=${K} msg fields  V=${V} values  B=${B} byte halves  N=${N} threshold  M=${M} signatures
-import "attestation"<${K}, ${V}, ${B}, ${N}, ${M}> prefix ${A};
+import "attestation"<${K}, ${V}, ${B}, ${N}, ${M}> prefix ${thoth};
 
-import "attestor_registry"<${M}, ${K}> prefix ${R};
+import "attestor_registry"<${M}, ${K}> prefix ${registry};
 
-export { ${A}Claim, ${A}ClaimEntry };
+export { ${thoth}Claim, ${thoth}ClaimEntry };
 
-export { ${A}appId, ${A}freshnessWindow, ${A}maxWindow, ${A}policyHashes, ${A}claimsVault, ${A}nullifiers };
+export { ${thoth}appId, ${thoth}freshnessWindow, ${thoth}maxWindow, ${thoth}policyHashes, ${thoth}claimsVault, ${thoth}nullifiers };
 
-// The accepted policy hashes. A witness, not a literal, so the accepted set
-// can change without changing this file's shape.
+// The accepted policy hashes, from the generated TypeScript. A witness, not a
+// literal, so the compiled circuits do not change when the policy does.
 witness seedPolicies(): Vector<1, Bytes<32>>;
 
 // Seals the app id, the windows, the policy hash and the registry keys. Call it
 // once, from your constructor: Compact allows a constructor only at the top level.
 circuit thothInit(): [] {
-  ${A}appId = disclose(Bytes[${[...input.appId].join(', ')}]);
-  ${A}freshnessWindow = disclose(${input.freshnessWindow});
-  ${A}maxWindow = disclose(${input.maxWindow});
+  ${thoth}appId = disclose(Bytes[${[...input.appId].join(', ')}]);
+  ${thoth}freshnessWindow = disclose(${input.freshnessWindow});
+  ${thoth}maxWindow = disclose(${input.maxWindow});
   for (const h of seedPolicies()) {
-    ${A}policyHashes.insert(disclose(h));
+    ${thoth}policyHashes.insert(disclose(h));
   }
-  ${R}initRegistry();
+  ${registry}initRegistry();
 }
 
 // Verify an attested claim and store it in the claims vault.
 export circuit verifyAttestation(): [] {
-  ${A}verifyAttestation();
+  ${thoth}verifyAttestation();
 }
 
 // The signed message, so off-chain code can reproduce it.
-export pure circuit message(c: ${A}Claim): Vector<${K}, Field> {
-  return ${A}buildMessage(c);
+export pure circuit message(c: ${thoth}Claim): Vector<${K}, Field> {
+  return ${thoth}buildMessage(c);
 }
 
-// The vault id \`verifyAttestation\` stores a claim under; pass it to ${A}openClaim.
-export pure circuit claimId(c: ${A}Claim, rand: Bytes<32>): Bytes<32> {
-  return ${A}computeId(c, rand);
+// The vault id \`verifyAttestation\` stores a claim under; pass it to ${thoth}openClaim.
+export pure circuit claimId(c: ${thoth}Claim, rand: Bytes<32>): Bytes<32> {
+  return ${thoth}computeId(c, rand);
 }
 
 // Named slot accessors. \`<name>Of\` asserts the slot was measured; check an

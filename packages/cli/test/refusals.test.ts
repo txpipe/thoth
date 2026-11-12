@@ -1,6 +1,6 @@
-// What `thoth generate` and the generated config check refuse: an edited or
-// foreign file at a generated path, a name clash with the app contract, and a
-// config that changed since the last `generate`.
+// What `thoth generate`, `thoth compile` and the generated config check refuse:
+// edited or foreign generated files, name clashes, and a config changed since `generate`.
+import { existsSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeProject, type Project } from './helpers/project.js';
 
@@ -61,6 +61,48 @@ describe('thoth generate', () => {
     expect(run.stderr).toContain(
       "the app contract declares 'athleteOf', which thoth generate also declares",
     );
+    expect(existsSync(project.path('contract/generated/thoth.compact'))).toBe(false);
+  });
+
+  it('refuses an attestor key pinned twice', () => {
+    project.write(
+      'thoth.config.ts',
+      project
+        .read('thoth.config.ts')
+        .replace('devKeyPair(i).publicKey', 'devKeyPair(i === 2 ? 1 : i).publicKey'),
+    );
+    const run = project.thoth('generate');
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("attestor 2 ('dev-2'): its public key is pinned twice");
+  });
+});
+
+describe('thoth compile', () => {
+  it('refuses a config changed since the last generate, before compiling', () => {
+    generateOk();
+    project.write(
+      'thoth.config.ts',
+      project.read('thoth.config.ts').replace('threshold: 2', 'threshold: 3'),
+    );
+    const run = project.thoth('compile', '--skip-zk');
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('thoth.config.ts changed since the last `thoth generate`');
+    expect(existsSync(project.path('artifacts'))).toBe(false);
+  });
+
+  it('refuses a generated Compact file that was edited', () => {
+    generateOk();
+    const file = 'contract/generated/thoth.compact';
+    project.write(file, `${project.read(file)}// my change\n`);
+    const run = project.thoth('compile', '--skip-zk');
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(`${file} was edited since thoth generate wrote it`);
+  });
+
+  it('refuses to compile before generate', () => {
+    const run = project.thoth('compile', '--skip-zk');
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('run thoth generate first');
   });
 });
 

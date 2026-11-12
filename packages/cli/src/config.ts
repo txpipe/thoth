@@ -3,7 +3,7 @@
 import type { JubjubPoint } from '@midnight-ntwrk/compact-runtime';
 import type { AttestorDefinition } from '@thoth/core';
 import type { KindAttestor, KindManifest } from '@thoth/core/kind';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 /** A kind manifest of any kind: the CLI drives every kind through this shape. */
 export type AnyKindManifest = KindManifest<
@@ -99,69 +99,5 @@ export interface ThothConfig<M extends AnyKindManifest = AnyKindManifest> {
  * ```
  */
 export function defineConfig<M extends AnyKindManifest>(config: ThothConfig<M>): ThothConfig<M> {
-  return config;
-}
-
-const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const path = z.string().min(1);
-const seconds = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const fn = z.custom<(...args: never[]) => unknown>((value) => typeof value === 'function');
-
-const configSchema = z.object({
-  kind: z.looseObject({
-    law: z.string().min(1),
-    clientEntry: z.object({
-      module: z.string().min(1),
-      export: z.string().regex(IDENTIFIER, 'must be a JavaScript identifier'),
-    }),
-    // Duck-typed: the kind may bring its own copy of zod.
-    policySchema: z.custom<z.ZodType>(
-      (value) => typeof (value as { parse?: unknown } | null)?.parse === 'function',
-      'must be a zod schema',
-    ),
-    policyHashOf: fn,
-    layoutOf: fn,
-    definition: fn,
-    client: fn,
-  }),
-  policy: z.unknown(),
-  appId: z.string().regex(/^(0x)?[0-9a-fA-F]{64}$/, 'must be 32 bytes as 64 hex digits'),
-  threshold: z.number(),
-  attestors: z.array(
-    z.object({
-      id: z.string().min(1),
-      publicKey: z.object({ x: z.bigint(), y: z.bigint() }),
-    }),
-  ),
-  contract: z.object({ source: path, modules: path, freshnessWindow: seconds, maxWindow: seconds }),
-  out: z.object({ compact: path, ts: path, artifacts: path }),
-});
-
-/**
- * Check a loaded config's shape, and that its attestors have distinct ids and
- * keys.
- *
- * @throws `Error` listing every field that fails, or naming the repeated
- *   attestor.
- */
-export function checkConfig(value: unknown): ThothConfig {
-  const parsed = configSchema.safeParse(value);
-  if (!parsed.success) {
-    throw new Error(`thoth.config.ts is invalid:\n${z.prettifyError(parsed.error)}`);
-  }
-  const config = value as ThothConfig;
-  const ids = new Set<string>();
-  const keys = new Set<string>();
-  for (const [slot, { id, publicKey }] of config.attestors.entries()) {
-    if (ids.has(id)) {
-      throw new Error(`attestor ${slot}: id '${id}' is used twice`);
-    }
-    const key = `${publicKey.x}:${publicKey.y}`;
-    if (keys.has(key)) {
-      throw new Error(`attestor ${slot} ('${id}'): its public key is pinned twice`);
-    }
-    ids.add(id);
-    keys.add(key);
-  }
   return config;
 }

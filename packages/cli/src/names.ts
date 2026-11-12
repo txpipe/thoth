@@ -14,7 +14,7 @@ const PREFIXES = [ATTESTATION_PREFIX, REGISTRY_PREFIX] as const;
  * its own circuits and witness, and the modules' witnesses, which Compact
  * does not prefix.
  */
-export const FIXED_NAMES = [
+const FIXED_NAMES = [
   'thothInit',
   'verifyAttestation',
   'message',

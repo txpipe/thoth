@@ -1,7 +1,6 @@
-// End to end through the `thoth` bin in a temp project: `thoth generate`, then
-// `thoth compile --skip-zk` of an app contract that includes the generated
-// file, then the zkFetch dev witnesses -> attestors -> generated client ->
-// generated witnesses -> the compiled contract in the simulator.
+// `thoth generate` and `thoth compile --skip-zk` in a temp project, then the zkFetch dev
+// witnesses -> attestors -> generated client and witnesses -> the compiled app contract.
+import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import {
   createCircuitContext,
@@ -34,6 +33,7 @@ describe('thoth generate, compile and the simulator', () => {
   let state: Module;
   let privateState: Module;
   let claimId: Uint8Array;
+  let attestment: Module;
 
   const call = async (circuit: string, ...args: unknown[]) => {
     const context = createCircuitContext({
@@ -84,7 +84,7 @@ describe('thoth generate, compile and the simulator', () => {
     const holderSecret = randomBytes(32);
     const commitRand = randomBytes(32);
     // Ask registry slots 2 and 0 only, in that order: placement must follow the slot.
-    const attestment = await client.collect(
+    attestment = await client.collect(
       { url: 'https://www.strava.com/api/v3/activities/1', method: 'GET' },
       {
         holder: holderCommitmentOf(holderSecret),
@@ -177,6 +177,44 @@ describe('thoth generate, compile and the simulator', () => {
   it('reads an absent optional slot through its presence flag', async () => {
     expect(privateState.claim.present).toEqual([true, false]);
     await call('movedLongEnough', claimId, 999n);
+  });
+
+  it('fails the accessor assert when a predicate reads an absent slot without its flag', async () => {
+    await expect(call('movingTimeAtLeast', claimId, 1n)).rejects.toThrow('movingTime not measured');
+  });
+
+  it.each([
+    ['a registry slot answered twice', [0, 0], 'registry slot 0 is answered twice'],
+    ['a registry slot outside the registry', [0, 3], 'registry slot 3 is outside 0..2'],
+  ])('refuses to place signatures with %s', (_, slots, message) => {
+    const [first, second] = attestment.collected;
+    const collected = [
+      { ...first, registryIndex: slots[0] },
+      { ...second, registryIndex: slots[1] },
+    ];
+    expect(() =>
+      generated.privateStateOf({ ...attestment, collected }, randomBytes(32), randomBytes(32)),
+    ).toThrow(message);
+  });
+
+  it('refuses a claim for another policy', () => {
+    const claim = { ...attestment.claim, policyHash: new Uint8Array(32) };
+    expect(() =>
+      generated.privateStateOf({ ...attestment, claim }, randomBytes(32), randomBytes(32)),
+    ).toThrow('the claim is for another policy');
+  });
+
+  it('loads the config check under plain Node', () => {
+    const run = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `await import(${JSON.stringify(project.path('src/generated/thoth.check.ts'))})`,
+      ],
+      { cwd: project.dir, encoding: 'utf8' },
+    );
+    expect(run.status, run.stderr).toBe(0);
   });
 
   it('loads the config check while the config is unchanged', async () => {

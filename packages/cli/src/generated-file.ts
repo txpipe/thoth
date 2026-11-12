@@ -11,15 +11,13 @@ const HASH_PREFIX = '// thoth-hash: sha256:';
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 
 /** A file's full content: the header, the hash line, then `body`. */
-export function renderGenerated(body: string): string {
+function renderGenerated(body: string): string {
   return `${HEADER}\n${HASH_PREFIX}${sha256(body)}\n${body}`;
 }
 
-/** What is at a generated file's path before `thoth generate` writes it. */
-export type ExistingFile = 'absent' | 'unchanged' | 'edited' | 'foreign';
+type ExistingFile = 'absent' | 'unchanged' | 'edited' | 'foreign';
 
-/** Classify the file at `path` by its header and hash. */
-export function existingFile(path: string): ExistingFile {
+const existingFile = (path: string): ExistingFile => {
   if (!existsSync(path)) {
     return 'absent';
   }
@@ -28,6 +26,30 @@ export function existingFile(path: string): ExistingFile {
     return 'foreign';
   }
   return hashLine.slice(HASH_PREFIX.length) === sha256(rest.join('\n')) ? 'unchanged' : 'edited';
+};
+
+/**
+ * Check that the file at `path`, if there is one, is unedited output of
+ * `thoth generate`.
+ *
+ * @returns whether the file exists.
+ * @throws `Error` if it was edited or not written by `thoth generate`.
+ */
+export function checkGenerated(path: string): boolean {
+  const existing = existingFile(path);
+  if (existing === 'edited') {
+    throw new Error(
+      `${path} was edited since thoth generate wrote it. ` +
+        'Move your change into the config or your own files, then delete it and run thoth generate again',
+    );
+  }
+  if (existing === 'foreign') {
+    throw new Error(
+      `${path} was not written by thoth generate. ` +
+        'Move or delete it, or change the output directory in the config',
+    );
+  }
+  return existing === 'unchanged';
 }
 
 /** One file `thoth generate` writes. */
@@ -37,26 +59,14 @@ export interface GeneratedFile {
 }
 
 /**
- * Write every file, after checking that none of them was edited or written by
- * something else. It writes nothing if one check fails.
+ * Write every file, after {@link checkGenerated} passes for each. It writes
+ * nothing if one check fails.
  *
  * @throws `Error` naming the first file it refuses to overwrite.
  */
 export function writeGenerated(files: readonly GeneratedFile[]): void {
   for (const { path } of files) {
-    const existing = existingFile(path);
-    if (existing === 'edited') {
-      throw new Error(
-        `${path} was edited since thoth generate wrote it; refusing to overwrite it. ` +
-          'Move your change into the config or your own files, then delete it and run thoth generate again',
-      );
-    }
-    if (existing === 'foreign') {
-      throw new Error(
-        `${path} was not written by thoth generate; refusing to overwrite it. ` +
-          'Move or delete it, or change the output directory in the config',
-      );
-    }
+    checkGenerated(path);
   }
   for (const { path, body } of files) {
     mkdirSync(dirname(path), { recursive: true });

@@ -1,5 +1,5 @@
-// A hash of everything in the config that the generated files depend on. The
-// generated `thoth.check.ts` recomputes it the same way from the loaded config.
+// A hash of everything in the config that the generated files depend on, so
+// `thoth compile` and the generated `thoth.check.ts` can tell a changed config.
 import { createHash } from 'node:crypto';
 import type { ThothConfig } from './config.js';
 
@@ -12,7 +12,6 @@ import type { ThothConfig } from './config.js';
  *   throws for the config's policy.
  */
 export function configFingerprint(config: ThothConfig): string {
-  // Keep in step with fingerprintOf in emitCheck's output (emit-ts.ts).
   const policy = config.kind.policySchema.parse(config.policy);
   const layout = config.kind.layoutOf(policy);
   const json = JSON.stringify([

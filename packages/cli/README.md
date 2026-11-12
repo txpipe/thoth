@@ -90,11 +90,20 @@ npx thoth generate             # writes the three files below
 npx thoth compile --skip-zk    # flags go to `compact compile`
 ```
 
+`thoth compile` prepends `contract.modules` to `COMPACT_PATH` and refuses to
+compile a generated file that was edited or that an older config produced.
+Keep `out.compact` and `out.ts` out of your formatter: a reformatted file
+counts as edited.
+
 | File | What it holds |
 |------|---------------|
 | `<out.compact>/thoth.compact` | The module imports with their parameters, `thothInit()`, `verifyAttestation`, `message`, `claimId`, and per slot a `<name>Of` accessor and a `<name>Present` flag |
 | `<out.ts>/thoth.ts` | The client-only entry: `createClient`, `trustedSet`, `privateStateOf` and the Compact `witnesses`, plus `LAYOUT`, `SLOTS`, `POLICY`, `POLICY_HASH`, `APP_ID` and `ATTESTORS` |
 | `<out.ts>/thoth.check.ts` | `config`, which refuses to load once `thoth.config.ts` changed since the last `generate` |
+
+`thoth.check.ts` imports the config with its `.ts` extension, which Node 24
+loads as it is. Under `tsc`, set `allowImportingTsExtensions` or
+`rewriteRelativeImportExtensions`.
 
 On the dApp side, build the client, collect an
 [attestment](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection),
@@ -134,15 +143,14 @@ What `thoth generate` derives and checks:
 
 - The module parameters: `V` and `W` from the kind's `layoutOf`, `B = 2W`, `K` from the wire layout in the [`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact) header, `M` from `attestors` and `N` from `threshold`. The threshold must be from 1 to `M`.
 - The config's shape, distinct attestor ids and keys, and a policy that passes the kind's schema and layout and survives a JSON round trip.
-- That the kind's client entry loads and is the same kind.
-- No clash between the generated names, the generated module prefixes (`Thoth_`, `ThothRegistry_`) and the names `contract.source` declares.
+- No clash between the generated names, the generated module prefixes (`Thoth_`, `ThothRegistry_`) and the names `contract.source` declares, if it exists yet.
 - Before writing, that every file it would overwrite is its own unedited output. It writes nothing otherwise.
 
 What the generated code does:
 
 - `<name>Of` asserts the slot was measured, so a predicate never reads an absent slot as zero.
 - `seedKeys` returns the keys in registry slot order, and `privateStateOf` places each signature at its attestor's registry slot. It refuses a claim for another app, policy or layout.
-- `thoth.check.ts` refuses a config that changed since the last `generate`. The policy enters its fingerprint through its hash, so an equivalent policy passes.
+- `thoth.check.ts` and `thoth compile` refuse a config that changed since the last `generate`. The policy enters the config fingerprint through its hash, so an equivalent policy passes.
 
 What you do yourself:
 
@@ -154,14 +162,14 @@ Limits:
 
 - One policy per config, so one kind and one trusted set per contract.
 - The name check reads `contract.source` only, not the files it includes.
-- `createClient` fills the kind's client config fields `trusted`, `verifier`, `policy`, `appId`, `valueSlots` and `byteSlots`; a kind's client must take them under those names.
-- The generated `thoth.check.ts` imports the config with a `.js` extension, as TypeScript's `nodenext` resolution expects.
+- `createClient` fills the kind's client config fields `trusted`, `verifier`, `policy`, `appId`, `valueSlots` and `byteSlots`, and `privateStateOf` takes the `{ claim, collected }` attestment the client returns; a kind's client must use those shapes.
+- `generate` does not load the kind's client entry. A wrong `clientEntry` fails when your app type-checks or imports `thoth.ts`.
 
 ## Design decisions
 
 - **The app owns the top-level contract.** Compact allows a constructor only at the top level, so the generated file is included and exposes `thothInit()` for your constructor to call.
 - **The generated file imports the modules by bare name.** An import inside an included file resolves from the including file's directory, so `thoth compile` sets `COMPACT_PATH` to `contract.modules` instead. The CLI never copies the modules into your app.
-- **The policy hash reaches the contract through the `seedPolicies` witness.** The generated TypeScript fills it from the config, so the generated Compact keeps its shape when the accepted policies become settable after deploy.
+- **The policy hash reaches the contract through the `seedPolicies` witness.** The generated TypeScript fills it from the config, so a policy change leaves the compiled circuits as they are.
 - **The app id is a literal in `thothInit()`.** The config fixes it, so no witness supplies it.
 - **Generated files are regenerated, never edited.** Each starts with a header and a hash of its body; change the config and run `thoth generate` again.
 - **The client entry loads only the kind's client side.** `thoth.ts` imports the kind's `KindClient` from the module its manifest's `clientEntry` names, so a browser bundle carries no attestor or offline evidence code.

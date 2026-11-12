@@ -227,33 +227,12 @@ export interface CheckInput {
 export function emitCheck(input: CheckInput): string {
   return `// Refuses a thoth.config.ts that changed since the last \`thoth generate\`. Import
 // \`config\` from here in tooling and tests; a dApp's client imports ./thoth.js.
-import { createHash } from 'node:crypto';
+import { configFingerprint } from '@thoth/cli/fingerprint';
 import loaded from ${JSON.stringify(input.configImport)};
 
 const GENERATED_FROM = '${input.fingerprint}';
 
 type Config = typeof loaded;
-
-// Mirrors configFingerprint in @thoth/cli.
-const fingerprintOf = (config: Config): string => {
-  const policy = config.kind.policySchema.parse(config.policy);
-  const layout = config.kind.layoutOf(policy);
-  const json = JSON.stringify([
-    config.kind.law,
-    [config.kind.clientEntry.module, config.kind.clientEntry.export],
-    Buffer.from(config.kind.policyHashOf(policy)).toString('hex'),
-    [
-      layout.valueSlots,
-      layout.byteSlots,
-      layout.names.map((slot) => [slot.name, slot.region, slot.index, slot.optional]),
-    ],
-    config.appId.toLowerCase().replace(/^0x/, ''),
-    config.threshold,
-    config.attestors.map(({ id, publicKey }) => [id, \`\${publicKey.x}\`, \`\${publicKey.y}\`]),
-    [config.contract.freshnessWindow, config.contract.maxWindow],
-  ]);
-  return createHash('sha256').update(json).digest('hex');
-};
 
 /**
  * Check that \`candidate\` is the config the generated files came from.
@@ -261,7 +240,7 @@ const fingerprintOf = (config: Config): string => {
  * @throws \`Error\` if it changed since the last \`thoth generate\`.
  */
 export function assertConfigCurrent(candidate: Config = loaded): void {
-  if (fingerprintOf(candidate) !== GENERATED_FROM) {
+  if (configFingerprint(candidate) !== GENERATED_FROM) {
     throw new Error(
       'thoth.config.ts changed since the last \`thoth generate\`; run it again before using the generated files',
     );

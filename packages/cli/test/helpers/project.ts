@@ -1,6 +1,5 @@
-// A temp app project built from `fixtures/app`, and the built `thoth` bin run
-// inside it. The project links the repo's node_modules, so its config and the
-// generated files resolve the workspace packages.
+// A temp copy of `fixtures/app` that links the repo's node_modules, and the built
+// `thoth` bin run inside it.
 import { spawnSync } from 'node:child_process';
 import {
   cpSync,

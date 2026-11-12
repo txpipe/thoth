@@ -21,3 +21,9 @@ export circuit movedLongEnough(id: Bytes<32>, min: Uint<64>): [] {
   const c = Thoth_openClaim(id);
   assert(!movingTimePresent(c) || movingTimeOf(c) >= min, "Too little moving time");
 }
+
+// Reads the optional slot without its flag, so an absent value fails the accessor's assert.
+export circuit movingTimeAtLeast(id: Bytes<32>, min: Uint<64>): [] {
+  const c = Thoth_openClaim(id);
+  assert(movingTimeOf(c) >= min, "Too little moving time");
+}

@@ -21,8 +21,8 @@ export interface ModuleParameters {
   readonly M: number;
 }
 
-// The fixed fields of the wire layout in the `attestation.compact` header:
-// version, appId, policyHash, the window, subjectHash, holder, salt and B.
+// The fields of the wire layout, in the `attestation.compact` header, that come
+// before the slots.
 const HEADER_FIELDS = 14;
 
 /**

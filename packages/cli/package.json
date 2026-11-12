@@ -39,6 +39,10 @@
     ".": {
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js"
+    },
+    "./fingerprint": {
+      "types": "./dist/fingerprint.d.ts",
+      "import": "./dist/fingerprint.js"
     }
   },
   "scripts": {
