@@ -272,10 +272,9 @@ export const myKind = defineKind({
 - `policyHashOf` must equal the `policyHash` your attestor signs for the same
   policy. Call the same function your claim derivation calls.
 - `layoutOf` maps each policy slot to its region and hands the list to
-  `denseLayout`. It requires a dense layout, numeric slots `0..V-1` then byte
-  slots from `V`, and slot names that are ASCII identifiers, because generated
-  code names its accessors after them. It refuses anything else and names the
-  slot.
+  `denseLayout`, which requires a dense layout (numeric slots `0..V-1`, then
+  byte slots from `V`) and ASCII slot names, and names the slot it refuses
+  ([why](../packages/core/README.md#design-decisions)).
 - `definition` returns the definition a dApp pins in each attestor's
   descriptor. Export it from your client entry, so a dApp never loads your
   attestor side. Only its `message` runs on the client, so let its `verify`

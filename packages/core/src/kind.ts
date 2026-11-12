@@ -40,8 +40,8 @@ export interface KindLayout {
   readonly names: readonly LayoutSlot[];
 }
 
-// Generated Compact and TypeScript name accessors after the slot. Compact also
-// takes `$` and Unicode letters; this ASCII subset is valid in both languages.
+// Generated code names accessors `<name>Of` and `<name>Present`; with this ASCII
+// subset both are valid in Compact and TypeScript. A bare name may be a keyword.
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const describeSlot = (slot: PolicySlot): string => `${slot.slot} (${quote(slot.name)})`;
@@ -54,6 +54,10 @@ const quote = (name: string): string => `'${name}'`;
  * The layout must be dense: numeric slots `0..V-1`, then byte slots from `V`.
  * A gap would be a slot every claim still pays for in its message, and a slot
  * map with one could fit more than one layout.
+ *
+ * A name must be an ASCII identifier, so generated accessor names built from it
+ * are valid. It may still be a keyword such as `type`, so generated code uses
+ * it only as the stem of an accessor name.
  *
  * @throws `Error` naming the slot, if a slot index is not a non-negative
  *   integer or is used twice, a name is not an ASCII identifier or is used
@@ -237,15 +241,15 @@ export interface KindManifest<
  *
  * @example
  * ```ts
- * import { defineKind, denseLayout } from '@thoth/core/kind';
+ * import { defineKind, denseLayout, type KindAttestorKey } from '@thoth/core/kind';
  *
  * export const myKind = defineKind({
- *   law: LAW,
- *   policySchema,
- *   policyHashOf: (policy: MyPolicy) => policyHashOf(LAW, normalize(policy)),
+ *   law: MY_LAW,
+ *   policySchema: myPolicySchema,
+ *   policyHashOf: (policy: MyPolicy) => myPolicyHashOf(policy),
  *   layoutOf: (policy: MyPolicy) =>
  *     denseLayout(policy.slots.map((slot) => ({ ...slot, region: 'numeric', optional: false }))),
- *   definition: myClientDefinition, // from your client entry
+ *   definition: () => myClientDefinition, // from your client entry
  *   client: (config: MyClientConfig) => myClient.init(config),
  *   attestor: (config: KindAttestorKey & { sourceKey: string }) => myAttestor(config),
  * });

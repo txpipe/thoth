@@ -1,6 +1,5 @@
-// The client entry stays client-only: walking the static imports of the built
-// `@thoth/zk-tls/client` finds none of the attestor side, which the tooling
-// export (`./thoth`) and the offline witness (`./dev`) load.
+// The built `@thoth/zk-tls/client` statically imports none of the attestor side,
+// which `./attestor`, `./dev` and `./thoth` load.
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

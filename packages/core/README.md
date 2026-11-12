@@ -69,15 +69,15 @@ layout, client and attestors
 ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#10-the-thoth-entry)).
 
 ```ts
-import { defineKind, denseLayout } from '@thoth/core/kind';
+import { defineKind, denseLayout, type KindAttestorKey } from '@thoth/core/kind';
 
 export const myKind = defineKind({
-  law: LAW,
-  policySchema,
-  policyHashOf: (policy: MyPolicy) => policyHashOf(LAW, policy),
+  law: MY_LAW,
+  policySchema: myPolicySchema,
+  policyHashOf: (policy: MyPolicy) => myPolicyHashOf(policy),
   layoutOf: (policy: MyPolicy) =>
     denseLayout(policy.slots.map((slot) => ({ ...slot, region: 'numeric', optional: false }))),
-  definition: () => clientDefinition, // from your client entry
+  definition: () => myClientDefinition, // from your client entry
   client: (config: MyClientConfig) => myClient.init(config),
   attestor: (config: KindAttestorKey & { sourceKey: string }) => myAttestor(config),
 });
@@ -137,7 +137,7 @@ What your app must do:
 - **A `Claim` is not the contract's struct.** A `Claim` has one `present` mask over `V + W` slots; the contract carries each byte value as two 16-byte halves with a flag per half, so you convert with `toContractClaim` before handing it to a witness ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
 - **The `./thoth` export is fixed to Jubjub Schnorr.** `KindManifest` types the attestor's key pair and public key as Jubjub, the scheme the contract's registry verifies, so code generated from it keeps its types. It holds no key: tooling passes one to `attestor`.
 - **A claim layout is dense.** `denseLayout` takes numeric slots `0..V-1`, then byte slots from `V`. A gap would cost message bytes in every claim, and a slot map with one could fit more than one layout.
-- **Slot names are ASCII identifiers.** Generated Compact and TypeScript name their accessors after a slot, so `denseLayout` takes a letter or `_`, then letters, digits or `_`. Compact also accepts `$` and Unicode letters; the ASCII subset is valid in both languages.
+- **Slot names are ASCII identifiers.** `denseLayout` takes a letter or `_`, then letters, digits or `_`, so the accessors generated code names `<name>Of` and `<name>Present` are valid in Compact and TypeScript. A name may still be a keyword such as `type`, so generated code never uses it bare.
 - **`FlatMessage` is the default message type.** A kind that needs another shape gives `message()` another return type; `MessageOf<D>` carries it through the signer, key pair and attestation.
 
 ## Links

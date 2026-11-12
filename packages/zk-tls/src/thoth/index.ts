@@ -41,15 +41,14 @@ export interface ZkFetchDevInput {
  * The object tooling drives zkFetch through, a `KindManifest`. Keys and
  * signatures are Jubjub Schnorr.
  *
- * `layoutOf` requires a dense slot map and slot names that are ASCII
- * identifiers (`denseLayout` in `@thoth/core/kind`). `devEvidence` gives each
- * operator a fixed test witness key, so its evidence proves nothing: use it
- * only offline.
+ * `layoutOf` applies `denseLayout` from `@thoth/core/kind`. `devEvidence`
+ * gives each operator a fixed test witness key, so its evidence proves
+ * nothing: use it only offline.
  */
 export const zkTls = defineKind({
   law: ZK_FETCH_LAW,
   policySchema: zkFetchPolicySchema,
-  policyHashOf: (policy: ZkFetchPolicy) => zkFetchPolicyHashOf(policy),
+  policyHashOf: zkFetchPolicyHashOf,
   layoutOf: (policy: ZkFetchPolicy) =>
     denseLayout(
       normalizePolicy(policy).slots.map((slot) => ({

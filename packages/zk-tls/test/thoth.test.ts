@@ -1,6 +1,5 @@
-// What zkFetch exports to tooling (`@thoth/zk-tls/thoth`): the layout a policy
-// implies, and the policy hash, client and attestors it builds agreeing with
-// the kind's own entries.
+// `zkTls` from `@thoth/zk-tls/thoth`: the layout a policy implies, and the
+// attestors and client it builds signing its policy hash.
 import { randomBytes } from 'node:crypto';
 import {
   CompactTypeField,
