@@ -251,7 +251,9 @@ both the client and the attestor reject a policy that crosses the regions.
 hash. The same rules under a different spelling hash the same: array order,
 the order of a rule's keys, empty redaction keys and an absent array are inert. The schema refuses
 Reclaim's `invert` and `hash` and any `{{param}}` template, so evidence whose
-signed rules carry them is refused too.
+signed rules carry them is refused too. It also refuses a redaction with no
+non-empty `regex`, `jsonPath` or `xPath`, which Reclaim would refuse on every
+prove.
 
 ### Regex engine
 

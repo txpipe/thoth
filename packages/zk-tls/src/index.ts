@@ -423,6 +423,14 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
             xPath: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
           })
           .superRefine((redaction, context) => {
+            // Reclaim reads an empty rule text as absent, and refuses a
+            // redaction with none on every prove.
+            if (!redaction.regex && !redaction.jsonPath && !redaction.xPath) {
+              context.addIssue({
+                code: 'custom',
+                message: 'a redaction needs a non-empty regex, jsonPath or xPath',
+              });
+            }
             // Reclaim compiles a redaction regex only when it is non-empty.
             if (redaction.regex !== undefined && redaction.regex !== '') {
               refineRe2(redaction.regex, context, ['regex']);
@@ -447,7 +455,8 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
  * Runtime validator for {@link ZkFetchPolicy}.
  *
  * Rule entries are strict, so Reclaim's `invert` and `hash` are refused, and
- * rule texts cannot carry `{{param}}` templates. Every `regex` match and
+ * rule texts cannot carry `{{param}}` templates. A redaction needs a non-empty
+ * `regex`, `jsonPath` or `xPath`. Every `regex` match and
  * redaction regex must compile under RE2, the engine the prover and the
  * witnesses run it with (the dApp guide's "Regex engine"); parsing throws if the
  * native `re2` module does not load. `bodyPolicy` is
