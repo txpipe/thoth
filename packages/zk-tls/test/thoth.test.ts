@@ -14,7 +14,8 @@ import { jubjubVerifier } from '@thoth/client/jubjub';
 import type { FlatMessage } from '@thoth/core/claim';
 import { holderCommitmentOf } from '@thoth/core/claim-context';
 import type { JubjubKeyPair } from '@thoth/core/kind';
-import type { ZkFetchPolicy } from '@thoth/zk-tls';
+import { ZK_FETCH_LAW, type ZkFetchPolicy } from '@thoth/zk-tls';
+import { zkFetchClientDefinition } from '@thoth/zk-tls/client';
 import { zkTls } from '@thoth/zk-tls/thoth';
 import { describe, expect, it } from 'vitest';
 import { DISCLOSURE_RULES } from './helpers/helper.js';
@@ -104,11 +105,11 @@ describe('zkTls.definition', () => {
 });
 
 describe('zkTls.clientEntry', () => {
-  it('names a client-only module whose export builds the same client side', async () => {
+  it("names the zkFetch client side in the package's client entry", async () => {
     const entry = await import(zkTls.clientEntry.module);
     const client = entry[zkTls.clientEntry.export];
-    expect(client.law).toBe(zkTls.law);
-    expect(client.definition()).toBe(zkTls.definition());
+    expect(client.law).toBe(ZK_FETCH_LAW);
+    expect(client.definition()).toBe(zkFetchClientDefinition);
   });
 });
 

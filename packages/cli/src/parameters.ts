@@ -1,5 +1,6 @@
 // The attestation module's parameters, derived from the policy's layout, the
 // attestor list and the threshold, so no app computes them by hand.
+import { CLAIM_VERSION, claimToMessage } from '@thoth/core/claim';
 import type { KindLayout } from '@thoth/core/kind';
 
 /**
@@ -21,13 +22,28 @@ export interface ModuleParameters {
   readonly M: number;
 }
 
-// The fields of the wire layout, in the `attestation.compact` header, that come
-// before the slots.
-const HEADER_FIELDS = 14;
+const zeros = (length: number): Uint8Array => new Uint8Array(length);
+
+// The signed-message length, from the off-chain encoder rather than a copy of
+// the wire layout: an all-absent claim of V numeric and W byte values.
+const messageLength = (V: number, W: number): number =>
+  claimToMessage({
+    version: CLAIM_VERSION,
+    appId: zeros(32),
+    policyHash: zeros(32),
+    windowStart: 0n,
+    windowEnd: 0n,
+    subjectHash: zeros(32),
+    holder: zeros(32),
+    salt: zeros(32),
+    present: Array.from({ length: V + W }, () => false),
+    values: Array.from({ length: V }, () => 0n),
+    byteValues: Array.from({ length: W }, () => zeros(32)),
+  }).length;
 
 /**
- * Derive the module parameters. `K` follows the wire layout in the
- * `attestation.compact` header.
+ * Derive the module parameters. `K` is the length of the message
+ * `claimToMessage` from `@thoth/core/claim` encodes for this layout.
  *
  * @param attestors - the number of attestors, `#M`.
  * @param threshold - `#N`, from 1 to `attestors`.
@@ -51,5 +67,5 @@ export function moduleParameters(
     throw new Error('the policy has no slot');
   }
   const B = 2 * W;
-  return { V, W, B, K: HEADER_FIELDS + 2 * V + 2 * B, N: threshold, M: attestors };
+  return { V, W, B, K: messageLength(V, W), N: threshold, M: attestors };
 }

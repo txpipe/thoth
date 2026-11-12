@@ -141,7 +141,7 @@ const contract = new Contract(witnesses);
 
 What `thoth generate` derives and checks:
 
-- The module parameters: `V` and `W` from the kind's `layoutOf`, `B = 2W`, `K` from the wire layout in the [`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact) header, `M` from `attestors` and `N` from `threshold`. The threshold must be from 1 to `M`.
+- The module parameters: `V` and `W` from the kind's `layoutOf`, `B = 2W`, `K` as the length of the message `claimToMessage` from `@thoth/core/claim` encodes for that layout, `M` from `attestors` and `N` from `threshold`. The threshold must be from 1 to `M`.
 - The config's shape, distinct attestor ids and keys, and a policy that passes the kind's schema and layout and survives a JSON round trip.
 - No clash between the generated names, the generated module prefixes (`Thoth_`, `ThothRegistry_`) and the names `contract.source` declares, if it exists yet.
 - Before writing, that every file it would overwrite is its own unedited output. It writes nothing otherwise.

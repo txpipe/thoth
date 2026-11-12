@@ -135,6 +135,12 @@ describe('thoth generate, compile and the simulator', () => {
     });
   });
 
+  it("derives K equal to the length of the compiled contract's signed message", () => {
+    expect(compiled.pureCircuits.message(privateState.claim)).toHaveLength(
+      generated.LAYOUT.messageFields,
+    );
+  });
+
   it('seals the app id, the policy hash and the attestor keys in registry slot order', () => {
     const ledger = compiled.ledger(state);
     expect(ledger.Thoth_appId).toEqual(new Uint8Array(32).fill(0xa1));
