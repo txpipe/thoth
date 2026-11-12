@@ -16,16 +16,8 @@ import { assertClaimMatchesContext, verifyZkFetchProof } from '@thoth/zk-tls/att
 import type { ZkFetchRequest } from '@thoth/zk-tls/client';
 import { zkFetchProver } from '@thoth/zk-tls/prover';
 import { describe, expect, it } from 'vitest';
+import { APP_ID, HOLDER, WITNESS_URLS } from './helpers/helper.js';
 
-/** The app id every claim in this suite is for. */
-const APP_ID = new Uint8Array(32).fill(0xa1);
-/** The holder every claim in this suite is for. */
-const HOLDER = new Uint8Array(32).fill(0xc1);
-
-const WITNESS_URLS = (process.env.WITNESS_URLS ?? '')
-  .split(',')
-  .map((url) => url.trim())
-  .filter((url) => url !== '');
 const TARGET_URL = process.env.LIVE_URL ?? 'https://api.github.com/repos/txpipe/dolos';
 
 const RESPONSE_MATCH = { type: 'regex' as const, value: '"stargazers_count":\\s*(?<stars>\\d+)' };

@@ -37,11 +37,8 @@ import {
 } from '@thoth/zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import { DISCLOSURE_RULES, FIXTURE } from './helpers/helper.js';
+import { APP_ID, DISCLOSURE_RULES, FIXTURE, padded } from './helpers/helper.js';
 import { type TestWitness, testWitness } from './helpers/witness.js';
-
-/** The app id every claim in this suite is for. */
-const APP_ID = new Uint8Array(32).fill(0xa1);
 
 const fixture = FIXTURE;
 
@@ -347,12 +344,6 @@ describe('zkFetch attestor + client', () => {
       bodyPolicy: 'ignored',
       ...DISCLOSURE_RULES,
     });
-
-    const padded = (value: string): Uint8Array => {
-      const out = new Uint8Array(32);
-      out.set(new TextEncoder().encode(value));
-      return out;
-    };
 
     const withData = (value: string | undefined, optional = false) =>
       clientWith({

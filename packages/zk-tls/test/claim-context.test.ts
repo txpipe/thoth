@@ -11,9 +11,8 @@ import {
   zkFetchSubjectOf,
 } from '@thoth/zk-tls';
 import { describe, expect, it } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
+import { DISCLOSURE_RULES, hex } from './helpers/helper.js';
 
-const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 const sha256 = (text: string): string => createHash('sha256').update(text, 'utf-8').digest('hex');
 
 const policy: ZkFetchPolicy = {

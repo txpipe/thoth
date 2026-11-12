@@ -30,10 +30,7 @@ import {
   assertClaimMatchesSubject,
 } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
-
-/** The app id every claim in this suite is for. */
-const APP_ID = new Uint8Array(32).fill(0xa1);
+import { APP_ID, DISCLOSURE_RULES, hex, padded } from './helpers/helper.js';
 
 /** The signed request parameters of a claim that only needs a subject. */
 const REQUEST = { url: 'https://api.github.com/repos/x', method: 'GET', body: '' };
@@ -833,19 +830,11 @@ describe('byte value parse rules', () => {
     ...DISCLOSURE_RULES,
   });
 
-  const padded = (value: string): Uint8Array => {
-    const out = new Uint8Array(32);
-    out.set(new TextEncoder().encode(value));
-    return out;
-  };
-
   const pad32 = (bytes: Uint8Array): Uint8Array => {
     const out = new Uint8Array(32);
     out.set(bytes);
     return out;
   };
-
-  const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 
   const PARAMS = { ...REQUEST, extractedParameters: { id: 'abc' } };
 

@@ -24,11 +24,7 @@ import {
 } from '@thoth/zk-tls';
 import { verifyZkFetchProof, zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { beforeAll, describe, expect, it } from 'vitest';
-
-/** The app id every claim in this suite is for. */
-const APP_ID = new Uint8Array(32).fill(0xa1);
-/** The holder every claim in this suite is for. */
-const HOLDER = new Uint8Array(32).fill(0xc1);
+import { APP_ID, HOLDER, hex, WITNESS_URLS } from './helpers/helper.js';
 
 /** The body the live probe sends but does not sign. */
 const PAYLOAD = { q: 123456789 };
@@ -137,10 +133,6 @@ describe('Reclaim receipt check', () => {
   });
 });
 
-const WITNESS_URLS = (process.env.WITNESS_URLS ?? '')
-  .split(',')
-  .map((url) => url.trim())
-  .filter((url) => url !== '');
 const WITNESS_URL = WITNESS_URLS[0] ?? '';
 const PROBE_URL = process.env.PROBE_URL ?? 'https://httpbin.org/post';
 
@@ -160,8 +152,6 @@ const witnessAddressOf = async (witnessUrl: string): Promise<string> => {
   }
   return body.address;
 };
-
-const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 
 describe.skipIf(WITNESS_URL === '')('live witness', () => {
   beforeAll(() => {

@@ -7,6 +7,30 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ZkFetchPolicy } from '@thoth/zk-tls';
 
+/** The app id every claim in the test suites is for. */
+export const APP_ID = new Uint8Array(32).fill(0xa1);
+/** The holder every claim in the test suites is for. */
+export const HOLDER = new Uint8Array(32).fill(0xc1);
+
+/**
+ * The witnesses the opt-in live suites run against: the comma-separated
+ * `WITNESS_URLS` environment variable, empty when it is unset.
+ */
+export const WITNESS_URLS = (process.env.WITNESS_URLS ?? '')
+  .split(',')
+  .map((url) => url.trim())
+  .filter((url) => url !== '');
+
+/** Lowercase hex of `bytes`. */
+export const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
+
+/** UTF-8 encode `value` and zero-pad it to 32 bytes (the `'bytes'` parse rule). */
+export const padded = (value: string): Uint8Array => {
+  const out = new Uint8Array(32);
+  out.set(new TextEncoder().encode(value));
+  return out;
+};
+
 /**
  * The disclosure rules every default policy and witness observation in the
  * test suites shares: the prover's default whole-response match and no

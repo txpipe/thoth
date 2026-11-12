@@ -18,11 +18,8 @@ import {
 } from '@thoth/zk-tls';
 import { createZkFetchDefinition, zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
+import { APP_ID, DISCLOSURE_RULES, HOLDER } from './helpers/helper.js';
 import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
-
-/** The app id every claim in this suite is for. */
-const APP_ID = new Uint8Array(32).fill(0xa1);
 
 const alice = testWitness(`0x${'11'.repeat(32)}`);
 const bob = testWitness(`0x${'22'.repeat(32)}`);
@@ -36,9 +33,6 @@ const policy: ZkFetchPolicy = {
   bodyPolicy: 'ignored',
   ...DISCLOSURE_RULES,
 };
-
-/** The holder every claim in this suite is proposed with. */
-const HOLDER = new Uint8Array(32).fill(0xc1);
 
 /** The observation window every claim in this suite is proposed with. */
 const WINDOW = { windowStart: 1_786_000_000n, windowEnd: 1_786_000_010n };
