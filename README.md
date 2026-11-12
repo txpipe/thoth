@@ -51,14 +51,14 @@ cannot confirm a guessed value from it; the contracts README
 
 | Package | Use it to |
 |---------|-----------|
-| [`@thoth/contracts`](packages/contracts/README.md) | Embed N-of-M verification in your Midnight contract |
-| [`@thoth/zk-tls`](packages/zk-tls/README.md) | Attest a web fact with zkFetch, as a dApp or as an attestor operator |
-| [`@thoth/client`](packages/client/README.md) | Write a kind's client: the trusted set and the attestation checks |
-| [`@thoth/attestor`](packages/attestor/README.md) | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
-| [`@thoth/core`](packages/core/README.md) | Write a kind's law against the shared claim types |
+| [`@txpipe/thoth-contracts`](packages/contracts/README.md) | Embed N-of-M verification in your Midnight contract |
+| [`@txpipe/thoth-zk-tls`](packages/zk-tls/README.md) | Attest a web fact with zkFetch, as a dApp or as an attestor operator |
+| [`@txpipe/thoth-client`](packages/client/README.md) | Write a kind's client: the trusted set and the attestation checks |
+| [`@txpipe/thoth-attestor`](packages/attestor/README.md) | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
+| [`@txpipe/thoth-core`](packages/core/README.md) | Write a kind's law against the shared claim types |
 
-If you are building a dApp on web data, start with `@thoth/contracts` and
-`@thoth/zk-tls`. To add a new kind of attestor, follow
+If you are building a dApp on web data, start with `@txpipe/thoth-contracts` and
+`@txpipe/thoth-zk-tls`. To add a new kind of attestor, follow
 [docs/kind-author-guide.md](docs/kind-author-guide.md).
 
 ## Quickstart
@@ -133,4 +133,4 @@ replace.
 - [docs/adr/](docs/adr/): the design decisions and their reasons
 - [CONTEXT.md](CONTEXT.md): the glossary
 - [CONTRIBUTING.md](CONTRIBUTING.md): dev setup, repo layout and commands
-- License: [Apache-2.0](LICENSE), except [`@thoth/zk-tls`](packages/zk-tls), which is [AGPL-3.0-only](packages/zk-tls/LICENSE) because it links Reclaim Protocol's AGPL-licensed attestor-core
+- License: [Apache-2.0](LICENSE), except [`@txpipe/thoth-zk-tls`](packages/zk-tls), which is [AGPL-3.0-only](packages/zk-tls/LICENSE) because it links Reclaim Protocol's AGPL-licensed attestor-core

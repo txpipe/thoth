@@ -8,7 +8,7 @@ import {
   type ZkFetchPolicy,
   zkFetchClaimContextDigestOf,
   zkFetchPolicyHashOf,
-} from '@thoth/zk-tls';
+} from '@txpipe/thoth-zk-tls';
 import { describe, expect, it } from 'vitest';
 import { DISCLOSURE_RULES } from './helpers/helper.js';
 import { testWitness } from './helpers/witness.js';

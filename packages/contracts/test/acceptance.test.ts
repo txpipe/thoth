@@ -8,20 +8,24 @@
 // a nullifier the honest submission left behind.
 import { randomBytes } from 'node:crypto';
 import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
-import type { KeyPair } from '@thoth/attestor';
-import { descriptorOf } from '@thoth/attestor';
-import { buildTrustedSet } from '@thoth/client';
-import { jubjubVerifier } from '@thoth/client/jubjub';
-import { type Claim, toContractClaim } from '@thoth/core/claim';
+import type { KeyPair } from '@txpipe/thoth-attestor';
+import { descriptorOf } from '@txpipe/thoth-attestor';
+import { buildTrustedSet } from '@txpipe/thoth-client';
+import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
+import { type Claim, toContractClaim } from '@txpipe/thoth-core/claim';
 import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
   zkFetchClaimContextDigestOf,
   zkFetchPolicyHashOf,
   zkFetchSubjectHashOf,
-} from '@thoth/zk-tls';
-import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
-import { type ZkFetchProver, type ZkFetchRequest, zkFetchClient } from '@thoth/zk-tls/client';
+} from '@txpipe/thoth-zk-tls';
+import { zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
+import {
+  type ZkFetchProver,
+  type ZkFetchRequest,
+  zkFetchClient,
+} from '@txpipe/thoth-zk-tls/client';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DISCLOSURE_RULES } from '../../zk-tls/test/helpers/helper.js';
 import { testWitness } from '../../zk-tls/test/helpers/witness.js';

@@ -1,11 +1,11 @@
 // Per-attestor steps shared by `proveReq` and `collect`.
 
 import { isDeepStrictEqual } from 'node:util';
-import type { TrustedAttestor } from '@thoth/client';
-import { resolveAttestation } from '@thoth/client';
-import type { AttestorDescriptor } from '@thoth/core';
-import type { Claim } from '@thoth/core/claim';
-import { bytes32Schema, claimSchema } from '@thoth/core/claim';
+import type { TrustedAttestor } from '@txpipe/thoth-client';
+import { resolveAttestation } from '@txpipe/thoth-client';
+import type { AttestorDescriptor } from '@txpipe/thoth-core';
+import type { Claim } from '@txpipe/thoth-core/claim';
+import { bytes32Schema, claimSchema } from '@txpipe/thoth-core/claim';
 import { z } from 'zod';
 import type {
   ZkFetchDefinition,

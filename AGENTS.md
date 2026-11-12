@@ -7,7 +7,7 @@ Agent-facing guide for the Thoth monorepo. Human-oriented docs live in
 
 Thoth is a private N-of-M attestation system for Midnight. Three layers:
 
-- **Contract layer** — `packages/contracts` (`@thoth/contracts`): embeddable
+- **Contract layer** — `packages/contracts` (`@txpipe/thoth-contracts`): embeddable
   Compact modules that verify N-of-M signatures over a flat signed message
   (`attestation.compact`), count valid signatures against a pinned key vector
   (`attestor_registry.compact`) with the stdlib `jubjubSchnorrVerify`.
@@ -54,7 +54,7 @@ file.
   contracts README).
   Never bump one workspace alone; [`CONTRIBUTING.md`](CONTRIBUTING.md#dev-setup)
   says why.
-- **Claim types are keyless.** `@thoth/core` carries no signing key; anything
+- **Claim types are keyless.** `@txpipe/thoth-core` carries no signing key; anything
   that commits to a message delegates to the kind's `message()`. Keep it that
   way.
 - **`registryIndex` is positional and app-owned.** `attestor_registry.compact`
@@ -72,7 +72,7 @@ file.
   `tsconfig.base.json`.
 - **Biome** is the formatter/linter (`biome.json`). Notable rules:
   - `noBarrelFile` / `noReExportAll` are errors (except `*.config.*`). Never
-    add `export *` barrels; use subpath exports instead (see `@thoth/core/claim`).
+    add `export *` barrels; use subpath exports instead (see `@txpipe/thoth-core/claim`).
   - `noUnusedImports`, `noUnusedVariables`, `useErrorMessage` are errors.
   - 100-column line width, single quotes, semicolons.
 - **Compact**: `pragma language_version >= 0.22`; follow the style in
@@ -136,12 +136,12 @@ Voice, for every doc and comment:
 Package README template, headings in this order (skip a section only if it
 would be empty):
 
-1. `# @thoth/<name>`, then one sentence saying what it is and who it's for.
+1. `# @txpipe/thoth-<name>`, then one sentence saying what it is and who it's for.
 2. The status line, identical in every README and the root:
    > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 3. `## Install`: how to install or use it today. A package with an npm name
-   gives it, plus one line saying the name may change until the npm scope is
-   settled; a private package skips both.
+   gives it (`@txpipe/thoth-<name>`), plus one line saying whether it is
+   published yet; a private package skips both.
 4. `## Usage`: the shortest working example of the main task. For `core`,
    `attestor` and `client` the reader is a kind author, so the example is from
    their side.
@@ -160,7 +160,7 @@ A decision that spans packages is an ADR in `docs/adr/`, linked from every
 README it affects. A decision that is local to one package and has no ADR
 lives only in that package's README. `docs/kind-author-guide.md` spans
 packages: update it when an interface a kind implements changes
-(`@thoth/core`, `@thoth/attestor`, `@thoth/client`, or the claim).
+(`@txpipe/thoth-core`, `@txpipe/thoth-attestor`, `@txpipe/thoth-client`, or the claim).
 
 The roadmap lives in GitHub: the `v0` and `Next` milestones and the `frozen`
 label. The root README's Roadmap section only links those three; package
@@ -175,7 +175,7 @@ READMEs don't repeat it.
   modules so tests run against real artifacts.
 - `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
   compiled pure circuits — never hand-roll the message encoding; use
-  `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.
+  `pureCircuits.message` or `@txpipe/thoth-core/claim`'s `claimToMessage`.
 - After changing Compact sources, recompile before running tests:
   `npm run compact:no-zk` (the `pretest` hook does this automatically).
 - `packages/contracts/test/acceptance.test.ts` is the end-to-end check (zkFetch

@@ -1,9 +1,9 @@
 // `zkFetchClient.collect`: one attempt per attestor, until a threshold of
 // registry slots signs the same message.
 
-import type { TrustedAttestor, TrustedSet } from '@thoth/client';
-import { attestorIdsOf, memberOf } from '@thoth/client';
-import type { Claim, FlatMessage } from '@thoth/core/claim';
+import type { TrustedAttestor, TrustedSet } from '@txpipe/thoth-client';
+import { attestorIdsOf, memberOf } from '@txpipe/thoth-client';
+import type { Claim, FlatMessage } from '@txpipe/thoth-core/claim';
 import { z } from 'zod';
 import type { ZkFetchDefinition } from '../index.js';
 import { ZkFetchProverError } from '../prover-error.js';

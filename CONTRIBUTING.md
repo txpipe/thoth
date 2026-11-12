@@ -24,15 +24,15 @@ at that version, so bump it everywhere at once, together with the compiler.
 ```
 thoth/
 ├── packages/                   # npm workspace packages
-│   ├── attestor/               # @thoth/attestor: pairs a kind's law with a signing key
-│   ├── client/                 # @thoth/client: trusted set, transport, attestation checks
-│   ├── contracts/              # @thoth/contracts: Compact modules
+│   ├── attestor/               # @txpipe/thoth-attestor: pairs a kind's law with a signing key
+│   ├── client/                 # @txpipe/thoth-client: trusted set, transport, attestation checks
+│   ├── contracts/              # @txpipe/thoth-contracts: Compact modules
 │   │   ├── attestation.compact        # N-of-M verification, replay and window checks, claims vault
 │   │   ├── attestor_registry.compact  # pinned attestor keys, signature counting
 │   │   ├── examples/example_app.compact  # a 2-of-3 embedding
 │   │   └── test/                      # simulator tests, mock contracts, helpers
-│   ├── core/                   # @thoth/core: keyless claim and law types
-│   └── zk-tls/                 # @thoth/zk-tls: the zkFetch kind (attestor, client, prover)
+│   ├── core/                   # @txpipe/thoth-core: keyless claim and law types
+│   └── zk-tls/                 # @txpipe/thoth-zk-tls: the zkFetch kind (attestor, client, prover)
 ├── docs/
 │   ├── DESIGN.md               # architecture, the claim and its wire order
 │   ├── kind-author-guide.md    # how to add an attestor kind

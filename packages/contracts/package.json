@@ -1,5 +1,5 @@
 {
-  "name": "@thoth/contracts",
+  "name": "@txpipe/thoth-contracts",
   "version": "0.0.0",
   "description": "Thoth Compact modules: N-of-M attestation and attestor registry.",
   "type": "module",
@@ -49,10 +49,10 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",
     "@midnight-ntwrk/compact-runtime": "0.21.0",
-    "@thoth/attestor": "*",
-    "@thoth/client": "*",
-    "@thoth/core": "*",
-    "@thoth/zk-tls": "*",
+    "@txpipe/thoth-attestor": "*",
+    "@txpipe/thoth-client": "*",
+    "@txpipe/thoth-core": "*",
+    "@txpipe/thoth-zk-tls": "*",
     "@types/node": "^26.2.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"

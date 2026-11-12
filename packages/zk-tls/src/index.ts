@@ -1,10 +1,14 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import type { AttestationInput } from '@thoth/core';
-import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
-import { bytes32Schema, CLAIM_VERSION, claimSchema } from '@thoth/core/claim';
-import type { CanonicalValue } from '@thoth/core/claim-context';
-import { claimContextDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
+import type { AttestationInput } from '@txpipe/thoth-core';
+import type { Claim, ClaimInput, FlatMessage } from '@txpipe/thoth-core/claim';
+import { bytes32Schema, CLAIM_VERSION, claimSchema } from '@txpipe/thoth-core/claim';
+import type { CanonicalValue } from '@txpipe/thoth-core/claim-context';
+import {
+  claimContextDigestOf,
+  policyHashOf,
+  subjectHashOf,
+} from '@txpipe/thoth-core/claim-context';
 import { z } from 'zod';
 import { bytesToHex, hexToBytes } from './hex.js';
 import { re2CompileError } from './regex.js';
@@ -183,7 +187,7 @@ const claimSchemaWithin = (limits: ZkFetchLimits) => {
 /**
  * The zkFetch kind's claim schema.
  *
- * `claimSchema` from `@thoth/core/claim` without the fixed lengths: the slot
+ * `claimSchema` from `@txpipe/thoth-core/claim` without the fixed lengths: the slot
  * counts are `values.length` and `byteValues.length` (default `[]`), and
  * `present` needs one flag per slot. It caps no count; an attestor parses with
  * its own {@link ZkFetchLimits}.

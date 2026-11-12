@@ -22,7 +22,7 @@ export interface AttestationInput<P, E, C> {
  * The law a kind of attestor implements: zod schemas for the policy, evidence
  * and claim, plus `verify` and `message`.
  *
- * It carries no signing key; `@thoth/attestor` pairs it with one.
+ * It carries no signing key; `@txpipe/thoth-attestor` pairs it with one.
  */
 export interface AttestorDefinition<
   K extends string,
@@ -60,7 +60,7 @@ export interface AttestorDefinition<
  * check its signatures, with no key material.
  *
  * It carries no registry slot; each app assigns one in its trusted set
- * (`@thoth/client`).
+ * (`@txpipe/thoth-client`).
  */
 export interface AttestorDescriptor<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,

@@ -1,4 +1,4 @@
-# @thoth/contracts
+# @txpipe/thoth-contracts
 
 The Compact modules a Midnight contract embeds to verify N-of-M attestations
 in-circuit, for dApp developers who consume Thoth claims on-chain.
@@ -216,7 +216,7 @@ What the module does not check, and what your app does itself:
   ([ADR 0001](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0001-source-binding-by-in-circuit-subject-hash.md)).
 - **The holder is a per-claim commitment, not an identity.** The pure
   `holderCommitment(secret)` circuit derives it, and `holderCommitmentOf` in
-  `@thoth/core/claim-context` matches it off-chain. Cross-claim or per-user
+  `@txpipe/thoth-core/claim-context` matches it off-chain. Cross-claim or per-user
   state is your app's ([ADR 0004](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
 - **The window is when the attestor observed.** The contract checks it against
   block time; a fact's own time is a claim value ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).

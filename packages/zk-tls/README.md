@@ -1,4 +1,4 @@
-# @thoth/zk-tls
+# @txpipe/thoth-zk-tls
 
 The zkFetch attestor kind for Thoth, which turns [Reclaim](https://github.com/reclaimprotocol/attestor-core) evidence of an HTTPS fetch into a claim a Midnight contract can verify, for dApp developers who need an attested web fact and for the operators who run its attestors.
 
@@ -14,7 +14,7 @@ npm install && npm run build
 cd /path/to/your-app && npm install /path/to/thoth/packages/zk-tls
 ```
 
-Its package name is `@thoth/zk-tls`; that name may change until the npm scope is settled.
+Once it is published, it installs as `@txpipe/thoth-zk-tls`.
 
 It depends on [`re2`](https://github.com/uhop/node-re2), a native Node module. `npm install` downloads a prebuilt binary for common platforms and otherwise builds one, which needs a C++ toolchain. The prover and the policy schema refuse to run without it ([Regex engine](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#regex-engine)).
 
@@ -23,7 +23,7 @@ It depends on [`re2`](https://github.com/uhop/node-re2), a native Node module. `
 An operator builds an attestor from a signing key pair and the address of the Reclaim witness it trusts, then serves `attestor.attest(input)` to dApps ([attestor guide](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/attestor-guide.md)):
 
 ```ts
-import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
+import { zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
 
 const attestor = zkFetchAttestor({ id: 'attestor-a', keyPair, witnessAddress: '0x…' });
 ```
@@ -31,12 +31,12 @@ const attestor = zkFetchAttestor({ id: 'attestor-a', keyPair, witnessAddress: '0
 A dApp pins its attestors, fetches through each one's witness, and collects a threshold of signatures over one claim ([dApp guide](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md)):
 
 ```ts
-import { buildTrustedSet } from '@thoth/client';
-import { jubjubVerifier } from '@thoth/client/jubjub';
-import { holderCommitmentOf } from '@thoth/core/claim-context';
-import { zkFetchBodyHashOf, type ZkFetchPolicy } from '@thoth/zk-tls';
-import { zkFetchClient } from '@thoth/zk-tls/client';
-import { zkFetchProver } from '@thoth/zk-tls/prover';
+import { buildTrustedSet } from '@txpipe/thoth-client';
+import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
+import { holderCommitmentOf } from '@txpipe/thoth-core/claim-context';
+import { zkFetchBodyHashOf, type ZkFetchPolicy } from '@txpipe/thoth-zk-tls';
+import { zkFetchClient } from '@txpipe/thoth-zk-tls/client';
+import { zkFetchProver } from '@txpipe/thoth-zk-tls/prover';
 
 const SENTINEL = '{"thoth":"ignored"}';
 
@@ -170,8 +170,8 @@ What it does not check, and what your app must do:
 - **The policy decides how the request body is bound.** `bodyPolicy` is required and part of the policy hash, so there is no method-based default and every attestor enforces the same rule. Reclaim compares the sent body only when the signed body is non-empty, so you choose between a bound body (`non-empty` or a pin) and the explicit unbound `ignored` ([Body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy)).
 - **One policy per trusted set.** N-of-M means N attestors signed the same message, so every attestor must enforce the same policy; different readings produce different messages and never count together. Which witness an attestor trusts is per instance, not part of the policy.
 - **Each attestor sets its own input limits.** They are offchain config that bounds what a request costs the operator. A limit only refuses input and never changes the signed message, so attestors with different limits cost a trusted set liveness, not safety: a request that some attestors refuse may not reach the threshold. Agree on limits with your attestors, as you do on the witness version. The client and the exported schemas cap nothing.
-- **One attestor instance serves any contract.** The slot counts come from each proposal, up to the instance's limits, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
-- **The prover is its own entry point.** `@thoth/zk-tls/prover` loads the Reclaim client libraries lazily, so a client-only build never pulls them. `@thoth/zk-tls/client` imports neither those libraries nor `@thoth/attestor`.
+- **One attestor instance serves any contract.** The slot counts come from each proposal, up to the instance's limits, and the registry slot from each dApp's trusted set (see [`@txpipe/thoth-attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
+- **The prover is its own entry point.** `@txpipe/thoth-zk-tls/prover` loads the Reclaim client libraries lazily, so a client-only build never pulls them. `@txpipe/thoth-zk-tls/client` imports neither those libraries nor `@txpipe/thoth-attestor`.
 
 ## License
 
@@ -184,9 +184,9 @@ AGPL-3.0-only: this package links Reclaim Protocol's [attestor-core](https://git
 - [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md): how to add a kind, with this package as the worked example
 - [dApp guide](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md): client setup, requests, policies, and handing the attestment to the contract
 - [attestor guide](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/attestor-guide.md): deploying an attestor, running a Reclaim witness, and the live check
-- [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): the claim, `claimToMessage` and `holderCommitmentOf`
-- [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor): `KeyPair`, `Attestor`, `buildAttestor`
-- [`@thoth/client`](https://github.com/txpipe-shop/thoth/tree/main/packages/client): `buildTrustedSet`, the transport, `resolveAttestation`
-- [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies the signatures positionally
+- [`@txpipe/thoth-core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): the claim, `claimToMessage` and `holderCommitmentOf`
+- [`@txpipe/thoth-attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor): `KeyPair`, `Attestor`, `buildAttestor`
+- [`@txpipe/thoth-client`](https://github.com/txpipe-shop/thoth/tree/main/packages/client): `buildTrustedSet`, the transport, `resolveAttestation`
+- [`@txpipe/thoth-contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies the signatures positionally
 - [Reclaim attestor-core](https://github.com/reclaimprotocol/attestor-core): the witness this kind verifies
 - [Reclaim zkFetch](https://github.com/reclaimprotocol/zk-fetch): the hosted-witness client; see the dApp guide's [hosted adapter](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#reclaims-hosted-zkfetch-sdk)

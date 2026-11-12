@@ -12,7 +12,7 @@ import {
 } from '@reclaimprotocol/attestor-core';
 import { setCryptoImplementation } from '@reclaimprotocol/tls';
 import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto';
-import type { FlatMessage } from '@thoth/core/claim';
+import type { FlatMessage } from '@txpipe/thoth-core/claim';
 import {
   assertEvidenceMatchesPolicy,
   deriveClaimFromEvidence,
@@ -21,8 +21,8 @@ import {
   type ZkFetchPolicy,
   zkFetchClaimContextDigestOf,
   zkFetchSubjectHashOf,
-} from '@thoth/zk-tls';
-import { verifyZkFetchProof, zkFetchAttestor } from '@thoth/zk-tls/attestor';
+} from '@txpipe/thoth-zk-tls';
+import { verifyZkFetchProof, zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 /** The app id every claim in this suite is for. */

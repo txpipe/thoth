@@ -1,5 +1,5 @@
 {
-  "name": "@thoth/core",
+  "name": "@txpipe/thoth-core",
   "version": "0.0.0",
   "description": "Core types and definitions for the Thoth N-of-M attestation system.",
   "type": "module",

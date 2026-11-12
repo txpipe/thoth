@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const packageRoot = new URL('../', import.meta.url);
 
 describe('witness pin', () => {
-  it('pins the witness to the attestor-core version @thoth/zk-tls depends on', () => {
+  it('pins the witness to the attestor-core version @txpipe/thoth-zk-tls depends on', () => {
     const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), 'utf8')) as {
       dependencies: Record<string, string>;
     };

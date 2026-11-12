@@ -1,15 +1,15 @@
-// Unit tests for the zkFetch claim context (`@thoth/zk-tls`): the kind's
+// Unit tests for the zkFetch claim context (`@txpipe/thoth-zk-tls`): the kind's
 // policy hash and its request subject.
 
 import { createHash } from 'node:crypto';
-import { policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
+import { policyHashOf, subjectHashOf } from '@txpipe/thoth-core/claim-context';
 import {
   type ZkFetchPolicy,
   zkFetchBodyHashOf,
   zkFetchPolicyHashOf,
   zkFetchSubjectHashOf,
   zkFetchSubjectOf,
-} from '@thoth/zk-tls';
+} from '@txpipe/thoth-zk-tls';
 import { describe, expect, it } from 'vitest';
 import { DISCLOSURE_RULES } from './helpers/helper.js';
 

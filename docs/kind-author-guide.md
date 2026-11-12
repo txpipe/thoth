@@ -2,7 +2,7 @@
 
 A kind is a family of attestors that share one law: how they read evidence,
 what policy they enforce, and which claim they sign. zkFetch
-([`@thoth/zk-tls`](../packages/zk-tls/README.md)) is the reference kind; this
+([`@txpipe/thoth-zk-tls`](../packages/zk-tls/README.md)) is the reference kind; this
 guide names its pieces as the example for each step. Terms follow
 [`CONTEXT.md`](../CONTEXT.md#kinds).
 
@@ -18,19 +18,19 @@ hash (ADR 0002, ADR 0008).
 | Piece | Where it runs | Built on | zkFetch example |
 |-------|---------------|----------|-----------------|
 | Law tag | everywhere | — | `ZK_FETCH_LAW = 'zk-fetch@1'` |
-| Policy schema, normalizer and hash | shared | `policyHashOf` (`@thoth/core/claim-context`) | `zkFetchPolicySchema`, `normalizePolicy`, `zkFetchPolicyHashOf` |
+| Policy schema, normalizer and hash | shared | `policyHashOf` (`@txpipe/thoth-core/claim-context`) | `zkFetchPolicySchema`, `normalizePolicy`, `zkFetchPolicyHashOf` |
 | Subject struct and hash | shared | `subjectHashOf` | `zkFetchSubjectOf`, `zkFetchSubjectHashOf` |
 | Claim context binding | shared, checked by the attestor | `claimContextDigestOf` | `zkFetchClaimContextDigestOf`, `assertClaimMatchesContext` |
 | Evidence schema | shared | zod | `zkFetchEvidenceSchema` |
-| Claim derivation | shared | `Claim` (`@thoth/core/claim`) | `deriveClaimFromEvidence` |
-| Definition (`verify`, `message`) | attestor | `defineAttestor` (`@thoth/attestor`) | `createZkFetchDefinition` |
+| Claim derivation | shared | `Claim` (`@txpipe/thoth-core/claim`) | `deriveClaimFromEvidence` |
+| Definition (`verify`, `message`) | attestor | `defineAttestor` (`@txpipe/thoth-attestor`) | `createZkFetchDefinition` |
 | Input limits | attestor | zod `.max()` | `ZK_FETCH_DEFAULT_LIMITS`, `zkFetchSchemasWithin` |
 | Instance builder | attestor | `buildAttestor` | `zkFetchAttestor` |
-| Client | dApp | `@thoth/client` | `zkFetchClient` |
+| Client | dApp | `@txpipe/thoth-client` | `zkFetchClient` |
 
 Put shared logic at the package root, so a client-only app never imports
-`@thoth/attestor`. Give the attestor and the client their own subpath entries, as
-`@thoth/zk-tls/attestor` and `@thoth/zk-tls/client` do.
+`@txpipe/thoth-attestor`. Give the attestor and the client their own subpath entries, as
+`@txpipe/thoth-zk-tls/attestor` and `@txpipe/thoth-zk-tls/client` do.
 
 ## 1. Name the law
 
@@ -113,7 +113,7 @@ decides only the header fields that come from the evidence and the values:
   certifiable and its slot stays unpresent. Your claim carries one flag per
   byte slot (`present[V + i]`); the message and the contract use the split
   shape in the [wire order](DESIGN.md#wire-order). So a dApp returns
-  `toContractClaim(claim)` (from `@thoth/core/claim`) from
+  `toContractClaim(claim)` (from `@txpipe/thoth-core/claim`) from
   `getAttestationWitness`, never your claim itself, even with `W = 0`, whose
   empty `bytePresent`/`byteHalves` the contract still requires.
 - `appId` and `holder` come from the claim proposal. The contract checks
@@ -121,7 +121,7 @@ decides only the header fields that come from the evidence and the values:
   seals.
 - Bind the holder and window to the evidence. Have the
   [witness](../CONTEXT.md#roles) sign `claimContextDigestOf` of the
-  [claim context](../CONTEXT.md#the-claim) (`@thoth/core/claim-context`), and
+  [claim context](../CONTEXT.md#the-claim) (`@txpipe/thoth-core/claim-context`), and
   refuse a proposal whose holder or window gives another digest. Otherwise
   whoever sees the evidence can claim its observation under their own holder.
   zkFetch signs it into the witness's context (`assertClaimMatchesContext`,
@@ -186,7 +186,7 @@ In your `attest`:
 - sign `definition.message(claim)` and return the claim, message, public key
   and signature.
 
-The [`@thoth/attestor` README](../packages/attestor/README.md#usage) signs the
+The [`@txpipe/thoth-attestor` README](../packages/attestor/README.md#usage) signs the
 parsed proposal to stay short; a real kind signs the claim it derived, as
 `zkFetchAttestor` does.
 
@@ -203,7 +203,7 @@ the attestor instance needs no `valueSlots`/`byteSlots` field.
 
 ## 8. The client
 
-The client runs on the user's machine and builds on `@thoth/client` (see its
+The client runs on the user's machine and builds on `@txpipe/thoth-client` (see its
 [Usage](../packages/client/README.md#usage)):
 
 - Take a `TrustedSet` built by `buildTrustedSet`. The app assigns each
@@ -212,7 +212,7 @@ The client runs on the user's machine and builds on `@thoth/client` (see its
   into a typed `Attestation`.
 - Derive the expected claim from the evidence yourself. Then vet every reply
   with `resolveAttestation({ trusted, member, attestation, verifier,
-  expectedClaim })`, using `jubjubVerifier` from `@thoth/client/jubjub`.
+  expectedClaim })`, using `jubjubVerifier` from `@txpipe/thoth-client/jubjub`.
 - Group the replies by exact message. Place each signature at its member's
   `registryIndex`, never by reply order.
 - Keep request secrets on the user's machine. The attestors see evidence, not

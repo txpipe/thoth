@@ -1,15 +1,15 @@
-// End-to-end tests over the package's shipped entry points (`@thoth/zk-tls/attestor`
-// and `@thoth/zk-tls/client`): verify a real witnessed Reclaim proof, derive and
+// End-to-end tests over the package's shipped entry points (`@txpipe/thoth-zk-tls/attestor`
+// and `@txpipe/thoth-zk-tls/client`): verify a real witnessed Reclaim proof, derive and
 // collect the N-of-M attestation set, and assert the kind's rejection paths.
 //
 // Uses `examples/demo-attestation/fixtures/` — a genuine, offline-verifiable
 // HTTPS fetch witnessed by a Reclaim witness (no network needed).
-import type { Attestor, KeyPair } from '@thoth/attestor';
-import { descriptorOf } from '@thoth/attestor';
-import type { AttestorTransport } from '@thoth/client';
-import { buildTrustedSet } from '@thoth/client';
-import type { FlatMessage } from '@thoth/core/claim';
-import { claimToMessage } from '@thoth/core/claim';
+import type { Attestor, KeyPair } from '@txpipe/thoth-attestor';
+import { descriptorOf } from '@txpipe/thoth-attestor';
+import type { AttestorTransport } from '@txpipe/thoth-client';
+import { buildTrustedSet } from '@txpipe/thoth-client';
+import type { FlatMessage } from '@txpipe/thoth-core/claim';
+import { claimToMessage } from '@txpipe/thoth-core/claim';
 import {
   assertEvidenceMatchesPolicy,
   parsedEvidenceView,
@@ -23,8 +23,8 @@ import {
   zkFetchEvidenceSchema,
   zkFetchPolicyHashOf,
   zkFetchSubjectHashOf,
-} from '@thoth/zk-tls';
-import { verifyZkFetchProof, zkFetchAttestor } from '@thoth/zk-tls/attestor';
+} from '@txpipe/thoth-zk-tls';
+import { verifyZkFetchProof, zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
 import {
   addressFromWitnessId,
   toCanonicalEvidence,
@@ -34,7 +34,7 @@ import {
   type ZkFetchRequest,
   ZkFetchThresholdError,
   zkFetchClient,
-} from '@thoth/zk-tls/client';
+} from '@txpipe/thoth-zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
 import { DISCLOSURE_RULES, FIXTURE } from './helpers/helper.js';
 import { type TestWitness, testWitness } from './helpers/witness.js';

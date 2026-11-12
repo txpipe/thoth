@@ -1,5 +1,5 @@
 // Parity between the off-chain holder commitment
-// (`@thoth/core/claim-context`'s `holderCommitmentOf`) and the compiled
+// (`@txpipe/thoth-core/claim-context`'s `holderCommitmentOf`) and the compiled
 // `holderCommitment` pure circuit.
 //
 // ADR 0004 binds each claim to a per-claim holder commitment. The client
@@ -7,7 +7,7 @@
 // in-circuit from the caller's secret, so the two must agree byte for byte.
 // The compiled pure circuit is the oracle.
 import { randomBytes } from 'node:crypto';
-import { holderCommitmentOf } from '@thoth/core/claim-context';
+import { holderCommitmentOf } from '@txpipe/thoth-core/claim-context';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 
