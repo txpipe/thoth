@@ -143,13 +143,13 @@ const collectSubmission = async (): Promise<Submission> => {
   return { claim: toContractClaim(claim), signatures, commitRand: randomBytes(32) };
 };
 
-// A fresh ledger that seals the policy the attestors enforced, with its block
-// time inside the claim's window.
-const freshLedger = async (): Promise<MockAttestationBytesSim> => {
+// A fresh ledger that seals the app id and the policy the attestors enforced,
+// with its block time inside the claim's window.
+const freshLedger = async (appId = APP_ID): Promise<MockAttestationBytesSim> => {
   const sim = await MockAttestationBytesSim.create(
     createPrivateState<B_Claim>(holderSecret),
     registryKeys,
-    { policyHashes: [cardanoPolicyHashOf(policy), cardanoPolicyHashOf(otherPolicy)] },
+    { appId, policyHashes: [cardanoPolicyHashOf(policy), cardanoPolicyHashOf(otherPolicy)] },
   );
   sim.now = Number(honestClaim.windowStart);
   return sim;
@@ -230,7 +230,12 @@ describe('cardano cross-seam acceptance', () => {
       name: 'the policy',
       mutate: (c: B_Claim) => ({ ...c, policyHash: cardanoPolicyHashOf(otherPolicy) }),
     },
-    { name: 'the app id', mutate: (c: B_Claim) => ({ ...c, appId: flip(c.appId, 0) }) },
+    // The ledger seals the substituted app id, so only the signatures can reject it.
+    {
+      name: 'the app id',
+      mutate: (c: B_Claim) => ({ ...c, appId: flip(c.appId, 0) }),
+      sealedAppId: flip(APP_ID, 0),
+    },
     {
       name: 'the subject',
       mutate: (c: B_Claim) => ({ ...c, subjectHash: flip(c.subjectHash, 0) }),
@@ -247,10 +252,13 @@ describe('cardano cross-seam acceptance', () => {
       mutate: (c: B_Claim) => ({ ...c, holder: pureCircuits.holderCommitment(otherSecret) }),
       secret: otherSecret,
     },
-  ])('rejects the signatures over a claim with $name mutated', async ({ mutate, secret }) => {
-    const sim = await freshLedger();
-    await expect(submit(sim, { ...honest, claim: mutate(honest.claim) }, secret)).rejects.toThrow(
-      'Insufficient valid signatures',
-    );
-  });
+  ])(
+    'rejects the signatures over a claim with $name mutated',
+    async ({ mutate, secret, sealedAppId }) => {
+      const sim = await freshLedger(sealedAppId);
+      await expect(submit(sim, { ...honest, claim: mutate(honest.claim) }, secret)).rejects.toThrow(
+        'Insufficient valid signatures',
+      );
+    },
+  );
 });
