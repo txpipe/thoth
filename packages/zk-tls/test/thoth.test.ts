@@ -1,4 +1,4 @@
-// The zkFetch kind manifest (`@thoth/zk-tls/thoth`): the layout a policy
+// What zkFetch exports to tooling (`@thoth/zk-tls/thoth`): the layout a policy
 // implies, and the policy hash, client and attestors it builds agreeing with
 // the kind's own entries.
 import { randomBytes } from 'node:crypto';
@@ -104,13 +104,13 @@ describe('zkTls.definition', () => {
   });
 });
 
-describe('the zkTls manifest end to end', () => {
+describe('zkTls end to end', () => {
   const policy = policyWith([
     { slot: 0, name: 'stars', parse: 'int' },
     { slot: 1, name: 'owner', parse: 'bytes' },
   ]);
 
-  // Build everything through the manifest alone, as the CLI does: offline
+  // Build everything through `zkTls` alone, as the CLI does: offline
   // operators, an attestor per operator, descriptors from `definition()`, and
   // the client.
   const collect = async () => {
@@ -165,7 +165,7 @@ describe('the zkTls manifest end to end', () => {
     );
   };
 
-  it("signs the manifest's policy hash for an equivalent policy", async () => {
+  it('signs the policy hash zkTls computes for an equivalent policy', async () => {
     const attestment = await collect();
     // Hosts in another case and order normalize to the same policy.
     const equivalent = { ...policy, allowedHosts: ['API.GitHub.com.', 'api.github.com'] };

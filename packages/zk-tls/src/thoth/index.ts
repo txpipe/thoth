@@ -1,5 +1,5 @@
-// The zkFetch kind manifest: the object tooling such as the `thoth` CLI drives
-// zkFetch through. It loads the attestor side, so a dApp imports `./client` instead.
+// What zkFetch exports to tooling: the object the `thoth` CLI drives zkFetch
+// through. It loads the attestor side, so a dApp imports `./client` instead.
 import { createHash } from 'node:crypto';
 import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import { defineKind, denseLayout, type KindAttestorKey } from '@thoth/core/kind';
@@ -38,7 +38,8 @@ export interface ZkFetchDevInput {
 }
 
 /**
- * The zkFetch kind manifest. Keys and signatures are Jubjub Schnorr.
+ * The object tooling drives zkFetch through, a `KindManifest`. Keys and
+ * signatures are Jubjub Schnorr.
  *
  * `layoutOf` requires a dense slot map and slot names that are ASCII
  * identifiers (`denseLayout` in `@thoth/core/kind`). `devEvidence` gives each

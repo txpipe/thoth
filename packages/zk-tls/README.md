@@ -83,6 +83,25 @@ const attestment = await client.collect(
 
 `attestment.collected[i]` carries each signature with its registry slot; hand them to the contract as the dApp guide's [last section](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#handing-it-to-the-contract) shows.
 
+Each descriptor's `definition` is `zkFetchClientDefinition` from `@thoth/zk-tls/client`, so the dApp never loads the attestor side:
+
+```ts
+import { zkFetchClientDefinition } from '@thoth/zk-tls/client';
+
+const descriptorA = { id: 'attestor-a', definition: zkFetchClientDefinition, publicKey: keyA };
+```
+
+Tooling such as the `thoth` CLI drives zkFetch through `zkTls`, the object `@thoth/zk-tls/thoth` exports. It gives the policy hash, the claim layout a policy implies, the client, an attestor per operator, and an offline evidence source ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#10-the-thoth-entry)):
+
+```ts
+import { zkTls } from '@thoth/zk-tls/thoth';
+
+zkTls.policyHashOf(policy); // the hash the contract seals
+zkTls.layoutOf(policy); // { valueSlots: 1, byteSlots: 0, names: [{ name: 'stars', … }] }
+```
+
+`@thoth/zk-tls/dev` exports `testWitness`, an offline witness for local development and tests. `zkTls.devEvidence` pairs one per operator with the `witnessAddress` its attestor trusts.
+
 ## Concepts
 
 - [Attestor](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles): verifies evidence under a policy and signs the claim. One instance serves any contract; the dApp assigns its registry slot.
@@ -138,6 +157,11 @@ When `collect` drops an attestor, its entry in `failures` names one reason:
 
 A custom `ZkFetchProver` reports `transport` and `no-match` by throwing `ZkFetchProverError`. Any other error it throws becomes `evidence`.
 
+What `zkTls.layoutOf` checks:
+
+- The slot map is dense: numeric slots `0..V-1`, then byte slots from `V`. It refuses a gap and a byte slot before a numeric slot, and says how to renumber.
+- Every slot name is an ASCII identifier used once: a letter or `_`, then letters, digits or `_`. A regex group name may be more than that, but generated code names its accessors after the slot.
+
 What it does not check, and what your app must do:
 
 - The window is not the exact fetch time: the fetch happened no earlier than about 10 minutes before `windowStart`. Do not read it as the time of the fact ([Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim) explains why).
@@ -148,6 +172,7 @@ What it does not check, and what your app must do:
 - The secret header check cannot recognize every transformation of a secret. The prover must still redact.
 - An attempt that times out keeps running in the background: Reclaim's `createClaimOnAttestor` takes no abort signal. Its late result is never counted.
 - Errors carry registry slots and reasons, never remote error text.
+- `testWitness` and `zkTls.devEvidence` sign any observation with a fixed or given test key, so their evidence proves nothing. Never let an attestor that serves real value trust their witness address.
 - `threshold` is yours to set; the client cannot read the contract's N.
 - The claim's values are not source-bound on-chain unless your circuit recomputes `subjectHash` from the subject fields (ADR 0001).
 - Reusing a holder secret links claims. Thoth promises no cross-claim unlinkability (ADR 0004).
@@ -171,6 +196,8 @@ What it does not check, and what your app must do:
 - **One policy per trusted set.** N-of-M means N attestors signed the same message, so every attestor must enforce the same policy; different readings produce different messages and never count together. Which witness an attestor trusts is per instance, not part of the policy.
 - **Each attestor sets its own input limits.** They are offchain config that bounds what a request costs the operator. A limit only refuses input and never changes the signed message, so attestors with different limits cost a trusted set liveness, not safety: a request that some attestors refuse may not reach the threshold. Agree on limits with your attestors, as you do on the witness version. The client and the exported schemas cap nothing.
 - **One attestor instance serves any contract.** The slot counts come from each proposal, up to the instance's limits, and the registry slot from each dApp's trusted set (see [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
+- **The tooling export and the offline witness are their own entry points.** `@thoth/zk-tls/thoth` and `@thoth/zk-tls/dev` load `@thoth/attestor` and attestor-core, so a dApp imports `@thoth/zk-tls/client` instead.
+- **The descriptor's definition never verifies.** `zkFetchClientDefinition` carries the schemas and `message` a client needs, and its `verify` always rejects. An attestor builds its own definition with `createZkFetchDefinition`, which checks its witness.
 - **The prover is its own entry point.** `@thoth/zk-tls/prover` loads the Reclaim client libraries lazily, so a client-only build never pulls them. `@thoth/zk-tls/client` imports neither those libraries nor `@thoth/attestor`.
 
 ## License

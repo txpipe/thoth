@@ -135,7 +135,7 @@ export interface JubjubKeyPair {
   };
 }
 
-/** What tooling gives every attestor it builds through a kind manifest. */
+/** What tooling gives every attestor it builds through a {@link KindManifest}. */
 export interface KindAttestorKey {
   /** The attestor's id, the one dApps pin in their trusted set. */
   readonly id: string;
@@ -170,7 +170,7 @@ export interface KindCommand {
  * from its `./thoth` subpath, built with {@link defineKind}.
  *
  * Keys and signatures are Jubjub Schnorr, the scheme the contract's registry
- * verifies. The manifest holds no key: tooling passes one to `attestor`.
+ * verifies. It holds no key: tooling passes one to `attestor`.
  *
  * @typeParam P - the parsed policy.
  * @typeParam D - the definition a dApp pins in each attestor's descriptor.
@@ -232,8 +232,8 @@ export interface KindManifest<
 }
 
 /**
- * Declare a kind manifest. It returns `manifest` unchanged and infers the
- * manifest's types from it.
+ * Declare the object a kind exports from its `./thoth` subpath. It returns
+ * `manifest` unchanged and infers its types.
  *
  * @example
  * ```ts

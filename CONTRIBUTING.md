@@ -32,7 +32,7 @@ thoth/
 │   │   ├── examples/example_app.compact  # a 2-of-3 embedding
 │   │   └── test/                      # simulator tests, mock contracts, helpers
 │   ├── core/                   # @thoth/core: keyless claim and law types
-│   └── zk-tls/                 # @thoth/zk-tls: the zkFetch kind (attestor, client, prover)
+│   └── zk-tls/                 # @thoth/zk-tls: the zkFetch kind (attestor, client, prover, dev, thoth)
 ├── docs/
 │   ├── DESIGN.md               # architecture, the claim and its wire order
 │   ├── kind-author-guide.md    # how to add an attestor kind

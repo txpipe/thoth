@@ -1,6 +1,6 @@
 // The client entry stays client-only: walking the static imports of the built
-// `@thoth/zk-tls/client` finds none of the attestor side, which the kind
-// manifest (`./thoth`) and the offline witness (`./dev`) load.
+// `@thoth/zk-tls/client` finds none of the attestor side, which the tooling
+// export (`./thoth`) and the offline witness (`./dev`) load.
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +42,7 @@ describe('@thoth/zk-tls/client', () => {
     }
   });
 
-  it('loads none of the attestor, dev or manifest entries', () => {
+  it('loads none of the attestor, dev or thoth entries', () => {
     const entries = [...files].map((file) => file.split('/dist/')[1]);
     expect(entries).toContain('client/index.js');
     expect(entries.filter((file) => /^(attestor|dev|thoth)\//.test(file ?? ''))).toEqual([]);

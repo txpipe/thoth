@@ -27,10 +27,15 @@ hash (ADR 0002, ADR 0008).
 | Input limits | attestor | zod `.max()` | `ZK_FETCH_DEFAULT_LIMITS`, `zkFetchSchemasWithin` |
 | Instance builder | attestor | `buildAttestor` | `zkFetchAttestor` |
 | Client | dApp | `@thoth/client` | `zkFetchClient` |
+| Client definition | dApp | `AttestorDefinition` (`@thoth/core`) | `zkFetchClientDefinition` |
+| Offline evidence source | development and tests | your evidence format | `testWitness` (`@thoth/zk-tls/dev`) |
+| `./thoth` export | tooling | `defineKind`, `denseLayout` (`@thoth/core/kind`) | `zkTls` (`@thoth/zk-tls/thoth`) |
 
 Put shared logic at the package root, so a client-only app never imports
 `@thoth/attestor`. Give the attestor and the client their own subpath entries, as
-`@thoth/zk-tls/attestor` and `@thoth/zk-tls/client` do.
+`@thoth/zk-tls/attestor` and `@thoth/zk-tls/client` do. The object tooling
+drives your kind through gets a `./thoth` entry, since it loads both sides
+([10. The `./thoth` entry](#10-the-thoth-entry)).
 
 ## 1. Name the law
 
@@ -234,6 +239,61 @@ as private input (ADR 0004).
   never count together.
 - Bind the source in the app's own circuit if the app needs it (step 3).
 
+## 10. The `./thoth` entry
+
+Tooling such as the `thoth` CLI drives your kind only through the object your
+package exports from its `./thoth` subpath, so a new kind works with it without
+a change to the tooling. Build that object with `defineKind` from
+`@thoth/core/kind`:
+
+```ts
+import { defineKind, denseLayout, type KindAttestorKey } from '@thoth/core/kind';
+
+export const myKind = defineKind({
+  law: MY_LAW,
+  policySchema: myPolicySchema,
+  policyHashOf: (policy: MyPolicy) => myPolicyHashOf(policy),
+  layoutOf: (policy: MyPolicy) =>
+    denseLayout(
+      normalize(policy).slots.map((slot) => ({
+        slot: slot.slot,
+        name: slot.name,
+        region: slot.rule === 'bytes' ? 'bytes' : 'numeric',
+        optional: slot.optional,
+      })),
+    ),
+  definition: () => myClientDefinition,
+  client: (config: MyClientConfig<JubjubPoint, JubjubSchnorrSignature>) => myClient.init(config),
+  attestor: (config: KindAttestorKey & { sourceKey: string }) => myAttestor(config),
+  devEvidence: (policy: MyPolicy, operators: number, input: MyObservation) => [/* … */],
+});
+```
+
+- `policyHashOf` must equal the `policyHash` your attestor signs for the same
+  policy. Call the same function your claim derivation calls.
+- `layoutOf` maps each policy slot to its region and hands the list to
+  `denseLayout`. It requires a dense layout, numeric slots `0..V-1` then byte
+  slots from `V`, and slot names that are ASCII identifiers, because generated
+  code names its accessors after them. It refuses anything else and names the
+  slot.
+- `definition` returns the definition a dApp pins in each attestor's
+  descriptor. Export it from your client entry, so a dApp never loads your
+  attestor side. Only its `message` runs on the client, so let its `verify`
+  reject, as `zkFetchClientDefinition` does.
+- `attestor` takes the id and Jubjub Schnorr key pair the tooling holds,
+  plus your trust anchors (zkFetch's `witnessAddress`). Keys and signatures
+  are Jubjub Schnorr, the scheme the contract's registry verifies.
+- `devEvidence` is optional: an offline evidence source for local development
+  and tests. It returns one entry per operator, each with the trust anchors of
+  an attestor that accepts its evidence and the prover a client uses, because a
+  dev source and the attestor that trusts it are configured together. Ship the
+  source from a `./dev` entry, as `@thoth/zk-tls/dev` does with `testWitness`,
+  so your own tests import the same code.
+- `commands` is optional: commands your kind adds to the tooling, by name.
+
+Add `@midnight-ntwrk/compact-runtime` to your dependencies, since the
+key types of `KindManifest` come from it (see [Packaging](#packaging)).
+
 ## Tests
 
 - **Subject parity.** Check `subjectHashOf` against the compiled circuit's
@@ -244,6 +304,10 @@ as private input (ADR 0004).
   policies hash the same and a changed one does not.
 - **Law.** Every `verify` step rejects its own mutation. The instance signs
   the claim it derived, not the one proposed.
+- **The `./thoth` export.** Build an attestor and a client through it alone,
+  with its `devEvidence`, and check that the attestors sign its
+  `policyHashOf`, as `packages/zk-tls/test/thoth.test.ts` does. Check that
+  `layoutOf` refuses a gap and an invalid name.
 - **Acceptance.** Run the path end to end against the simulator, as
   `packages/contracts/test/acceptance.test.ts` does for zkFetch: honest claim
   accepted, each signed field mutated and rejected, and evidence replayed
