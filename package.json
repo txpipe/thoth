@@ -7,7 +7,8 @@
     "packages/client",
     "packages/contracts",
     "packages/core",
-    "packages/zk-tls"
+    "packages/zk-tls",
+    "packages/cli"
   ],
   "description": "Private N-of-M attestation for Midnight — a TypeScript monorepo.",
   "type": "module",
@@ -18,7 +19,7 @@
     "pretest": "npm run compact && npm run build",
     "test": "vitest run",
     "build": "npm run build --workspace=packages/core && npm run build --workspaces --if-present",
-    "types": "npm run build --workspace=packages/core && npm run build --workspace=packages/attestor && npm run build --workspace=packages/client && npm run build --workspace=packages/zk-tls && tsc --noEmit && npm run types --workspaces --if-present",
+    "types": "npm run build --workspace=packages/core && npm run build --workspace=packages/attestor && npm run build --workspace=packages/client && npm run build --workspace=packages/zk-tls && npm run build --workspace=packages/cli && tsc --noEmit && npm run types --workspaces --if-present",
     "check": "npm run check:biome && npm run check:compact",
     "check:fix": "npm run check:fix:biome && npm run check:fix:compact",
     "check:ci": "npm run check:biome && npm run check:compact",
