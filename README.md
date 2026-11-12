@@ -132,4 +132,4 @@ replace.
 - [docs/adr/](docs/adr/): the design decisions and their reasons
 - [CONTEXT.md](CONTEXT.md): the glossary
 - [CONTRIBUTING.md](CONTRIBUTING.md): dev setup, repo layout and commands
-- License: [MIT](LICENSE), except [`@thoth/zk-tls`](packages/zk-tls), which is [AGPL-3.0-only](packages/zk-tls/LICENSE) because it links Reclaim Protocol's AGPL-licensed attestor-core
+- License: [Apache-2.0](LICENSE), except [`@thoth/zk-tls`](packages/zk-tls), which is [AGPL-3.0-only](packages/zk-tls/LICENSE) because it links Reclaim Protocol's AGPL-licensed attestor-core

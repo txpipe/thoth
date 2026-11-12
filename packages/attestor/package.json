@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "Attestor host types and helpers for the Thoth N-of-M attestation system.",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "TxPipe-Shop",
   "keywords": [
     "thoth",
