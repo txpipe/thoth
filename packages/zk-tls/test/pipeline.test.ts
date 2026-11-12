@@ -1362,4 +1362,22 @@ describe('zkFetch attestor + client', () => {
       expect(requestOf(requests, id).context).toEqual({ [ZK_FETCH_CLAIM_CONTEXT_KEY]: digest });
     }
   });
+
+  it("keeps the policy's disclosure rules out of a prover's reach", async () => {
+    const received: ZkFetchRequest['responseMatches'][] = [];
+    const client = clientWith({
+      provers: proversWith({
+        onProve: (id, request) => {
+          received.push(structuredClone(request.responseMatches));
+          if (id === 'attestor-0') {
+            const [match] = request.responseMatches ?? [];
+            (match as { value: string }).value = '(?<data>tampered)';
+          }
+        },
+      }),
+    });
+    await client.proveReq(collectionRequest, binding());
+    await client.proveReq(collectionRequest, binding());
+    expect(received).toEqual(Array(6).fill(policy().responseMatches));
+  });
 });
