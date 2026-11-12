@@ -100,6 +100,20 @@ package versions on its own; a package that depends on a bumped one gets a
 `patch` bump. `@txpipe/thoth-contracts` is private and takes no changesets.
 A change with no user-facing effect, such as a test or a CI tweak, needs none.
 
+## Releases
+
+The [release workflow](.github/workflows/release.yml) runs on every push to
+`main`. It builds and tests, then:
+
+- with changesets on `main`, opens or updates the "Version Packages" pull
+  request, which bumps the versions and writes each package's `CHANGELOG.md`;
+- once that pull request merges, publishes the new versions to npm through
+  trusted publishing, with provenance, and tags them.
+
+Publishing runs only when the repository variable `NPM_PUBLISH` is `true`. It
+uses no npm token: npm trusts this repository's `release.yml` workflow in the
+`npm` environment.
+
 ## CI and commits
 
 CI (`.github/workflows/`) compiles the Compact contracts and runs the type
