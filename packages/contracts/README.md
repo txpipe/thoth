@@ -18,7 +18,7 @@ message encoder matches the circuit only at that version.
 
 | File | Module | Role |
 |------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
+| `attestation.compact` | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
 | `attestor_registry.compact` | `attestor_registry<#M, #K>` | Seals the `M` pinned attestor keys at deploy and counts the signatures that verify, each against its own slot. |
 
 Embed both modules in your top-level contract, seal the deploy-time values in
@@ -36,11 +36,13 @@ import "attestor_registry"<3, 24> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
-export { A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
+export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
 
 witness seedPolicies(): Vector<1, Bytes<32>>;
 
-constructor() {
+// appId names this app; the contract rejects claims signed for any other.
+constructor(appId: Bytes<32>) {
+  A_appId = disclose(appId);
   A_freshnessWindow = disclose(3600); // submittable up to an hour after the window ends
   A_maxWindow = disclose(300); // an observation spans at most five minutes
   for (const h of seedPolicies()) {
@@ -107,6 +109,9 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
 `verifyAttestation` rejects a claim unless all of these hold:
 
 - `version` is `1` (`"Unsupported claim version"`).
+- `appId` equals the sealed `appId` (`"App id mismatch"`), so a claim signed
+  for another app is rejected even when that app pins the same attestors and
+  policy.
 - `policyHash` is in the sealed `policyHashes` set (`"Unaccepted policy"`).
   The membership check discloses which accepted policy the claim used.
 - At least `N` of the `M` signatures verify, each against its own registry
@@ -129,9 +134,6 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
 
 What the module does not check, and what your app does itself:
 
-- `appId` is signed but not compared. Each contract keeps its own replay set;
-  an app that must refuse claims made for another app compares `appId` in its
-  predicate.
 - `subjectHash` is signed but not compared. To accept only one source, take the
   subject as private input, recompute the hash, and compare it to the opened
   claim's `subjectHash`, pinning only the fields you need (the mock's
@@ -202,6 +204,11 @@ What the module does not check, and what your app does itself:
 - **No kind on-chain; the policy hash is the commitment.** A requester cannot
   substitute a laxer policy, and a new kind needs no change here: you accept
   it by sealing its policy hash ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
+- **A contract seals its app id.** You pass it to the constructor, and the
+  contract accepts only claims signed for it. Each contract keeps its own
+  replay set, so the nullifier alone would not stop a claim stored in one app
+  from being stored again in another
+  ([ADR 0013](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0013-contract-seals-its-app-id.md)).
 - **A contract seals a set of policy hashes.** One contract serves several
   policies, and so several kinds ([ADR 0008](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0008-contract-accepts-a-set-of-policy-hashes.md)).
 - **Source binding is your in-circuit check.** `subjectHash` is a circuit hash

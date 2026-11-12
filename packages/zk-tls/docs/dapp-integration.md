@@ -23,8 +23,12 @@ contract. The [package README](../README.md) explains the terms; the
   [Building the policy](#building-the-policy). Every claim carries
   `zkFetchPolicyHashOf(policy)` as its `policyHash`, and your contract must
   seal that hash at deploy or it rejects the claim.
-- **`appId`.** The 32 bytes naming your app, signed into every claim.
-- **`valueSlots`.** Your contract's `#V`, the numeric slot count.
+- **`appId`.** The 32 bytes naming your app, signed into every claim. Your
+  contract seals the same bytes at deploy and rejects a claim for any other.
+- **`valueSlots`.** Your contract's `#V`, the numeric slot count. Each
+  attestor caps the slot counts it accepts; check its
+  [limits](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls#guarantees-and-limits)
+  with its operator.
 - **`byteSlots`.** Optional: half your contract's `#B`, since the contract
   stores each 32-byte value as two 16-byte halves. Defaults to `0`.
 - **`provers`.** Where evidence comes from, keyed by attestor id. Each entry
@@ -402,24 +406,43 @@ carries the `witnesses[].url` it used) and retries. Wrap it as a
 `ZkFetchProver` with `toCanonicalEvidence`:
 
 ```ts
-import { ReclaimClient } from '@reclaimprotocol/zk-fetch';
+import { type Options, ReclaimClient } from '@reclaimprotocol/zk-fetch';
 import { toCanonicalEvidence, type ZkFetchProver } from '@thoth/zk-tls/client';
 
 const hostedProver = (client: ReclaimClient): ZkFetchProver => ({
-  prove: async (request) =>
-    toCanonicalEvidence(
-      await client.zkFetch(
-        request.url,
-        { method: request.method, headers: request.publicHeaders, context: request.context },
-        {
-          headers: request.secretHeaders,
-          responseMatches: request.responseMatches,
-          responseRedactions: request.responseRedactions,
-        },
-      ),
-    ),
+  prove: async (request) => {
+    const proof = await client.zkFetch(
+      request.url,
+      {
+        method: request.method ?? 'GET',
+        body: request.body,
+        headers: request.publicHeaders,
+        // zk-fetch types `context` as { contextAddress, contextMessage } but
+        // passes any JSON object to the witness, which signs every key. The
+        // client's claim context digest rides in this object.
+        context: request.context as Options['context'],
+      },
+      {
+        headers: request.secretHeaders,
+        responseMatches: request.responseMatches?.map((match) => ({ ...match })),
+        responseRedactions: request.responseRedactions?.map((rule) => ({ ...rule })),
+      },
+    );
+    if (proof === undefined) {
+      throw new Error('zk-fetch returned no proof');
+    }
+    return toCanonicalEvidence(proof);
+  },
 });
 ```
+
+Leave `useTee` off. The TEE path hands the context to a native library, and
+Thoth has not checked that it keeps the claim context digest; if it drops it,
+the client refuses the evidence.
+
+`collect` reports an error from this prover as `evidence`. To report
+`transport` or `no-match` instead, throw `ZkFetchProverError` with that reason;
+[Guarantees and limits](../README.md#guarantees-and-limits) lists the reasons.
 
 `@reclaimprotocol/zk-fetch` is AGPL-licensed; this package does not depend on
 it. Reclaim chooses the witness per call, so this path only fits a trusted set

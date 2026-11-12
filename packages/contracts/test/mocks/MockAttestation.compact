@@ -11,7 +11,7 @@ import "../../attestor_registry"<3, 20> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
-export { A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
+export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
 
 // A four-field subject, so a test can check `persistentHash<Subject>` against
 // the off-chain subject hash in `@thoth/core/claim-context`.
@@ -85,6 +85,8 @@ export circuit openAndBindHost(id: Bytes<32>, s: Subject, host: Bytes<32>): [] {
   assert(s.host == host, "Host not accepted");
 }
 
+witness seedAppId(): Bytes<32>;
+
 witness freshWindow(): Uint<64>;
 
 witness maxWin(): Uint<64>;
@@ -92,6 +94,7 @@ witness maxWin(): Uint<64>;
 witness seedPolicies(): Vector<2, Bytes<32>>;
 
 constructor() {
+  A_appId = disclose(seedAppId());
   A_freshnessWindow = disclose(freshWindow());
   A_maxWindow = disclose(maxWin());
   for (const h of seedPolicies()) {

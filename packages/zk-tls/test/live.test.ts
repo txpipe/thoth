@@ -99,7 +99,7 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
       assertEvidenceMatchesPolicy(view, policy);
     }
 
-    expect(new Set(verified.map((view) => view.identifier)).size).toBe(1);
+    expect(new Set(verified.map((view) => view.claim.identifier)).size).toBe(1);
 
     const messages = verified.map((view) => {
       const claim = deriveClaimFromEvidence({
@@ -137,7 +137,7 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
       assertEvidenceMatchesPolicy(view, mixedPolicy);
     }
 
-    expect(new Set(verified.map((view) => view.identifier)).size).toBe(1);
+    expect(new Set(verified.map((view) => view.claim.identifier)).size).toBe(1);
 
     const claims = verified.map((view) => {
       const claim = deriveClaimFromEvidence({

@@ -1,5 +1,10 @@
 import type { JubjubPoint } from '@midnight-ntwrk/compact-runtime';
-import { ACCEPTED_POLICIES, DEFAULT_FRESHNESS_WINDOW, DEFAULT_MAX_WINDOW } from './fixtures.js';
+import {
+  ACCEPTED_POLICIES,
+  APP_ID,
+  DEFAULT_FRESHNESS_WINDOW,
+  DEFAULT_MAX_WINDOW,
+} from './fixtures.js';
 import type { PrivateState } from './private-state.js';
 
 /**
@@ -14,6 +19,7 @@ export type WitnessBase<Claim> = {
 
 /** Deploy-time values sealed by the mock constructor. Omitted values use fixture defaults. */
 export type DeploySeals = {
+  appId?: Uint8Array;
   freshnessWindow?: bigint;
   maxWindow?: bigint;
   policyHashes?: readonly Uint8Array[];
@@ -32,6 +38,7 @@ export type DeploySeals = {
 export const makeWitnesses = <Claim>(
   registryKeys: JubjubPoint[],
   {
+    appId = APP_ID,
     freshnessWindow = DEFAULT_FRESHNESS_WINDOW,
     maxWindow = DEFAULT_MAX_WINDOW,
     policyHashes = ACCEPTED_POLICIES,
@@ -57,6 +64,11 @@ export const makeWitnesses = <Claim>(
   seedKeys: ({ privateState }: WitnessBase<Claim>): [PrivateState<Claim>, JubjubPoint[]] => [
     privateState,
     registryKeys,
+  ],
+
+  seedAppId: ({ privateState }: WitnessBase<Claim>): [PrivateState<Claim>, Uint8Array] => [
+    privateState,
+    appId,
   ],
 
   freshWindow: ({ privateState }: WitnessBase<Claim>): [PrivateState<Claim>, bigint] => [
