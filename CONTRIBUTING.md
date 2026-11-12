@@ -109,7 +109,8 @@ A change with no user-facing effect, such as a test or a CI tweak, needs none.
 ## Releases
 
 The [release workflow](.github/workflows/release.yml) runs on every push to
-`main`. It builds and tests, then:
+`main` and on demand from the Actions tab (`workflow_dispatch`). It builds and
+tests, then:
 
 - with changesets on `main`, opens or updates the "Version Packages" pull
   request, which bumps the versions and writes each package's `CHANGELOG.md`;
