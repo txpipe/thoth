@@ -28,7 +28,7 @@ To move to a new compiler, update in one change:
   if the new compiler needs a newer CLI);
 - the `+<version>` in the `compact` scripts of the root and
   `packages/contracts` `package.json`;
-- this section and the contracts README.
+- this section, the contracts README and `AGENTS.md`.
 
 ## Repository layout
 
