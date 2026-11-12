@@ -53,6 +53,7 @@ cannot confirm a guessed value from it; the contracts README
 |---------|-----------|
 | [`@thoth/contracts`](packages/contracts/README.md) | Embed N-of-M verification in your Midnight contract |
 | [`@thoth/zk-tls`](packages/zk-tls/README.md) | Attest a web fact with zkFetch, as a dApp or as an attestor operator |
+| [`@thoth/cli`](packages/cli/README.md) | Generate your contract's Thoth embedding, witnesses and client from one config file |
 | [`@thoth/client`](packages/client/README.md) | Write a kind's client: the trusted set and the attestation checks |
 | [`@thoth/attestor`](packages/attestor/README.md) | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
 | [`@thoth/core`](packages/core/README.md) | Write a kind's law against the shared claim types |

@@ -1,0 +1,29 @@
+// The test app's own contract: it includes the generated file and reads the
+// claim through the generated accessors.
+include "generated/thoth";
+
+export ledger rewarded: Counter;
+
+constructor() {
+  thothInit();
+}
+
+// Reward a run of at least `min` metres by `athlete`.
+export circuit claimReward(id: Bytes<32>, min: Uint<64>, athlete: Bytes<32>): [] {
+  const c = Thoth_openClaim(id);
+  assert(distanceOf(c) >= min, "Run too short");
+  assert(athleteOf(c) == athlete, "Wrong athlete");
+  rewarded.increment(1);
+}
+
+// An optional slot: branch on its presence flag instead of asserting it.
+export circuit movedLongEnough(id: Bytes<32>, min: Uint<64>): [] {
+  const c = Thoth_openClaim(id);
+  assert(!movingTimePresent(c) || movingTimeOf(c) >= min, "Too little moving time");
+}
+
+// Reads the optional slot without its flag, so an absent value fails the accessor's assert.
+export circuit movingTimeAtLeast(id: Bytes<32>, min: Uint<64>): [] {
+  const c = Thoth_openClaim(id);
+  assert(movingTimeOf(c) >= min, "Too little moving time");
+}

@@ -72,13 +72,12 @@ layout, client and attestors
 import { defineKind, denseLayout, type KindAttestorKey } from '@thoth/core/kind';
 
 export const myKind = defineKind({
-  law: MY_LAW,
+  ...myKindClient, // the KindClient your client entry exports: law, definition, client
+  clientEntry: { module: 'my-kind/client', export: 'myKindClient' },
   policySchema: myPolicySchema,
   policyHashOf: (policy: MyPolicy) => myPolicyHashOf(policy),
   layoutOf: (policy: MyPolicy) =>
     denseLayout(policy.slots.map((slot) => ({ ...slot, region: 'numeric', optional: false }))),
-  definition: () => myClientDefinition, // from your client entry
-  client: (config: MyClientConfig) => myClient.init(config),
   attestor: (config: KindAttestorKey & { sourceKey: string }) => myAttestor(config),
 });
 ```
@@ -88,7 +87,7 @@ The four entry points:
 - **`@thoth/core`**: `AttestorDefinition`, `AttestationInput`, `Attestation`, `AttestorDescriptor`, `MessageOf`.
 - **`@thoth/core/claim`**: `Claim`, `ClaimInput`, `claimSchema`, `bytes32Schema`, `claimToMessage`, `toContractClaim`, `ContractClaim`, `FlatMessage`, `CLAIM_VERSION`.
 - **`@thoth/core/claim-context`**: `policyHashOf`, `subjectHashOf`, `holderCommitmentOf`, `claimContextDigestOf`, `ClaimContext`, `CanonicalValue`.
-- **`@thoth/core/kind`**: `KindManifest`, `defineKind`, `denseLayout`, `KindLayout`, `LayoutSlot`, `PolicySlot`, `SlotRegion`, `KindAttestorKey`, `JubjubKeyPair`, `KindAttestor`, `DevOperator`, `KindCommand`.
+- **`@thoth/core/kind`**: `KindManifest`, `defineKind`, `KindClient`, `KindClientEntry`, `denseLayout`, `KindLayout`, `LayoutSlot`, `PolicySlot`, `SlotRegion`, `KindAttestorKey`, `JubjubKeyPair`, `KindAttestor`, `DevOperator`, `KindCommand`.
 
 ## Concepts
 

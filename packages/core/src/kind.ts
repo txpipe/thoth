@@ -160,6 +160,43 @@ export interface DevOperator<Anchors, Prover> {
   readonly prover: Prover;
 }
 
+/**
+ * The client side of a kind: what a dApp needs to build its client and pin
+ * its attestors, without the kind's attestor side. A kind exports one from its
+ * client entry and names it in its manifest's `clientEntry`.
+ *
+ * @typeParam D - the definition a dApp pins in each attestor's descriptor.
+ * @typeParam ClientConfig - what `client` takes.
+ * @typeParam Client - what `client` returns.
+ */
+export interface KindClient<
+  D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
+  ClientConfig,
+  Client,
+> {
+  /** The kind's versioned law tag, such as `zk-fetch@1`. */
+  readonly law: string;
+  /**
+   * The definition a dApp pins in each attestor's descriptor. It comes from a
+   * client-safe entry, so a dApp never loads the kind's attestor side.
+   */
+  definition(): D;
+  /** @throws if the kind's client refuses `config`. */
+  client(config: ClientConfig): Client;
+}
+
+/**
+ * Where code generated for a dApp imports a kind's {@link KindClient} from.
+ * The module loads only the kind's client side, so a browser bundle stays free
+ * of attestor and offline evidence code.
+ */
+export interface KindClientEntry {
+  /** A module specifier, such as `@thoth/zk-tls/client`. */
+  readonly module: string;
+  /** The name the module exports its {@link KindClient} under. */
+  readonly export: string;
+}
+
 /** A command a kind adds to tooling, such as a `try` that runs a policy against its source. */
 export interface KindCommand {
   /** One line for the command's help. */
@@ -171,7 +208,8 @@ export interface KindCommand {
 /**
  * Describes a kind to tooling: its law, its policy, the claim layout a policy
  * implies, and how to build its client and its attestors. A kind exports one
- * from its `./thoth` subpath, built with {@link defineKind}.
+ * from its `./thoth` subpath, built with {@link defineKind}, and exports its
+ * client side alone from the module `clientEntry` names.
  *
  * Keys and signatures are Jubjub Schnorr, the scheme the contract's registry
  * verifies. It holds no key: tooling passes one to `attestor`.
@@ -194,9 +232,9 @@ export interface KindManifest<
   Attestor extends KindAttestor,
   DevInput = never,
   Prover = never,
-> {
-  /** The kind's versioned law tag, such as `zk-fetch@1`. */
-  readonly law: string;
+> extends KindClient<D, ClientConfig, Client> {
+  /** Where generated client code imports this kind's {@link KindClient} from. */
+  readonly clientEntry: KindClientEntry;
   readonly policySchema: z.ZodType<P>;
   /**
    * The hash the contract seals for `policy`: the claim's `policyHash`.
@@ -210,13 +248,6 @@ export interface KindManifest<
    * @throws if `policy` fails `policySchema`, or its slots fail {@link denseLayout}.
    */
   layoutOf(policy: P): KindLayout;
-  /**
-   * The definition a dApp pins in each attestor's descriptor. It comes from a
-   * client-safe entry, so a dApp never loads the kind's attestor side.
-   */
-  definition(): D;
-  /** @throws if the kind's client refuses `config`. */
-  client(config: ClientConfig): Client;
   /** @throws if the kind's attestor refuses `config`. */
   attestor(config: KindAttestorKey & Anchors): Attestor;
   /**
@@ -242,15 +273,15 @@ export interface KindManifest<
  * @example
  * ```ts
  * import { defineKind, denseLayout, type KindAttestorKey } from '@thoth/core/kind';
+ * import { myKindClient } from '../client/index.js'; // a KindClient
  *
  * export const myKind = defineKind({
- *   law: MY_LAW,
+ *   ...myKindClient, // law, definition and client
+ *   clientEntry: { module: 'my-kind/client', export: 'myKindClient' },
  *   policySchema: myPolicySchema,
  *   policyHashOf: (policy: MyPolicy) => myPolicyHashOf(policy),
  *   layoutOf: (policy: MyPolicy) =>
  *     denseLayout(policy.slots.map((slot) => ({ ...slot, region: 'numeric', optional: false }))),
- *   definition: () => myClientDefinition, // from your client entry
- *   client: (config: MyClientConfig) => myClient.init(config),
  *   attestor: (config: KindAttestorKey & { sourceKey: string }) => myAttestor(config),
  * });
  * ```

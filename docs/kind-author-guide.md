@@ -250,7 +250,8 @@ a change to the tooling. Build that object with `defineKind` from
 import { defineKind, denseLayout, type KindAttestorKey } from '@thoth/core/kind';
 
 export const myKind = defineKind({
-  law: MY_LAW,
+  ...myKindClient,
+  clientEntry: { module: 'my-kind/client', export: 'myKindClient' },
   policySchema: myPolicySchema,
   policyHashOf: (policy: MyPolicy) => myPolicyHashOf(policy),
   layoutOf: (policy: MyPolicy) =>
@@ -262,8 +263,6 @@ export const myKind = defineKind({
         optional: slot.optional,
       })),
     ),
-  definition: () => myClientDefinition,
-  client: (config: MyClientConfig<JubjubPoint, JubjubSchnorrSignature>) => myClient.init(config),
   attestor: (config: KindAttestorKey & { sourceKey: string }) => myAttestor(config),
   devEvidence: (policy: MyPolicy, operators: number, input: MyObservation) => [/* … */],
 });
@@ -275,10 +274,28 @@ export const myKind = defineKind({
   `denseLayout`, which requires a dense layout (numeric slots `0..V-1`, then
   byte slots from `V`) and ASCII slot names, and names the slot it refuses
   ([why](../packages/core/README.md#design-decisions)).
+- `myKindClient` is your client side as a `KindClient`: `law`, `definition`
+  and `client`. Export it from your client entry, as `@thoth/zk-tls/client`
+  does with `zkTlsKindClient`:
+
+  ```ts
+  export const myKindClient: KindClient<MyDefinition, MyClientConfig, MyClient> = {
+    law: MY_LAW,
+    definition: () => myClientDefinition,
+    client: (config: MyClientConfig) => myClient.init(config),
+  };
+  ```
+
+- `clientEntry` names that module and export. Code generated for a dApp
+  imports the client from there, so a browser bundle never loads your
+  attestor side or your offline evidence source.
 - `definition` returns the definition a dApp pins in each attestor's
-  descriptor. Export it from your client entry, so a dApp never loads your
-  attestor side. Only its `message` runs on the client, so let its `verify`
+  descriptor. Only its `message` runs on the client, so let its `verify`
   reject, as `zkFetchClientDefinition` does.
+- `client` takes your client config. The `thoth` CLI fills its `trusted`,
+  `verifier`, `policy`, `appId`, `valueSlots` and `byteSlots` fields, so
+  name them as `zkFetchClient` does
+  ([`@thoth/cli`](../packages/cli/README.md#guarantees-and-limits)).
 - `attestor` takes the id and Jubjub Schnorr key pair the tooling holds,
   plus your trust anchors (zkFetch's `witnessAddress`). Keys and signatures
   are Jubjub Schnorr, the scheme the contract's registry verifies.

@@ -1,3 +1,4 @@
+import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import type {
   AttestationVerifier,
   AttestorTransport,
@@ -8,6 +9,7 @@ import { attestorIdsOf, memberOf } from '@thoth/client';
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, FlatMessage } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
+import type { KindClient } from '@thoth/core/kind';
 import { z } from 'zod';
 import type {
   ProviderClaimData,
@@ -399,6 +401,22 @@ export const zkFetchClient = {
     };
   },
 };
+
+/**
+ * zkFetch's client side as a `KindClient`, keyed and signed with Jubjub
+ * Schnorr: the export `@thoth/zk-tls/thoth`'s `clientEntry` names, so code
+ * generated for a dApp builds the client without loading the attestor side.
+ */
+export const zkTlsKindClient: KindClient<
+  ZkFetchDefinition,
+  ZkFetchClientConfig<number, JubjubPoint, JubjubSchnorrSignature>,
+  ZkFetchClient<number, JubjubPoint, JubjubSchnorrSignature>
+> = Object.freeze({
+  law: ZK_FETCH_LAW,
+  definition: () => zkFetchClientDefinition,
+  client: (config: ZkFetchClientConfig<number, JubjubPoint, JubjubSchnorrSignature>) =>
+    zkFetchClient.init(config),
+});
 
 /** The unparsed input the transport forwards; the attestor parses it with its own schemas. */
 export type ZkFetchAttestationInput = AttestationInput<
