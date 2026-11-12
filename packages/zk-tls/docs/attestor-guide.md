@@ -120,14 +120,27 @@ Self-host a witness from the
 
 ```bash
 git clone --depth 1 https://github.com/reclaimprotocol/attestor-core
-cd attestor-core && npm install
-PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start   # ws://localhost:8001/ws
+cd attestor-core
+npm install --ignore-scripts --include=dev
+npm rebuild re2 --ignore-scripts=false
+node -e "require('re2')" &&
+  PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start
 ```
 
-- The witness must load the native `re2` module, so that it runs policy
-  regexes with RE2 like the prover. `npm install` builds it; check with
-  `node -e "require('re2')"` in the `attestor-core` directory. Without it,
-  attestor-core falls back to `RegExp`, which reads some regexes differently.
+The witness listens on `ws://localhost:8001/ws`.
+
+- The witness needs the native `re2` module. It compiles your policy's regexes
+  with `re2`. If `re2` doesn't load, it falls back to JavaScript `RegExp` and
+  only logs a `Failed to load RE2` warning. The `require('re2')` check before
+  `npm run start` stops the start instead.
+- `--ignore-scripts` skips every install script, including the witness's own
+  build. The witness runs from source, so the only script it needs is
+  `re2`'s.
+- `npm rebuild re2 --ignore-scripts=false` runs that one script, even when
+  your npm config sets `ignore-scripts`. It downloads a prebuilt `re2` binary.
+  If none matches your platform, it builds one with `node-gyp`.
+- Upstream's lockfile marks `re2` as a dev dependency. `--include=dev` keeps it
+  when `NODE_ENV=production` or `--omit=dev` would leave it out.
 - `PRIVATE_KEY` is the witness's secp256k1 key. Keep it on the witness host
   and give the attestor only the address, as above.
 - `AUTHENTICATION_PUBLIC_KEY`, the matching compressed public key, makes the
@@ -136,12 +149,15 @@ PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start   # ws://localhost:8001/ws
 - Locally the endpoint is plain `ws://`. In production, terminate TLS (`wss://`)
   at a reverse proxy.
 
-For two witnesses at once, `npm run witnesses --workspace=packages/zk-tls` runs
-`scripts/start-witnesses.sh`: it clones `attestor-core` at a pinned commit
-(`f451eb3`, the source of the 5.1.6 release `@thoth/zk-tls` depends on),
-installs it, checks that `re2` loads, starts two witnesses on ports 8001 and 8002, and prints each one's
-address. `WITNESS_REF`, `WITNESS_CLONE_DIR`, `WITNESS_PORT_A`/`B` and
-`WITNESS_KEY_A`/`B` override the defaults; Ctrl-C stops both.
+For two witnesses at once, run `npm run witnesses --workspace=packages/zk-tls`.
+It runs `scripts/start-witnesses.sh`, which clones `attestor-core` at a pinned
+commit: `f451eb3`, the source of the 5.1.6 release `@thoth/zk-tls` depends on.
+The script installs the clone as above and starts two witnesses on ports 8001
+and 8002. It stops with an error if `re2` doesn't load or a port is already in
+use. It also stops if a witness logs `Failed to load RE2` or exits. Once both
+witnesses answer, it prints each one's address. `WITNESS_REF`,
+`WITNESS_CLONE_DIR`, `WITNESS_PORT_A`/`B` and `WITNESS_KEY_A`/`B` override the
+defaults. Ctrl-C stops both witnesses.
 
 The npm package ships no witness server, so the script pins a commit by hand.
 When Dependabot bumps `@reclaimprotocol/attestor-core`, `witness-pin.test.ts`

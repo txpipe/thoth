@@ -34,18 +34,46 @@ if [ "$(git -C "$CLONE_DIR" rev-parse HEAD)" != "$PINNED_REF" ]; then
   git -C "$CLONE_DIR" checkout --quiet --detach "$PINNED_REF"
 fi
 
-if [ ! -d "$CLONE_DIR/node_modules" ]; then
-  log "installing dependencies (install scripts skipped, no build needed)"
-  (cd "$CLONE_DIR" && npm install --ignore-scripts --no-audit --no-fund >/dev/null)
+if [ ! -d "$CLONE_DIR/node_modules/re2" ]; then
+  log "installing dependencies (install scripts skipped)"
+  (cd "$CLONE_DIR" && npm install --ignore-scripts --include=dev --no-audit --no-fund >/dev/null)
 fi
 
-# Witnesses run policy regexes with RE2, like the prover; without `re2`, attestor-core falls back
-# to RegExp. Its install script is the one that fetches or builds the native binary.
-if ! (cd "$CLONE_DIR" && node -e "require('re2')" 2>/dev/null); then
+# The witness needs re2; see "Running a Reclaim witness" in docs/attestor-guide.md.
+re2_check() {
+  RE2_ERROR=$(cd "$CLONE_DIR" && node -e "
+    try { require('re2') } catch (error) { console.log(error.message.split('\n')[0]); process.exit(1) }
+  " 2>&1) && return 0
+  local status=$?
+  [ -n "$RE2_ERROR" ] || RE2_ERROR="node exited with status $status"
+  return 1
+}
+if ! re2_check; then
   log "building re2"
-  (cd "$CLONE_DIR" && npm rebuild re2 >/dev/null)
-  (cd "$CLONE_DIR" && node -e "require('re2')") || { log "re2 does not load in $CLONE_DIR"; exit 1; }
+  (cd "$CLONE_DIR" && npm rebuild re2 --ignore-scripts=false >/dev/null) || true
 fi
+if ! re2_check; then
+  log "re2 does not load in $CLONE_DIR: $RE2_ERROR"
+  log "the witnesses would fall back to RegExp, so they are not started"
+  log "to reinstall, delete $CLONE_DIR/node_modules and run this script again"
+  exit 1
+fi
+
+# A witness that can't bind its port dies, and an old process on that port
+# would then answer for it.
+port_free() {
+  node -e "
+    const server = require('node:net').createServer();
+    server.once('error', () => process.exit(1));
+    server.listen(Number(process.argv[1]), () => server.close(() => process.exit(0)));
+  " "$1"
+}
+for port in "$PORT_A" "$PORT_B"; do
+  if ! port_free "$port"; then
+    log "port $port is already in use; stop whatever listens on it or set WITNESS_PORT_A/WITNESS_PORT_B"
+    exit 1
+  fi
+done
 
 start_witness() {
   local key=$1 port=$2 logfile=$3
@@ -56,34 +84,49 @@ start_witness() {
 }
 
 wait_for() {
-  local port=$1
+  local port=$1 pid=$2
   for _ in $(seq 1 60); do
+    kill -0 "$pid" 2>/dev/null || return 1
     if node -e "fetch('http://localhost:' + process.argv[1] + '/address').then(() => process.exit(0), () => process.exit(1))" "$port" 2>/dev/null; then
-      return 0
+      kill -0 "$pid" 2>/dev/null && return 0
+      return 1
     fi
     sleep 0.5
   done
   return 1
 }
 
+# Set the traps before starting the witnesses, so a signal in between cannot
+# leave them running.
+WITNESS_A_PID=
+WITNESS_B_PID=
+cleanup() {
+  kill ${WITNESS_A_PID:+"$WITNESS_A_PID"} ${WITNESS_B_PID:+"$WITNESS_B_PID"} 2>/dev/null || true
+  wait 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 start_witness "$KEY_A" "$PORT_A" "$LOG_A" &
 WITNESS_A_PID=$!
 start_witness "$KEY_B" "$PORT_B" "$LOG_B" &
 WITNESS_B_PID=$!
 
-cleanup() {
-  kill "$WITNESS_A_PID" "$WITNESS_B_PID" 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
-
-if ! wait_for "$PORT_A"; then
+if ! wait_for "$PORT_A" "$WITNESS_A_PID"; then
   log "witness A failed to start, see $LOG_A"
   exit 1
 fi
-if ! wait_for "$PORT_B"; then
+if ! wait_for "$PORT_B" "$WITNESS_B_PID"; then
   log "witness B failed to start, see $LOG_B"
   exit 1
 fi
+for logfile in "$LOG_A" "$LOG_B"; do
+  if grep -q 'Failed to load RE2' "$logfile"; then
+    log "a witness fell back to RegExp because re2 failed to load, see $logfile"
+    exit 1
+  fi
+done
 
 witness_address() {
   node -e "fetch('http://localhost:' + process.argv[1] + '/address').then(async response => {
@@ -103,4 +146,10 @@ log "run the live check in another shell:"
 printf '\n  WITNESS_URLS=ws://localhost:%s/ws,ws://localhost:%s/ws npx vitest run packages/zk-tls/test/live.test.ts\n\n' "$PORT_A" "$PORT_B"
 log "Ctrl-C stops both witnesses."
 
-wait
+# Poll instead of a bare wait, which returns 0 after a witness dies; bash 3.2
+# has no wait -n.
+while kill -0 "$WITNESS_A_PID" 2>/dev/null && kill -0 "$WITNESS_B_PID" 2>/dev/null; do
+  sleep 1
+done
+log "a witness exited, see $LOG_A and $LOG_B"
+exit 1
