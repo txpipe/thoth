@@ -35,9 +35,9 @@ import {
   ZkFetchThresholdError,
   zkFetchClient,
 } from '@thoth/zk-tls/client';
+import { type TestWitness, testWitness } from '@thoth/zk-tls/dev';
 import { describe, expect, it, vi } from 'vitest';
 import { DISCLOSURE_RULES, FIXTURE } from './helpers/helper.js';
-import { type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
 const APP_ID = new Uint8Array(32).fill(0xa1);

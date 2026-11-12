@@ -63,11 +63,32 @@ attestor parses it with the schemas, runs `verify`, signs `message(claim)`, and
 returns an `Attestation`. `AttestorDescriptor` is the client-side view of an
 attestor: its definition and public key, without key material.
 
-The three entry points:
+To let tooling such as the `thoth` CLI drive your kind, export one object from
+your package's `./thoth` subpath that describes the kind's law, policy, claim
+layout, client and attestors
+([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#10-the-thoth-entry)).
+
+```ts
+import { defineKind, denseLayout, type KindAttestorKey } from '@thoth/core/kind';
+
+export const myKind = defineKind({
+  law: MY_LAW,
+  policySchema: myPolicySchema,
+  policyHashOf: (policy: MyPolicy) => myPolicyHashOf(policy),
+  layoutOf: (policy: MyPolicy) =>
+    denseLayout(policy.slots.map((slot) => ({ ...slot, region: 'numeric', optional: false }))),
+  definition: () => myClientDefinition, // from your client entry
+  client: (config: MyClientConfig) => myClient.init(config),
+  attestor: (config: KindAttestorKey & { sourceKey: string }) => myAttestor(config),
+});
+```
+
+The four entry points:
 
 - **`@thoth/core`**: `AttestorDefinition`, `AttestationInput`, `Attestation`, `AttestorDescriptor`, `MessageOf`.
 - **`@thoth/core/claim`**: `Claim`, `ClaimInput`, `claimSchema`, `bytes32Schema`, `claimToMessage`, `toContractClaim`, `ContractClaim`, `FlatMessage`, `CLAIM_VERSION`.
 - **`@thoth/core/claim-context`**: `policyHashOf`, `subjectHashOf`, `holderCommitmentOf`, `claimContextDigestOf`, `ClaimContext`, `CanonicalValue`.
+- **`@thoth/core/kind`**: `KindManifest`, `defineKind`, `denseLayout`, `KindLayout`, `LayoutSlot`, `PolicySlot`, `SlotRegion`, `KindAttestorKey`, `JubjubKeyPair`, `KindAttestor`, `DevOperator`, `KindCommand`.
 
 ## Concepts
 
@@ -90,6 +111,7 @@ What the package checks:
 - `toContractClaim` produces the contract's `Claim` struct from a `Claim`. A dApp always converts, even with `W = 0`.
 - `policyHashOf` and `claimContextDigestOf` are SHA-256 over a canonical JSON serialization: sorted keys, no whitespace, a `bigint` as a quoted decimal string, bytes as lowercase hex. Another implementation reproduces them from those rules alone.
 - `subjectHashOf` and `holderCommitmentOf` are circuit hashes, equal to the circuit's `persistentHash` of the subject struct and its `holderCommitment`, so an app can recompute them in-circuit.
+- `denseLayout` refuses a slot map with a gap, a byte slot before a numeric slot, an index used twice, or a name that is not an ASCII identifier or is used twice. Its error names the slot, and a gap or region error lists how to renumber.
 
 What it does not do:
 
@@ -113,6 +135,9 @@ What your app must do:
 - **Evidence binds the claim context.** Your kind's witness signs the `claimContextDigestOf` digest with its evidence and your `verify` recomputes it from the proposal, so the holder and window are fixed before the witness observes ([ADR 0011](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
 - **The nullifier hashes a secret salt your kind fixes.** Your `verify` derives `claim.salt` from the evidence and refuses any other, so a client cannot vary it to mint several claims from one observation. Derive it from something outsiders cannot guess, or the public nullifier confirms guessed values ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
 - **A `Claim` is not the contract's struct.** A `Claim` has one `present` mask over `V + W` slots; the contract carries each byte value as two 16-byte halves with a flag per half, so you convert with `toContractClaim` before handing it to a witness ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
+- **The `./thoth` export is fixed to Jubjub Schnorr.** `KindManifest` types the attestor's key pair and public key as Jubjub, the scheme the contract's registry verifies, so code generated from it keeps its types. It holds no key: tooling passes one to `attestor`.
+- **A claim layout is dense.** `denseLayout` takes numeric slots `0..V-1`, then byte slots from `V`. A gap would cost message bytes in every claim, and a slot map with one could fit more than one layout.
+- **Slot names are ASCII identifiers.** `denseLayout` takes a letter or `_`, then letters, digits or `_`, so the accessors generated code names `<name>Of` and `<name>Present` are valid in Compact and TypeScript. A name may still be a keyword such as `type`, so generated code never uses it bare.
 - **`FlatMessage` is the default message type.** A kind that needs another shape gives `message()` another return type; `MessageOf<D>` carries it through the signer, key pair and attestation.
 
 ## Links

@@ -17,9 +17,9 @@ import {
   zkFetchSubjectHashOf,
 } from '@thoth/zk-tls';
 import { createZkFetchDefinition, zkFetchAttestor } from '@thoth/zk-tls/attestor';
+import { type Observation, type TestWitness, testWitness } from '@thoth/zk-tls/dev';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DISCLOSURE_RULES } from './helpers/helper.js';
-import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
 const APP_ID = new Uint8Array(32).fill(0xa1);
