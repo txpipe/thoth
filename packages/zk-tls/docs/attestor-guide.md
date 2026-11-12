@@ -124,6 +124,10 @@ cd attestor-core && npm install
 PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start   # ws://localhost:8001/ws
 ```
 
+- The witness must load the native `re2` module, so that it runs policy
+  regexes with RE2 like the prover. `npm install` builds it; check with
+  `node -e "require('re2')"` in the `attestor-core` directory. Without it,
+  attestor-core falls back to `RegExp`, which reads some regexes differently.
 - `PRIVATE_KEY` is the witness's secp256k1 key. Keep it on the witness host
   and give the attestor only the address, as above.
 - `AUTHENTICATION_PUBLIC_KEY`, the matching compressed public key, makes the
@@ -135,7 +139,7 @@ PRIVATE_KEY=0x… DISABLE_BGP_CHECKS=1 npm run start   # ws://localhost:8001/ws
 For two witnesses at once, `npm run witnesses --workspace=packages/zk-tls` runs
 `scripts/start-witnesses.sh`: it clones `attestor-core` at a pinned commit
 (`f451eb3`, the source of the 5.1.6 release `@thoth/zk-tls` depends on),
-installs it, starts two witnesses on ports 8001 and 8002, and prints each one's
+installs it, checks that `re2` loads, starts two witnesses on ports 8001 and 8002, and prints each one's
 address. `WITNESS_REF`, `WITNESS_CLONE_DIR`, `WITNESS_PORT_A`/`B` and
 `WITNESS_KEY_A`/`B` override the defaults; Ctrl-C stops both.
 
@@ -147,7 +151,7 @@ matching release and run the live check against it.
 ## Witness agreement and upgrades
 
 Every operator in one trusted set must run the same witness version and
-behavior. Witnesses agree only when they add identical context fields to the
+behavior, with `re2` loaded. Witnesses agree only when they add identical context fields to the
 Reclaim claim identifier for the same request and disclosures. Thoth does not
 pin witness behavior, so an upstream change can split a trusted set: the
 client fails closed, `proveReq` with `witnesses disagree` before any attestor

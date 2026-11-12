@@ -39,6 +39,14 @@ if [ ! -d "$CLONE_DIR/node_modules" ]; then
   (cd "$CLONE_DIR" && npm install --ignore-scripts --no-audit --no-fund >/dev/null)
 fi
 
+# Witnesses run policy regexes with RE2, like the prover; without `re2`, attestor-core falls back
+# to RegExp. Its install script is the one that fetches or builds the native binary.
+if ! (cd "$CLONE_DIR" && node -e "require('re2')" 2>/dev/null); then
+  log "building re2"
+  (cd "$CLONE_DIR" && npm rebuild re2 >/dev/null)
+  (cd "$CLONE_DIR" && node -e "require('re2')") || { log "re2 does not load in $CLONE_DIR"; exit 1; }
+fi
+
 start_witness() {
   local key=$1 port=$2 logfile=$3
   cd "$CLONE_DIR"

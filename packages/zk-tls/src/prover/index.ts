@@ -35,8 +35,10 @@ export interface ZkFetchProverConfig {
 let corePromise: Promise<AttestorCore> | undefined;
 
 /**
- * Import the Reclaim client libraries once and install the WebCrypto TLS backend,
- * which `@reclaimprotocol/tls` leaves empty by default.
+ * Import the Reclaim client libraries once, install the WebCrypto TLS backend,
+ * which `@reclaimprotocol/tls` leaves empty by default, and wait for `re2`.
+ *
+ * @throws if the native `re2` module does not load.
  */
 const loadCore = (): Promise<AttestorCore> => {
   corePromise ??= (async () => {
@@ -46,6 +48,13 @@ const loadCore = (): Promise<AttestorCore> => {
       import('@reclaimprotocol/tls/webcrypto'),
     ]);
     tls.setCryptoImplementation(webcrypto.webcryptoCrypto);
+    // attestor-core starts loading `re2` on import and runs regexes with RegExp until it has.
+    // The witnesses run RE2, so wait for the same module, and never prove without it.
+    await import('re2').catch((error: unknown) => {
+      throw new Error('@thoth/zk-tls needs the native re2 module, which did not load', {
+        cause: error,
+      });
+    });
     return attestorCore;
   })();
   return corePromise;
@@ -157,8 +166,8 @@ export const zkFetchProver = (config: ZkFetchProverConfig): ZkFetchProver => {
      *
      * @throws {@link ZkFetchProverError} if the witness or the source cannot be
      *   reached, or the response fails the request's redactions or `responseMatches`.
-     * @throws if the prover fails otherwise, the witness refuses the claim, or it
-     *   returns no signed claim.
+     * @throws if the native `re2` module does not load, the prover fails otherwise,
+     *   the witness refuses the claim, or it returns no signed claim.
      */
     prove: async (request: ZkFetchRequest): Promise<ZkFetchEvidence> => {
       const core = await loadCore();
