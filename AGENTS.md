@@ -183,6 +183,9 @@ READMEs don't repeat it.
 - `packages/zk-tls/test/live.test.ts` is an opt-in live check against two real
   witnesses; it skips unless `WITNESS_URLS` names them, so `npm test` and CI
   stay offline. See "Live check" in `packages/zk-tls/docs/attestor-guide.md`.
+- `packages/cardano/test/live.test.ts` is the same kind of check for one real
+  UTxO-RPC endpoint; it skips unless `DOLOS_URL` names it. See "Live check" in
+  `packages/cardano/README.md`.
 - Never skip the `present` mask semantics: `present[i] = true` means slot `i`
   was measured (value may still be `0`).
 

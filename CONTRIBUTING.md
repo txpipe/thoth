@@ -72,6 +72,9 @@ N type argument(s)".
 `packages/zk-tls/test/live.test.ts` runs against two real witnesses and skips
 unless `WITNESS_URLS` names them; see the attestor guide's
 [live check](packages/zk-tls/docs/attestor-guide.md#live-check).
+`packages/cardano/test/live.test.ts` runs against one real UTxO-RPC endpoint
+and skips unless `DOLOS_URL` names it; see the cardano
+[live check](packages/cardano/README.md#live-check).
 
 ## CI and commits
 
