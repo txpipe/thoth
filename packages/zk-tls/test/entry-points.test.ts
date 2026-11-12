@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const STATIC_IMPORT = /(?:^|\n)\s*(?:import|export)\s(?:[^;'"]*?\sfrom\s*)?['"]([^'"]+)['"]/g;
+const WORKSPACE_PACKAGE = /^@thoth\//;
 
-/** Every file and bare package an entry loads through static imports. */
+/** Every file and bare package an entry loads through static imports, transitively. */
 const staticGraphOf = (entry: string): { files: Set<string>; packages: Set<string> } => {
   const files = new Set<string>();
   const packages = new Set<string>();
@@ -18,9 +19,10 @@ const staticGraphOf = (entry: string): { files: Set<string>; packages: Set<strin
       if (specifier === undefined) continue;
       if (specifier.startsWith('.')) {
         visit(resolve(dirname(file), specifier));
-      } else {
-        packages.add(specifier);
+        continue;
       }
+      packages.add(specifier);
+      if (WORKSPACE_PACKAGE.test(specifier)) visit(fileURLToPath(import.meta.resolve(specifier)));
     }
   };
   visit(fileURLToPath(import.meta.resolve(entry)));
