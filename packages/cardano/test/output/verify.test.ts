@@ -3,6 +3,7 @@
 
 import {
   CARDANO_LIMITS,
+  cardanoAddressHashOf,
   cardanoClaimSchema,
   deriveCardanoClaim,
   type OutputObservation,
@@ -17,10 +18,12 @@ import {
   ASSET_OBSERVATION,
   ASSET_POLICY,
   BLOCK_HASH,
+  BYTE_FACT_POLICY,
   HOLDER,
   LOCATOR,
   OBSERVATION,
   POLICY,
+  TEST_ADDRESS,
 } from './fixtures.js';
 
 const definition = createCardanoDefinition();
@@ -114,6 +117,29 @@ describe('cardano verify', () => {
     ).toThrow('policy asset is not in the output');
   });
 
+  it('fills the addressHash and blockHash byte slots', () => {
+    const claim = deriveCardanoClaim({
+      policy: BYTE_FACT_POLICY,
+      observation: OBSERVATION,
+      appId: APP_ID,
+      holder: HOLDER,
+      valueSlots: 5,
+      byteSlots: 2,
+    });
+    expect(claim.byteValues).toEqual([
+      cardanoAddressHashOf(TEST_ADDRESS),
+      Uint8Array.from(Buffer.from(BLOCK_HASH, 'hex')),
+    ]);
+    expect(claim.present).toEqual(Array.from({ length: 7 }, () => true));
+    expect(() =>
+      verify({
+        policy: BYTE_FACT_POLICY,
+        evidence: { ...LOCATOR, observation: OBSERVATION },
+        claim,
+      }),
+    ).not.toThrow();
+  });
+
   it('rejects a block that is not deep enough', () => {
     const observation = { ...OBSERVATION, tipBlockNumber: 1002 };
     expect(() =>
@@ -126,6 +152,23 @@ describe('cardano verify', () => {
     expect(() =>
       verify({ evidence: { ...LOCATOR, observation }, claim: claimFor(observation) }),
     ).toThrow('need 3');
+  });
+
+  it('accepts a block at the tip when the confirmation depth is zero', () => {
+    const policy: OutputPolicy = { ...POLICY, confirmationDepth: 0 };
+    const observation: OutputObservation = {
+      ...OBSERVATION,
+      tipBlockNumber: OBSERVATION.block.blockNumber,
+    };
+    const claim = deriveCardanoClaim({
+      policy,
+      observation,
+      appId: APP_ID,
+      holder: HOLDER,
+      valueSlots: 5,
+      byteSlots: 1,
+    });
+    expect(() => verify({ policy, evidence: { ...LOCATOR, observation }, claim })).not.toThrow();
   });
 
   it('rejects a window that is not the block time', () => {

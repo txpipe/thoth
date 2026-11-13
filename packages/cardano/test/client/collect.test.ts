@@ -33,8 +33,8 @@ const keyPair = (id: string): KeyPair<FakePublicKey, FakeSignature, FlatMessage>
   signer: { sign: (message) => `sig:${message.length}` },
 });
 
-const makeAttestor = (id: string) =>
-  cardanoAttestor({ id, keyPair: keyPair(id), read: () => OBSERVATION });
+const makeAttestor = (id: string, observation: typeof OBSERVATION = OBSERVATION) =>
+  cardanoAttestor({ id, keyPair: keyPair(id), read: () => observation });
 
 const trustedOf = (attestors: FakeAttestor[]): TrustedSet<CardanoDefinition, FakePublicKey> =>
   buildTrustedSet({
@@ -208,6 +208,25 @@ describe('cardanoClient', () => {
 
     expect(collectedSlots(attestment)).toEqual([0]);
     expect(attestment.failures).toEqual([{ registryIndex: 1, reason: 'attestation' }]);
+  });
+
+  it('drops an attestor whose read derives another claim', async () => {
+    // A fork: attestor 1 saw the event in another block, so its subject differs.
+    const forked = {
+      ...OBSERVATION,
+      block: { ...OBSERVATION.block, hash: 'ef'.repeat(32) },
+    };
+    const attestors = [makeAttestor('attestor-0'), makeAttestor('attestor-1', forked)];
+
+    const error = await clientFor(attestors)
+      .collect(LOCATOR, options())
+      .catch((failure: unknown) => failure);
+
+    expect(error).toBeInstanceOf(CardanoThresholdError);
+    expect(error).toMatchObject({
+      reason: 'threshold',
+      failures: [{ registryIndex: 1, reason: 'attestation' }],
+    });
   });
 
   it('drops an attestor whose signature does not verify', async () => {

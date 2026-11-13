@@ -68,6 +68,20 @@ export const ASSET_OBSERVATION: OutputObservation = {
   output: { ...OBSERVATION.output, assets: [{ ...ASSET_PIN, quantity: 700n }] },
 };
 
+/** The output policy whose byte slots carry the watched address and the block. */
+export const BYTE_FACT_POLICY: OutputPolicy = {
+  ...POLICY,
+  slots: [
+    { slot: 0, name: 'blockTime' },
+    { slot: 1, name: 'slot' },
+    { slot: 2, name: 'blockNumber' },
+    { slot: 3, name: 'lovelace' },
+    { slot: 4, name: 'outputIndex' },
+    { slot: 5, name: 'addressHash' },
+    { slot: 6, name: 'blockHash' },
+  ],
+};
+
 /** A fixed app id, 32 bytes. */
 export const APP_ID = new Uint8Array(32).fill(0xaa);
 
