@@ -14,7 +14,7 @@ npm install && npm run build
 cd /path/to/your-app && npm install /path/to/thoth/packages/client
 ```
 
-Once it is published, it installs as `@txpipe/thoth-client`.
+Once it is published, it installs as `@txpipe/thoth-client`. It needs `zod@^4.6.7` as a peer dependency.
 
 ## Usage
 

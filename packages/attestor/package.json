@@ -26,7 +26,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "src"
   ],
   "publishConfig": {
     "access": "public",
@@ -37,7 +38,8 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
@@ -45,7 +47,12 @@
     "types": "tsc --noEmit"
   },
   "dependencies": {
-    "@txpipe/thoth-core": "^0.0.0",
+    "@txpipe/thoth-core": "^0.0.0"
+  },
+  "peerDependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
     "zod": "^4.6.7"
   }
 }
