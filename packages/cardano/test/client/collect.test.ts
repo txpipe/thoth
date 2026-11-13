@@ -3,7 +3,12 @@
 
 import type { KeyPair } from '@thoth/attestor';
 import { descriptorOf } from '@thoth/attestor';
-import { type CardanoDefinition, deriveCardanoClaim } from '@thoth/cardano';
+import {
+  CARDANO_LIMITS,
+  type CardanoDefinition,
+  type CardanoPolicy,
+  deriveCardanoClaim,
+} from '@thoth/cardano';
 import { cardanoAttestor } from '@thoth/cardano/attestor';
 import {
   type CardanoAttestationInput,
@@ -278,5 +283,54 @@ describe('cardanoClient', () => {
         read: () => OBSERVATION,
       }),
     ).toThrow("outside the claim's 2 slots");
+  });
+
+  it('rejects a byte slot count above the limit at init', () => {
+    expect(() =>
+      cardanoClient.init({
+        trusted: trustedOf([makeAttestor('attestor-0')]),
+        transport: transportFor([makeAttestor('attestor-0')]),
+        verifier: verifier(),
+        policy: POLICY,
+        appId: APP_ID,
+        valueSlots: 5,
+        byteSlots: CARDANO_LIMITS.byteSlots + 1,
+        read: () => OBSERVATION,
+      }),
+    ).toThrow();
+  });
+
+  it('rejects a value slot count above the limit at init', () => {
+    const numericOnly: CardanoPolicy = { ...POLICY, slots: [{ slot: 0, name: 'lovelace' }] };
+    expect(() =>
+      cardanoClient.init({
+        trusted: trustedOf([makeAttestor('attestor-0')]),
+        transport: transportFor([makeAttestor('attestor-0')]),
+        verifier: verifier(),
+        policy: numericOnly,
+        appId: APP_ID,
+        valueSlots: CARDANO_LIMITS.valueSlots + 1,
+        byteSlots: 0,
+        read: () => OBSERVATION,
+      }),
+    ).toThrow();
+  });
+
+  it('validates the locator before reading', async () => {
+    let reads = 0;
+    const client = clientFor([makeAttestor('attestor-0')], {
+      read: () => {
+        reads += 1;
+        return OBSERVATION;
+      },
+    });
+
+    await expect(
+      client.collect(
+        { ...LOCATOR, txHash: LOCATOR.txHash.toUpperCase() },
+        options({ threshold: 1 }),
+      ),
+    ).rejects.toThrow('64 lowercase hex');
+    expect(reads).toBe(0);
   });
 });

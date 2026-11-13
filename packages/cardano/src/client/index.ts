@@ -14,11 +14,13 @@ import type { Claim } from '@thoth/core/claim';
 import { bytes32Schema } from '@thoth/core/claim';
 import { z } from 'zod';
 import {
+  CARDANO_LIMITS,
   type CardanoDefinition,
   type CardanoLocator,
   type CardanoObservation,
   type CardanoPolicy,
   cardanoClaimSchema,
+  cardanoEvidenceSchema,
   cardanoObservationSchema,
   cardanoPolicySchema,
   deriveCardanoClaim,
@@ -124,7 +126,7 @@ export interface CardanoClient<PK, S> {
    * @returns the claim and its attestations, sorted by registry slot.
    * @throws {@link CardanoThresholdError} if the options are invalid, the
    *   deadline expires, or the candidates run out before the threshold.
-   * @throws if the read or the claim derivation fails.
+   * @throws if the locator, the read or the claim derivation fails.
    */
   collect(
     locator: CardanoLocator,
@@ -251,18 +253,25 @@ const runAttempt = async <PK, S>(
  * the replies that equal the derived claim and verify against their pinned
  * key.
  *
- * @throws if the policy, app id or value count fails its schema, or a policy
- *   slot does not fit the claim size, at init.
+ * @throws if the policy, app id or slot count fails its schema, a slot count
+ *   exceeds {@link CARDANO_LIMITS}, or a policy slot does not fit the claim
+ *   size, at init.
  */
 export const cardanoClient = {
   init<PK, S>(config: CardanoClientConfig<PK, S>): CardanoClient<PK, S> {
     const policy = cardanoPolicySchema.parse(config.policy);
     const appId = bytes32Schema.parse(config.appId);
-    const valueSlots = z.number().int().positive().parse(config.valueSlots);
+    const valueSlots = z
+      .number()
+      .int()
+      .positive()
+      .max(CARDANO_LIMITS.valueSlots)
+      .parse(config.valueSlots);
     const byteSlots = z
       .number()
       .int()
       .nonnegative()
+      .max(CARDANO_LIMITS.byteSlots)
       .parse(config.byteSlots ?? 0);
     // Same guard `deriveCardanoClaim` enforces later; fail at init instead of
     // on the first collect.
@@ -275,13 +284,16 @@ export const cardanoClient = {
         if (Date.now() >= options.expiresAt) {
           throw new CardanoThresholdError('expired');
         }
+        // The client's own input is unvalidated until here; fail with the
+        // evidence schema's message instead of a provider or threshold error.
+        const checkedLocator = cardanoEvidenceSchema.parse(locator);
         const candidates = candidatesOf(trusted, options);
 
-        const observation = cardanoObservationSchema.parse(await read(locator));
+        const observation = cardanoObservationSchema.parse(await read(checkedLocator));
         // Fail fast on a read the attestors would reject anyway; the depth is
         // the attestors' alone, since this client's tip can differ without a
         // fork.
-        checkLocatorMatchesObservation(locator, observation);
+        checkLocatorMatchesObservation(checkedLocator, observation);
         checkObservationMatchesPolicy(policy, observation);
         const claim = cardanoClaimSchema.parse(
           deriveCardanoClaim({
@@ -311,7 +323,7 @@ export const cardanoClient = {
             }
             const outcome = await runAttempt(
               { trusted, transport, verifier, policy },
-              locator,
+              checkedLocator,
               claim,
               options,
               member,

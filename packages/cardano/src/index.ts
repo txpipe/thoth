@@ -2,11 +2,12 @@
 // schema shared by every variant. The output variant lives under ./output/.
 
 import type { AttestationInput } from '@thoth/core';
-import type { Claim, FlatMessage } from '@thoth/core/claim';
+import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { claimSchema } from '@thoth/core/claim';
 import type { CanonicalValue } from '@thoth/core/claim-context';
 import { z } from 'zod';
 import { cardanoAddressHashOf } from './bytes.js';
+import { CARDANO_LIMITS } from './limits.js';
 import {
   type AssetClass,
   cardanoOutputEvidenceSchema,
@@ -56,6 +57,7 @@ export {
   CARDANO_BYTE_FACTS,
   CARDANO_FACTS,
   CARDANO_LAW,
+  CARDANO_LIMITS,
   CARDANO_NETWORKS,
   cardanoAddressHashOf,
   cardanoOutputEvidenceSchema,
@@ -121,9 +123,47 @@ export const cardanoPolicyHashOf = (policy: CardanoPolicy): Uint8Array =>
 
 /**
  * Runtime validator for a cardano@1 claim: the standard claim, sized by the
- * client's proposal. `verify` checks the proposal covers every policy slot.
+ * client's proposal and capped by {@link CARDANO_LIMITS}. `verify` checks the
+ * proposal covers every policy slot.
+ *
+ * The caps run before the slot arrays' elements are parsed, so a remote
+ * proposal cannot size the work its own schema does.
  */
-export const cardanoClaimSchema = claimSchema<number, number>();
+export const cardanoClaimSchema = z.preprocess<
+  unknown,
+  ReturnType<typeof claimSchema<number, number>>,
+  ClaimInput<number, number>
+>((input, context) => {
+  if (typeof input !== 'object' || input === null) {
+    return input;
+  }
+  const bounded: Record<string, unknown> = { ...input };
+  const caps = [
+    ['values', CARDANO_LIMITS.valueSlots],
+    ['byteValues', CARDANO_LIMITS.byteSlots],
+    ['present', CARDANO_LIMITS.valueSlots + CARDANO_LIMITS.byteSlots],
+  ] as const;
+  for (const [key, maximum] of caps) {
+    const entries = bounded[key];
+    if (!Array.isArray(entries)) {
+      continue;
+    }
+    // One past the cap is enough to fail, so a huge array is not copied.
+    const copy = entries.slice(0, maximum + 1);
+    bounded[key] = copy;
+    if (copy.length > maximum) {
+      context.addIssue({
+        code: 'too_big',
+        origin: 'array',
+        maximum,
+        inclusive: true,
+        input: copy,
+        path: [key],
+      });
+    }
+  }
+  return bounded;
+}, claimSchema<number, number>());
 
 /** The cardano@1 definition, the value `createCardanoDefinition` returns. */
 export interface CardanoDefinition {

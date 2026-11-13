@@ -27,10 +27,10 @@ walkthrough.
   [The policy](#the-policy). Its hash is signed into every claim, and your
   contract must seal it.
 - **`appId`.** The 32 bytes naming your app, signed into every claim.
-- **`valueSlots`.** Your contract's `#V`, the numeric slot count.
+- **`valueSlots`.** Your contract's `#V`, the numeric slot count, up to 64.
 - **`byteSlots`.** Optional: the number of 32-byte byte values you measure,
-  W. The contract's `#B` is `2W`, since each value is two 16-byte halves.
-  Defaults to `0`.
+  W, up to 64. The contract's `#B` is `2W`, since each value is two 16-byte
+  halves. Defaults to `0`.
 - **`read`.** Your own read of the event, in the observation shape the client
   and the attestors share. The client awaits it as-is and does not bound it,
   so a provider that hangs holds `collect` open past `expiresAt`. Give the

@@ -3,6 +3,7 @@
 // per network, and the rejection matrix of the output slot set.
 
 import {
+  CARDANO_FACTS,
   type CardanoPolicy,
   cardanoPolicyHashOf,
   cardanoPolicySchema,
@@ -82,6 +83,21 @@ describe('cardanoPolicySchema', () => {
 
   it('rejects an empty slot list', () => {
     expect(() => parse({ ...OUTPUT, slots: [] })).toThrow();
+  });
+
+  it('accepts one entry per fact, the largest slot map a policy can carry', () => {
+    const allFacts = CARDANO_FACTS.map((name, slot) => ({ slot, name }));
+    expect(parse({ ...OUTPUT, asset: ASSET_PIN, slots: allFacts }).slots).toHaveLength(
+      CARDANO_FACTS.length,
+    );
+  });
+
+  it('rejects more slot entries than the variant has facts', () => {
+    const tooMany = Array.from({ length: CARDANO_FACTS.length + 1 }, (_, slot) => ({
+      slot,
+      name: 'lovelace' as const,
+    }));
+    expect(() => parse({ ...OUTPUT, slots: tooMany })).toThrow(/Too big/);
   });
 
   it('rejects a fact the variant does not carry', () => {

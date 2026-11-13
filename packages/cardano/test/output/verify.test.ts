@@ -1,7 +1,13 @@
 // Unit tests for the cardano@1 law's verify (`@thoth/cardano/attestor`): the
 // honest observation, one rejection per check, and the derived-message pin.
 
-import { deriveCardanoClaim, type OutputObservation, type OutputPolicy } from '@thoth/cardano';
+import {
+  CARDANO_LIMITS,
+  cardanoClaimSchema,
+  deriveCardanoClaim,
+  type OutputObservation,
+  type OutputPolicy,
+} from '@thoth/cardano';
 import { createCardanoDefinition } from '@thoth/cardano/attestor';
 import type { Claim } from '@thoth/core/claim';
 import { claimToMessage } from '@thoth/core/claim';
@@ -145,6 +151,49 @@ describe('cardano verify', () => {
   it('rejects a fact mapped beyond the claim slots', () => {
     const badPolicy: OutputPolicy = { ...POLICY, slots: [{ slot: 6, name: 'txHash' }] };
     expect(() => verify({ policy: badPolicy })).toThrow("outside the claim's 6 slots");
+  });
+
+  it('rejects a negative policy slot index', () => {
+    const badPolicy: OutputPolicy = { ...POLICY, slots: [{ slot: -1, name: 'lovelace' }] };
+    const derive = () =>
+      deriveCardanoClaim({
+        policy: badPolicy,
+        observation: OBSERVATION,
+        appId: APP_ID,
+        holder: HOLDER,
+        valueSlots: 5,
+        byteSlots: 1,
+      });
+    expect(derive).toThrow("outside the claim's 6 slots");
+    expect(() => verify({ policy: badPolicy })).toThrow("outside the claim's 6 slots");
+  });
+
+  it('caps the claim slot counts the schema accepts', () => {
+    const base = claimFor();
+    const atLimit = {
+      ...base,
+      present: Array.from(
+        { length: CARDANO_LIMITS.valueSlots + CARDANO_LIMITS.byteSlots },
+        () => true,
+      ),
+      values: Array.from({ length: CARDANO_LIMITS.valueSlots }, () => 0n),
+      byteValues: Array.from({ length: CARDANO_LIMITS.byteSlots }, () => new Uint8Array(32)),
+    };
+    expect(() => cardanoClaimSchema.parse(atLimit)).not.toThrow();
+    expect(() =>
+      cardanoClaimSchema.parse({
+        ...atLimit,
+        values: [...atLimit.values, 0n],
+        present: [...atLimit.present, true],
+      }),
+    ).toThrow(/Too big/);
+    expect(() =>
+      cardanoClaimSchema.parse({
+        ...atLimit,
+        byteValues: [...atLimit.byteValues, new Uint8Array(32)],
+        present: [...atLimit.present, true],
+      }),
+    ).toThrow(/Too big/);
   });
 
   it('rejects a claim whose policyHash does not match the policy', () => {

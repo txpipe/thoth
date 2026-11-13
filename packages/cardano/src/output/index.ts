@@ -97,6 +97,7 @@ export const cardanoOutputPolicySchema = z
     slots: z
       .array(outputSlotSchema)
       .min(1)
+      .max(CARDANO_FACTS.length)
       .superRefine((slots, context) => {
         checkSlotIndicesDistinct(slots, context);
         checkSlotNamesDistinct(slots, context);

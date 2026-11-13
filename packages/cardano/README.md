@@ -114,6 +114,7 @@ What the attestor checks:
 - The observed output's `txHash` and `outputIndex` equal the client's locator, its `address` and `networkMagic` equal the policy, and its block sits at least `confirmationDepth` blocks below the tip at read time.
 - The claim's `policyHash` is the policy's hash, its version is `1`, its window is the block's time, and its subject, salt, values and `present` flags are the ones derived from the observation.
 - Evidence is a strict `{ txHash, outputIndex }`; an `observation` key is refused before the attestor reads anything.
+- A claim carries at most 64 numeric and 64 byte slots (`CARDANO_LIMITS`); a larger proposal is refused before its arrays are parsed.
 
 What the client checks:
 

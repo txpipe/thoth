@@ -184,10 +184,10 @@ export const checkSlotNamesDistinct = (
 };
 
 /**
- * Require every policy slot to fit the claim's size and its fact's region:
- * numeric facts in `0..V-1`, byte facts in `V..V+W-1`.
+ * Require every policy slot to be non-negative and fit the claim's size and its
+ * fact's region: numeric facts in `0..V-1`, byte facts in `V..V+W-1`.
  *
- * @throws if a slot is out of range or in the wrong region for its fact.
+ * @throws if a slot is negative, out of range or in the wrong region for its fact.
  */
 export const assertPolicySlotsInRange = (
   slots: readonly CardanoSlot[],
@@ -195,7 +195,7 @@ export const assertPolicySlotsInRange = (
   byteSlots: number,
 ): void => {
   const total = valueSlots + byteSlots;
-  const outOfRange = slots.find((entry) => entry.slot >= total);
+  const outOfRange = slots.find((entry) => entry.slot < 0 || entry.slot >= total);
   if (outOfRange !== undefined) {
     throw new Error(`policy slot ${outOfRange.slot} is outside the claim's ${total} slots`);
   }
