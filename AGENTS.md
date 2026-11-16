@@ -172,7 +172,8 @@ READMEs don't repeat it.
   `packages/contracts/test/`. The mock top-level shells
   (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, K=20, M=3,
   N=2 — and `MockAttestationBytes.compact` — V=3, B=2, K=24) specialize the
-  modules so tests run against real artifacts.
+  modules so tests run against real artifacts. `MockAddressHash.compact` is the
+  compiled oracle for the cardano address hash.
 - `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
   compiled pure circuits — never hand-roll the message encoding; use
   `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.

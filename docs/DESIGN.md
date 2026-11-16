@@ -44,12 +44,15 @@ kind needs no contract change. To add one, see
 
 - **Credentials** (API keys, cookies, auth headers) never leave the user's
   machine; the fetch redacts them.
-- **The evidence** goes to the attestors. It shows the disclosed values the
-  claim is derived from, not the credentials or anything the fetch redacted.
+- **The evidence** goes to the attestors. In zkFetch it shows the disclosed
+  values the claim is derived from, not the credentials or anything the fetch
+  redacted; a chain-event locator only points at an event the attestor
+  re-reads.
 - **The claim values** are private witness data in the contract and are not
-  stored on-chain. The public nullifier hashes them with a secret salt, so it
-  cannot confirm a guessed value ([ADR 0012](adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md));
-  the [`@thoth/contracts` README](../packages/contracts/README.md#guarantees-and-limits)
+  stored on-chain. What the public nullifier reveals depends on the kind's
+  salt ([ADR 0012](adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md),
+  [ADR 0014](adr/0014-chain-event-kinds.md)); the
+  [`@thoth/contracts` README](../packages/contracts/README.md#guarantees-and-limits)
   says what the ledger makes public.
 
 Matching values alone do not prove where they came from. An app that needs
@@ -67,16 +70,13 @@ The terms are defined in [`CONTEXT.md`](../CONTEXT.md#the-claim).
 | `version` | Wire version, `1` until a layout is deployed |
 | `appId` | The app the claim is for; the contract seals its own and rejects any other ([ADR 0013](adr/0013-contract-seals-its-app-id.md)) |
 | `policyHash` | Hash of the policy the attestors enforced; stands in for the kind ([ADR 0002](adr/0002-no-kind-on-chain-policy-hash.md)) |
-| `windowStart`, `windowEnd` | When the attestor observed, in Unix seconds ([ADR 0005](adr/0005-window-is-when-the-attestor-observed.md)) |
+| `windowStart`, `windowEnd` | When the observation happened, in Unix seconds; the kind defines what the observation is ([ADR 0005](adr/0005-window-is-when-the-attestor-observed.md), [ADR 0014](adr/0014-chain-event-kinds.md)) |
 | `subjectHash` | Circuit hash of what the claim is about ([ADR 0001](adr/0001-source-binding-by-in-circuit-subject-hash.md)) |
 | `holder` | Per-claim commitment of the caller's secret ([ADR 0004](adr/0004-holder-is-per-claim-not-an-identity.md)) |
-| `salt` | Secret the attestors derive from the evidence; the nullifier hashes it and the chain never sees it ([ADR 0012](adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)) |
+| `salt` | The attestors derive it from the evidence; the nullifier hashes it, and the kind decides whether it is secret ([ADR 0012](adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md), [ADR 0014](adr/0014-chain-event-kinds.md)) |
 | `present` | One flag per value slot: `V` numeric slots, then `W` byte slots |
 | `values` | `V` positional `Uint<64>` measurements |
 | `byteValues` | `W` positional 32-byte measurements (identifiers, strings) ([ADR 0009](adr/0009-byte-value-slots-in-the-claim.md)) |
-
-The window is when the attestor's witness looked, not when the fact happened,
-and it is not the exact fetch time ([Window](../CONTEXT.md#the-claim)).
 
 An absent slot must carry zero; a present slot may be zero. There is no nonce
 and no kind code: the contract derives replay protection from the observation

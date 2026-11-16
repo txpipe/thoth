@@ -266,28 +266,20 @@ threshold, and the simulator accepts `toContractClaim`'s output.
 
 ## Depth and finality
 
-Depth lives in the policy. Each attestor checks that the event's block sits at
-least `confirmationDepth` blocks below its own tip before it signs; the client
-does not check depth, because its tip can differ from an attestor's without a
-fork. A depth of `0` is accepted and carries the most rollback risk: while a
-fork is open, attestors on either side sign different subjects and no
-attestment forms, but once accepted, a claim is a true record of what was
-observed even if its block is rolled back. Your app owns finality: set a depth
-that covers the risk you accept, and, if you need stronger finality, measure
-the block number or slot and bound it in the predicate.
-
-[ADR 0014](../../../docs/adr/0014-chain-event-kinds.md) has the reasoning; the
-README lists depth `0` under
-[Guarantees and limits](../README.md#guarantees-and-limits).
+Set the policy's `confirmationDepth` to the finality you accept. The attestor
+checks it against its own tip before signing; the client does not check depth,
+because its tip can differ. Depth `0` is accepted and carries the most rollback
+risk, so measure `blockNumber` or `slot` and bound it in the predicate if you
+need stronger finality. The README lists depth `0` under
+[Guarantees and limits](../README.md#guarantees-and-limits);
+[ADR 0014](../../../docs/adr/0014-chain-event-kinds.md) has the reasoning.
 
 ## Privacy
 
-Cardano values are public, so the salt is public: anyone who suspects an event
-can recompute it, and a pending submission confirms which event the claim
-attests. One event also mints one claim per app and policy, whatever the
-holder, so a griefer can race the first acceptance; if your predicate accepts
-any holder, that first-come-first-served is the semantics you chose, and if it
-grants the event to a user, bind the claimant. The README's
+The salt is public, so a pending submission reveals the event it attests. One
+event also mints one claim per app and policy, so an observer can race the first
+acceptance: if your predicate grants the event to a user, bind the claimant;
+otherwise first-come-first-served is the semantics you chose. The README's
 [Guarantees and limits](../README.md#guarantees-and-limits) lists these limits.
 
 ## Links
