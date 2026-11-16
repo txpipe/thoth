@@ -1,6 +1,6 @@
 # Chain-event kinds: evidence, window and ownership
 
-Status: proposed
+Status: accepted
 
 A chain-event kind attests that an event was observed on a chain, such as a deposit at a Cardano script address. This ADR fixes the contract every chain-event kind must follow, the open points of #158. The indexer choice is its own decision; this ADR names none. Critical decisions are marked; a law or app that weakens one breaks the family's guarantees. Decisions that depart from other ADRs are marked as divergences.
 
