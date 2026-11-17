@@ -595,21 +595,41 @@ describe('zkFetch attestor + client', () => {
   });
 
   it.each([
-    { encoding: 'plain', secret: 'Bearer private-token', encode: (json: string) => json },
+    {
+      encoding: 'plain',
+      reason: 'secret',
+      secret: 'Bearer private-token',
+      encode: (json: string) => json,
+    },
     {
       encoding: 'JSON-escaped',
+      reason: 'secret',
       secret: 'Bearer "private-token"\n',
       encode: (json: string) => json,
     },
     {
       encoding: 'Unicode-escaped',
+      reason: 'secret',
       secret: 'Bearer private-token',
       encode: (json: string) => json.replace('private-token', '\\u0070rivate-token'),
     },
     {
       encoding: 'percent-encoded',
+      reason: 'secret',
       secret: 'Bearer private-token',
       encode: (json: string) => json.replace('Bearer private-token', 'Bearer%20private-token'),
+    },
+    {
+      encoding: 'deeply-nested',
+      // The recursion overflows before it can clear the evidence; that error is
+      // not a SecretHeaderError, so `collect` reports an evidence failure.
+      reason: 'evidence',
+      secret: 'Bearer private-token',
+      encode: (json: string) =>
+        JSON.stringify({
+          ...JSON.parse(json),
+          echo: `${'['.repeat(5000)}"Bearer\\u0020private-token"${']'.repeat(5000)}`,
+        }),
     },
   ])('never forwards evidence carrying a $encoding secret header value', async (leak) => {
     const { seen, watched } = watchSlot0();
@@ -632,7 +652,7 @@ describe('zkFetch attestor + client', () => {
       options(),
     );
     expect(slots(result)).toEqual([1, 2]);
-    expect(result.failures).toEqual([{ registryIndex: 0, reason: 'secret' }]);
+    expect(result.failures).toEqual([{ registryIndex: 0, reason: leak.reason }]);
     expect(seen.contacted).toBe(false);
   });
 

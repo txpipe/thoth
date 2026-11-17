@@ -276,12 +276,18 @@ const containsSecret = (value: unknown, secrets: readonly string[]): boolean => 
     if (secrets.some((secret) => value.includes(secret))) {
       return true;
     }
-    // Decoding catches escaped forms such as `private`.
+    // Decoding catches escaped forms such as `\u0070rivate`. A parse failure
+    // means the string is not JSON; any other error must not read as clean.
+    let decoded: unknown;
     try {
-      return containsSecret(JSON.parse(value), secrets);
-    } catch {
+      decoded = JSON.parse(value);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) {
+        throw error;
+      }
       return false;
     }
+    return containsSecret(decoded, secrets);
   }
   if (typeof value === 'object' && value !== null) {
     return Object.entries(value).some(
