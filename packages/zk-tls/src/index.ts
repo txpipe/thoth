@@ -1121,11 +1121,11 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
 
 /**
  * Check evidence against the policy: the signed request carries no
- * `{{param}}` template, the attested URL is HTTPS on an allowed host, the
- * signed request body carries no `*` and satisfies the policy's body mode,
- * the signed disclosure rules equal the policy's canonical form, and every
- * required slot is certifiable. `responseText` is not witness-signed and takes
- * no part.
+ * `{{param}}` template or URL `*`, the attested URL is HTTPS on an allowed
+ * host, the signed request body carries no `*` and satisfies the policy's body
+ * mode, the signed disclosure rules equal the policy's canonical form, and
+ * every required slot is certifiable. `responseText` is not witness-signed and
+ * takes no part.
  *
  * The policy is parsed with {@link zkFetchPolicySchema} first, so a missing
  * `bodyPolicy` or the empty body's pin fails here rather than later.
@@ -1140,22 +1140,23 @@ export const assertEvidenceMatchesPolicy = (
 ): string => {
   const parsedPolicy = zkFetchPolicySchema.parse(policy);
   const parameters = claimParametersOf(verified.claim);
+  // The url is normalised the way WHATWG parses it: tab, LF and CR removed.
+  const signedUrlText = parameters.url.replace(/[\t\n\r]/g, '');
   // Any `{{` is refused, not only a fillable template: Reclaim matches the signed path and body
-  // against the sent request with `{{…}…}` as a wildcard over redacted bytes. The url is normalised
-  // the way WHATWG parses it (tab, LF and CR removed, path braces encoded) and the way Reclaim
-  // decodes it back (`%7B`/`%7D` to braces) before the check.
+  // against the sent request with `{{…}…}` as a wildcard over redacted bytes. Reclaim decodes
+  // `%7B`/`%7D` back to braces, so the check runs on that decoding too.
   for (const field of ['url', 'body', 'geoLocation', 'proxySessionId'] as const) {
     const value = parameters[field];
     const text =
-      field === 'url' && typeof value === 'string'
-        ? value
-            .replace(/[\t\n\r]/g, '')
-            .replace(/%7B/gi, '{')
-            .replace(/%7D/gi, '}')
-        : value;
+      field === 'url' ? signedUrlText.replace(/%7B/gi, '{').replace(/%7D/gi, '}') : value;
     if (typeof text === 'string' && text.includes('{{')) {
       throw new Error(`the signed ${field} cannot use {{param}} templates`);
     }
+  }
+  // Reclaim matches a signed `*` with the transcript's redaction markers, and the caller chooses
+  // which request bytes it redacts, so each one leaves a sent byte unbound. `%2A` stays literal.
+  if (signedUrlText.includes('*')) {
+    throw new Error('the signed request url cannot contain *');
   }
   const url = new URL(parameters.url);
   if (url.protocol !== 'https:') {

@@ -192,6 +192,9 @@ client and the attestor refuse evidence whose signed URL, body, `geoLocation`
 or `proxySessionId` contains `{{`, in the URL also when written as `%7B`/`%7D`
 or split by a tab or line break, which URL parsing drops.
 
+The signed URL cannot contain `*`, which Reclaim matches against the redaction
+markers the caller chooses; write a literal one as `%2A`.
+
 The subject hash binds the **signed** body. An empty body contributes
 `sha256('')` and does not bind the body the witness sent: the witness checks the
 sent body only when the signed body is non-empty. The policy's
