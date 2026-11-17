@@ -37,7 +37,7 @@ import {
 } from '@thoth/zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import { DISCLOSURE_RULES, FIXTURE } from './helpers/helper.js';
+import { disclosureRules, FIXTURE } from './helpers/helper.js';
 import { type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
@@ -51,7 +51,7 @@ const policy = (
   allowedHosts: ['api.github.com'],
   slots,
   bodyPolicy: 'ignored',
-  ...DISCLOSURE_RULES,
+  ...disclosureRules(...slots.map(({ name }) => name)),
 });
 
 type FakePublicKey = { id: string };
@@ -258,7 +258,9 @@ describe('zkFetch attestor + client', () => {
         url: overrides.url ?? request.url,
         method: request.method ?? 'GET',
         body: request.body ?? '',
-        ...DISCLOSURE_RULES,
+        // The client binds the policy's rules to the request it proves.
+        responseMatches: request.responseMatches ?? disclosureRules('data').responseMatches,
+        responseRedactions: request.responseRedactions ?? [],
       },
       context: request.context,
     });
@@ -345,7 +347,7 @@ describe('zkFetch attestor + client', () => {
       allowedHosts: ['api.github.com'],
       slots: [{ slot: 3, name: 'data', parse: 'bytes', optional }],
       bodyPolicy: 'ignored',
-      ...DISCLOSURE_RULES,
+      ...disclosureRules('data'),
     });
 
     const padded = (value: string): Uint8Array => {
@@ -396,7 +398,7 @@ describe('zkFetch attestor + client', () => {
           { slot: 4, name: 'second', parse: 'bytes' },
         ],
         bodyPolicy: 'ignored',
-        ...DISCLOSURE_RULES,
+        ...disclosureRules('first', 'second'),
       };
       const { claim, collected } = await clientWith({
         policy: twoBytePolicy,
@@ -414,7 +416,7 @@ describe('zkFetch attestor + client', () => {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 3, name: 'data', parse: 'hex', length: 2 }],
         bodyPolicy: 'ignored',
-        ...DISCLOSURE_RULES,
+        ...disclosureRules('data'),
       };
       const { claim, collected } = await clientWith({
         policy: hexPolicy,
@@ -432,7 +434,7 @@ describe('zkFetch attestor + client', () => {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 3, name: 'data', parse: 'hex', length: 3 }],
         bodyPolicy: 'ignored',
-        ...DISCLOSURE_RULES,
+        ...disclosureRules('data'),
       };
       await expect(
         clientWith({

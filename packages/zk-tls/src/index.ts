@@ -318,6 +318,56 @@ const refineRe2 = (regex: string, context: z.RefinementCtx, path: string[]): voi
   }
 };
 
+/** The name of the group opening at `index`, or `undefined` for any other `(`. */
+const groupNameAt = (source: string, index: number): string | undefined => {
+  // RE2 accepts both spellings; a lookbehind carries no name.
+  const opened = source.startsWith('(?P<', index)
+    ? index + 4
+    : source.startsWith('(?<', index)
+      ? index + 3
+      : undefined;
+  if (opened === undefined || source[opened] === '=' || source[opened] === '!') {
+    return undefined;
+  }
+  const end = source.indexOf('>', opened);
+  return end === -1 ? undefined : source.slice(opened, end);
+};
+
+/**
+ * The named groups a regex source declares, without their angle brackets.
+ *
+ * Reads names only: RE2 has already compiled the source, so this skips
+ * escapes, character classes and lookbehinds rather than validating syntax.
+ */
+const namedGroupsOf = (source: string): ReadonlySet<string> => {
+  const names = new Set<string>();
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '\\') {
+      index += 1;
+    } else if (char === '[') {
+      index += 1;
+      if (source[index] === '^') {
+        index += 1;
+      }
+      if (source[index] === ']') {
+        index += 1;
+      }
+      for (; index < source.length && source[index] !== ']'; index += 1) {
+        if (source[index] === '\\') {
+          index += 1;
+        }
+      }
+    } else if (char === '(') {
+      const name = groupNameAt(source, index);
+      if (name !== undefined) {
+        names.add(name);
+      }
+    }
+  }
+  return names;
+};
+
 /** SHA-256 of a UTF-8 string, raw bytes. */
 const sha256 = (data: string): Uint8Array =>
   new Uint8Array(createHash('sha256').update(data, 'utf-8').digest());
@@ -350,7 +400,7 @@ const EMPTY_BODY_SHA256 = bytesToHex(sha256(''));
 /** The policy schema with array and string sizes capped by `limits`. */
 const policySchemaWithin = (limits: ZkFetchLimits) => {
   const ruleText = z.string().max(limits.ruleLength);
-  return z.object({
+  const schema = z.object({
     allowedHosts: z
       .array(
         z
@@ -441,6 +491,24 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
     ]),
     claimVersion: z.bigint().min(0n).max(255n).optional(),
   });
+  return schema.superRefine((policy, context) => {
+    // A slot is read from a disclosed value keyed by its name, so a slot no
+    // regex group names is never certifiable.
+    const groups = new Set(
+      policy.responseMatches.flatMap((match) =>
+        match.type === 'regex' ? [...namedGroupsOf(match.value)] : [],
+      ),
+    );
+    for (const [index, slot] of policy.slots.entries()) {
+      if (!groups.has(slot.name)) {
+        context.addIssue({
+          code: 'custom',
+          message: `slot '${slot.name}' is not a named group of any regex response match`,
+          path: ['slots', index, 'name'],
+        });
+      }
+    }
+  });
 };
 
 /**
@@ -450,7 +518,9 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
  * rule texts cannot carry `{{param}}` templates. Every `regex` match and
  * redaction regex must compile under RE2, the engine the prover and the
  * witnesses run it with (the dApp guide's "Regex engine"); parsing throws if the
- * native `re2` module does not load. `bodyPolicy` is
+ * native `re2` module does not load. Every slot `name` must be a named group of
+ * a `regex` match, so the slot has a disclosed value to read; a `contains`
+ * match and a redaction regex contribute no groups. `bodyPolicy` is
  * required; a pin is 32 bytes and not the empty body's hash. Every
  * `allowedHosts` entry is a non-empty host with an optional port in 1–65535.
  * `claimVersion` is 0–255, the claim's `Uint<8>` range.

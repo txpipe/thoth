@@ -18,7 +18,7 @@ import {
 } from '@thoth/zk-tls';
 import { createZkFetchDefinition, zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
+import { disclosureRules } from './helpers/helper.js';
 import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
@@ -34,7 +34,7 @@ const policy: ZkFetchPolicy = {
     { slot: 1, name: 'score', parse: 'float', optional: true },
   ],
   bodyPolicy: 'ignored',
-  ...DISCLOSURE_RULES,
+  ...disclosureRules('balance', 'score'),
 };
 
 /** The holder every claim in this suite is proposed with. */
@@ -47,7 +47,7 @@ const PARAMETERS = {
   url: 'https://api.example.com/v1/account',
   method: 'GET',
   body: '',
-  ...DISCLOSURE_RULES,
+  ...disclosureRules('balance', 'score'),
 };
 
 /**
@@ -214,7 +214,7 @@ describe('test-key witness', () => {
   it('is deterministic across runs', async () => {
     // RFC 6979 signing: the same observation always yields this signature.
     expect((await observe(alice, { context: { intent: 'ab'.repeat(32) } })).signatureHex).toBe(
-      '0x79cff7aef768dd40ad4e61a20a084a35ed3bb2deae1c8443592500701280da9b7536aa09f930244d461c96daefa815f838f97c77f4119d2dfd00bd521d7c6fed1b',
+      '0xc17c840172f282180b663314f7db5a79e41b5950a7c69cab83c56bd46a76728145175c0909bc6bbf365e878b4eebc2c0525bd5601d52d79eb9c537e1530536211c',
     );
   });
 
@@ -486,7 +486,7 @@ describe('test-key witness', () => {
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'balance', parse: 'int' }],
       bodyPolicy: 'ignored',
-      responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+      responseMatches: [{ type: 'regex', value: '(?<balance>.*)' }],
       responseRedactions: [],
     };
     const evidence = await observe(
@@ -497,7 +497,7 @@ describe('test-key witness', () => {
           url: 'https://api.example.com/v1/account',
           method: 'GET',
           body: '',
-          responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+          responseMatches: [{ type: 'regex', value: '(?<balance>.*)' }],
         },
       },
       activePolicy,
@@ -511,7 +511,7 @@ describe('test-key witness', () => {
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'balance', parse: 'int' }],
       bodyPolicy: 'ignored',
-      responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+      responseMatches: [{ type: 'regex', value: '(?<balance>.*)' }],
       responseRedactions: [],
     };
     const inverted = await observe(alice, {
@@ -520,7 +520,7 @@ describe('test-key witness', () => {
         url: 'https://api.example.com/v1/account',
         method: 'GET',
         body: '',
-        responseMatches: [{ type: 'regex', value: '(?<data>.*)', invert: true }],
+        responseMatches: [{ type: 'regex', value: '(?<balance>.*)', invert: true }],
         responseRedactions: [],
       },
     });
@@ -552,7 +552,7 @@ describe('test-key witness', () => {
         url: 'https://api.example.com/v1/account',
         method: 'GET',
         body: '',
-        ...DISCLOSURE_RULES,
+        ...disclosureRules('balance', 'score'),
         paramValues: { x: 'evil.example/' },
         ...templated,
       },
