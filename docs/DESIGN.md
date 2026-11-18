@@ -59,18 +59,18 @@ The claim is the same object everywhere (client, attestors, contract) and it
 is the whole signed message: anything the contract checks is a field of it.
 The terms are defined in [`CONTEXT.md`](../CONTEXT.md#the-claim).
 
-| Field | What it is |
-|-------|------------|
-| `version` | Wire version, `1` until a layout is deployed |
-| `appId` | The app the claim is for; the contract seals its own and rejects any other ([ADR 0013](adr/0013-contract-seals-its-app-id.md)) |
-| `policyHash` | Hash of the policy the attestors enforced; stands in for the kind ([ADR 0002](adr/0002-no-kind-on-chain-policy-hash.md)) |
-| `windowStart`, `windowEnd` | When the attestor observed, in Unix seconds ([ADR 0005](adr/0005-window-is-when-the-attestor-observed.md)) |
-| `subjectHash` | Circuit hash of what the claim is about ([ADR 0001](adr/0001-source-binding-by-in-circuit-subject-hash.md)) |
-| `holder` | Per-claim commitment of the caller's secret ([ADR 0004](adr/0004-holder-is-per-claim-not-an-identity.md)) |
-| `salt` | Secret the attestors derive from the evidence; the nullifier hashes it and the chain never sees it ([ADR 0012](adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)) |
-| `present` | One flag per value slot: `V` numeric slots, then `W` byte slots |
-| `values` | `V` positional `Uint<64>` measurements |
-| `byteValues` | `W` positional 32-byte measurements (identifiers, strings) ([ADR 0009](adr/0009-byte-value-slots-in-the-claim.md)) |
+| Field                      | What it is                                                                                                                                                                   |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                  | Wire version, `1` until a layout is deployed                                                                                                                                 |
+| `appId`                    | The app the claim is for; the contract seals its own and rejects any other ([ADR 0013](adr/0013-contract-seals-its-app-id.md))                                               |
+| `policyHash`               | Hash of the policy the attestors enforced; stands in for the kind ([ADR 0002](adr/0002-no-kind-on-chain-policy-hash.md))                                                     |
+| `windowStart`, `windowEnd` | When the attestor observed, in Unix seconds ([ADR 0005](adr/0005-window-is-when-the-attestor-observed.md))                                                                   |
+| `subjectHash`              | Circuit hash of what the claim is about ([ADR 0001](adr/0001-source-binding-by-in-circuit-subject-hash.md))                                                                  |
+| `holder`                   | Per-claim commitment of the caller's secret ([ADR 0004](adr/0004-holder-is-per-claim-not-an-identity.md))                                                                    |
+| `salt`                     | Secret the attestors derive from the evidence; the nullifier hashes it and the chain never sees it ([ADR 0012](adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)) |
+| `present`                  | One flag per value slot: `V` numeric slots, then `W` byte slots                                                                                                              |
+| `values`                   | `V` positional `Uint<64>` measurements                                                                                                                                       |
+| `byteValues`               | `W` positional 32-byte measurements (identifiers, strings) ([ADR 0009](adr/0009-byte-value-slots-in-the-claim.md))                                                           |
 
 The window is when the attestor's witness looked, not when the fact happened,
 and it is not the exact fetch time ([Window](../CONTEXT.md#the-claim)).
@@ -90,21 +90,21 @@ two equal. Each 32-byte field is split into two 16-byte halves, each read as a
 `Uint<128>` little-endian (byte 0 least significant, the runtime's
 `convertBytesToUint` convention), so every byte is signed.
 
-| Index | Field | Encoding |
-|-------|-------|----------|
-| 0 | `version` | `1` |
-| 1, 2 | `appId` | bytes 0–15, then bytes 16–31 |
-| 3, 4 | `policyHash` | two halves |
-| 5 | `windowStart` | Unix seconds |
-| 6 | `windowEnd` | Unix seconds |
-| 7, 8 | `subjectHash` | two halves |
-| 9, 10 | `holder` | two halves |
-| 11, 12 | `salt` | two halves |
-| 13 | `B` | the byte-half count `2W`; the contract writes its own `#B` |
-| 14 … 13+V | `present[0]` … `present[V-1]` | `1` measured, `0` absent |
-| 14+V … 13+V+B | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
-| 14+V+B … 13+V+B+V | `values[0]` … `values[V-1]` | the value; `0` when absent |
-| 14+V+B+V … 13+V+B+V+B | `byteHalves[0]` … `byteHalves[B-1]` | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]` |
+| Index                 | Field                                 | Encoding                                                      |
+| --------------------- | ------------------------------------- | ------------------------------------------------------------- |
+| 0                     | `version`                             | `1`                                                           |
+| 1, 2                  | `appId`                               | bytes 0–15, then bytes 16–31                                  |
+| 3, 4                  | `policyHash`                          | two halves                                                    |
+| 5                     | `windowStart`                         | Unix seconds                                                  |
+| 6                     | `windowEnd`                           | Unix seconds                                                  |
+| 7, 8                  | `subjectHash`                         | two halves                                                    |
+| 9, 10                 | `holder`                              | two halves                                                    |
+| 11, 12                | `salt`                                | two halves                                                    |
+| 13                    | `B`                                   | the byte-half count `2W`; the contract writes its own `#B`    |
+| 14 … 13+V             | `present[0]` … `present[V-1]`         | `1` measured, `0` absent                                      |
+| 14+V … 13+V+B         | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
+| 14+V+B … 13+V+B+V     | `values[0]` … `values[V-1]`           | the value; `0` when absent                                    |
+| 14+V+B+V … 13+V+B+V+B | `byteHalves[0]` … `byteHalves[B-1]`   | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]`           |
 
 `K` alone fixes only `2*V + 2*B`, so two layouts can share a length (`V = 3,
 W = 2` and `V = 1, W = 3` both give `K = 28`). Index 13 signs the layout: the

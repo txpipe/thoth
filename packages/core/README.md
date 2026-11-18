@@ -55,7 +55,12 @@ export const definition = {
     }
   },
   message: (claim) => claimToMessage(claim),
-} satisfies AttestorDefinition<typeof LAW, typeof policySchema, typeof evidenceSchema, typeof claim>;
+} satisfies AttestorDefinition<
+  typeof LAW,
+  typeof policySchema,
+  typeof evidenceSchema,
+  typeof claim
+>;
 ```
 
 A dApp sends an `AttestationInput` (policy, evidence, claim proposal); the
