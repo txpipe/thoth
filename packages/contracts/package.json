@@ -47,13 +47,13 @@
     "check:fix:compact": "compact format ."
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.10",
+    "@biomejs/biome": "^2.6.8",
     "@midnight-ntwrk/compact-runtime": "0.21.0",
     "@thoth/attestor": "*",
     "@thoth/client": "*",
     "@thoth/core": "*",
     "@thoth/zk-tls": "*",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.6.6",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   }

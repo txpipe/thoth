@@ -35,9 +35,9 @@
     "zk"
   ],
   "devDependencies": {
-    "@biomejs/biome": "^2.5.10",
+    "@biomejs/biome": "^2.6.8",
     "@midnight-ntwrk/compact-runtime": "0.21.0",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.6.6",
     "husky": "^9.1.7",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
