@@ -229,6 +229,8 @@ export const bindRequestToClaimContext = (
  *
  * @throws `ZkFetchProverError` as the prover throws it.
  * @throws {@link SecretHeaderError} if the evidence carries a secret header value.
+ * @throws {@link EvidenceTooDeepError} if the secret scan cannot finish because
+ *   the evidence's JSON is nested too deeply.
  * @throws if the attestor has no prover, the prover fails otherwise, or the
  *   evidence is invalid or for another origin, subject or claim context.
  */
@@ -306,17 +308,44 @@ export class SecretHeaderError extends Error {
 }
 
 /**
+ * The secret scan could not finish because the evidence's JSON is nested too
+ * deeply. Carries no evidence value itself.
+ */
+export class EvidenceTooDeepError extends Error {
+  /**
+   * Build the error from the overflow that stopped the scan.
+   *
+   * @param options — `cause` is the local `RangeError`; it carries no evidence text.
+   */
+  constructor(options?: ErrorOptions) {
+    super('evidence is nested too deeply to scan for secret header values', options);
+    this.name = 'EvidenceTooDeepError';
+  }
+}
+
+/**
  * Refuse evidence that carries a secret header value as written,
  * percent-encoded, or JSON-escaped. A prover must still redact; no check can
  * recognize every transformation of a secret.
  *
  * @throws {@link SecretHeaderError} if the evidence carries a secret header value.
+ * @throws {@link EvidenceTooDeepError} if the scan cannot finish because the
+ *   evidence's JSON is nested too deeply.
  */
 const assertNoSecretHeaders = (evidence: ZkFetchEvidence, request: ZkFetchRequest): void => {
   const secrets = Object.values(request.secretHeaders ?? {})
     .filter(Boolean)
     .flatMap((secret) => [secret, encodeURIComponent(secret)]);
-  if (containsSecret(evidence, secrets)) {
+  let found: boolean;
+  try {
+    found = containsSecret(evidence, secrets);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      throw new EvidenceTooDeepError({ cause: error });
+    }
+    throw error;
+  }
+  if (found) {
     throw new SecretHeaderError();
   }
 };

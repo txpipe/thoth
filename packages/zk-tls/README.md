@@ -124,6 +124,7 @@ What the client checks:
 - Each attestation's key is the pinned one, its claim is the proposal, its message encodes that claim, and its signature verifies. A forged response fails before submission.
 - `collect` counts one signature per registry slot inside one exact-message group, starts `threshold` attempts, and contacts a spare only when the attempts in flight cannot reach the threshold any more. A spare that is never needed does not receive the request. Set `expiresAt` to at least twice `attestorTimeoutMs` after the start, so a spare can still prove after one attestor hangs.
 - Evidence that carries a secret header value, as written, percent-encoded, or JSON-escaped, is refused before it reaches an attestor. A very short secret can match unrelated text and drop a healthy attestor as `secret`.
+- The secret scan parses JSON strings recursively. If the nesting is deep enough that the scan cannot complete, the evidence is refused as `evidence`; it is never treated as clean. The exact depth depends on the JavaScript runtime.
 
 When `collect` drops an attestor, its entry in `failures` names one reason:
 
@@ -144,7 +145,7 @@ What it does not check, and what your app must do:
 - `bodyPolicy: 'ignored'` does not bind the body the witness sent: a caller can send a body while every witness signs an empty one, including on a GET. Use it only when a body cannot change the endpoint's response at any layer ([Body policy](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#body-policy)).
 - The client does not re-verify the witness signature; each attestor does, and the contract enforces the threshold.
 - Thoth can't check which engine a witness runs. A witness without `re2` falls back to RegExp. When that changes what it extracts, the witnesses disagree and the client fails closed, but a trusted set whose witnesses all lack `re2` agrees on RegExp's reading. Run every witness with `re2` ([attestor guide](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/attestor-guide.md#running-a-reclaim-witness)).
-- `responseText` is the transcript as the client saw it. The witness does not sign it, and no check reads it.
+- `responseText` is the transcript as the client saw it. The witness does not sign it; the secret scan reads it, but no other check does.
 - The secret header check cannot recognize every transformation of a secret. The prover must still redact.
 - An attempt that times out keeps running in the background: Reclaim's `createClaimOnAttestor` takes no abort signal. Its late result is never counted.
 - Errors carry registry slots and reasons, never remote error text.

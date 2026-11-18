@@ -27,6 +27,8 @@ import {
 import { verifyZkFetchProof, zkFetchAttestor } from '@thoth/zk-tls/attestor';
 import {
   addressFromWitnessId,
+  EvidenceTooDeepError,
+  SecretHeaderError,
   toCanonicalEvidence,
   type ZkFetchAttestorFailure,
   type ZkFetchProver,
@@ -594,6 +596,13 @@ describe('zkFetch attestor + client', () => {
     ]);
   });
 
+  /** `json` with the secret echoed inside 5000 levels of escaped JSON arrays. */
+  const deeplyNestedSecret = (json: string): string =>
+    JSON.stringify({
+      ...JSON.parse(json),
+      echo: `${'['.repeat(5000)}"Bearer\\u0020private-token"${']'.repeat(5000)}`,
+    });
+
   it.each([
     {
       encoding: 'plain',
@@ -621,15 +630,11 @@ describe('zkFetch attestor + client', () => {
     },
     {
       encoding: 'deeply-nested',
-      // The recursion overflows before it can clear the evidence; that error is
-      // not a SecretHeaderError, so `collect` reports an evidence failure.
+      // The scan overflows before it can find the secret; EvidenceTooDeepError
+      // is not a SecretHeaderError, so `collect` reports an evidence failure.
       reason: 'evidence',
       secret: 'Bearer private-token',
-      encode: (json: string) =>
-        JSON.stringify({
-          ...JSON.parse(json),
-          echo: `${'['.repeat(5000)}"Bearer\\u0020private-token"${']'.repeat(5000)}`,
-        }),
+      encode: deeplyNestedSecret,
     },
   ])('never forwards evidence carrying a $encoding secret header value', async (leak) => {
     const { seen, watched } = watchSlot0();
@@ -700,7 +705,28 @@ describe('zkFetch attestor + client', () => {
         { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
         binding(),
       ),
-    ).rejects.toThrow(/secret header value/);
+    ).rejects.toThrow(SecretHeaderError);
+  });
+
+  it('refuses a proof handle whose evidence is too deeply nested to scan', async () => {
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async (request) => {
+            const evidence = await observe(aliceWitness, request);
+            evidence.claim.context = deeplyNestedSecret(evidence.claim.context);
+            return evidence;
+          },
+        },
+      },
+    });
+    await expect(
+      client.proveReq(
+        { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
+        binding(),
+      ),
+    ).rejects.toThrow(EvidenceTooDeepError);
   });
 
   it.each(['prover', 'transport', 'verifier'] as const)(

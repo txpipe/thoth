@@ -30,13 +30,15 @@ import {
   bindRequestToClaimContext,
   bindRequestToPolicy,
   buildClaimProposal,
+  EvidenceTooDeepError,
   proveOptionsShape,
   proveWith,
+  SecretHeaderError,
   windowInOrder,
 } from './proposal.js';
 
 export type { ZkFetchAttestorFailure, ZkFetchThresholdAttestment, ZkFetchThresholdOptions };
-export { ZkFetchProverError, ZkFetchThresholdError };
+export { EvidenceTooDeepError, SecretHeaderError, ZkFetchProverError, ZkFetchThresholdError };
 
 /** Byte length of a claim's `appId`. */
 const APP_ID_BYTES = 32;
@@ -229,6 +231,8 @@ export interface ZkFetchClient<V extends number, PK, S> {
    * @throws `ZodError` if the holder is not 32 bytes, the window is out of range or
    *   inverted, or a prover returns malformed evidence.
    * @throws `SecretHeaderError` if evidence carries a secret header value.
+   * @throws `EvidenceTooDeepError` if the secret scan cannot finish because the
+   *   evidence's JSON is nested too deeply.
    * @throws {@link ZkFetchProverError} if a witness or the source cannot be reached, or
    *   a response fails the policy's disclosure rules.
    * @throws `Error` if the request carries disclosure rules other than the policy's or
