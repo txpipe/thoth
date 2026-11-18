@@ -204,6 +204,58 @@ describe('zkFetchPolicySchema slot groups', () => {
       ),
     ).toThrow(/balance/);
   });
+
+  it('ignores a quoted group sequence', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(policyWith('balance', [regex('\\Q(?P<balance>)\\E')])),
+    ).toThrow(/balance/);
+  });
+
+  it('ignores a group-like sequence in a POSIX class', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(policyWith('balance', [regex('[[:alpha:](?<balance>]')])),
+    ).toThrow(/balance/);
+  });
+
+  it('still reads a group after a quoted span', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(policyWith('balance', [regex('\\Qnot a group\\E(?<balance>a)')])),
+    ).not.toThrow();
+  });
+
+  it('still reads a group after a class containing a literal [: sequence', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(policyWith('balance', [regex('[a[:](?<balance>a)')])),
+    ).not.toThrow();
+  });
+
+  it('still reads a group after a class that a later class follows', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(policyWith('balance', [regex('[a](?<balance>a)[b]')])),
+    ).not.toThrow();
+  });
+
+  it('reads a Unicode group name', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(policyWith('café', [regex('(?<café>a)')])),
+    ).not.toThrow();
+  });
+
+  it('reads a group name that starts with a digit', () => {
+    expect(() => zkFetchPolicySchema.parse(policyWith('1', [regex('(?P<1>a)')]))).not.toThrow();
+  });
+
+  it('ignores a group sequence after an unterminated quote', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(policyWith('balance', [regex('\\Q(?P<balance>)')])),
+    ).toThrow(/balance/);
+  });
+
+  it('still reads a group before an unterminated quote', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(policyWith('balance', [regex('(?<balance>a)\\Qabc')])),
+    ).not.toThrow();
+  });
 });
 
 describe('zkFetchPolicySchema claimVersion', () => {

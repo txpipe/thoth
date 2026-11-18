@@ -318,51 +318,34 @@ const refineRe2 = (regex: string, context: z.RefinementCtx, path: string[]): voi
   }
 };
 
-/** The name of the group opening at `index`, or `undefined` for any other `(`. */
-const groupNameAt = (source: string, index: number): string | undefined => {
-  // RE2 accepts both spellings; a lookbehind carries no name.
-  const opened = source.startsWith('(?P<', index)
-    ? index + 4
-    : source.startsWith('(?<', index)
-      ? index + 3
-      : undefined;
-  if (opened === undefined || source[opened] === '=' || source[opened] === '!') {
-    return undefined;
-  }
-  const end = source.indexOf('>', opened);
-  return end === -1 ? undefined : source.slice(opened, end);
-};
+/**
+ * Every RE2 construct that can contain or open a named group: a `\Q…\E`
+ * quote, an escape, a character class (POSIX classes included), or
+ * `(?<name>` / `(?P<name>`. Anything else is skipped; a name is read to the
+ * next `>` and RE2 has already validated it.
+ */
+const RE2_TOKEN = new RegExp(
+  [
+    String.raw`\\Q[\s\S]*?(?:\\E|$)`, // \Q…\E: the span is literal
+    String.raw`\\[\s\S]`, // an escaped character
+    String.raw`\[\^?\]?(?:\\[\s\S]|\[:\^?[a-z]+:\]|[^\]\\])*\]`, // a character class
+    String.raw`\(\?(?:P)?<(?![=!])([^>]+)>`, // a named group
+  ].join('|'),
+  'g',
+);
 
 /**
  * The named groups a regex source declares, without their angle brackets.
  *
  * Reads names only: RE2 has already compiled the source, so this skips
- * escapes, character classes and lookbehinds rather than validating syntax.
+ * quotes, escapes and character classes rather than validating syntax.
  */
 const namedGroupsOf = (source: string): ReadonlySet<string> => {
   const names = new Set<string>();
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index];
-    if (char === '\\') {
-      index += 1;
-    } else if (char === '[') {
-      index += 1;
-      if (source[index] === '^') {
-        index += 1;
-      }
-      if (source[index] === ']') {
-        index += 1;
-      }
-      for (; index < source.length && source[index] !== ']'; index += 1) {
-        if (source[index] === '\\') {
-          index += 1;
-        }
-      }
-    } else if (char === '(') {
-      const name = groupNameAt(source, index);
-      if (name !== undefined) {
-        names.add(name);
-      }
+  for (const match of source.matchAll(RE2_TOKEN)) {
+    const name = match[1];
+    if (name !== undefined) {
+      names.add(name);
     }
   }
   return names;
