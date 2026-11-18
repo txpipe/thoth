@@ -81,10 +81,7 @@ const policy = zkFetchPolicySchema.parse({
     { type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' },
     { type: 'regex', value: '"moving_time":\\s*(?<movingTime>\\d+)' },
   ],
-  responseRedactions: [
-    { regex: '"distance":\\s*[\\d.]+' },
-    { regex: '"moving_time":\\s*\\d+' },
-  ],
+  responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }, { regex: '"moving_time":\\s*\\d+' }],
   // Safe only if a body cannot change this endpoint's response at any layer.
   bodyPolicy: 'ignored',
 });
