@@ -116,11 +116,13 @@ Who reads what:
 | `README.md`                                           | someone evaluating Thoth                            | what it is, status, how it works, which package to use, the demo, roadmap links                    |
 | `packages/*/README.md`                                | a developer using that package (it is the npm page) | the package README template below                                                                  |
 | `docs/kind-author-guide.md`, `packages/zk-tls/docs/*` | a developer building a kind or integrating a dApp   | step-by-step guides                                                                                |
+| `docs/policies/*.md`                                  | someone adapting a real API or UTxO to Thoth        | one source per file: the source, the request, the policy, what it certifies and its limits         |
 | `docs/DESIGN.md`                                      | anyone who wants the architecture                   | overview, the claim and its wire order, flow, out of scope; links the ADRs and never restates them |
 | `docs/adr/`                                           | maintainers                                         | one decision each with its full reasoning; the only place for history and ticket references        |
 | `CONTEXT.md`                                          | everyone                                            | the glossary                                                                                       |
 | `CONTRIBUTING.md`                                     | contributors                                        | dev setup, repo layout, commands                                                                   |
 | `AGENTS.md`                                           | coding agents                                       | the rules agents follow here; links to the docs above for everything else                          |
+| `site/`                                               | someone reading the docs as a website               | the Astro site that renders the allowlisted docs; it holds no copy of them and is not a workspace  |
 | source comments                                       | someone reading the code                            | why: invariants, security reasons, non-obvious constraints                                         |
 
 Voice, for every doc and comment:
@@ -137,6 +139,10 @@ Voice, for every doc and comment:
 - Bold only as the lead-in of a list item; no emphasis mid-sentence.
 - One explanation, one place: explain a concept where it is owned and link to
   it from everywhere else.
+- **Docs stay renderer-agnostic.** Link between docs with repo-relative paths
+  and add no site-only frontmatter. `site/src/lib/docs.ts` is the publish
+  allowlist: a new reader-facing doc joins it in the same PR, and a new file
+  in `docs/policies/` publishes itself.
 
 Package README template, headings in this order (skip a section only if it
 would be empty):

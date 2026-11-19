@@ -1,0 +1,28 @@
+---
+import { render } from 'astro:content';
+import DocPage from '../layouts/DocPage.astro';
+import { getDocs, navGroups, type DocEntry } from '../lib/collection';
+import { routeFor, titleOf } from '../lib/docs';
+
+export async function getStaticPaths() {
+  const docs = await getDocs();
+  return docs
+    .filter((entry) => entry.id !== 'README')
+    .map((entry) => ({
+      params: { path: routeFor(`${entry.id}.md`).replace(/^\/|\/$/g, '') },
+      props: { entry },
+    }));
+}
+
+interface Props {
+  entry: DocEntry;
+}
+
+const { entry } = Astro.props;
+const docs = await getDocs();
+const { Content } = await render(entry);
+---
+
+<DocPage title={titleOf(entry.body)} groups={navGroups(docs)} currentId={entry.id}>
+  <Content />
+</DocPage>

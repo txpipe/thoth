@@ -1,0 +1,52 @@
+---
+import Nav from '../components/Nav.astro';
+import type { NavGroup } from '../lib/collection';
+import { withBase } from '../lib/docs';
+import '../styles/tokens.css';
+import '../styles/theme.css';
+import '../styles/site.css';
+
+interface Props {
+  title: string;
+  groups: NavGroup[];
+  currentId: string;
+}
+
+const { title, groups, currentId } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const home = withBase('/', base);
+const github = 'https://github.com/txpipe-shop/thoth';
+const pageTitle = title === 'Thoth' ? 'Thoth' : `${title} · Thoth`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+  </head>
+  <body>
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="site-header">
+      <a class="wordmark" href={home}>Thoth</a>
+      <a class="repo" href={github}>GitHub</a>
+    </header>
+    <div class="site-body">
+      <Nav groups={groups} currentId={currentId} />
+      <main id="content" class="content prose">
+        <slot />
+      </main>
+    </div>
+    <footer class="site-footer">
+      <span>Apache-2.0</span>
+      <a href={`${github}/blob/main/LICENSE`}>License</a>
+    </footer>
+  </body>
+</html>
