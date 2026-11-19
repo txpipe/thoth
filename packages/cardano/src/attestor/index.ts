@@ -21,8 +21,8 @@ export { createCardanoDefinition };
  *
  * `read` is the operator's own Cardano endpoint query. It receives the
  * client's locator and must return the output and the block that contains it;
- * the attestor derives every claim field from that read, never from the
- * client's proposal.
+ * the attestor derives every field that describes the event from that read.
+ * Only the app id, holder and slot counts come from the proposal.
  *
  * The returned `attest` throws to reject a policy, evidence or claim that does
  * not match the observation, or a read that does not match its schema.

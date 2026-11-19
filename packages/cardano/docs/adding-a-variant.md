@@ -59,7 +59,7 @@ Refuse a pin and fact combination the read cannot measure, as the output variant
 
 The locator is the evidence the client sends: the minimal fields an attestor needs to find the event, such as a transaction hash and output index. Keep it strict and small.
 
-The attestor re-reads the event from its own source and derives every claim field from that read, so the locator can only choose which event to attest, never shape the claim ([ADR 0007](../../../docs/adr/0007-no-evidence-commitment.md), [ADR 0014](../../../docs/adr/0014-chain-event-kinds.md)). A strict schema also rejects an `observation` key the client adds.
+The attestor re-reads the event from its own source and derives every field that describes the event from that read, so the locator can only choose which event to attest, never shape the claim ([ADR 0007](../../../docs/adr/0007-no-evidence-commitment.md), [ADR 0014](../../../docs/adr/0014-chain-event-kinds.md)). A strict schema also rejects an `observation` key the client adds.
 
 ## The observation
 

@@ -60,7 +60,7 @@ const attestor = cardanoAttestor({
 
 `readRawEvent` returns the observation the attestor expects, and checks the response's transaction hash against the locator before reading anything else. The source is still trusted to describe its own chain; the block it reports is bound into the subject (ADR 0003).
 
-The evidence a client sends is only a [locator](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#kinds), `{ txHash, outputIndex }`. The attestor re-reads the output and its block and derives every claim field from that read.
+The evidence a client sends is only a [locator](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#kinds), `{ txHash, outputIndex }`. The attestor re-reads the output and its block and derives every field that describes the event from that read; the app id, holder and slot counts come from the proposal.
 
 A dApp reads the event once and collects a threshold of attestations. The [dApp integration guide](./docs/dapp-integration.md) covers the client setup, the read's trust boundary, the policy slot map, the failure reasons `collect` reports, and the contract side.
 
@@ -143,7 +143,7 @@ What the policy does not check, and what your app must do:
 - **The watched address is a policy pin and an `addressHash` fact.** The policy hash seals the address the attestors enforce; the `addressHash` fact carries the same address into the claim, so an app's predicate can read it in-circuit.
 - **The window is the event's block time, which diverges from ADR 0005.** Every attestor derives the same window from the block, so they sign the same message ([ADR 0014](../../docs/adr/0014-chain-event-kinds.md), [ADR 0005](../../docs/adr/0005-window-is-when-the-attestor-observed.md)).
 - **No witness binds the claim context, which diverges from ADR 0011.** The attestor reads the chain itself, and the window follows from the event, so nothing the client chooses can move it ([ADR 0014](../../docs/adr/0014-chain-event-kinds.md), [ADR 0011](../../docs/adr/0011-evidence-binds-the-claim-context.md)).
-- **Evidence is a locator, not the payload.** The client points at an event; the attestor re-reads it and derives every claim field, so client input can only choose what to attest, never what the claim says ([ADR 0014](../../docs/adr/0014-chain-event-kinds.md), [ADR 0007](../../docs/adr/0007-no-evidence-commitment.md)).
+- **Evidence is a locator, not the payload.** The client points at an event; the attestor re-reads it and derives every field that describes the event, so client input can only choose what to attest, never what the claim says ([ADR 0014](../../docs/adr/0014-chain-event-kinds.md), [ADR 0007](../../docs/adr/0007-no-evidence-commitment.md)).
 - **Each variant is additive.** The variant tag is part of the policy hash, so a new variant does not change existing hashes. See [adding a variant](./docs/adding-a-variant.md).
 
 ## Links
