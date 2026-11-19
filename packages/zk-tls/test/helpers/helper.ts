@@ -1,7 +1,6 @@
 // Shared test fixtures: artifacts the zkFetch suites reuse so they do not
-// drift apart. The disclosure rules below build the prover's default
-// whole-response match (`(?<data>.*)`, see `src/prover/index.ts`) once per
-// slot name a policy declares.
+// drift apart. The disclosure rules below build one whole-response match,
+// `(?<name>.*)`, for each slot name a policy declares.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -19,6 +18,12 @@ export const disclosureRules = (
   responseMatches: names.map((name) => ({ type: 'regex', value: `(?<${name}>.*)` })),
   responseRedactions: [],
 });
+
+/** {@link disclosureRules} for the names of `slots`. */
+export const disclosureRulesOf = (
+  slots: ZkFetchPolicy['slots'],
+): Pick<ZkFetchPolicy, 'responseMatches' | 'responseRedactions'> =>
+  disclosureRules(...slots.map(({ name }) => name));
 
 /**
  * The recorded evidence in `examples/demo-attestation/fixtures/`: a genuine,

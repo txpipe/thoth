@@ -30,7 +30,7 @@ import {
   assertClaimMatchesSubject,
 } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
-import { disclosureRules } from './helpers/helper.js';
+import { disclosureRules, disclosureRulesOf } from './helpers/helper.js';
 
 /** The app id every claim in this suite is for. */
 const APP_ID = new Uint8Array(32).fill(0xa1);
@@ -79,7 +79,6 @@ describe('zkFetchPolicySchema disclosure rules', () => {
     allowedHosts: ['api.github.com'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
     bodyPolicy: 'ignored',
-    ...disclosureRules('distance'),
     ...rules,
   });
   const match = { type: 'regex', value: '(?<distance>[\\d.]+)' } as const;
@@ -158,47 +157,18 @@ describe('zkFetchPolicySchema slot groups', () => {
     ).not.toThrow();
   });
 
+  it('reads a (?P<name> group, which RE2 accepts', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(policyWith('balance', [regex('(?P<balance>\\d+)')])),
+    ).not.toThrow();
+  });
+
   it('ignores a group-like contains match', () => {
     expect(() =>
       zkFetchPolicySchema.parse(
         policyWith('balance', [{ type: 'contains', value: '(?<balance>\\d+)' }]),
       ),
     ).toThrow(/balance/);
-  });
-
-  it.each([
-    ['a leading ] in a class', '[](?<x>a)]'],
-    ['a leading ] in a negated class', '[^](?<x>a)]'],
-    ['an escaped ] in a class', '[\\](?<x>a)]'],
-    ['a negated POSIX class', '[[:^alpha:](?<x>]'],
-  ])('ignores a group-like sequence after %s', (_case, source) => {
-    expect(() => zkFetchPolicySchema.parse(policyWith('x', [regex(source)]))).toThrow(/'x'/);
-  });
-
-  it('refuses a lookbehind, which RE2 does not support', () => {
-    const parsed = zkFetchPolicySchema.safeParse(policyWith('=x', [regex('(?<=x)a')]));
-    expect(parsed.success).toBe(false);
-    if (!parsed.success) {
-      expect(parsed.error.issues.map((issue) => issue.path)).toContainEqual(['slots', 0, 'name']);
-    }
-  });
-
-  it('ignores an escaped parenthesis', () => {
-    expect(() => zkFetchPolicySchema.parse(policyWith('data', [regex('\\(?<data>a\\)')]))).toThrow(
-      /data/,
-    );
-  });
-
-  it('ignores a group-like sequence in a character class', () => {
-    expect(() => zkFetchPolicySchema.parse(policyWith('data', [regex('[(?<data>]')]))).toThrow(
-      /data/,
-    );
-  });
-
-  it('reads a (?P<name> group, which RE2 accepts', () => {
-    expect(() =>
-      zkFetchPolicySchema.parse(policyWith('balance', [regex('(?P<balance>\\d+)')])),
-    ).not.toThrow();
   });
 
   it('ignores groups a redaction regex declares', () => {
@@ -213,56 +183,29 @@ describe('zkFetchPolicySchema slot groups', () => {
     ).toThrow(/balance/);
   });
 
-  it('ignores a quoted group sequence', () => {
-    expect(() =>
-      zkFetchPolicySchema.parse(policyWith('balance', [regex('\\Q(?P<balance>)\\E')])),
-    ).toThrow(/balance/);
+  // RE2 decides what a group is; these pin that the schema asks it rather than
+  // searching the text for `(?<`.
+  it.each([
+    ['escaped', '\\(?<balance>a\\)'],
+    ['in a character class', '[(?<balance>]'],
+    ['in a \\Q…\\E quote', '\\Q(?<balance>\\E'],
+  ])('ignores a group-like sequence %s', (_case, source) => {
+    expect(() => zkFetchPolicySchema.parse(policyWith('balance', [regex(source)]))).toThrow(
+      /'balance'/,
+    );
   });
 
-  it('ignores a group-like sequence in a POSIX class', () => {
-    expect(() =>
-      zkFetchPolicySchema.parse(policyWith('balance', [regex('[[:alpha:](?<balance>]')])),
-    ).toThrow(/balance/);
-  });
-
-  it('still reads a group after a quoted span', () => {
-    expect(() =>
-      zkFetchPolicySchema.parse(policyWith('balance', [regex('\\Qnot a group\\E(?<balance>a)')])),
-    ).not.toThrow();
-  });
-
-  it('still reads a group after a class containing a literal [: sequence', () => {
-    expect(() =>
-      zkFetchPolicySchema.parse(policyWith('balance', [regex('[a[:](?<balance>a)')])),
-    ).not.toThrow();
-  });
-
-  it('still reads a group after a class that a later class follows', () => {
-    expect(() =>
-      zkFetchPolicySchema.parse(policyWith('balance', [regex('[a](?<balance>a)[b]')])),
-    ).not.toThrow();
-  });
-
-  it('reads a Unicode group name', () => {
-    expect(() =>
-      zkFetchPolicySchema.parse(policyWith('café', [regex('(?<café>a)')])),
-    ).not.toThrow();
-  });
-
-  it('reads a group name that starts with a digit', () => {
-    expect(() => zkFetchPolicySchema.parse(policyWith('1', [regex('(?P<1>a)')]))).not.toThrow();
-  });
-
-  it('ignores a group sequence after an unterminated quote', () => {
-    expect(() =>
-      zkFetchPolicySchema.parse(policyWith('balance', [regex('\\Q(?P<balance>)')])),
-    ).toThrow(/balance/);
-  });
-
-  it('still reads a group before an unterminated quote', () => {
-    expect(() =>
-      zkFetchPolicySchema.parse(policyWith('balance', [regex('(?<balance>a)\\Qabc')])),
-    ).not.toThrow();
+  it.each([
+    ['an unclosed group', '(?<balance>\\d+'],
+    ['a lookbehind', '(?<=x)(?<balance>\\d+)'],
+  ])('reports only the RE2 error for %s', (_case, source) => {
+    const parsed = zkFetchPolicySchema.safeParse(policyWith('balance', [regex(source)]));
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.path)).toEqual([
+        ['responseMatches', 0, 'value'],
+      ]);
+    }
   });
 });
 
@@ -412,7 +355,7 @@ describe('deriveClaimFromEvidence', () => {
     allowedHosts: ['api.github.com'],
     slots,
     bodyPolicy: 'ignored',
-    ...disclosureRules(...slots.map(({ name }) => name)),
+    ...disclosureRulesOf(slots),
   });
 
   it('maps disclosed values into the declared slots', () => {
@@ -677,7 +620,7 @@ describe('assertClaimMatchesDisclosures', () => {
     allowedHosts: ['api.github.com'],
     slots,
     bodyPolicy: 'ignored',
-    ...disclosureRules(...slots.map(({ name }) => name)),
+    ...disclosureRulesOf(slots),
   });
 
   it('accepts a claim that reflects the disclosures', () => {
@@ -995,7 +938,7 @@ describe('byte value parse rules', () => {
     allowedHosts: ['api.github.com'],
     slots,
     bodyPolicy: 'ignored',
-    ...disclosureRules(...slots.map(({ name }) => name)),
+    ...disclosureRulesOf(slots),
   });
 
   const padded = (value: string): Uint8Array => {

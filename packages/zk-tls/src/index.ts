@@ -444,11 +444,22 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
   return schema.superRefine((policy, context) => {
     // A slot is read from a disclosed value keyed by its name, so a slot no
     // regex group names is never certifiable.
-    const groups = new Set(
-      policy.responseMatches.flatMap((match) =>
-        match.type === 'regex' ? [...re2GroupNames(match.value)] : [],
-      ),
-    );
+    const groups = new Set<string>();
+    for (const match of policy.responseMatches) {
+      if (match.type !== 'regex') {
+        continue;
+      }
+      const names = re2GroupNames(match.value);
+      if (names === undefined) {
+        // RE2 refused the regex: refineRe2 reports it, or it sits at RE2's size
+        // limit (see re2GroupNames). A slot error would blame a group the regex
+        // may declare; the attest-time slot check still covers this policy.
+        return;
+      }
+      for (const name of names) {
+        groups.add(name);
+      }
+    }
     for (const [index, slot] of policy.slots.entries()) {
       if (!groups.has(slot.name)) {
         context.addIssue({
@@ -468,9 +479,9 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
  * rule texts cannot carry `{{param}}` templates. Every `regex` match and
  * redaction regex must compile under RE2, the engine the prover and the
  * witnesses run it with (the dApp guide's "Regex engine"); parsing throws if the
- * native `re2` module does not load. Every slot `name` must be a named group of
- * a `regex` match, so the slot has a disclosed value to read; a `contains`
- * match and a redaction regex contribute no groups. `bodyPolicy` is
+ * native `re2` module does not load. Every slot `name` must be declared as a
+ * named group by a `regex` match, so the slot has a disclosed value to read; a
+ * `contains` match and a redaction regex declare no groups. `bodyPolicy` is
  * required; a pin is 32 bytes and not the empty body's hash. Every
  * `allowedHosts` entry is a non-empty host with an optional port in 1–65535.
  * `claimVersion` is 0–255, the claim's `Uint<8>` range.

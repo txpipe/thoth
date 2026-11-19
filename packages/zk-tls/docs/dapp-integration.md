@@ -182,7 +182,7 @@ a request that omits them gets the policy's, and one that supplies its own must
 carry exactly the policy's or the client refuses before any witness is
 contacted. A slot is certifiable only when a `responseMatches` group extracted
 it from a revealed slice, so name the slot exactly like the group. The policy
-schema refuses a slot `name` that is no `regex` match's named group; a
+schema refuses a slot `name` that no `regex` match declares as a named group; a
 `contains` match and a redaction regex declare no groups.
 
 Put a per-user URL in the request as a concrete URL

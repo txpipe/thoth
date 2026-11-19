@@ -37,7 +37,7 @@ import {
 } from '@thoth/zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import { disclosureRules, FIXTURE } from './helpers/helper.js';
+import { disclosureRules, disclosureRulesOf, FIXTURE } from './helpers/helper.js';
 import { type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
@@ -51,7 +51,7 @@ const policy = (
   allowedHosts: ['api.github.com'],
   slots,
   bodyPolicy: 'ignored',
-  ...disclosureRules(...slots.map(({ name }) => name)),
+  ...disclosureRulesOf(slots),
 });
 
 type FakePublicKey = { id: string };
