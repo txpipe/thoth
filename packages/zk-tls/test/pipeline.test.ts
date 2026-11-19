@@ -1075,6 +1075,12 @@ describe('zkFetch attestor + client', () => {
     ).rejects.toThrow(/not in allowlist/);
   });
 
+  it('refuses a starred signed URL before any attestor is contacted', async () => {
+    await expect(
+      clientWith().proveReq({ url: 'https://api.github.com/repos/*', method: 'GET' }, binding()),
+    ).rejects.toThrow(/url cannot contain \*/);
+  });
+
   it('binds a pinned body end to end', async () => {
     const body = '{"q":1}';
     const url = 'https://api.github.com/repos/x';

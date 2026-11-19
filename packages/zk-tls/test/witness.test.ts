@@ -6,6 +6,7 @@
 import { buildAttestor } from '@thoth/attestor';
 import { type Claim, claimToMessage, type FlatMessage } from '@thoth/core/claim';
 import {
+  assertEvidenceMatchesPolicy,
   deriveClaimFromEvidence,
   parsedEvidenceView,
   ZK_FETCH_CLAIM_CONTEXT_KEY,
@@ -560,6 +561,45 @@ describe('test-key witness', () => {
     const sign = vi.spyOn(aliceAttestor.signer, 'sign');
     await expect(attestWith(aliceAttestor, evidence)).rejects.toThrow(/\{\{param\}\} templates/);
     expect(sign).not.toHaveBeenCalled();
+  });
+
+  // A `*` in the signed URL is a redaction marker the caller controls, so it leaves the sent
+  // path or query byte unbound. `%2A` is the spelling Reclaim compares as literal bytes.
+  it.each(['https://api.example.com/users/*/stats', 'https://api.example.com/v1/account?select=*'])(
+    'refuses a starred signed request URL, case %#',
+    async (url) => {
+      const evidence = await observe(alice, { parameters: { ...PARAMETERS, url } });
+      // The client runs this same check before contacting an attestor.
+      expect(() => assertEvidenceMatchesPolicy(parsedEvidenceView(evidence), policy)).toThrow(
+        /url cannot contain \*/,
+      );
+      const sign = vi.spyOn(aliceAttestor.signer, 'sign');
+      await expect(attestWith(aliceAttestor, evidence)).rejects.toThrow(/url cannot contain \*/);
+      expect(sign).not.toHaveBeenCalled();
+    },
+  );
+
+  // URL parsing turns these hosts into `*.api.example.com`, past the check on the raw text.
+  it.each(['https://%2A.api.example.com/stats', 'https://\uFF0A.api.example.com/stats'])(
+    'refuses a signed host that parses to a *, case %#',
+    async (url) => {
+      const evidence = await observe(alice, { parameters: { ...PARAMETERS, url } });
+      expect(() => assertEvidenceMatchesPolicy(parsedEvidenceView(evidence), policy)).toThrow(
+        /url cannot contain \*/,
+      );
+      const sign = vi.spyOn(aliceAttestor.signer, 'sign');
+      await expect(attestWith(aliceAttestor, evidence)).rejects.toThrow(/url cannot contain \*/);
+      expect(sign).not.toHaveBeenCalled();
+    },
+  );
+
+  it('accepts a signed URL that spells a literal * as %2A', async () => {
+    const url = 'https://api.example.com/users/%2A/stats';
+    const evidence = await observe(alice, { parameters: { ...PARAMETERS, url } });
+    expect(assertEvidenceMatchesPolicy(parsedEvidenceView(evidence), policy)).toBe(
+      'api.example.com',
+    );
+    await expect(attestWith(aliceAttestor, evidence)).resolves.toBeDefined();
   });
 
   it('is rejected when the claim identifier does not match its signed content', async () => {
