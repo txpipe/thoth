@@ -192,8 +192,15 @@ client and the attestor refuse evidence whose signed URL, body, `geoLocation`
 or `proxySessionId` contains `{{`, in the URL also when written as `%7B`/`%7D`
 or split by a tab or line break, which URL parsing drops.
 
-The signed URL cannot contain `*`, which Reclaim matches against the redaction
-markers the caller chooses; write a literal one as `%2A`.
+The signed URL cannot contain `*`. Reclaim compares a signed `*` as equal to a
+[redaction marker](../../../CONTEXT.md#roles) in the transcript, and the caller
+chooses which request bytes it redacts, so each `*` would leave a sent byte
+unbound. The client and the attestor refuse a `*` in the URL text, and a host
+that URL parsing turns into one, as it does with `%2A.example.com` or a
+full-width `＊`. Write a literal `*` in the path or query as `%2A`, which
+Reclaim compares byte for byte. The subject keeps that spelling, so pass the
+`%2A` form to `zkFetchSubjectOf` when you compute the subject hash your
+contract expects.
 
 The subject hash binds the **signed** body. An empty body contributes
 `sha256('')` and does not bind the body the witness sent: the witness checks the

@@ -579,6 +579,20 @@ describe('test-key witness', () => {
     },
   );
 
+  // URL parsing turns these hosts into `*.api.example.com`, past the check on the raw text.
+  it.each(['https://%2A.api.example.com/stats', 'https://\uFF0A.api.example.com/stats'])(
+    'refuses a signed host that parses to a *, case %#',
+    async (url) => {
+      const evidence = await observe(alice, { parameters: { ...PARAMETERS, url } });
+      expect(() => assertEvidenceMatchesPolicy(parsedEvidenceView(evidence), policy)).toThrow(
+        /url cannot contain \*/,
+      );
+      const sign = vi.spyOn(aliceAttestor.signer, 'sign');
+      await expect(attestWith(aliceAttestor, evidence)).rejects.toThrow(/url cannot contain \*/);
+      expect(sign).not.toHaveBeenCalled();
+    },
+  );
+
   it('accepts a signed URL that spells a literal * as %2A', async () => {
     const url = 'https://api.example.com/users/%2A/stats';
     const evidence = await observe(alice, { parameters: { ...PARAMETERS, url } });

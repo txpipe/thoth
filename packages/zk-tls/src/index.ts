@@ -1159,6 +1159,11 @@ export const assertEvidenceMatchesPolicy = (
     throw new Error('the signed request url cannot contain *');
   }
   const url = new URL(parameters.url);
+  // Host parsing decodes `%2A` and maps a full-width `＊` to `*`, and Reclaim compares the Host
+  // header as text, so a `*` the raw check above misses still reaches the witness here.
+  if (url.host.includes('*')) {
+    throw new Error('the signed request url cannot contain *');
+  }
   if (url.protocol !== 'https:') {
     throw new Error(`attested url must be https, got ${url.protocol}//`);
   }
