@@ -21,19 +21,19 @@ shared public ledger.
 
 ## What you build
 
-| Piece | Where it runs | Built on | Examples |
-|-------|---------------|----------|----------|
-| Versioned tag | everywhere | — | `zk-fetch@1`, `cardano@1` |
-| Policy schema, normalizer and hash | shared | `policyHashOf` (`@thoth/core/claim-context`) | `zkFetchPolicySchema`, `cardanoPolicySchema` |
-| Subject struct and hash | shared | `subjectHashOf` | `zkFetchSubjectOf`, `cardanoOutputSubjectOf` |
-| Evidence schema | shared | zod | `zkFetchEvidenceSchema`, `cardanoOutputEvidenceSchema` |
-| Observation schema | attestor, after it reads or verifies | zod | `cardanoOutputObservationSchema` |
-| Claim derivation | shared | `Claim` (`@thoth/core/claim`) | `deriveClaimFromEvidence`, `deriveCardanoClaim` |
-| Definition (`verify`, `message`) | attestor | `defineAttestor` (`@thoth/attestor`) | `createZkFetchDefinition`, `createCardanoDefinition` |
-| Input limits | attestor | zod `.max()` | `ZK_FETCH_DEFAULT_LIMITS`, `CARDANO_LIMITS` |
-| Instance builder | attestor | `buildAttestor` | `zkFetchAttestor`, `cardanoAttestor` |
-| Client | dApp | `@thoth/client` | `zkFetchClient`, `cardanoClient` |
-| Claim context binding (when the evidence can bind it) | shared, checked by the attestor | `claimContextDigestOf` | `zkFetchClaimContextDigestOf`, `assertClaimMatchesContext` |
+| Piece                                                 | Where it runs                        | Built on                                     | Examples                                                   |
+| ----------------------------------------------------- | ------------------------------------ | -------------------------------------------- | ---------------------------------------------------------- |
+| Versioned tag                                         | everywhere                           | —                                            | `zk-fetch@1`, `cardano@1`                                  |
+| Policy schema, normalizer and hash                    | shared                               | `policyHashOf` (`@thoth/core/claim-context`) | `zkFetchPolicySchema`, `cardanoPolicySchema`               |
+| Subject struct and hash                               | shared                               | `subjectHashOf`                              | `zkFetchSubjectOf`, `cardanoOutputSubjectOf`               |
+| Evidence schema                                       | shared                               | zod                                          | `zkFetchEvidenceSchema`, `cardanoOutputEvidenceSchema`     |
+| Observation schema                                    | attestor, after it reads or verifies | zod                                          | `cardanoOutputObservationSchema`                           |
+| Claim derivation                                      | shared                               | `Claim` (`@thoth/core/claim`)                | `deriveClaimFromEvidence`, `deriveCardanoClaim`            |
+| Definition (`verify`, `message`)                      | attestor                             | `defineAttestor` (`@thoth/attestor`)         | `createZkFetchDefinition`, `createCardanoDefinition`       |
+| Input limits                                          | attestor                             | zod `.max()`                                 | `ZK_FETCH_DEFAULT_LIMITS`, `CARDANO_LIMITS`                |
+| Instance builder                                      | attestor                             | `buildAttestor`                              | `zkFetchAttestor`, `cardanoAttestor`                       |
+| Client                                                | dApp                                 | `@thoth/client`                              | `zkFetchClient`, `cardanoClient`                           |
+| Claim context binding (when the evidence can bind it) | shared, checked by the attestor      | `claimContextDigestOf`                       | `zkFetchClaimContextDigestOf`, `assertClaimMatchesContext` |
 
 Put shared logic at the package root, so a client-only app never imports
 `@thoth/attestor`. Give the attestor and the client their own subpath entries,
@@ -75,11 +75,11 @@ verifies. The fact behind it is the [observation](../CONTEXT.md#the-claim). A
 kind can combine them: a provider can read its own source and sign the result,
 or a proof can carry a signed payload. What matters is what the evidence fixes.
 
-| Evidence | Fixes | Cannot fix |
-|----------|-------|------------|
-| Locator and observation | The fact's identity, and the values the instance read | The reader's honesty or independence; the context; a time the source lacks |
-| Signed payload | The signed fields, and the context if the signer signed it | Any field outside the signature |
-| Proof | The statement's fields, and the context if the statement includes it | Any field outside the statement |
+| Evidence                | Fixes                                                                | Cannot fix                                                                 |
+| ----------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Locator and observation | The fact's identity, and the values the instance read                | The reader's honesty or independence; the context; a time the source lacks |
+| Signed payload          | The signed fields, and the context if the signer signed it           | Any field outside the signature                                            |
+| Proof                   | The statement's fields, and the context if the statement includes it | Any field outside the statement                                            |
 
 An oracle, a TEE or a zkFetch witness produces a signed payload; a Merkle
 inclusion proof or a ZK proof against a verifier key is a proof.
@@ -194,11 +194,11 @@ says so.
 
 The split is the trust boundary:
 
-| Field | Comes from |
-|-------|------------|
-| `appId`, `holder`, requested counts | The claim proposal |
-| `windowStart`, `windowEnd`, `subjectHash`, `salt`, `values`, `byteValues`, `present` | The verified evidence |
-| `version`, `policyHash` | The law and policy, checked |
+| Field                                                                                | Comes from                  |
+| ------------------------------------------------------------------------------------ | --------------------------- |
+| `appId`, `holder`, requested counts                                                  | The claim proposal          |
+| `windowStart`, `windowEnd`, `subjectHash`, `salt`, `values`, `byteValues`, `present` | The verified evidence       |
+| `version`, `policyHash`                                                              | The law and policy, checked |
 
 For a signed payload the window is proposed and checked against the signer's
 observation; where the evidence fixes it, derive it and refuse a different

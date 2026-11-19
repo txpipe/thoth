@@ -81,10 +81,7 @@ const policy = zkFetchPolicySchema.parse({
     { type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' },
     { type: 'regex', value: '"moving_time":\\s*(?<movingTime>\\d+)' },
   ],
-  responseRedactions: [
-    { regex: '"distance":\\s*[\\d.]+' },
-    { regex: '"moving_time":\\s*\\d+' },
-  ],
+  responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }, { regex: '"moving_time":\\s*\\d+' }],
   // Safe only if a body cannot change this endpoint's response at any layer.
   bodyPolicy: 'ignored',
 });
@@ -181,7 +178,9 @@ The policy owns both. The client proves every request with the policy's rules:
 a request that omits them gets the policy's, and one that supplies its own must
 carry exactly the policy's or the client refuses before any witness is
 contacted. A slot is certifiable only when a `responseMatches` group extracted
-it from a revealed slice, so name the slot exactly like the group.
+it from a revealed slice, so name the slot exactly like the group. The policy
+schema refuses a slot `name` that no `regex` match declares as a named group; a
+`contains` match and a redaction regex declare no groups.
 
 Put a per-user URL in the request as a concrete URL
 (`https://example.com/user/42`), never as a Reclaim `{{param}}` template.
@@ -192,6 +191,16 @@ caller-chosen `paramValues`, so a template in the host or the userinfo
 client and the attestor refuse evidence whose signed URL, body, `geoLocation`
 or `proxySessionId` contains `{{`, in the URL also when written as `%7B`/`%7D`
 or split by a tab or line break, which URL parsing drops.
+
+The signed URL cannot contain `*`. Reclaim compares a signed `*` as equal to a
+[redaction marker](../../../CONTEXT.md#roles) in the transcript, and the caller
+chooses which request bytes it redacts, so each `*` would leave a sent byte
+unbound. The client and the attestor refuse a `*` in the URL text, and a host
+that URL parsing turns into one, as it does with `%2A.example.com` or a
+full-width `＊`. Write a literal `*` in the path or query as `%2A`, which
+Reclaim compares byte for byte. The subject keeps that spelling, so pass the
+`%2A` form to `zkFetchSubjectOf` when you compute the subject hash your
+contract expects.
 
 The subject hash binds the **signed** body. An empty body contributes
 `sha256('')` and does not bind the body the witness sent: the witness checks the

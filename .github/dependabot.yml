@@ -6,15 +6,15 @@ updates:
       interval: weekly
     ignore:
       # Pinned with the Compact compiler; see CONTRIBUTING.md#dev-setup.
-      - dependency-name: '@midnight-ntwrk/compact-runtime'
+      - dependency-name: "@midnight-ntwrk/compact-runtime"
     groups:
       # Its own PR: an attestor-core bump also needs the witness pin in
       # packages/zk-tls/scripts/start-witnesses.sh, and witness-pin.test.ts fails until it moves.
       reclaim:
-        patterns: ['@reclaimprotocol/*']
+        patterns: ["@reclaimprotocol/*"]
       npm:
-        patterns: ['*']
-        exclude-patterns: ['@reclaimprotocol/*']
+        patterns: ["*"]
+        exclude-patterns: ["@reclaimprotocol/*"]
         update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /

@@ -50,11 +50,18 @@ const policyWith = (
 });
 
 const matchPolicy = (value: string) =>
-  policyWith({ responseMatches: [{ type: 'regex', value }], responseRedactions: [] });
+  policyWith({
+    // The second match covers the slot, so each case tests only `value`.
+    responseMatches: [
+      { type: 'regex', value },
+      { type: 'regex', value: '(?<v>.*)' },
+    ],
+    responseRedactions: [],
+  });
 
 const redactionPolicy = (regex: string) =>
   policyWith({
-    responseMatches: [{ type: 'contains', value: 'x' }],
+    responseMatches: [{ type: 'regex', value: '(?<v>.*)' }],
     responseRedactions: [{ regex }],
   });
 
@@ -104,7 +111,10 @@ describe('policy regexes', () => {
 
   it('does not read a contains value or an empty redaction regex as a regex', () => {
     const policy = policyWith({
-      responseMatches: [{ type: 'contains', value: '(?=x' }],
+      responseMatches: [
+        { type: 'contains', value: '(?=x' },
+        { type: 'regex', value: '(?<v>.*)' },
+      ],
       responseRedactions: [{ regex: '', jsonPath: '$.a' }],
     });
     expect(() => zkFetchPolicySchema.parse(policy)).not.toThrow();

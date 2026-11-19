@@ -30,7 +30,7 @@ import {
   assertClaimMatchesSubject,
 } from '@thoth/zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
+import { disclosureRules, disclosureRulesOf } from './helpers/helper.js';
 
 /** The app id every claim in this suite is for. */
 const APP_ID = new Uint8Array(32).fill(0xa1);
@@ -100,7 +100,7 @@ describe('zkFetchPolicySchema disclosure rules', () => {
 
   it('refuses a rule field the policy cannot declare', () => {
     const policy = {
-      ...policyWith(DISCLOSURE_RULES),
+      ...policyWith(disclosureRules('distance')),
       responseMatches: [{ type: 'contains', value: 'error', invert: true }],
     } as never;
     expect(() => zkFetchPolicySchema.parse(policy)).toThrow(/[Uu]nrecognized key/);
@@ -116,12 +116,118 @@ describe('zkFetchPolicySchema slots', () => {
         { slot: 0, name: 'b', parse: 'int' },
       ],
       bodyPolicy: 'ignored',
-      ...DISCLOSURE_RULES,
+      ...disclosureRules('a', 'b'),
     } as const;
     expect(() => zkFetchPolicySchema.parse(policy)).toThrow(
       /claim slot 0 is declared more than once/,
     );
     expect(() => zkFetchPolicyHashOf(policy as never)).toThrow(/declared more than once/);
+  });
+});
+
+describe('zkFetchPolicySchema slot groups', () => {
+  const policyWith = (
+    name: string,
+    responseMatches: ZkFetchPolicy['responseMatches'],
+    responseRedactions: ZkFetchPolicy['responseRedactions'] = [],
+  ) => ({
+    allowedHosts: ['api.github.com'],
+    slots: [{ slot: 0, name, parse: 'int' }],
+    bodyPolicy: 'ignored',
+    responseMatches,
+    responseRedactions,
+  });
+  const regex = (value: string) => ({ type: 'regex' as const, value });
+
+  it('refuses a slot name no regex match declares a group for', () => {
+    const parsed = zkFetchPolicySchema.safeParse(policyWith('balance', [regex('(?<score>\\d+)')]));
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues).toMatchObject([
+        { path: ['slots', 0, 'name'], message: expect.stringContaining('balance') },
+      ]);
+    }
+  });
+
+  it('accepts a slot name one of several regex matches declares', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(
+        policyWith('balance', [regex('(?<score>\\d+)'), regex('(?<balance>\\d+)')]),
+      ),
+    ).not.toThrow();
+  });
+
+  it('reads a (?P<name> group, which RE2 accepts', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(policyWith('balance', [regex('(?P<balance>\\d+)')])),
+    ).not.toThrow();
+  });
+
+  it('ignores a group-like contains match', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(
+        policyWith('balance', [{ type: 'contains', value: '(?<balance>\\d+)' }]),
+      ),
+    ).toThrow(/balance/);
+  });
+
+  it('ignores groups a redaction regex declares', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(
+        policyWith(
+          'balance',
+          [{ type: 'contains', value: 'balance' }],
+          [{ regex: '(?<balance>\\d+)' }],
+        ),
+      ),
+    ).toThrow(/balance/);
+  });
+
+  // RE2 decides what a group is; these pin that the schema asks it rather than
+  // searching the text for `(?<`.
+  it.each([
+    ['escaped', '\\(?<balance>a\\)'],
+    ['in a character class', '[(?<balance>]'],
+    ['in a \\Q…\\E quote', '\\Q(?<balance>\\E'],
+  ])('ignores a group-like sequence %s', (_case, source) => {
+    expect(() => zkFetchPolicySchema.parse(policyWith('balance', [regex(source)]))).toThrow(
+      /'balance'/,
+    );
+  });
+
+  it.each([
+    ['an unclosed group', '(?<balance>\\d+'],
+    ['a lookbehind', '(?<=x)(?<balance>\\d+)'],
+  ])('reports only the RE2 error for %s', (_case, source) => {
+    const parsed = zkFetchPolicySchema.safeParse(policyWith('balance', [regex(source)]));
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.path)).toEqual([
+        ['responseMatches', 0, 'value'],
+      ]);
+    }
+  });
+});
+
+describe('zkFetchPolicySchema claimVersion', () => {
+  const policyWith = (claimVersion: bigint) => ({
+    allowedHosts: ['api.github.com'],
+    slots: [{ slot: 0, name: 'distance', parse: 'float' }],
+    bodyPolicy: 'ignored',
+    ...disclosureRules('distance'),
+    claimVersion,
+  });
+
+  it.each([0n, 1n, 255n])('accepts claimVersion %s', (claimVersion) => {
+    expect(() => zkFetchPolicySchema.parse(policyWith(claimVersion))).not.toThrow();
+  });
+
+  it.each([-1n, 256n])('refuses claimVersion %s outside the claim Uint<8>', (claimVersion) => {
+    const parsed = zkFetchPolicySchema.safeParse(policyWith(claimVersion));
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.path)).toEqual([['claimVersion']]);
+    }
   });
 });
 
@@ -133,7 +239,7 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 0, name: 'v', parse }],
         bodyPolicy: 'ignored',
-        ...DISCLOSURE_RULES,
+        ...disclosureRules('v'),
       },
       appId: APP_ID,
       holder: new Uint8Array(32).fill(0xc1),
@@ -249,7 +355,7 @@ describe('deriveClaimFromEvidence', () => {
     allowedHosts: ['api.github.com'],
     slots,
     bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
+    ...disclosureRulesOf(slots),
   });
 
   it('maps disclosed values into the declared slots', () => {
@@ -461,7 +567,7 @@ describe('assertClaimMatchesContext', () => {
     allowedHosts: ['api.github.com'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
     bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
+    ...disclosureRules('distance'),
   };
   const window = { holder: new Uint8Array(32).fill(7), windowStart: 10n, windowEnd: 20n };
   const digestUnder = (signedPolicy: ZkFetchPolicy, request: typeof REQUEST = REQUEST) =>
@@ -514,7 +620,7 @@ describe('assertClaimMatchesDisclosures', () => {
     allowedHosts: ['api.github.com'],
     slots,
     bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
+    ...disclosureRulesOf(slots),
   });
 
   it('accepts a claim that reflects the disclosures', () => {
@@ -589,13 +695,13 @@ describe('assertEvidenceMatchesPolicy', () => {
     allowedHosts: ['api.github.com'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
     bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
+    ...disclosureRules('distance'),
   };
 
   const verified = (url: string, method = 'GET', body = ''): VerifiedEvidence =>
     verifiedOf(
       claimWith(
-        { url, method, body, ...DISCLOSURE_RULES },
+        { url, method, body, ...disclosureRules('distance') },
         { extractedParameters: { distance: '12.4' } },
       ),
       {
@@ -614,13 +720,22 @@ describe('assertEvidenceMatchesPolicy', () => {
   });
 
   it('rejects a required __proto__ slot when nothing named it is disclosed', () => {
+    const rules = disclosureRules('__proto__');
     const protoPolicy: ZkFetchPolicy = {
       ...policy,
       slots: [{ slot: 0, name: '__proto__', parse: 'bytes' }],
+      ...rules,
     };
-    expect(() =>
-      assertEvidenceMatchesPolicy(verified('https://api.github.com/x'), protoPolicy),
-    ).toThrow(/did not disclose a parseable value/);
+    const evidence = verifiedOf(
+      claimWith(
+        { url: 'https://api.github.com/x', method: 'GET', body: '', ...rules },
+        { extractedParameters: {} },
+      ),
+      {},
+    );
+    expect(() => assertEvidenceMatchesPolicy(evidence, protoPolicy)).toThrow(
+      /did not disclose a parseable value/,
+    );
   });
 
   it('accepts an https claim against an allowlisted host', () => {
@@ -660,7 +775,12 @@ describe('assertEvidenceMatchesPolicy', () => {
   it('refuses a required slot whose disclosure is missing or unparseable', () => {
     const missing = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
+        {
+          url: 'https://api.github.com/x',
+          method: 'GET',
+          body: '',
+          ...disclosureRules('distance'),
+        },
         { extractedParameters: {} },
       ),
       {},
@@ -670,7 +790,12 @@ describe('assertEvidenceMatchesPolicy', () => {
     );
     const unparseable = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
+        {
+          url: 'https://api.github.com/x',
+          method: 'GET',
+          body: '',
+          ...disclosureRules('distance'),
+        },
         { extractedParameters: { distance: 'abc' } },
       ),
       { distance: 'abc' },
@@ -713,7 +838,12 @@ describe('assertEvidenceMatchesPolicy', () => {
     };
     const missing = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
+        {
+          url: 'https://api.github.com/x',
+          method: 'GET',
+          body: '',
+          ...disclosureRules('distance'),
+        },
         { extractedParameters: {} },
       ),
       {},
@@ -808,7 +938,7 @@ describe('byte value parse rules', () => {
     allowedHosts: ['api.github.com'],
     slots,
     bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
+    ...disclosureRulesOf(slots),
   });
 
   const padded = (value: string): Uint8Array => {
@@ -958,7 +1088,7 @@ describe('byte value parse rules', () => {
         allowedHosts: ['api.github.com'],
         slots: [slot],
         bodyPolicy: 'ignored',
-        ...DISCLOSURE_RULES,
+        ...disclosureRules(slot.name),
       });
     expect(() => policyWith({ slot: 0, name: 'id', parse: 'int', length: 4 })).toThrow(/length/);
     expect(() => policyWith({ slot: 1, name: 'id', parse: 'hex', length: 0 })).toThrow();

@@ -51,16 +51,16 @@ type-checked only once it is listed in the root `package.json` `workspaces`.
 
 Run them from the repo root:
 
-| Command | What it does |
-|---------|--------------|
-| `npm test` | Compiles the mock contracts and builds the packages (`pretest`), then runs vitest |
-| `npm test -- <pattern>` | The same, for the test files matching `<pattern>` |
-| `npm run types` | Type-checks every package |
-| `npm run check` | Biome format and lint, plus `compact format -c` |
-| `npm run check:fix` | Applies the Biome and Compact formatting fixes |
-| `npm run build` | Builds every package into its `dist/` |
-| `npm run compact` | Compiles the mock contracts with proving keys |
-| `npm run compact:no-zk` | Compiles the mock contracts without proving keys (faster) |
+| Command                 | What it does                                                                      |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| `npm test`              | Compiles the mock contracts and builds the packages (`pretest`), then runs vitest |
+| `npm test -- <pattern>` | The same, for the test files matching `<pattern>`                                 |
+| `npm run types`         | Type-checks every package                                                         |
+| `npm run check`         | Biome format and lint, plus `compact format -c`                                   |
+| `npm run check:fix`     | Applies the Biome and Compact formatting fixes                                    |
+| `npm run build`         | Builds every package into its `dist/`                                             |
+| `npm run compact`       | Compiles the mock contracts with proving keys                                     |
+| `npm run compact:no-zk` | Compiles the mock contracts without proving keys (faster)                         |
 
 For one package: `npm run <script> --workspace=packages/<name>`.
 

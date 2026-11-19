@@ -13,15 +13,15 @@ Read `src/output/` beside this guide: it implements every piece below.
 
 A client reads the locator and derives the claim; each attestor re-reads the event, verifies the proposal and signs. The variant supplies:
 
-| Piece | What it is | What it decides |
-|-------|------------|-----------------|
-| Policy (`index.ts`) | The app's commitment: the chain, the depth, the pins it watches and the slot list | Which events qualify, and where their facts land in the claim |
-| Locator (`index.ts`) | The evidence the client sends | Which event to attest |
-| Observation (`index.ts`) | The event and block an attestor read | Every value and the window the claim carries |
-| Subject (`index.ts`) | The event's identity as 32-byte fields | Which event the claim is about |
-| Salt (`index.ts`) | A tagged hash of that identity | Keeps one kind's salts apart; replay is the nullifier's job |
-| Claim derivation (`index.ts`) | Observation and policy turned into a claim | The exact claim every attestor signs |
-| Checks (`verify.ts`) | Locator, policy, depth and claim checks | What an attestor refuses |
+| Piece                         | What it is                                                                        | What it decides                                               |
+| ----------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Policy (`index.ts`)           | The app's commitment: the chain, the depth, the pins it watches and the slot list | Which events qualify, and where their facts land in the claim |
+| Locator (`index.ts`)          | The evidence the client sends                                                     | Which event to attest                                         |
+| Observation (`index.ts`)      | The event and block an attestor read                                              | Every value and the window the claim carries                  |
+| Subject (`index.ts`)          | The event's identity as 32-byte fields                                            | Which event the claim is about                                |
+| Salt (`index.ts`)             | A tagged hash of that identity                                                    | Keeps one kind's salts apart; replay is the nullifier's job   |
+| Claim derivation (`index.ts`) | Observation and policy turned into a claim                                        | The exact claim every attestor signs                          |
+| Checks (`verify.ts`)          | Locator, policy, depth and claim checks                                           | What an attestor refuses                                      |
 
 ## The policy
 

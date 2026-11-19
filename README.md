@@ -51,14 +51,14 @@ kind's salt is public instead, since its values already sit on the chain
 
 ## Which package to use
 
-| Package | Use it to |
-|---------|-----------|
-| [`@thoth/contracts`](packages/contracts/README.md) | Embed N-of-M verification in your Midnight contract |
-| [`@thoth/zk-tls`](packages/zk-tls/README.md) | Attest a web fact with zkFetch, as a dApp or as an attestor operator |
-| [`@thoth/cardano`](packages/cardano/README.md) | Attest a Cardano chain event, as a dApp or as an attestor operator |
-| [`@thoth/client`](packages/client/README.md) | Write a kind's client: the trusted set and the attestation checks |
-| [`@thoth/attestor`](packages/attestor/README.md) | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
-| [`@thoth/core`](packages/core/README.md) | Write a kind's law against the shared claim types |
+| Package                                            | Use it to                                                                    |
+| -------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [`@thoth/contracts`](packages/contracts/README.md) | Embed N-of-M verification in your Midnight contract                          |
+| [`@thoth/zk-tls`](packages/zk-tls/README.md)       | Attest a web fact with zkFetch, as a dApp or as an attestor operator         |
+| [`@thoth/cardano`](packages/cardano/README.md)     | Attest a Cardano chain event, as a dApp or as an attestor operator           |
+| [`@thoth/client`](packages/client/README.md)       | Write a kind's client: the trusted set and the attestation checks            |
+| [`@thoth/attestor`](packages/attestor/README.md)   | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
+| [`@thoth/core`](packages/core/README.md)           | Write a kind's law against the shared claim types                            |
 
 If you are building a dApp on web data, start with `@thoth/contracts` and
 `@thoth/zk-tls`; on chain data, start with `@thoth/contracts` and
@@ -97,11 +97,21 @@ const client = zkFetchClient.init({
     registrySize: 3,
     attestors: attestors.map((a, registryIndex) => ({ attestor: descriptorOf(a), registryIndex })),
   }),
-  transport, verifier: jubjubVerifier, policy, appId, valueSlots: 3, byteSlots: 1, provers,
+  transport,
+  verifier: jubjubVerifier,
+  policy,
+  appId,
+  valueSlots: 3,
+  byteSlots: 1,
+  provers,
 });
 const { claim, collected } = await client.collect(request, {
   holder: holderCommitmentOf(holderSecret),
-  windowStart, windowEnd, expiresAt, threshold: 2, attestorTimeoutMs: 5_000,
+  windowStart,
+  windowEnd,
+  expiresAt,
+  threshold: 2,
+  attestorTimeoutMs: 5_000,
 });
 
 // 4. Your contract's getAttestationWitness returns toContractClaim(claim), the
