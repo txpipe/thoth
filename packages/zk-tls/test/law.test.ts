@@ -166,8 +166,16 @@ describe('zkFetchPolicySchema slot groups', () => {
     ).toThrow(/balance/);
   });
 
-  it('ignores a lookbehind, which carries no group name', () => {
-    // Read as a group, a lookbehind would be named `=x`.
+  it.each([
+    ['a leading ] in a class', '[](?<x>a)]'],
+    ['a leading ] in a negated class', '[^](?<x>a)]'],
+    ['an escaped ] in a class', '[\\](?<x>a)]'],
+    ['a negated POSIX class', '[[:^alpha:](?<x>]'],
+  ])('ignores a group-like sequence after %s', (_case, source) => {
+    expect(() => zkFetchPolicySchema.parse(policyWith('x', [regex(source)]))).toThrow(/'x'/);
+  });
+
+  it('refuses a lookbehind, which RE2 does not support', () => {
     const parsed = zkFetchPolicySchema.safeParse(policyWith('=x', [regex('(?<=x)a')]));
     expect(parsed.success).toBe(false);
     if (!parsed.success) {

@@ -7,7 +7,7 @@ import type { CanonicalValue } from '@thoth/core/claim-context';
 import { claimContextDigestOf, policyHashOf, subjectHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
 import { bytesToHex, hexToBytes } from './hex.js';
-import { re2CompileError } from './regex.js';
+import { re2CompileError, re2GroupNames } from './regex.js';
 
 /** The zkFetch kind's law tag, also its kind identifier. */
 export const ZK_FETCH_LAW = 'zk-fetch@1';
@@ -318,39 +318,6 @@ const refineRe2 = (regex: string, context: z.RefinementCtx, path: string[]): voi
   }
 };
 
-/**
- * Every RE2 construct that can contain or open a named group: a `\Q…\E`
- * quote, an escape, a character class (POSIX classes included), or
- * `(?<name>` / `(?P<name>`. Anything else is skipped; a name is read to the
- * next `>` and RE2 has already validated it.
- */
-const RE2_TOKEN = new RegExp(
-  [
-    String.raw`\\Q[\s\S]*?(?:\\E|$)`, // \Q…\E: the span is literal
-    String.raw`\\[\s\S]`, // an escaped character
-    String.raw`\[\^?\]?(?:\\[\s\S]|\[:\^?[a-z]+:\]|[^\]\\])*\]`, // a character class
-    String.raw`\(\?(?:P)?<(?![=!])([^>]+)>`, // a named group
-  ].join('|'),
-  'g',
-);
-
-/**
- * The named groups a regex source declares, without their angle brackets.
- *
- * Reads names only: RE2 has already compiled the source, so this skips
- * quotes, escapes and character classes rather than validating syntax.
- */
-const namedGroupsOf = (source: string): ReadonlySet<string> => {
-  const names = new Set<string>();
-  for (const match of source.matchAll(RE2_TOKEN)) {
-    const name = match[1];
-    if (name !== undefined) {
-      names.add(name);
-    }
-  }
-  return names;
-};
-
 /** SHA-256 of a UTF-8 string, raw bytes. */
 const sha256 = (data: string): Uint8Array =>
   new Uint8Array(createHash('sha256').update(data, 'utf-8').digest());
@@ -479,7 +446,7 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
     // regex group names is never certifiable.
     const groups = new Set(
       policy.responseMatches.flatMap((match) =>
-        match.type === 'regex' ? [...namedGroupsOf(match.value)] : [],
+        match.type === 'regex' ? [...re2GroupNames(match.value)] : [],
       ),
     );
     for (const [index, slot] of policy.slots.entries()) {
