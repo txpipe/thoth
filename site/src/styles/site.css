@@ -7,7 +7,7 @@
 :root {
   --body-top-gap: var(--space-12);
   --content-width: 48rem;
-  --header-height: 5.25rem;
+  --header-height: 3.5rem;
   --page-bg: #141011;
   --page-surface:
     radial-gradient(
@@ -30,6 +30,8 @@
     15rem +
     var(--space-16) +
     var(--content-width) +
+    var(--space-16) +
+    15rem +
     var(--container-pad-lg) +
     var(--container-pad-lg)
   );
@@ -141,22 +143,25 @@ a:hover {
 
 .site-body {
   display: grid;
-  grid-template-columns: 15rem minmax(0, 1fr);
+  /* symmetric side tracks keep the reading column on the page's midline */
+  grid-template-columns: 15rem minmax(0, var(--content-width)) 15rem;
   gap: var(--space-16);
   padding-top: var(--body-top-gap);
   padding-bottom: var(--space-20);
 }
 
 .sidebar {
-  position: sticky;
+  position: fixed;
   top: var(--header-height);
+  left: max(
+    var(--container-pad-lg),
+    calc(50% - var(--page-width) / 2 + var(--container-pad-lg))
+  );
   display: flex;
   flex-direction: column;
   justify-content: safe center;
-  align-self: start;
+  width: 15rem;
   height: calc(100vh - var(--header-height));
-  /* start the box under the header, not after the body top gap */
-  margin-top: calc(-1 * var(--body-top-gap));
   overflow-y: auto;
 }
 
@@ -231,6 +236,7 @@ a:hover {
 }
 
 .content {
+  grid-column: 2;
   min-width: 0;
   max-width: var(--content-width);
 }
@@ -368,7 +374,7 @@ a:hover {
   font-size: var(--fs-sm);
 }
 
-@media (max-width: 52rem) {
+@media (max-width: 73rem) {
   .site-body {
     grid-template-columns: 1fr;
     gap: var(--space-8);
@@ -379,10 +385,14 @@ a:hover {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
     gap: var(--space-4);
+    width: auto;
     height: auto;
-    margin-top: 0;
     max-height: none;
     justify-content: normal;
+  }
+
+  .content {
+    grid-column: auto;
   }
 
   .sidebar details + details {
