@@ -9,6 +9,23 @@
   --content-width: 48rem;
   --header-height: 5.25rem;
   --page-bg: #141011;
+  --page-surface:
+    radial-gradient(
+      60rem 32rem at 12% -10%,
+      color-mix(in srgb, var(--grape) 13%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      50rem 28rem at 92% 4%,
+      color-mix(in srgb, var(--majorelle-blue) 11%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      45rem 26rem at 55% 108%,
+      color-mix(in srgb, var(--cyan-900) 12%, transparent),
+      transparent 70%
+    ),
+    var(--page-bg);
   --page-width: calc(
     15rem +
     var(--space-16) +
@@ -25,23 +42,7 @@ html {
 
 body {
   margin: 0;
-  background:
-    radial-gradient(
-      60rem 32rem at 12% -10%,
-      color-mix(in srgb, var(--grape) 25%, transparent),
-      transparent 65%
-    ),
-    radial-gradient(
-      50rem 28rem at 92% 4%,
-      color-mix(in srgb, var(--majorelle-blue) 22%, transparent),
-      transparent 65%
-    ),
-    radial-gradient(
-      45rem 26rem at 55% 108%,
-      color-mix(in srgb, var(--cyan-900) 24%, transparent),
-      transparent 70%
-    ),
-    var(--page-bg);
+  background: var(--page-surface);
   background-attachment: fixed;
 }
 
@@ -85,7 +86,8 @@ a:hover {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--page-bg);
+  background: var(--page-surface);
+  background-attachment: fixed;
 }
 
 .site-header::after {
@@ -113,25 +115,20 @@ a:hover {
   font-size: 1.75rem;
   font-weight: var(--fw-bold);
   letter-spacing: 0.02em;
-  background: linear-gradient(
-    120deg,
-    #fff 0%,
-    var(--pink-100) 55%,
-    var(--pink-400) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: #fff;
   filter: drop-shadow(
-    0 0 12px color-mix(in srgb, var(--pink-500) 35%, transparent)
-  );
+      0 0 6px color-mix(in srgb, var(--pink-500) 30%, transparent)
+    )
+    drop-shadow(0 0 18px color-mix(in srgb, var(--pink-500) 20%, transparent));
+  transition: filter 150ms ease;
 }
 
 .wordmark:hover {
-  color: transparent;
+  color: #fff;
   filter: drop-shadow(
-    0 0 18px color-mix(in srgb, var(--pink-500) 55%, transparent)
-  );
+      0 0 8px color-mix(in srgb, var(--pink-500) 45%, transparent)
+    )
+    drop-shadow(0 0 26px color-mix(in srgb, var(--pink-500) 30%, transparent));
 }
 
 .repo {
