@@ -6,7 +6,7 @@
 
 :root {
   --body-top-gap: var(--space-12);
-  --content-width: 46rem;
+  --content-width: 48rem;
   --header-height: 5.25rem;
   --page-bg: #141011;
   --page-width: calc(
