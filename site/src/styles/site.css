@@ -314,10 +314,11 @@ a:hover {
 
 .prose pre {
   padding: var(--space-4);
-  border: 1px solid var(--stroke-3);
   border-radius: var(--radius-md);
   overflow-x: auto;
   line-height: 1.6;
+  /* Shiki writes the theme background inline on <pre>; match the page palette */
+  background: color-mix(in srgb, var(--pink-100) 5%, var(--bg-card)) !important;
 }
 
 .prose pre code {

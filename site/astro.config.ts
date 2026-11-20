@@ -12,6 +12,7 @@ export default defineConfig({
   base,
   trailingSlash: 'always',
   markdown: {
+    shikiConfig: { theme: 'synthwave-84' },
     processor: unified({
       remarkPlugins: [[rewriteLinks, { repoRoot, base }]],
     }),
