@@ -2,7 +2,7 @@
 import { render } from 'astro:content';
 import DocPage from '../layouts/DocPage.astro';
 import { getDocs, navGroups, type DocEntry } from '../lib/collection';
-import { routeFor, titleOf } from '../lib/docs';
+import { routeFor, titleFor } from '../lib/docs';
 
 export async function getStaticPaths() {
   const docs = await getDocs();
@@ -23,6 +23,6 @@ const docs = await getDocs();
 const { Content } = await render(entry);
 ---
 
-<DocPage title={titleOf(entry.body)} groups={navGroups(docs)} currentId={entry.id}>
+<DocPage title={titleFor(entry.id, entry.body)} groups={navGroups(docs)} currentId={entry.id}>
   <Content />
 </DocPage>

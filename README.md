@@ -142,6 +142,7 @@ replace.
 
 ## Links
 
+- [Docs site](https://txpipe-shop.github.io/thoth/): these docs rendered as a website
 - [docs/DESIGN.md](docs/DESIGN.md): the architecture, the claim and its wire order
 - [docs/kind-author-guide.md](docs/kind-author-guide.md): how to add an attestor kind
 - [docs/adr/](docs/adr/): the design decisions and their reasons

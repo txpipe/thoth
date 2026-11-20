@@ -5,24 +5,57 @@
 }
 
 :root {
+  --body-top-gap: var(--space-12);
   --content-width: 46rem;
+  --header-height: 5.25rem;
+  --page-bg: #141011;
+  --page-width: calc(
+    15rem +
+    var(--space-16) +
+    var(--content-width) +
+    var(--container-pad-lg) +
+    var(--container-pad-lg)
+  );
+  color-scheme: dark;
+}
+
+html {
+  background: var(--page-bg);
 }
 
 body {
   margin: 0;
+  background:
+    radial-gradient(
+      60rem 32rem at 12% -10%,
+      color-mix(in srgb, var(--grape) 25%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      50rem 28rem at 92% 4%,
+      color-mix(in srgb, var(--majorelle-blue) 22%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      45rem 26rem at 55% 108%,
+      color-mix(in srgb, var(--cyan-900) 24%, transparent),
+      transparent 70%
+    ),
+    var(--page-bg);
+  background-attachment: fixed;
 }
 
 a {
-  color: var(--cyan-text);
+  color: var(--cyan-100);
   text-decoration: none;
 }
 
 a:hover {
-  color: var(--accent-text);
+  color: var(--pink-200);
 }
 
 :focus-visible {
-  outline: 2px solid var(--cyan);
+  outline: 2px solid var(--cyan-400);
   outline-offset: 2px;
 }
 
@@ -40,29 +73,71 @@ a:hover {
   background: var(--bg-card);
 }
 
-.site-header,
 .site-footer,
 .site-body {
-  max-width: 80rem;
+  max-width: var(--page-width);
   margin: 0 auto;
   padding-right: var(--container-pad-lg);
   padding-left: var(--container-pad-lg);
 }
 
 .site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--page-bg);
+}
+
+.site-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: var(--gradient-hr);
+}
+
+.site-header-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding-top: var(--space-6);
-  padding-bottom: var(--space-6);
+  height: var(--header-height);
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 0 var(--container-pad-lg);
 }
 
 .wordmark {
-  font-size: var(--fs-h4);
+  font-size: 1.75rem;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.02em;
+  background: linear-gradient(
+    120deg,
+    #fff 0%,
+    var(--pink-100) 55%,
+    var(--pink-400) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(
+    0 0 12px color-mix(in srgb, var(--pink-500) 35%, transparent)
+  );
+}
+
+.wordmark:hover {
+  color: transparent;
+  filter: drop-shadow(
+    0 0 18px color-mix(in srgb, var(--pink-500) 55%, transparent)
+  );
 }
 
 .repo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--fs-sm);
   color: var(--fg-4);
 }
@@ -71,27 +146,61 @@ a:hover {
   display: grid;
   grid-template-columns: 15rem minmax(0, 1fr);
   gap: var(--space-16);
+  padding-top: var(--body-top-gap);
   padding-bottom: var(--space-20);
 }
 
 .sidebar {
   position: sticky;
-  top: var(--space-6);
+  top: var(--header-height);
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
   align-self: start;
-  max-height: calc(100vh - var(--space-12));
+  height: calc(100vh - var(--header-height));
+  /* start the box under the header, not after the body top gap */
+  margin-top: calc(-1 * var(--body-top-gap));
   overflow-y: auto;
 }
 
-.sidebar section + section {
+.sidebar details + details {
   margin-top: var(--space-6);
 }
 
+.sidebar summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  color: var(--fg-4);
+  cursor: pointer;
+  list-style: none;
+}
+
+.sidebar summary::-webkit-details-marker {
+  display: none;
+}
+
+.sidebar summary::before {
+  content: "";
+  flex: none;
+  width: 0.35em;
+  height: 0.35em;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.sidebar details:not([open]) summary::before {
+  transform: rotate(-45deg);
+}
+
 .sidebar h2 {
-  margin: 0 0 var(--space-2);
+  margin: 0;
   background: none;
   color: var(--fg-4);
-  font-size: var(--fs-xs);
-  letter-spacing: var(--tracking-label);
+  font-size: 13px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -108,7 +217,7 @@ a:hover {
   display: block;
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
-  color: var(--fg-4);
+  color: var(--fg-1);
   font-size: var(--fs-sm);
 }
 
@@ -121,6 +230,7 @@ a:hover {
 .sidebar a[aria-current="page"] {
   background: var(--bg-card);
   color: var(--fg-1);
+  box-shadow: inset 2px 0 0 var(--pink-400);
 }
 
 .content {
@@ -136,8 +246,13 @@ a:hover {
   margin-bottom: var(--space-4);
 }
 
+.prose :is(h1, h2, h3, h4) {
+  scroll-margin-top: calc(var(--header-height) + var(--space-5));
+}
+
 .prose h2 {
   margin-top: var(--space-12);
+  letter-spacing: normal;
 }
 
 .prose h3,
@@ -148,6 +263,7 @@ a:hover {
 .prose p,
 .prose li {
   color: var(--fg-2);
+  letter-spacing: normal;
 }
 
 .prose ul,
@@ -166,7 +282,7 @@ a:hover {
 .prose blockquote {
   margin: var(--space-6) 0;
   padding: var(--space-4) var(--space-5);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--pink-400);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   background: var(--bg-card-soft);
 }
@@ -188,10 +304,12 @@ a:hover {
 }
 
 .prose code {
-  padding: 0.1em 0.35em;
-  border: 1px solid var(--stroke-4);
+  padding: 0.1em 0.2em;
+  /* pull the chip's padding back out of the surrounding word gaps */
+  margin-inline: -0.2em;
   border-radius: var(--radius-sm);
-  background: var(--bg-card);
+  color: var(--fg-1);
+  background: color-mix(in srgb, var(--pink-100) 8%, var(--bg-card));
 }
 
 .prose pre {
@@ -204,7 +322,9 @@ a:hover {
 
 .prose pre code {
   padding: 0;
+  margin: 0;
   border: 0;
+  color: inherit;
   background: none;
 }
 
@@ -229,12 +349,19 @@ a:hover {
   font-weight: var(--fw-semibold);
 }
 
+.prose tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--bg-card) 45%, transparent);
+}
+
 .prose td {
   color: var(--fg-3);
 }
 
 .site-footer {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-4);
   padding-top: var(--space-6);
   padding-bottom: var(--space-6);
@@ -254,10 +381,13 @@ a:hover {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
     gap: var(--space-4);
+    height: auto;
+    margin-top: 0;
     max-height: none;
+    justify-content: normal;
   }
 
-  .sidebar section + section {
+  .sidebar details + details {
     margin-top: 0;
   }
 }

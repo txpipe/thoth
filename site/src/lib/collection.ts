@@ -1,7 +1,7 @@
 // Content collection queries shared by the pages, the nav and llms.txt.
 
 import { type CollectionEntry, getCollection } from 'astro:content';
-import { DOC_FILES, GROUP_ORDER, navGroup, routeFor, titleOf } from './docs';
+import { DOC_FILES, GROUP_ORDER, navGroup, routeFor, titleFor } from './docs';
 
 export type DocEntry = CollectionEntry<'docs'>;
 
@@ -35,13 +35,15 @@ export function navGroups(docs: DocEntry[]): NavGroup[] {
   const sorted = [...docs].sort((a, b) => {
     const left = order.get(a.id) ?? Number.MAX_SAFE_INTEGER;
     const right = order.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-    return left === right ? titleOf(a.body).localeCompare(titleOf(b.body)) : left - right;
+    return left === right
+      ? titleFor(a.id, a.body).localeCompare(titleFor(b.id, b.body))
+      : left - right;
   });
 
   const groups = new Map<string, NavItem[]>();
   const seen = new Set<string>();
   for (const entry of sorted) {
-    const title = titleOf(entry.body);
+    const title = titleFor(entry.id, entry.body);
     const stem = entry.id.split('/').at(-1) ?? entry.id;
     const label = seen.has(title) ? `${title} (${stem})` : title;
     seen.add(title);

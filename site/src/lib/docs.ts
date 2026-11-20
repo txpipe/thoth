@@ -56,6 +56,15 @@ export function titleOf(markdown: string | undefined): string {
   return heading ? heading.slice(2).trim() : 'Untitled';
 }
 
+// Site-only display names where the H1 is too generic or collides with another.
+// The docs themselves stay untouched.
+const TITLES: Record<string, string> = { README: 'Introduction', CONTEXT: 'Glossary' };
+
+/** The title the site shows for a doc: an override by collection id, else its first H1. */
+export function titleFor(id: string, markdown: string | undefined): string {
+  return TITLES[id] ?? titleOf(markdown);
+}
+
 /** The first paragraph of a doc, used as its one-line note in llms.txt. */
 export function summaryOf(markdown: string | undefined): string {
   const paragraph: string[] = [];

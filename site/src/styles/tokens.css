@@ -1,10 +1,5 @@
-/* shortcut: vendored copies of txpipe-video's kit/tokens.css and kit/theme.css
-   with no sync step; move them to a design-system package when one exists. */
-/* =========================================================================
-   GENERATED FILE — do not edit by hand.
-   Source: txpipe-design-system/colors_and_type.css
-   Regenerate: npm run sync:tokens
-   ========================================================================= */
+/* shortcut: a vendored copy of txpipe-video's kit/tokens.css with no sync
+   step, so edit it here; move it to a design-system package when one exists. */
 /* =========================================================================
    TxPipe Design System — Colors & Type
    Sourced directly from txpipe-web2 (Tailwind v4 theme + tailwind.css)
