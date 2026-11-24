@@ -32,9 +32,9 @@ walkthrough.
   W, up to 64. The contract's `#B` is `2W`, since each value is two 16-byte
   halves. Defaults to `0`.
 - **`read`.** Your own read of the event, in the observation shape the client
-  and the attestors share. The client awaits it as-is and does not bound it,
-  so a provider that hangs holds `collect` open past `expiresAt`. Give the
-  provider its own timeout before you build the client.
+  and the attestors share. `collect` stops waiting for it at `expiresAt` and
+  throws `expired`; a read it abandons keeps running until your provider
+  settles it.
 
 A complete setup:
 

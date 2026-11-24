@@ -110,7 +110,10 @@ export interface CardanoClientConfig<PK, S> {
   readonly valueSlots: number;
   /** The contract's byte value count. Defaults to `0`. */
   readonly byteSlots?: number;
-  /** The app's own read of the event; the attestors read it again themselves. */
+  /**
+   * The app's own read of the event; the attestors read it again themselves.
+   * `collect` stops waiting for it at `expiresAt`.
+   */
   readonly read: (locator: CardanoLocator) => CardanoObservation | Promise<CardanoObservation>;
 }
 
@@ -136,15 +139,14 @@ export interface CardanoClient<PK, S> {
   ): Promise<CardanoAttestment<PK, S>>;
 }
 
+/** `setTimeout`'s largest delay; a longer one fires at once. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
 const optionsSchema = z.object({
   holder: bytes32Schema,
   expiresAt: z.number().int(),
   threshold: z.number().int().positive(),
-  attestorTimeoutMs: z
-    .number()
-    .int()
-    .positive()
-    .max(2 ** 31 - 1),
+  attestorTimeoutMs: z.number().int().positive().max(MAX_TIMER_MS),
   attestorIds: z.array(z.string()).optional(),
 });
 
@@ -160,6 +162,25 @@ type Outcome<PK, S> =
 
 /** Rejects one attestor's attempt at its deadline. */
 class AttemptTimeout extends Error {}
+
+/**
+ * Await `pending`, but throw `expired` if `expiresAt` passes first, so a hung
+ * provider cannot hold `collect` open past its deadline.
+ */
+const beforeExpiry = async <T>(pending: T | Promise<T>, expiresAt: number): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new CardanoThresholdError('expired')),
+      Math.min(expiresAt - Date.now(), MAX_TIMER_MS),
+    );
+  });
+  try {
+    return await Promise.race([pending, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
 
 /** Validate the collect options, mapping any failure to a safe reason. */
 const parseOptions = (supplied: CardanoCollectOptions): Options => {
@@ -291,7 +312,9 @@ export const cardanoClient = {
         const checkedLocator = cardanoEvidenceSchema.parse(locator);
         const candidates = candidatesOf(trusted, options);
 
-        const observation = cardanoObservationSchema.parse(await read(checkedLocator));
+        const observation = cardanoObservationSchema.parse(
+          await beforeExpiry(read(checkedLocator), options.expiresAt),
+        );
         // Fail fast on a read the attestors would reject anyway; the depth is
         // the attestors' alone, since this client's tip can differ without a
         // fork.

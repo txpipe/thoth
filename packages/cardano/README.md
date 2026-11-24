@@ -98,7 +98,7 @@ What the client checks:
 
 - It reads the event once and checks its own read against the locator and the policy before it asks any attestor, so a wrong event fails fast with that reason.
 - It does not check depth: that is the attestors' alone, since two tips can differ without a fork.
-- A collection returns as soon as the threshold signs, reports each failed attestor with a safe reason (`attestation` or `timeout`, never remote error text), and bounds each attempt by `attestorTimeoutMs` and the deadline, not the read.
+- A collection returns as soon as the threshold signs, reports each failed attestor with a safe reason (`attestation` or `timeout`, never remote error text), bounds its own read by the deadline, and bounds each attempt by `attestorTimeoutMs` and the deadline.
 
 What the policy does not check, and what your app must do:
 

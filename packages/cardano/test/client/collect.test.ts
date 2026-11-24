@@ -86,7 +86,7 @@ const clientFor = (
   parts: {
     transport?: AttestorTransport<CardanoDefinition, FakePublicKey, FakeSignature>;
     verifier?: AttestationVerifier<FakePublicKey, FakeSignature>;
-    read?: () => typeof OBSERVATION;
+    read?: () => typeof OBSERVATION | Promise<typeof OBSERVATION>;
   } = {},
 ) =>
   cardanoClient.init({
@@ -258,6 +258,18 @@ describe('cardanoClient', () => {
     const attestors = [makeAttestor('attestor-0'), makeAttestor('attestor-1')];
     const error = await clientFor(attestors)
       .collect(LOCATOR, options({ expiresAt: Date.now() - 1 }))
+      .catch((failure: unknown) => failure);
+
+    expect(error).toBeInstanceOf(CardanoThresholdError);
+    expect(error).toMatchObject({ reason: 'expired' });
+  });
+
+  it('rejects as expired when its own read outlives the deadline', async () => {
+    const attestors = [makeAttestor('attestor-0'), makeAttestor('attestor-1')];
+    const client = clientFor(attestors, { read: () => new Promise(() => {}) });
+
+    const error = await client
+      .collect(LOCATOR, options({ expiresAt: Date.now() + 50 }))
       .catch((failure: unknown) => failure);
 
     expect(error).toBeInstanceOf(CardanoThresholdError);
