@@ -4,8 +4,6 @@
 // is then mutated under the same signatures, each on a fresh ledger so the
 // rejection can only come from the signature check.
 import { randomBytes } from 'node:crypto';
-import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
-import type { KeyPair } from '@thoth/attestor';
 import { descriptorOf } from '@thoth/attestor';
 import {
   type CardanoLocator,
@@ -23,6 +21,7 @@ import type { Claim } from '@thoth/core/claim';
 import { toContractClaim } from '@thoth/core/claim';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { type B_Claim, pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
+import { jubjubKeyPair, type Submission, submit } from './helpers/acceptance.js';
 import {
   APP_ID,
   bytesIdOf,
@@ -32,7 +31,6 @@ import {
   splitHalves,
 } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
-import { signMessage } from './helpers/sign.js';
 import { MockAttestationBytesSim } from './helpers/sim.js';
 
 const TEST_ADDRESS = `addr_test1${'q'.repeat(53)}`;
@@ -74,12 +72,6 @@ const observation: CardanoObservation = {
   },
 };
 
-/** A Jubjub key pair whose signer signs the flat message the registry verifies. */
-const jubjubKeyPair = (): KeyPair<JubjubPoint, JubjubSchnorrSignature> => {
-  const { sk, pk } = makeNotaryKey();
-  return { publicKey: pk, signer: { sign: (message) => signMessage(sk, message).signature } };
-};
-
 // Each operator runs its own attestor over its own read of the same event.
 const attestors = [0, 1].map((index) =>
   cardanoAttestor({
@@ -92,8 +84,6 @@ const attestors = [0, 1].map((index) =>
 const registryKeys = [...attestors.map((attestor) => attestor.publicKey), makeNotaryKey().pk];
 
 const holderSecret = randomBytes(32);
-
-type Submission = { claim: B_Claim; signatures: JubjubSchnorrSignature[]; commitRand: Uint8Array };
 
 /** The claim the honest threshold set signed. */
 let honestClaim: Claim<number, number>;
@@ -155,9 +145,6 @@ const freshLedger = async (appId = APP_ID): Promise<MockAttestationBytesSim> => 
   return sim;
 };
 
-const submit = (sim: MockAttestationBytesSim, submission: Submission, secret = holderSecret) =>
-  sim.call('verifyAttestation', { ...submission, holderSecret: secret });
-
 describe('cardano cross-seam acceptance', () => {
   let honest: Submission;
 
@@ -194,7 +181,7 @@ describe('cardano cross-seam acceptance', () => {
 
   it('accepts the honest claim end to end', async () => {
     const sim = await freshLedger();
-    await submit(sim, honest);
+    await submit(sim, honest, holderSecret);
     expect(sim.ledgerView().B_claimsVault.member(bytesIdOf(honest.claim, honest.commitRand))).toBe(
       true,
     );
@@ -256,9 +243,9 @@ describe('cardano cross-seam acceptance', () => {
     'rejects the signatures over a claim with $name mutated',
     async ({ mutate, secret, sealedAppId }) => {
       const sim = await freshLedger(sealedAppId);
-      await expect(submit(sim, { ...honest, claim: mutate(honest.claim) }, secret)).rejects.toThrow(
-        'Insufficient valid signatures',
-      );
+      await expect(
+        submit(sim, { ...honest, claim: mutate(honest.claim) }, secret ?? holderSecret),
+      ).rejects.toThrow('Insufficient valid signatures');
     },
   );
 });
