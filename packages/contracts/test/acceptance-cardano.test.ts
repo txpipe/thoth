@@ -116,10 +116,10 @@ const clientWith = () =>
 
 // Collect the honest threshold set through the cardano client and lay its
 // signatures out at their registry slots, the dummy filling the unqueried one.
-const collectSubmission = async (): Promise<Submission> => {
+const collectSubmission = async (secret = holderSecret): Promise<Submission> => {
   const client = clientWith();
   const { claim, collected } = await client.collect(locator, {
-    holder: pureCircuits.holderCommitment(holderSecret),
+    holder: pureCircuits.holderCommitment(secret),
     expiresAt: Date.now() + 60_000,
     threshold: 2,
     attestorTimeoutMs: 5_000,
@@ -185,6 +185,25 @@ describe('cardano cross-seam acceptance', () => {
     expect(sim.ledgerView().B_claimsVault.member(bytesIdOf(honest.claim, honest.commitRand))).toBe(
       true,
     );
+  });
+
+  it('refuses a resubmission of the accepted claim under fresh vault randomness', async () => {
+    const sim = await freshLedger();
+    await submit(sim, honest, holderSecret);
+    await expect(
+      submit(sim, { ...honest, commitRand: randomBytes(32) }, holderSecret),
+    ).rejects.toThrow('Observation replay');
+  });
+
+  // The salt follows the event, not the holder, so a second holder's claim for
+  // the same event carries the same nullifier.
+  it('refuses a claim by a second holder for an event already accepted', async () => {
+    const secondSecret = randomBytes(32);
+    const second = await collectSubmission(secondSecret);
+    expect(second.claim.holder).not.toEqual(honest.claim.holder);
+    const sim = await freshLedger();
+    await submit(sim, honest, holderSecret);
+    await expect(submit(sim, second, secondSecret)).rejects.toThrow('Observation replay');
   });
 
   const otherSecret = randomBytes(32);
