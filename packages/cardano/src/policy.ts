@@ -97,7 +97,7 @@ const ADDRESS_PATTERN: Record<CardanoNetwork, RegExp> = {
 };
 
 /** A policy slot index. */
-export const numericSlotSchema = z.number().int().nonnegative();
+export const slotIndexSchema = z.number().int().nonnegative();
 
 /** A bech32 payment address, stored in its canonical lowercase form. */
 export const addressSchema = z

@@ -38,7 +38,7 @@ Every variant's slot list has this shape:
 slots: z
   .array(
     z.strictObject({
-      slot: numericSlotSchema,
+      slot: slotIndexSchema,
       name: z.enum([/* the facts this variant's read fills */]),
     }),
   )

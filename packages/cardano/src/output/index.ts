@@ -29,8 +29,8 @@ import {
   checkSlotNamesDistinct,
   isCardanoByteFact,
   MAX_NETWORK_MAGIC,
-  numericSlotSchema,
   policyHashOfCardano,
+  slotIndexSchema,
 } from '../policy.js';
 
 /** The overflow bound of a claim value: lovelace is a uint64. */
@@ -81,7 +81,7 @@ export type OutputPolicy = CardanoPolicyBase & {
 
 /** Runtime validator for one {@link CardanoSlot}. */
 const outputSlotSchema = z.strictObject({
-  slot: numericSlotSchema,
+  slot: slotIndexSchema,
   name: z.enum(CARDANO_FACTS),
 });
 
