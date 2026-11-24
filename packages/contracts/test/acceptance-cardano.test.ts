@@ -4,7 +4,7 @@
 // is then mutated under the same signatures, each on a fresh ledger so the
 // rejection can only come from the signature check.
 import { randomBytes } from 'node:crypto';
-import { descriptorOf } from '@thoth/attestor';
+import { descriptorOf } from '@txpipe/thoth-attestor';
 import {
   type CardanoLocator,
   type CardanoObservation,
@@ -12,13 +12,13 @@ import {
   cardanoOutputSaltOf,
   cardanoOutputSubjectHashOf,
   cardanoPolicyHashOf,
-} from '@thoth/cardano';
-import { cardanoAttestor } from '@thoth/cardano/attestor';
-import { type CardanoAttestationInput, cardanoClient } from '@thoth/cardano/client';
-import { buildTrustedSet } from '@thoth/client';
-import { jubjubVerifier } from '@thoth/client/jubjub';
-import type { Claim } from '@thoth/core/claim';
-import { toContractClaim } from '@thoth/core/claim';
+} from '@txpipe/thoth-cardano';
+import { cardanoAttestor } from '@txpipe/thoth-cardano/attestor';
+import { type CardanoAttestationInput, cardanoClient } from '@txpipe/thoth-cardano/client';
+import { buildTrustedSet } from '@txpipe/thoth-client';
+import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
+import type { Claim } from '@txpipe/thoth-core/claim';
+import { toContractClaim } from '@txpipe/thoth-core/claim';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { type B_Claim, pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { jubjubKeyPair, type Submission, submit } from './helpers/acceptance.js';

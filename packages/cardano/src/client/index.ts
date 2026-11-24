@@ -7,11 +7,11 @@ import type {
   CollectedAttestation,
   TrustedAttestor,
   TrustedSet,
-} from '@thoth/client';
-import { attestorIdsOf, memberOf, resolveAttestation } from '@thoth/client';
-import type { AttestationInput } from '@thoth/core';
-import type { Claim } from '@thoth/core/claim';
-import { bytes32Schema } from '@thoth/core/claim';
+} from '@txpipe/thoth-client';
+import { attestorIdsOf, memberOf, resolveAttestation } from '@txpipe/thoth-client';
+import type { AttestationInput } from '@txpipe/thoth-core';
+import type { Claim } from '@txpipe/thoth-core/claim';
+import { bytes32Schema } from '@txpipe/thoth-core/claim';
 import { z } from 'zod';
 import {
   CARDANO_LIMITS,

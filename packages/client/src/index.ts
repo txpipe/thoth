@@ -4,8 +4,8 @@ import type {
   AttestorDefinition,
   AttestorDescriptor,
   MessageOf,
-} from '@thoth/core';
-import type { FlatMessage } from '@thoth/core/claim';
+} from '@txpipe/thoth-core';
+import type { FlatMessage } from '@txpipe/thoth-core/claim';
 import type { z } from 'zod';
 import {
   AttestationMismatchError,
@@ -156,7 +156,7 @@ const isSlotOf = (registrySize: number, index: number): boolean =>
 /**
  * How the client reaches a remote attestor.
  *
- * The client-side mirror of `Attestor.attest` in `@thoth/attestor`: both take
+ * The client-side mirror of `Attestor.attest` in `@txpipe/thoth-attestor`: both take
  * the same raw {@link AttestationInput} and return the same
  * {@link Attestation}. This package defines only the interface; the kind's
  * client or the app supplies the transport (HTTP, in-process, mock).

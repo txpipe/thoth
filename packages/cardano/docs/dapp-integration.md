@@ -1,4 +1,4 @@
-# @thoth/cardano dApp integration
+# @txpipe/thoth-cardano dApp integration
 
 How to act on a Cardano event from a Midnight dApp: set up the client, write
 the policy, collect a threshold of attestations, and hand the claim to the
@@ -11,18 +11,19 @@ walkthrough.
 
 `cardanoClient.init` takes:
 
-- **`trusted`.** The attestors your app pins, built with `@thoth/client`'s
-  `buildTrustedSet({ registrySize, attestors })`. `registrySize` is your
+- **`trusted`.** The attestors your app pins, built with
+  `@txpipe/thoth-client`'s `buildTrustedSet({ registrySize, attestors })`. `registrySize` is your
   contract's `#M`; each member pairs an attestor's descriptor with the
   `registryIndex` of its key in the deployed registry. The attestor does not
   choose its slot.
 - **`transport`.** How the client reaches each attestor. You supply an
-  `AttestorTransport`; the [@thoth/client README](../../client/README.md#usage)
-  gives the recipe. JSON carries neither bigint nor bytes, so the recipe tags
-  them with `toJson` and `fromJson`; your attestor's server must decode with
-  the same pair, or every reply fails the claim or signature check.
+  `AttestorTransport`; the
+  [@txpipe/thoth-client README](../../client/README.md#usage) gives the recipe.
+  JSON carries neither bigint nor bytes, so the recipe tags them with `toJson`
+  and `fromJson`; your attestor's server must decode with the same pair, or
+  every reply fails the claim or signature check.
 - **`verifier`.** The signature verifier. For Jubjub Schnorr, use
-  `jubjubVerifier` from `@thoth/client/jubjub`.
+  `jubjubVerifier` from `@txpipe/thoth-client/jubjub`.
 - **`policy`.** The one policy every attestor in the set enforces; see
   [The policy](#the-policy). Its hash is signed into every claim, and your
   contract must seal it.
@@ -39,10 +40,10 @@ walkthrough.
 A complete setup:
 
 ```ts
-import { buildTrustedSet } from '@thoth/client';
-import { jubjubVerifier } from '@thoth/client/jubjub';
-import { cardanoClient } from '@thoth/cardano/client';
-import { createDolosSource, readOutputObservation } from '@thoth/cardano/dolos';
+import { buildTrustedSet } from '@txpipe/thoth-client';
+import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
+import { cardanoClient } from '@txpipe/thoth-cardano/client';
+import { createDolosSource, readOutputObservation } from '@txpipe/thoth-cardano/dolos';
 
 const source = createDolosSource({ uri: 'http://localhost:50051' }); // your UTxO-RPC endpoint
 
@@ -54,7 +55,7 @@ const client = cardanoClient.init({
       { attestor: descriptorB, registryIndex: 1 },
     ],
   }),
-  transport, // the @thoth/client README recipe
+  transport, // the @txpipe/thoth-client README recipe
   verifier: jubjubVerifier,
   policy, // see The policy below
   appId, // 32 bytes
@@ -83,7 +84,7 @@ claim the attestors refuse.
 variant, which watches one lovelace output at one address:
 
 ```ts
-import { cardanoPolicyHashOf, type CardanoPolicy } from '@thoth/cardano';
+import { cardanoPolicyHashOf, type CardanoPolicy } from '@txpipe/thoth-cardano';
 
 const policy: CardanoPolicy = {
   kind: 'output',
@@ -128,7 +129,7 @@ slot rules.
 ## Collecting a threshold
 
 ```ts
-import { holderCommitmentOf } from '@thoth/core/claim-context';
+import { holderCommitmentOf } from '@txpipe/thoth-core/claim-context';
 
 const attestment = await client.collect(
   { txHash, outputIndex },
@@ -205,7 +206,7 @@ unchanged; those are your provider's errors, not threshold failures.
 from.
 
 ```ts
-import { toContractClaim } from '@thoth/core/claim';
+import { toContractClaim } from '@txpipe/thoth-core/claim';
 
 // In your contract's getAttestationWitness:
 return [toContractClaim(attestment.claim), signatures, commitRand];
@@ -320,10 +321,10 @@ those offline.
 
 - [Package README](../README.md): the policy, the attestor, the guarantees and
   the limits
-- [@thoth/client README](../../client/README.md): `buildTrustedSet`, the
+- [@txpipe/thoth-client README](../../client/README.md): `buildTrustedSet`, the
   transport recipe and its `toJson`/`fromJson` pair
-- [@thoth/contracts README](../../contracts/README.md): the attestation module,
-  its parameters and its checks
+- [@txpipe/thoth-contracts README](../../contracts/README.md): the attestation
+  module, its parameters and its checks
 - [attestation.compact](../../contracts/attestation.compact): the `Claim`
   struct, `buildMessage` and the wire layout
 - [ADR 0014](../../../docs/adr/0014-chain-event-kinds.md): the chain-event kind

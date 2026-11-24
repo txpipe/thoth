@@ -3,8 +3,8 @@
 // by the witness address it pins, offline and deterministically, and rejects
 // evidence from any other witness.
 
-import { buildAttestor } from '@thoth/attestor';
-import { type Claim, claimToMessage, type FlatMessage } from '@thoth/core/claim';
+import { buildAttestor } from '@txpipe/thoth-attestor';
+import { type Claim, claimToMessage, type FlatMessage } from '@txpipe/thoth-core/claim';
 import {
   assertEvidenceMatchesPolicy,
   deriveClaimFromEvidence,
@@ -16,8 +16,8 @@ import {
   zkFetchPolicyHashOf,
   zkFetchPolicySchema,
   zkFetchSubjectHashOf,
-} from '@thoth/zk-tls';
-import { createZkFetchDefinition, zkFetchAttestor } from '@thoth/zk-tls/attestor';
+} from '@txpipe/thoth-zk-tls';
+import { createZkFetchDefinition, zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { disclosureRules } from './helpers/helper.js';
 import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
@@ -342,7 +342,7 @@ describe('test-key witness', () => {
         witnessAddress: `0x${alice.address.slice(2).toUpperCase()}`,
       }),
       keyPair: { publicKey: 'attestor-generic', signer: { sign: () => 'sig' } },
-      // The generic `attest` from the `@thoth/attestor` README: no witness check of its own.
+      // The generic `attest` from the `@txpipe/thoth-attestor` README: no witness check of its own.
       attest: async (definition, signer, input) => {
         const parsed = {
           policy: definition.policy.parse(input.policy),

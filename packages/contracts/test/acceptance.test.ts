@@ -7,19 +7,23 @@
 // fresh ledger so a rejection can only come from the signature check, never from
 // a nullifier the honest submission left behind.
 import { randomBytes } from 'node:crypto';
-import { descriptorOf } from '@thoth/attestor';
-import { buildTrustedSet } from '@thoth/client';
-import { jubjubVerifier } from '@thoth/client/jubjub';
-import { type Claim, toContractClaim } from '@thoth/core/claim';
+import { descriptorOf } from '@txpipe/thoth-attestor';
+import { buildTrustedSet } from '@txpipe/thoth-client';
+import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
+import { type Claim, toContractClaim } from '@txpipe/thoth-core/claim';
 import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
   zkFetchClaimContextDigestOf,
   zkFetchPolicyHashOf,
   zkFetchSubjectHashOf,
-} from '@thoth/zk-tls';
-import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
-import { type ZkFetchProver, type ZkFetchRequest, zkFetchClient } from '@thoth/zk-tls/client';
+} from '@txpipe/thoth-zk-tls';
+import { zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
+import {
+  type ZkFetchProver,
+  type ZkFetchRequest,
+  zkFetchClient,
+} from '@txpipe/thoth-zk-tls/client';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { disclosureRules } from '../../zk-tls/test/helpers/helper.js';
 import { testWitness } from '../../zk-tls/test/helpers/witness.js';

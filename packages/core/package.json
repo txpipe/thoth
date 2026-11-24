@@ -1,5 +1,5 @@
 {
-  "name": "@thoth/core",
+  "name": "@txpipe/thoth-core",
   "version": "0.0.0",
   "description": "Core types and definitions for the Thoth N-of-M attestation system.",
   "type": "module",
@@ -29,6 +29,10 @@
     "README.md",
     "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

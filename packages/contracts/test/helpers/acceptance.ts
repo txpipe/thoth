@@ -1,7 +1,7 @@
 // Pieces both cross-seam acceptance suites share: the attestors' Jubjub key
 // pair and the submission the bytes mock verifies.
 import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
-import type { KeyPair } from '@thoth/attestor';
+import type { KeyPair } from '@txpipe/thoth-attestor';
 import type { B_Claim } from '../../artifacts/mock_attestation_bytes/contract/index.js';
 import { makeNotaryKey } from './fixtures.js';
 import { signMessage } from './sign.js';

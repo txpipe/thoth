@@ -1,4 +1,4 @@
-# @thoth/contracts
+# @txpipe/thoth-contracts
 
 The Compact modules a Midnight contract embeds to verify N-of-M attestations
 in-circuit, for dApp developers who consume Thoth claims on-chain.
@@ -8,11 +8,12 @@ in-circuit, for dApp developers who consume Thoth claims on-chain.
 ## Install
 
 The package is not on npm. Use the modules from a checkout of this repo: point
-`COMPACT_PATH` at `packages/contracts`, or vendor `attestation.compact` and
-`attestor_registry.compact` unchanged into your project (they import each
-other as siblings). Compile with Compact `0.36.1` and pin
-`@midnight-ntwrk/compact-runtime` to `0.21.0` in the driver: the off-chain
-message encoder matches the circuit only at that version.
+`COMPACT_PATH` at `packages/contracts`. Once it is published, it installs as
+`@txpipe/thoth-contracts`, and `COMPACT_PATH` points at
+`node_modules/@txpipe/thoth-contracts`. Depend on the package instead of
+copying the modules: a copy forks the attestation semantics. Compile with
+Compact `0.36.1` and pin `@midnight-ntwrk/compact-runtime` to `0.21.0` in the
+driver: the off-chain message encoder matches the circuit only at that version.
 
 ## Usage
 
@@ -215,7 +216,7 @@ What the module does not check, and what your app does itself:
   ([ADR 0001](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0001-source-binding-by-in-circuit-subject-hash.md)).
 - **The holder is a per-claim commitment, not an identity.** The pure
   `holderCommitment(secret)` circuit derives it, and `holderCommitmentOf` in
-  `@thoth/core/claim-context` matches it off-chain. Cross-claim or per-user
+  `@txpipe/thoth-core/claim-context` matches it off-chain. Cross-claim or per-user
   state is your app's ([ADR 0004](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
 - **The window is when the attestor observed.** The contract checks it against
   block time; a fact's own time is a claim value ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).

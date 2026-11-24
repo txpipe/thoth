@@ -1,5 +1,5 @@
 {
-  "name": "@thoth/attestor",
+  "name": "@txpipe/thoth-attestor",
   "version": "0.0.0",
   "description": "Attestor host types and helpers for the Thoth N-of-M attestation system.",
   "type": "module",
@@ -29,6 +29,10 @@
     "README.md",
     "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -42,7 +46,7 @@
     "types": "tsc --noEmit"
   },
   "dependencies": {
-    "@thoth/core": "*",
+    "@txpipe/thoth-core": "^0.0.0",
     "zod": "^4.6.7"
   }
 }

@@ -1,9 +1,9 @@
-// Unit tests for the output subject fields and hash (`@thoth/cardano`): the
+// Unit tests for the output subject fields and hash (`@txpipe/thoth-cardano`): the
 // four identity fields an app binds in-circuit, in struct order, and the hash
 // they produce.
 
-import { cardanoOutputSubjectHashOf, cardanoOutputSubjectOf } from '@thoth/cardano';
-import { subjectHashOf } from '@thoth/core/claim-context';
+import { cardanoOutputSubjectHashOf, cardanoOutputSubjectOf } from '@txpipe/thoth-cardano';
+import { subjectHashOf } from '@txpipe/thoth-core/claim-context';
 import { describe, expect, it } from 'vitest';
 import { BLOCK_HASH, TX_HASH } from './fixtures.js';
 

@@ -1,26 +1,26 @@
-// Unit tests for the cardano@1 client (`@thoth/cardano/client`): one read, one
+// Unit tests for the cardano@1 client (`@txpipe/thoth-cardano/client`): one read, one
 // derived proposal, a threshold of vetted attestations, and the failure paths.
 
-import type { KeyPair } from '@thoth/attestor';
-import { descriptorOf } from '@thoth/attestor';
+import type { KeyPair } from '@txpipe/thoth-attestor';
+import { descriptorOf } from '@txpipe/thoth-attestor';
 import {
   CARDANO_LIMITS,
   type CardanoDefinition,
   type CardanoPolicy,
   deriveCardanoClaim,
-} from '@thoth/cardano';
-import { cardanoAttestor } from '@thoth/cardano/attestor';
+} from '@txpipe/thoth-cardano';
+import { cardanoAttestor } from '@txpipe/thoth-cardano/attestor';
 import {
   type CardanoAttestationInput,
   type CardanoAttestment,
   type CardanoCollectOptions,
   CardanoThresholdError,
   cardanoClient,
-} from '@thoth/cardano/client';
-import type { AttestationVerifier, AttestorTransport, TrustedSet } from '@thoth/client';
-import { buildTrustedSet } from '@thoth/client';
-import type { Attestation } from '@thoth/core';
-import type { FlatMessage } from '@thoth/core/claim';
+} from '@txpipe/thoth-cardano/client';
+import type { AttestationVerifier, AttestorTransport, TrustedSet } from '@txpipe/thoth-client';
+import { buildTrustedSet } from '@txpipe/thoth-client';
+import type { Attestation } from '@txpipe/thoth-core';
+import type { FlatMessage } from '@txpipe/thoth-core/claim';
 import { describe, expect, it } from 'vitest';
 import { APP_ID, HOLDER, LOCATOR, OBSERVATION, POLICY } from '../output/fixtures.js';
 

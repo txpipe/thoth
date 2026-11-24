@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ZkFetchPolicy } from '@thoth/zk-tls';
+import type { ZkFetchPolicy } from '@txpipe/thoth-zk-tls';
 
 /**
  * The disclosure rules a fixture policy needs to certify `names`: one

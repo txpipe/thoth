@@ -1,4 +1,4 @@
-// Parity between @thoth/cardano's cardanoAddressHashOf and the compiled
+// Parity between @txpipe/thoth-cardano's cardanoAddressHashOf and the compiled
 // circuit's persistentHash over the exact-length address literal.
 //
 // An app pins a watched address in-circuit by baking it as an exact-length
@@ -10,7 +10,7 @@ import {
   CompactTypeVector,
   persistentHash,
 } from '@midnight-ntwrk/compact-runtime';
-import { cardanoAddressHashOf } from '@thoth/cardano';
+import { cardanoAddressHashOf } from '@txpipe/thoth-cardano';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../../../contracts/artifacts/mock_address_hash/contract/index.js';
 

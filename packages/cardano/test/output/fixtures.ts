@@ -1,6 +1,6 @@
 // Fixed cardano@1 values shared by the kind's tests.
 
-import type { OutputLocator, OutputObservation, OutputPolicy } from '@thoth/cardano';
+import type { OutputLocator, OutputObservation, OutputPolicy } from '@txpipe/thoth-cardano';
 
 /** A preview payment address at the smallest CIP-19 length; the checksum is a fixture. */
 export const TEST_ADDRESS = `addr_test1${'q'.repeat(53)}`;

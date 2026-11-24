@@ -14,30 +14,32 @@ claim's `policyHash` only if it is in its sealed set. An app accepts your kind
 by sealing your policy's hash (ADR 0002, ADR 0008).
 
 Two kinds ship today. Use the one whose evidence format and source match yours
-as the worked example: [`@thoth/zk-tls`](../packages/zk-tls/README.md) verifies
-signed evidence from a zkFetch witness — the party that runs the fetch and signs
-its evidence — and [`@thoth/cardano`](../packages/cardano/README.md) reads a
-shared public ledger.
+as the worked example:
+[`@txpipe/thoth-zk-tls`](../packages/zk-tls/README.md) verifies signed evidence
+from a zkFetch witness — the party that runs the fetch and signs its evidence —
+and [`@txpipe/thoth-cardano`](../packages/cardano/README.md) reads a shared
+public ledger.
 
 ## What you build
 
-| Piece                                                 | Where it runs                        | Built on                                     | Examples                                                   |
-| ----------------------------------------------------- | ------------------------------------ | -------------------------------------------- | ---------------------------------------------------------- |
-| Versioned tag                                         | everywhere                           | —                                            | `zk-fetch@1`, `cardano@1`                                  |
-| Policy schema, normalizer and hash                    | shared                               | `policyHashOf` (`@thoth/core/claim-context`) | `zkFetchPolicySchema`, `cardanoPolicySchema`               |
-| Subject struct and hash                               | shared                               | `subjectHashOf`                              | `zkFetchSubjectOf`, `cardanoOutputSubjectOf`               |
-| Evidence schema                                       | shared                               | zod                                          | `zkFetchEvidenceSchema`, `cardanoOutputEvidenceSchema`     |
-| Observation schema                                    | attestor, after it reads or verifies | zod                                          | `cardanoOutputObservationSchema`                           |
-| Claim derivation                                      | shared                               | `Claim` (`@thoth/core/claim`)                | `deriveClaimFromEvidence`, `deriveCardanoClaim`            |
-| Definition (`verify`, `message`)                      | attestor                             | `defineAttestor` (`@thoth/attestor`)         | `createZkFetchDefinition`, `createCardanoDefinition`       |
-| Input limits                                          | attestor                             | zod `.max()`                                 | `ZK_FETCH_DEFAULT_LIMITS`, `CARDANO_LIMITS`                |
-| Instance builder                                      | attestor                             | `buildAttestor`                              | `zkFetchAttestor`, `cardanoAttestor`                       |
-| Client                                                | dApp                                 | `@thoth/client`                              | `zkFetchClient`, `cardanoClient`                           |
-| Claim context binding (when the evidence can bind it) | shared, checked by the attestor      | `claimContextDigestOf`                       | `zkFetchClaimContextDigestOf`, `assertClaimMatchesContext` |
+| Piece                                                 | Where it runs                        | Built on                                            | Examples                                                   |
+| ----------------------------------------------------- | ------------------------------------ | --------------------------------------------------- | ---------------------------------------------------------- |
+| Versioned tag                                         | everywhere                           | —                                                   | `zk-fetch@1`, `cardano@1`                                  |
+| Policy schema, normalizer and hash                    | shared                               | `policyHashOf` (`@txpipe/thoth-core/claim-context`) | `zkFetchPolicySchema`, `cardanoPolicySchema`               |
+| Subject struct and hash                               | shared                               | `subjectHashOf`                                     | `zkFetchSubjectOf`, `cardanoOutputSubjectOf`               |
+| Evidence schema                                       | shared                               | zod                                                 | `zkFetchEvidenceSchema`, `cardanoOutputEvidenceSchema`     |
+| Observation schema                                    | attestor, after it reads or verifies | zod                                                 | `cardanoOutputObservationSchema`                           |
+| Claim derivation                                      | shared                               | `Claim` (`@txpipe/thoth-core/claim`)                | `deriveClaimFromEvidence`, `deriveCardanoClaim`            |
+| Definition (`verify`, `message`)                      | attestor                             | `defineAttestor` (`@txpipe/thoth-attestor`)         | `createZkFetchDefinition`, `createCardanoDefinition`       |
+| Input limits                                          | attestor                             | zod `.max()`                                        | `ZK_FETCH_DEFAULT_LIMITS`, `CARDANO_LIMITS`                |
+| Instance builder                                      | attestor                             | `buildAttestor`                                     | `zkFetchAttestor`, `cardanoAttestor`                       |
+| Client                                                | dApp                                 | `@txpipe/thoth-client`                              | `zkFetchClient`, `cardanoClient`                           |
+| Claim context binding (when the evidence can bind it) | shared, checked by the attestor      | `claimContextDigestOf`                              | `zkFetchClaimContextDigestOf`, `assertClaimMatchesContext` |
 
 Put shared logic at the package root, so a client-only app never imports
-`@thoth/attestor`. Give the attestor and the client their own subpath entries,
-as `@thoth/zk-tls/attestor` and `@thoth/cardano/client` do.
+`@txpipe/thoth-attestor`. Give the attestor and the client their own subpath
+entries, as `@txpipe/thoth-zk-tls/attestor` and `@txpipe/thoth-cardano/client`
+do.
 
 ## What a kind must state
 
@@ -225,7 +227,7 @@ proposal.
   value that does not fit is not certifiable and its slot stays unpresent. Your
   claim carries one flag per byte slot (`present[V + i]`); the message and the
   contract use the split shape in the [wire order](DESIGN.md#wire-order). So a
-  dApp returns `toContractClaim(claim)` (from `@thoth/core/claim`) from
+  dApp returns `toContractClaim(claim)` (from `@txpipe/thoth-core/claim`) from
   `getAttestationWitness`, never your claim itself, even with `W = 0`, whose
   empty `bytePresent`/`byteHalves` the contract still requires.
 - `appId` and `holder` come from the claim proposal. The holder is a per-claim
@@ -247,7 +249,7 @@ proposal.
 Binding belongs to the evidence format, not the trust label. The
 [claim context](../CONTEXT.md#the-claim) is the shared part of one claim: policy
 hash, subject hash, holder and window. Where the evidence has a signer, have it
-sign the digest that `claimContextDigestOf` (`@thoth/core/claim-context`)
+sign the digest that `claimContextDigestOf` (`@txpipe/thoth-core/claim-context`)
 computes from that context, and refuse a proposal
 whose holder or window gives another digest (ADR 0011). zkFetch signs it into
 the witness's context (`assertClaimMatchesContext`).
@@ -311,7 +313,7 @@ In your `attest`:
 - sign `definition.message(claim)` and return the claim, message, public key
   and signature.
 
-The [`@thoth/attestor` README](../packages/attestor/README.md#usage) signs the
+The [`@txpipe/thoth-attestor` README](../packages/attestor/README.md#usage) signs the
 parsed proposal to stay short; a real kind signs the claim it derived, as
 `zkFetchAttestor` does.
 
@@ -328,7 +330,7 @@ the attestor instance needs no `valueSlots`/`byteSlots` field.
 
 ## 8. The client
 
-The client runs on the user's machine and builds on `@thoth/client` (see its
+The client runs on the user's machine and builds on `@txpipe/thoth-client` (see its
 [Usage](../packages/client/README.md#usage)):
 
 - Take a [`TrustedSet`](../CONTEXT.md#signing-and-collection) built by
@@ -339,7 +341,7 @@ The client runs on the user's machine and builds on `@thoth/client` (see its
   into a typed `Attestation`.
 - Derive the expected claim from the evidence yourself. Then vet every reply
   with `resolveAttestation({ trusted, member, attestation, verifier,
-  expectedClaim })`, using `jubjubVerifier` from `@thoth/client/jubjub`.
+  expectedClaim })`, using `jubjubVerifier` from `@txpipe/thoth-client/jubjub`.
 - Group the replies by exact message. Place each signature at its member's
   `registryIndex`, never by reply order.
 - Keep request secrets on the user's machine. The attestors see evidence, not

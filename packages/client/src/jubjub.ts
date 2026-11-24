@@ -6,7 +6,7 @@ import {
   type JubjubSchnorrSignature,
   jubjubSchnorrVerify,
 } from '@midnight-ntwrk/compact-runtime';
-import type { FlatMessage } from '@thoth/core/claim';
+import type { FlatMessage } from '@txpipe/thoth-core/claim';
 import type { AttestationVerifier } from './index.js';
 
 /**

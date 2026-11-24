@@ -3,11 +3,11 @@ import {
   assertValidClaimSignatures,
   getIdentifierFromClaimInfo,
 } from '@reclaimprotocol/attestor-core';
-import type { Attestor, KeyPair } from '@thoth/attestor';
-import { buildAttestor, defineAttestor } from '@thoth/attestor';
-import type { AttestationInput } from '@thoth/core';
-import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { claimToMessage } from '@thoth/core/claim';
+import type { Attestor, KeyPair } from '@txpipe/thoth-attestor';
+import { buildAttestor, defineAttestor } from '@txpipe/thoth-attestor';
+import type { AttestationInput } from '@txpipe/thoth-core';
+import type { Claim, FlatMessage } from '@txpipe/thoth-core/claim';
+import { claimToMessage } from '@txpipe/thoth-core/claim';
 import { bytesToHex, hexToBytes } from '../hex.js';
 import {
   assertEvidenceMatchesPolicy,
@@ -267,7 +267,7 @@ export function createZkFetchDefinition(options: { witnessAddress: string }): Zk
  *
  * @example
  * ```ts
- * import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
+ * import { zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
  *
  * const attestor = zkFetchAttestor({
  *   id: 'zkFetch-strava-1',

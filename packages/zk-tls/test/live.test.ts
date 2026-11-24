@@ -3,7 +3,7 @@
 // numeric-only, once with a byte value slot.
 // Opt-in through `WITNESS_URLS`, skipped otherwise (`npm test` stays offline
 // and deterministic). See the README's "Live check".
-import { claimToMessage } from '@thoth/core/claim';
+import { claimToMessage } from '@txpipe/thoth-core/claim';
 import {
   assertEvidenceMatchesPolicy,
   deriveClaimFromEvidence,
@@ -11,10 +11,10 @@ import {
   ZK_FETCH_CLAIM_CONTEXT_KEY,
   type ZkFetchPolicy,
   zkFetchClaimContextDigestOf,
-} from '@thoth/zk-tls';
-import { assertClaimMatchesContext, verifyZkFetchProof } from '@thoth/zk-tls/attestor';
-import type { ZkFetchRequest } from '@thoth/zk-tls/client';
-import { zkFetchProver } from '@thoth/zk-tls/prover';
+} from '@txpipe/thoth-zk-tls';
+import { assertClaimMatchesContext, verifyZkFetchProof } from '@txpipe/thoth-zk-tls/attestor';
+import type { ZkFetchRequest } from '@txpipe/thoth-zk-tls/client';
+import { zkFetchProver } from '@txpipe/thoth-zk-tls/prover';
 import { describe, expect, it } from 'vitest';
 
 /** The app id every claim in this suite is for. */

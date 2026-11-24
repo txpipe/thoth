@@ -1,4 +1,4 @@
-// Unit tests for the zkFetch kind's shared logic (`@thoth/zk-tls`): value
+// Unit tests for the zkFetch kind's shared logic (`@txpipe/thoth-zk-tls`): value
 // parsing, redaction handling, claim derivation, disclosure matching, and
 // policy checks.
 //
@@ -23,12 +23,12 @@ import {
   zkFetchPolicyHashOf,
   zkFetchPolicySchema,
   zkFetchSubjectHashOf,
-} from '@thoth/zk-tls';
+} from '@txpipe/thoth-zk-tls';
 import {
   assertClaimMatchesContext,
   assertClaimMatchesDisclosures,
   assertClaimMatchesSubject,
-} from '@thoth/zk-tls/attestor';
+} from '@txpipe/thoth-zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
 import { disclosureRules, disclosureRulesOf } from './helpers/helper.js';
 

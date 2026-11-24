@@ -1,9 +1,9 @@
 // The output variant's checks: the proposal must say exactly what the observation
 // shows. The attestor runs them all; the client runs the first two on its own read.
 
-import type { AttestationInput } from '@thoth/core';
-import type { Claim } from '@thoth/core/claim';
-import { CLAIM_VERSION } from '@thoth/core/claim';
+import type { AttestationInput } from '@txpipe/thoth-core';
+import type { Claim } from '@txpipe/thoth-core/claim';
+import { CLAIM_VERSION } from '@txpipe/thoth-core/claim';
 import { assertPolicySlotsInRange } from '../policy.js';
 import {
   assetQuantityOf,

@@ -1,9 +1,9 @@
 // The cardano@1 law: the schemas and checks every cardano@1 attestor runs, with
 // no key material. Paired with a key by `cardanoAttestor` in `./index.js`.
 
-import { defineAttestor } from '@thoth/attestor';
-import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { claimToMessage } from '@thoth/core/claim';
+import { defineAttestor } from '@txpipe/thoth-attestor';
+import type { Claim, FlatMessage } from '@txpipe/thoth-core/claim';
+import { claimToMessage } from '@txpipe/thoth-core/claim';
 import {
   CARDANO_LAW,
   type CardanoDefinition,

@@ -14,7 +14,7 @@ export { A_Claim, A_ClaimEntry };
 export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
 
 // A four-field subject, so a test can check `persistentHash<Subject>` against
-// the off-chain subject hash in `@thoth/core/claim-context`.
+// the off-chain subject hash in `@txpipe/thoth-core/claim-context`.
 export struct Subject {
   method: Bytes<32>;
   host: Bytes<32>;

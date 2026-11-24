@@ -3,11 +3,11 @@ import type {
   AttestorTransport,
   CollectedAttestation,
   TrustedSet,
-} from '@thoth/client';
-import { attestorIdsOf, memberOf } from '@thoth/client';
-import type { AttestationInput } from '@thoth/core';
-import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { claimToMessage } from '@thoth/core/claim';
+} from '@txpipe/thoth-client';
+import { attestorIdsOf, memberOf } from '@txpipe/thoth-client';
+import type { AttestationInput } from '@txpipe/thoth-core';
+import type { Claim, FlatMessage } from '@txpipe/thoth-core/claim';
+import { claimToMessage } from '@txpipe/thoth-core/claim';
 import { z } from 'zod';
 import type {
   ProviderClaimData,
@@ -165,7 +165,7 @@ export interface Attestment<V extends number, PK, S> {
 
 /** The configuration a dApp fixes once, at `zkFetchClient.init`. */
 export interface ZkFetchClientConfig<V extends number, PK, S> {
-  /** The dApp's pinned attestors, from `@thoth/client`'s `buildTrustedSet`. */
+  /** The dApp's pinned attestors, from `@txpipe/thoth-client`'s `buildTrustedSet`. */
   readonly trusted: TrustedSet<ZkFetchDefinition, PK>;
   readonly transport: AttestorTransport<ZkFetchDefinition, PK, S>;
   /** Verifies attestor signatures before a response counts. */
@@ -265,8 +265,8 @@ export interface ZkFetchClient<V extends number, PK, S> {
  *
  * @example
  * ```ts
- * import { zkFetchClient } from '@thoth/zk-tls/client';
- * import { zkFetchProver } from '@thoth/zk-tls/prover';
+ * import { zkFetchClient } from '@txpipe/thoth-zk-tls/client';
+ * import { zkFetchProver } from '@txpipe/thoth-zk-tls/prover';
  *
  * // `trusted` pins attestor-a and attestor-b; each needs its own prover.
  * const client = zkFetchClient.init({

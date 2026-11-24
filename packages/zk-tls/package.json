@@ -1,5 +1,5 @@
 {
-  "name": "@thoth/zk-tls",
+  "name": "@txpipe/thoth-zk-tls",
   "version": "0.0.0",
   "description": "zkFetch attestor kind for the Thoth N-of-M attestation system.",
   "type": "module",
@@ -30,6 +30,10 @@
     "dist",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -56,9 +60,9 @@
   "dependencies": {
     "@reclaimprotocol/attestor-core": "5.1.6",
     "@reclaimprotocol/tls": "0.1.5",
-    "@thoth/attestor": "*",
-    "@thoth/client": "*",
-    "@thoth/core": "*",
+    "@txpipe/thoth-attestor": "^0.0.0",
+    "@txpipe/thoth-client": "^0.0.0",
+    "@txpipe/thoth-core": "^0.0.0",
     "re2": "1.27.1",
     "zod": "^4.6.7"
   },

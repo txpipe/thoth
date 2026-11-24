@@ -1,5 +1,5 @@
 // Unit tests for the cardano@1 kind's policy schema and hash
-// (`@thoth/cardano`): normalization, the pinned hash bytes, the address rules
+// (`@txpipe/thoth-cardano`): normalization, the pinned hash bytes, the address rules
 // per network, and the rejection matrix of the output slot set.
 
 import {
@@ -9,7 +9,7 @@ import {
   cardanoPolicySchema,
   normalizeCardanoPolicy,
   type OutputPolicy,
-} from '@thoth/cardano';
+} from '@txpipe/thoth-cardano';
 import { describe, expect, it } from 'vitest';
 
 /**

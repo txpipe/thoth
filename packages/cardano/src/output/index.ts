@@ -1,10 +1,10 @@
 // The output variant of cardano@1: one lovelace output at a watched address. Its
 // policy, evidence, observation, subject, salt and claim; the checks are in ./verify.ts.
 
-import type { Claim } from '@thoth/core/claim';
-import { CLAIM_VERSION } from '@thoth/core/claim';
-import type { CanonicalValue } from '@thoth/core/claim-context';
-import { subjectHashOf } from '@thoth/core/claim-context';
+import type { Claim } from '@txpipe/thoth-core/claim';
+import { CLAIM_VERSION } from '@txpipe/thoth-core/claim';
+import type { CanonicalValue } from '@txpipe/thoth-core/claim-context';
+import { subjectHashOf } from '@txpipe/thoth-core/claim-context';
 import { z } from 'zod';
 import {
   bytes32OfHex,

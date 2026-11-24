@@ -1,12 +1,16 @@
-// Unit tests for the cardano@1 attestor (`@thoth/cardano/attestor`): the read
+// Unit tests for the cardano@1 attestor (`@txpipe/thoth-cardano/attestor`): the read
 // is the source of the claim, the proposal is checked, and the locator schema
 // is strict.
 
-import type { KeyPair } from '@thoth/attestor';
-import { deriveCardanoClaim, type OutputLocator, type OutputObservation } from '@thoth/cardano';
-import { cardanoAttestor } from '@thoth/cardano/attestor';
-import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { claimToMessage } from '@thoth/core/claim';
+import type { KeyPair } from '@txpipe/thoth-attestor';
+import {
+  deriveCardanoClaim,
+  type OutputLocator,
+  type OutputObservation,
+} from '@txpipe/thoth-cardano';
+import { cardanoAttestor } from '@txpipe/thoth-cardano/attestor';
+import type { Claim, FlatMessage } from '@txpipe/thoth-core/claim';
+import { claimToMessage } from '@txpipe/thoth-core/claim';
 import { describe, expect, it } from 'vitest';
 import {
   APP_ID,

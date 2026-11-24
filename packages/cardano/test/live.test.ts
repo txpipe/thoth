@@ -11,8 +11,8 @@ import {
   jubjubSchnorrVerifyingKey,
   sampleJubjubSchnorrSk,
 } from '@midnight-ntwrk/compact-runtime';
-import type { KeyPair } from '@thoth/attestor';
-import { descriptorOf } from '@thoth/attestor';
+import type { KeyPair } from '@txpipe/thoth-attestor';
+import { descriptorOf } from '@txpipe/thoth-attestor';
 import {
   type CardanoNetwork,
   type CardanoObservation,
@@ -20,14 +20,18 @@ import {
   cardanoOutputSaltOf,
   cardanoOutputSubjectHashOf,
   cardanoPolicyHashOf,
-} from '@thoth/cardano';
-import { cardanoAttestor } from '@thoth/cardano/attestor';
-import { type CardanoAttestationInput, cardanoClient } from '@thoth/cardano/client';
-import { createDolosSource, type DolosSource, readOutputObservation } from '@thoth/cardano/dolos';
-import { buildTrustedSet } from '@thoth/client';
-import { jubjubVerifier } from '@thoth/client/jubjub';
-import { claimToMessage } from '@thoth/core/claim';
-import { holderCommitmentOf } from '@thoth/core/claim-context';
+} from '@txpipe/thoth-cardano';
+import { cardanoAttestor } from '@txpipe/thoth-cardano/attestor';
+import { type CardanoAttestationInput, cardanoClient } from '@txpipe/thoth-cardano/client';
+import {
+  createDolosSource,
+  type DolosSource,
+  readOutputObservation,
+} from '@txpipe/thoth-cardano/dolos';
+import { buildTrustedSet } from '@txpipe/thoth-client';
+import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
+import { claimToMessage } from '@txpipe/thoth-core/claim';
+import { holderCommitmentOf } from '@txpipe/thoth-core/claim-context';
 import { describe, expect, it } from 'vitest';
 
 /** The recorded preview event the fixture suite reads; override for another one. */

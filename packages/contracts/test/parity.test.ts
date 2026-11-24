@@ -1,4 +1,4 @@
-// Parity between the off-chain message encoder (`@thoth/core/claim`'s
+// Parity between the off-chain message encoder (`@txpipe/thoth-core/claim`'s
 // `claimToMessage`) and the contract's own `buildMessage` (`pureCircuits.message`).
 // `toContractClaim` is held to the same encoder: its witness shape must build
 // the message `claimToMessage` signs.
@@ -9,7 +9,7 @@
 // `buildMessage(claim)` in-circuit, so acceptance is only possible if the
 // off-chain encoder is byte-identical to the contract's own.
 import { randomBytes } from 'node:crypto';
-import { claimToMessage, toContractClaim } from '@thoth/core/claim';
+import { claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import {

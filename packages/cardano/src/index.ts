@@ -1,9 +1,9 @@
 // The cardano@1 chain-event kind: the policy union, policy hash and claim
 // schema shared by every variant. The output variant lives under ./output/.
 
-import type { AttestationInput } from '@thoth/core';
-import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
-import { claimSchema } from '@thoth/core/claim';
+import type { AttestationInput } from '@txpipe/thoth-core';
+import type { Claim, ClaimInput, FlatMessage } from '@txpipe/thoth-core/claim';
+import { claimSchema } from '@txpipe/thoth-core/claim';
 import { z } from 'zod';
 import { cardanoAddressHashOf } from './bytes.js';
 import { CARDANO_LIMITS } from './limits.js';

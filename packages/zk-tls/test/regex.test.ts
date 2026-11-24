@@ -3,7 +3,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { type ZkFetchPolicy, zkFetchPolicySchema } from '@thoth/zk-tls';
+import { type ZkFetchPolicy, zkFetchPolicySchema } from '@txpipe/thoth-zk-tls';
 import { describe, expect, it } from 'vitest';
 
 /** Every regex in the repo's examples, fixtures and docs. */

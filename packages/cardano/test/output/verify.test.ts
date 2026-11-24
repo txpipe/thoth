@@ -1,4 +1,4 @@
-// Unit tests for the cardano@1 law's verify (`@thoth/cardano/attestor`): the
+// Unit tests for the cardano@1 law's verify (`@txpipe/thoth-cardano/attestor`): the
 // honest observation, one rejection per check, and the derived-message pin.
 
 import {
@@ -8,10 +8,10 @@ import {
   deriveCardanoClaim,
   type OutputObservation,
   type OutputPolicy,
-} from '@thoth/cardano';
-import { createCardanoDefinition } from '@thoth/cardano/attestor';
-import type { Claim } from '@thoth/core/claim';
-import { claimToMessage } from '@thoth/core/claim';
+} from '@txpipe/thoth-cardano';
+import { createCardanoDefinition } from '@txpipe/thoth-cardano/attestor';
+import type { Claim } from '@txpipe/thoth-core/claim';
+import { claimToMessage } from '@txpipe/thoth-core/claim';
 import { describe, expect, it } from 'vitest';
 import {
   APP_ID,

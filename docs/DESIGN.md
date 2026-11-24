@@ -30,11 +30,11 @@ and requires N of them to sign the same claim. Colluding attestors are
 ### Kinds
 
 Attestors come in kinds, one per way of checking evidence. zkFetch, shipped as
-[`@thoth/zk-tls`](../packages/zk-tls/README.md), checks a Reclaim zkFetch
+[`@txpipe/thoth-zk-tls`](../packages/zk-tls/README.md), checks a Reclaim zkFetch
 proof that an HTTPS response was fetched and not forged; in that kind each
 attestor trusts its own Reclaim witness. cardano@1, shipped as
-[`@thoth/cardano`](../packages/cardano/README.md), attests that a chain event
-such as one Cardano output was observed
+[`@txpipe/thoth-cardano`](../packages/cardano/README.md), attests that a chain
+event such as one Cardano output was observed
 ([ADR 0014](adr/0014-chain-event-kinds.md)). The contract knows nothing about
 kinds: the claim's `policyHash` stands in for the kind ([ADR 0002](adr/0002-no-kind-on-chain-policy-hash.md)), so a new
 kind needs no contract change. To add one, see
@@ -52,7 +52,7 @@ kind needs no contract change. To add one, see
   stored on-chain. What the public nullifier reveals depends on the kind's
   salt ([ADR 0012](adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md),
   [ADR 0014](adr/0014-chain-event-kinds.md)); the
-  [`@thoth/contracts` README](../packages/contracts/README.md#guarantees-and-limits)
+  [`@txpipe/thoth-contracts` README](../packages/contracts/README.md#guarantees-and-limits)
   says what the ledger makes public.
 
 Matching values alone do not prove where they came from. An app that needs
@@ -88,7 +88,7 @@ Attestors sign, and the contract rebuilds, a flat vector of
 `K = 2*V + 2*B + 14` fields (`B = 2*W` is the number of byte halves).
 `buildMessage` in
 [`attestation.compact`](../packages/contracts/attestation.compact) defines it;
-`claimToMessage` in `@thoth/core/claim` mirrors it, and a parity test keeps the
+`claimToMessage` in `@txpipe/thoth-core/claim` mirrors it, and a parity test keeps the
 two equal. Each 32-byte field is split into two 16-byte halves, each read as a
 `Uint<128>` little-endian (byte 0 least significant, the runtime's
 `convertBytesToUint` convention), so every byte is signed.
@@ -155,7 +155,7 @@ sequenceDiagram
 3. The contract verifies, in-circuit, the version, the policy hash, at least N
    valid signatures each against its own registry slot, the absent slots, the
    holder secret, the window and replay. The
-   [`@thoth/contracts` README](../packages/contracts/README.md#guarantees-and-limits)
+   [`@txpipe/thoth-contracts` README](../packages/contracts/README.md#guarantees-and-limits)
    lists every check. Only then does the app's predicate run.
 
 ## Out of scope

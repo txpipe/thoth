@@ -1,4 +1,4 @@
-# @thoth/cardano
+# @txpipe/thoth-cardano
 
 The cardano@1 [chain-event kind](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#kinds) for Thoth, which attests one lovelace output at a watched Cardano address, for dApp developers who act on Cardano deposits and for the operators who run their attestors.
 
@@ -14,14 +14,14 @@ npm install && npm run build
 cd /path/to/your-app && npm install /path/to/thoth/packages/cardano
 ```
 
-Its package name is `@thoth/cardano`; that name may change until the npm scope is settled.
+Once it is published, it installs as `@txpipe/thoth-cardano`.
 
 ## Usage
 
 Describe the output you watch as a policy, then hash it. The hash is the `policyHash` your contract seals:
 
 ```ts
-import { cardanoPolicyHashOf, type CardanoPolicy } from '@thoth/cardano';
+import { cardanoPolicyHashOf, type CardanoPolicy } from '@txpipe/thoth-cardano';
 
 const policy: CardanoPolicy = {
   kind: 'output',
@@ -46,8 +46,8 @@ The `slots` list says which claim slot each fact fills: numeric facts fill the c
 To run an attestor, give it a signing key and a reader bound to your own Cardano endpoint:
 
 ```ts
-import { cardanoAttestor } from '@thoth/cardano/attestor';
-import { createDolosSource, readOutputObservation } from '@thoth/cardano/dolos';
+import { cardanoAttestor } from '@txpipe/thoth-cardano/attestor';
+import { createDolosSource, readOutputObservation } from '@txpipe/thoth-cardano/dolos';
 
 const source = createDolosSource({ uri: 'http://localhost:50051' }); // your UTxO-RPC endpoint
 
@@ -121,7 +121,7 @@ What the policy does not check, and what your app must do:
 - **The window is the event's block time, which diverges from ADR 0005.** Every attestor derives the same window from the block, so they sign the same message ([ADR 0014](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0014-chain-event-kinds.md), [ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
 - **No witness binds the claim context, which diverges from ADR 0011.** The attestor reads the chain itself, and the window follows from the event, so nothing the client chooses can move it ([ADR 0014](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0014-chain-event-kinds.md), [ADR 0011](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
 - **Evidence is a locator, not the payload.** The client points at an event; the attestor re-reads it and derives every field that describes the event, so client input can only choose what to attest, never what the claim says ([ADR 0014](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0014-chain-event-kinds.md), [ADR 0007](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0007-no-evidence-commitment.md)).
-- **The first reader speaks UTxO-RPC.** `@thoth/cardano/dolos` reads the event from a UTxO-RPC endpoint such as Dolos, with no EffectStream node in between. The attestor and the client take any `read` function that returns a `CardanoObservation`, so a reader over another source, such as Blockfrost or Ogmios, plugs in without a change to the law or the policy hash.
+- **The first reader speaks UTxO-RPC.** `@txpipe/thoth-cardano/dolos` reads the event from a UTxO-RPC endpoint such as Dolos, with no EffectStream node in between. The attestor and the client take any `read` function that returns a `CardanoObservation`, so a reader over another source, such as Blockfrost or Ogmios, plugs in without a change to the law or the policy hash.
 - **Each variant is additive.** The variant tag is part of the policy hash, so a new variant does not change existing hashes. See [adding a variant](https://github.com/txpipe-shop/thoth/blob/main/packages/cardano/docs/adding-a-variant.md).
 
 ## Links
@@ -133,4 +133,4 @@ What the policy does not check, and what your app must do:
 - [docs/adr/0014-chain-event-kinds.md](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0014-chain-event-kinds.md): the chain-event kind contract
 - [dApp integration guide](https://github.com/txpipe-shop/thoth/blob/main/packages/cardano/docs/dapp-integration.md): client setup, the policy slot map, collecting a threshold, handing the claim to the contract, and the live check
 - [Adding a variant](https://github.com/txpipe-shop/thoth/blob/main/packages/cardano/docs/adding-a-variant.md): how to add an event shape to this package
-- [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): the claim and `policyHashOf`
+- [`@txpipe/thoth-core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): the claim and `policyHashOf`

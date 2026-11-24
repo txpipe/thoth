@@ -1,8 +1,8 @@
 // Shared cardano@1 policy primitives: the law tag, networks, base fields and
 // validators. Each event variant supplies its own schema on top of these.
 
-import type { CanonicalValue } from '@thoth/core/claim-context';
-import { policyHashOf } from '@thoth/core/claim-context';
+import type { CanonicalValue } from '@txpipe/thoth-core/claim-context';
+import { policyHashOf } from '@txpipe/thoth-core/claim-context';
 import { z } from 'zod';
 import { MAX_UINT32 } from './bytes.js';
 

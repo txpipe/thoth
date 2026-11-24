@@ -8,11 +8,11 @@ the address of your Reclaim witness, and run that witness. The
 ## Building an instance
 
 An attestor instance is a signing key pair and the public address of the
-Reclaim witness you run. `@thoth/attestor`'s `AttestorSigner` holds the key;
+Reclaim witness you run. `@txpipe/thoth-attestor`'s `AttestorSigner` holds the key;
 nothing in this package reads a private key.
 
 ```ts
-import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
+import { zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
 
 const attestor = zkFetchAttestor({
   id: 'zkFetch-strava-1',
@@ -22,8 +22,8 @@ const attestor = zkFetchAttestor({
 ```
 
 Serve `attestor.attest(input)` to dApps over the transport you choose;
-`@thoth/client` shows a minimal HTTP one. Share `descriptorOf(attestor)` from
-`@thoth/attestor` with the dApps that pin you.
+`@txpipe/thoth-client` shows a minimal HTTP one. Share `descriptorOf(attestor)` from
+`@txpipe/thoth-attestor` with the dApps that pin you.
 
 The instance takes no registry slot and no slot counts, so one instance
 serves any dApp ([why](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
@@ -152,7 +152,7 @@ The witness listens on `ws://localhost:8001/ws`.
 
 For two witnesses at once, run `npm run witnesses --workspace=packages/zk-tls`.
 It runs `scripts/start-witnesses.sh`, which clones `attestor-core` at a pinned
-commit: `f451eb3`, the source of the 5.1.6 release `@thoth/zk-tls` depends on.
+commit: `f451eb3`, the source of the 5.1.6 release `@txpipe/thoth-zk-tls` depends on.
 The script installs the clone as above and starts two witnesses on ports 8001
 and 8002. It stops with an error if `re2` doesn't load or a port is already in
 use. It also stops if a witness logs `Failed to load RE2` or exits. Once both

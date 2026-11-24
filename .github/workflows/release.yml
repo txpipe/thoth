@@ -1,0 +1,151 @@
+name: Release
+
+# Opens the Version Packages PR from pending changesets and publishes to npm once it
+# merges. Publishing needs NPM_PUBLISH set to 'true'; see CONTRIBUTING.md#releases.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Build and test
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+
+  select-mode:
+    name: Select release mode
+    needs: test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.select-mode.outputs.mode }}
+      publish-plan-artifact-id: ${{ steps.select-mode.outputs.publish-plan-artifact-id }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+
+      - name: Install dependencies
+        # No install scripts: nothing here needs a native build, and publish holds an OIDC token.
+        run: npm ci --ignore-scripts
+
+      - name: Select Changesets mode
+        id: select-mode
+        uses: changesets/action/select-mode@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+
+  version:
+    name: Open the Version Packages PR
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'version'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # changeset version reads the history behind each changeset, and this checkout
+          # keeps no credentials to fetch more of it.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+
+      - name: Install dependencies
+        # No install scripts: nothing here needs a native build, and publish holds an OIDC token.
+        run: npm ci --ignore-scripts
+
+      - name: Version packages
+        uses: changesets/action/version@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          # `changeset version` leaves package-lock.json behind; the script refreshes it.
+          script: npm run changeset:version
+
+  pack:
+    name: Pack packages
+    needs: select-mode
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      needs.select-mode.outputs.mode == 'publish' &&
+      vars.NPM_PUBLISH == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      pack-dir-artifact-id: ${{ steps.pack.outputs.pack-dir-artifact-id }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+
+      - name: Install dependencies
+        # No install scripts: nothing here needs a native build, and publish holds an OIDC token.
+        run: npm ci --ignore-scripts
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack packages
+        id: pack
+        uses: changesets/action/pack@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          publish-plan-artifact-id: ${{ needs.select-mode.outputs.publish-plan-artifact-id }}
+
+  publish:
+    name: Publish to npm
+    needs: pack
+    runs-on: ubuntu-24.04
+    environment: npm
+    permissions:
+      contents: write # git tags and GitHub releases
+      id-token: write # npm trusted publishing
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+
+      - name: Install dependencies
+        # No install scripts: nothing here needs a native build, and publish holds an OIDC token.
+        run: npm ci --ignore-scripts
+
+      - name: Publish packages
+        uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}

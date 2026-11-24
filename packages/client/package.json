@@ -1,5 +1,5 @@
 {
-  "name": "@thoth/client",
+  "name": "@txpipe/thoth-client",
   "version": "0.0.0",
   "description": "Client-facing types for the Thoth N-of-M attestation system.",
   "type": "module",
@@ -29,6 +29,10 @@
     "README.md",
     "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -51,7 +55,7 @@
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "0.21.0",
-    "@thoth/core": "*",
+    "@txpipe/thoth-core": "^0.0.0",
     "zod": "^4.6.7"
   }
 }

@@ -1,7 +1,7 @@
 // The attestor's per-instance input limits: oversized input is rejected while
 // it is parsed, before the proof check or the signature runs.
-import type { KeyPair } from '@thoth/attestor';
-import type { FlatMessage } from '@thoth/core/claim';
+import type { KeyPair } from '@txpipe/thoth-attestor';
+import type { FlatMessage } from '@txpipe/thoth-core/claim';
 import {
   ZK_FETCH_DEFAULT_LIMITS,
   type ZkFetchLimits,
@@ -9,8 +9,8 @@ import {
   zkFetchClaimSchema,
   zkFetchPolicyHashOf,
   zkFetchSchemasWithin,
-} from '@thoth/zk-tls';
-import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
+} from '@txpipe/thoth-zk-tls';
+import { zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
 import { describe, expect, it, vi } from 'vitest';
 import { disclosureRules, FIXTURE } from './helpers/helper.js';
 

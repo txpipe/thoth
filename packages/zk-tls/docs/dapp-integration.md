@@ -1,4 +1,4 @@
-# @thoth/zk-tls dApp integration
+# @txpipe/thoth-zk-tls dApp integration
 
 How to use the zkFetch kind from a dApp: configure the client, write the
 policy and the request, collect a threshold, and hand the attestment to the
@@ -9,16 +9,16 @@ contract. The [package README](../README.md) explains the terms; the
 
 `zkFetchClient.init` takes:
 
-- **`trusted`.** The attestors your app pins, built with `@thoth/client`'s
+- **`trusted`.** The attestors your app pins, built with `@txpipe/thoth-client`'s
   `buildTrustedSet({ registrySize, attestors })`. `registrySize` is your
   registry's `#M`; each member pairs an attestor's descriptor
   (`{ id, definition, publicKey }`) with the `registryIndex` of its key in your
   deployed registry. The attestor does not choose its slot.
 - **`transport`.** How the client reaches each attestor. You supply it; the
-  attestor side is `Attestor.attest`, and `@thoth/client` has a minimal HTTP
+  attestor side is `Attestor.attest`, and `@txpipe/thoth-client` has a minimal HTTP
   example.
 - **`verifier`.** The attestor signature verifier. For Jubjub Schnorr, use
-  `jubjubVerifier` from `@thoth/client/jubjub`.
+  `jubjubVerifier` from `@txpipe/thoth-client/jubjub`.
 - **`policy`.** The policy every attestor in the set enforces; see
   [Building the policy](#building-the-policy). Every claim carries
   `zkFetchPolicyHashOf(policy)` as its `policyHash`, and your contract must
@@ -39,12 +39,12 @@ contract. The [package README](../README.md) explains the terms; the
 A complete setup:
 
 ```ts
-import { buildTrustedSet, type AttestorTransport } from '@thoth/client';
-import { jubjubVerifier } from '@thoth/client/jubjub';
-import { holderCommitmentOf } from '@thoth/core/claim-context';
-import { type ZkFetchDefinition, zkFetchPolicySchema } from '@thoth/zk-tls';
-import { zkFetchClient } from '@thoth/zk-tls/client';
-import { zkFetchProver } from '@thoth/zk-tls/prover';
+import { buildTrustedSet, type AttestorTransport } from '@txpipe/thoth-client';
+import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
+import { holderCommitmentOf } from '@txpipe/thoth-core/claim-context';
+import { type ZkFetchDefinition, zkFetchPolicySchema } from '@txpipe/thoth-zk-tls';
+import { zkFetchClient } from '@txpipe/thoth-zk-tls/client';
+import { zkFetchProver } from '@txpipe/thoth-zk-tls/prover';
 
 const trusted = buildTrustedSet({
   registrySize: 3, // the registry's #M
@@ -56,7 +56,7 @@ const trusted = buildTrustedSet({
 });
 
 // JSON carries neither bigint nor bytes, so toJson and fromJson (defined in the
-// @thoth/client README) tag them; your attestor's server must decode with the same pair.
+// @txpipe/thoth-client README) tag them; your attestor's server must decode with the same pair.
 const transport: AttestorTransport<ZkFetchDefinition, PublicKey, Signature> = {
   async request(attestor, input) {
     const res = await fetch(`https://${attestor.id}/attest`, {
@@ -270,7 +270,7 @@ flags `sgiu` when its optional native `re2` module has loaded, and JavaScript's
 `RegExp` otherwise. The two read some patterns differently, so Thoth pins the
 engine to RE2:
 
-- `@thoth/zk-tls` depends on `re2`. The prover waits for it before its first
+- `@txpipe/thoth-zk-tls` depends on `re2`. The prover waits for it before its first
   proof and refuses to prove without it.
 - Every witness loads `re2` too
   ([attestor guide](attestor-guide.md#running-a-reclaim-witness)).
@@ -316,7 +316,7 @@ An endpoint that accepts a body but has nothing to say in it should send a
 harmless non-empty sentinel and pin it, rather than using `ignored`:
 
 ```ts
-import { zkFetchBodyHashOf, type ZkFetchPolicy } from '@thoth/zk-tls';
+import { zkFetchBodyHashOf, type ZkFetchPolicy } from '@txpipe/thoth-zk-tls';
 
 const SENTINEL = '{"thoth":"ignored"}';
 const policy: ZkFetchPolicy = {
@@ -348,13 +348,13 @@ each signature at its slot in the contract's fixed signature vector and call
 [wire order](../../../docs/DESIGN.md#wire-order) shows that shape.
 
 ```ts
-import { toContractClaim } from '@thoth/core/claim';
+import { toContractClaim } from '@txpipe/thoth-core/claim';
 
 // In getAttestationWitness:
 const claim = toContractClaim(attestment.claim);
 ```
 
-See `@thoth/contracts` for the circuit and the registry wiring.
+See `@txpipe/thoth-contracts` for the circuit and the registry wiring.
 
 Replay protection keys on the signed observation: app id, policy hash, subject
 hash, salt, window, values and `present`. The salt is the claim context digest
@@ -381,7 +381,7 @@ carries the `witnesses[].url` it used) and retries. Wrap it as a
 
 ```ts
 import { type Options, ReclaimClient } from '@reclaimprotocol/zk-fetch';
-import { toCanonicalEvidence, type ZkFetchProver } from '@thoth/zk-tls/client';
+import { toCanonicalEvidence, type ZkFetchProver } from '@txpipe/thoth-zk-tls/client';
 
 const hostedProver = (client: ReclaimClient): ZkFetchProver => ({
   prove: async (request) => {

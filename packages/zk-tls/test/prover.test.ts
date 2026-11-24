@@ -1,7 +1,7 @@
 // zkFetchProver's mapping between ZkFetchRequest, Reclaim's createClaimOnAttestor
 // and ZkFetchEvidence, against a mocked attestor-core so CI covers it offline.
-import { zkFetchEvidenceSchema } from '@thoth/zk-tls';
-import { zkFetchProver } from '@thoth/zk-tls/prover';
+import { zkFetchEvidenceSchema } from '@txpipe/thoth-zk-tls';
+import { zkFetchProver } from '@txpipe/thoth-zk-tls/prover';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createClaimOnAttestor = vi.hoisted(() => vi.fn());

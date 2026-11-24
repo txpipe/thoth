@@ -1,8 +1,8 @@
-// Unit tests for the canonical claim shape (`@thoth/core/claim`): the schema's
+// Unit tests for the canonical claim shape (`@txpipe/thoth-core/claim`): the schema's
 // length and numeric-bound validation, `claimToMessage`'s wire encoding
 // (per-half byte flag duplication, adjacent 16-byte halves), and
 // `toContractClaim`'s mask guard (its parity lives in the contracts tests).
-import { type Claim, claimSchema, claimToMessage, toContractClaim } from '@thoth/core/claim';
+import { type Claim, claimSchema, claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
 import { describe, expect, it } from 'vitest';
 
 const bytes32 = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);

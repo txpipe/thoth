@@ -1,9 +1,9 @@
 // The cardano@1 attestor instance: the law paired with an operator's key and
 // its own Cardano reader.
 
-import type { Attestor, KeyPair } from '@thoth/attestor';
-import { buildAttestor } from '@thoth/attestor';
-import type { FlatMessage } from '@thoth/core/claim';
+import type { Attestor, KeyPair } from '@txpipe/thoth-attestor';
+import { buildAttestor } from '@txpipe/thoth-attestor';
+import type { FlatMessage } from '@txpipe/thoth-core/claim';
 import {
   type CardanoDefinition,
   type CardanoLocator,
@@ -29,7 +29,7 @@ export { createCardanoDefinition };
  *
  * @example
  * ```ts
- * import { cardanoAttestor } from '@thoth/cardano/attestor';
+ * import { cardanoAttestor } from '@txpipe/thoth-cardano/attestor';
  *
  * const attestor = cardanoAttestor({
  *   id: 'cardano-preview-1',

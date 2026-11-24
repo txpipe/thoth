@@ -3,8 +3,8 @@
 // and a local HTTPS source; the rest stub `createClaimOnAttestor`.
 import { createServer } from 'node:net';
 import type * as AttestorCore from '@reclaimprotocol/attestor-core';
-import { ZkFetchProverError, type ZkFetchRequest } from '@thoth/zk-tls/client';
-import { type ZkFetchProverConfig, zkFetchProver } from '@thoth/zk-tls/prover';
+import { ZkFetchProverError, type ZkFetchRequest } from '@txpipe/thoth-zk-tls/client';
+import { type ZkFetchProverConfig, zkFetchProver } from '@txpipe/thoth-zk-tls/prover';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startFakeWitness, startSource, type TestServer } from './helpers/fake-witness.js';
 

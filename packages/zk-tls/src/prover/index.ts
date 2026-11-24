@@ -51,7 +51,7 @@ const loadCore = (): Promise<AttestorCore> => {
     // attestor-core starts loading `re2` on import and runs regexes with RegExp until it has.
     // The witnesses run RE2, so wait for the same module, and never prove without it.
     await import('re2').catch((error: unknown) => {
-      throw new Error('@thoth/zk-tls needs the native re2 module, which did not load', {
+      throw new Error('@txpipe/thoth-zk-tls needs the native re2 module, which did not load', {
         cause: error,
       });
     });
@@ -147,7 +147,7 @@ const classifyThrown = (
  *
  * @example
  * ```ts
- * import { zkFetchProver } from '@thoth/zk-tls/prover';
+ * import { zkFetchProver } from '@txpipe/thoth-zk-tls/prover';
  *
  * const prover = zkFetchProver({ witnessUrl: 'ws://localhost:8001/ws' });
  * const evidence = await prover.prove({
