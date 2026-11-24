@@ -228,10 +228,12 @@ export interface VerifiedEvidence {
 /**
  * How a disclosed string becomes a claim value.
  *
- * `int` takes decimal digits; `float` takes an unsigned decimal with an
- * optional exponent and rounds halves up; both must fit `Uint<64>`. `bytes`,
- * `hex` and `base64` fill a 32-byte slot (ADR 0010). The dApp guide's
- * "Building the policy" section lists what each rule accepts.
+ * `int` takes decimal digits or `0x`/`0X`-prefixed hex; `float` takes an
+ * unsigned decimal with an optional exponent and rounds halves up; both must
+ * fit `Uint<64>`. `bytes`, `hex` and `base64` fill a 32-byte slot (ADR 0010);
+ * `hex` needs an even number of digits, so a hex-encoded integer below `2^64`
+ * uses `int`.
+ * The dApp guide's "Building the policy" section lists what each rule accepts.
  */
 export type ZkFetchParseRule = 'int' | 'float' | 'bytes' | 'hex' | 'base64';
 
@@ -843,8 +845,8 @@ const canonicalJson = (value: unknown): string => {
   }) as string;
 };
 
-/** The contract's value type is `Uint<64>`; only non-negative values below 2^64 are certifiable. */
-const UINT64_MAX = 1n << 64n;
+/** The contract's `Uint<64>` holds only values below this exclusive bound. */
+const UINT64_LIMIT = 1n << 64n;
 
 /** Parse an unsigned decimal, round halves up, and require a Uint<64> result. */
 const parseDecimalUint64 = (value: string): bigint | null => {
@@ -874,7 +876,7 @@ const parseDecimalUint64 = (value: string): bigint | null => {
   const integerDigits = digits.slice(0, position).padEnd(position, '0') || '0';
   const roundUp = (digits[position] ?? '0') >= '5';
   const rounded = BigInt(integerDigits) + (roundUp ? 1n : 0n);
-  return rounded < UINT64_MAX ? rounded : null;
+  return rounded < UINT64_LIMIT ? rounded : null;
 };
 
 /** The fixed width of a claim byte value (ADR 0009). */
@@ -951,10 +953,10 @@ const decodeByteValue = (value: string, rule: ByteRule): Uint8Array | null => {
 /**
  * Parse a disclosed string into a claim value under a rule.
  *
- * `null` means not certifiable: a numeric reading outside `[0, 2^64)`, or a
- * byte reading that is not a valid encoding or does not fit 32 bytes. For a
- * policy slot, use {@link parseSlotValue}, which also applies the slot's
- * `length` pin.
+ * `null` means not certifiable: a numeric reading outside `[0, 2^64)` or
+ * outside the rule's grammar, or a byte reading that is not a valid encoding
+ * or does not fit 32 bytes. For a policy slot, use {@link parseSlotValue},
+ * which also applies the slot's `length` pin.
  */
 export function parseDisclosedValue(value: string, rule: 'int' | 'float'): bigint | null;
 export function parseDisclosedValue(value: string, rule: ByteRule): Uint8Array | null;
@@ -968,11 +970,11 @@ export function parseDisclosedValue(
 ): bigint | Uint8Array | null {
   switch (rule) {
     case 'int': {
-      if (!/^\d+$/.test(value)) {
+      if (!/^(?:[0-9]+|0[xX][0-9a-fA-F]+)$/.test(value)) {
         return null;
       }
       const big = BigInt(value);
-      return big < UINT64_MAX ? big : null;
+      return big < UINT64_LIMIT ? big : null;
     }
     case 'float':
       return parseDecimalUint64(value);
@@ -982,6 +984,8 @@ export function parseDisclosedValue(
       const bytes = decodeByteValue(value, rule);
       return bytes === null ? null : padTo32(bytes);
     }
+    default:
+      return null;
   }
 }
 
