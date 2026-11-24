@@ -27,9 +27,9 @@ import {
   checkNetworkMagic,
   checkSlotIndicesDistinct,
   checkSlotNamesDistinct,
+  hashParsedCardanoPolicy,
   isCardanoByteFact,
   MAX_NETWORK_MAGIC,
-  policyHashOfCardano,
   slotIndexSchema,
 } from '../policy.js';
 
@@ -131,7 +131,7 @@ export const cardanoOutputPolicySchema = z
  * @throws `ZodError` if the policy fails {@link cardanoOutputPolicySchema}.
  */
 export const cardanoOutputPolicyHashOf = (policy: OutputPolicy): Uint8Array =>
-  policyHashOfCardano(cardanoOutputPolicySchema.parse(policy) as CanonicalValue);
+  hashParsedCardanoPolicy(cardanoOutputPolicySchema.parse(policy) as CanonicalValue);
 
 /** An output's index within its transaction, a uint32. */
 const outputIndexSchema = z.number().int().min(0).max(MAX_UINT32);

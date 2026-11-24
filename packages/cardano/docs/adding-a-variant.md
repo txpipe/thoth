@@ -2,7 +2,7 @@
 
 A variant is one event shape `cardano@1` can describe, such as the `output` variant that exists today. Each variant is a folder under `src/` that supplies what differs for that shape; the law-level pieces stay shared.
 
-- `src/policy.ts`: the law tag, networks, `CardanoPolicyBase`, the fact and slot types (`CardanoFact`, `CardanoSlot`), the shared validators, and `policyHashOfCardano`.
+- `src/policy.ts`: the law tag, networks, `CardanoPolicyBase`, the fact and slot types (`CardanoFact`, `CardanoSlot`), the shared validators, and `hashParsedCardanoPolicy`.
 - `src/bytes.ts`: the 32-byte field encoders and `cardanoAddressHashOf`.
 - `src/index.ts`: the policy union and hash, the claim schema, `deriveCardanoClaim`, and the law-level locator and observation aliases.
 - `src/attestor/`: the law and the attestor instance.
@@ -49,7 +49,7 @@ slots: z
   }),
 ```
 
-Build the schema as a strict object, refine the whole policy with the shared checks, and normalize before hashing: `addressSchema` lowercases an address, and a final `.transform` sorts `slots` by index, so the hash does not depend on the order you wrote the entries in. Give the policy a hash function that parses it and delegates to `policyHashOfCardano`.
+Build the schema as a strict object, refine the whole policy with the shared checks, and normalize before hashing: `addressSchema` lowercases an address, and a final `.transform` sorts `slots` by index, so the hash does not depend on the order you wrote the entries in. Give the policy a hash function that parses it and delegates to `hashParsedCardanoPolicy`.
 
 The schema cannot check that a slot fits the contract's claim size, because the size comes with the client's proposal. `assertPolicySlotsInRange` checks it at derivation and verify, and `cardanoClient.init` checks it when the client starts.
 

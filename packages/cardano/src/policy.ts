@@ -216,5 +216,5 @@ export const assertPolicySlotsInRange = (
  * Hash a normalized cardano@1 policy under the law tag and the claim wire
  * version, so the same policy under another law or version hashes differently.
  */
-export const policyHashOfCardano = (policy: CanonicalValue): Uint8Array =>
+export const hashParsedCardanoPolicy = (policy: CanonicalValue): Uint8Array =>
   policyHashOf(CARDANO_LAW, policy);
