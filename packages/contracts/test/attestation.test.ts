@@ -313,6 +313,12 @@ describe('mock attestation', () => {
       ).rejects.toThrow('Observation replay');
     });
 
+    it('rejects the same claim with the same vault randomness', async () => {
+      const signed = signClaim(makeClaim(), notaryKeys, randomBytes(32));
+      await sim.call('verifyAttestation', ps(signed));
+      await expect(sim.call('verifyAttestation', ps(signed))).rejects.toThrow('Observation replay');
+    });
+
     it('rejects the same observation with fresh vault randomness', async () => {
       const claim = makeClaim();
       await sim.call('verifyAttestation', ps(signClaim(claim, notaryKeys, randomBytes(32))));

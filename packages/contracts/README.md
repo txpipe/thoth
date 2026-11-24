@@ -130,8 +130,8 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
   (`"Window too old"`). A zero `freshnessWindow` does not disable the check.
 - The caller's secret matches `holder` (`"Holder mismatch"`).
 - The observation identity has not been accepted before (`"Observation
-  replay"`), and the claim is not already vaulted under the same randomness
-  (`"Claim already accepted"`).
+  replay"`). This also rejects the same claim resubmitted under the same vault
+  randomness, so the vault needs no check of its own.
 
 What the module does not check, and what your app does itself:
 
