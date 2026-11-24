@@ -47,18 +47,18 @@ To run an attestor, give it a signing key and a reader bound to your own Cardano
 
 ```ts
 import { cardanoAttestor } from '@thoth/cardano/attestor';
-import { createDolosSource, readRawEvent } from '@thoth/cardano/dolos';
+import { createDolosSource, readOutputObservation } from '@thoth/cardano/dolos';
 
 const source = createDolosSource({ uri: 'http://localhost:50051' }); // your UTxO-RPC endpoint
 
 const attestor = cardanoAttestor({
   id: 'cardano-preview-1',
   keyPair, // the attestor's signing key
-  read: (locator) => readRawEvent({ source, ...locator }),
+  read: (locator) => readOutputObservation({ source, ...locator }),
 });
 ```
 
-`readRawEvent` returns the observation the attestor expects, and checks the response's transaction hash against the locator before reading anything else. The source is still trusted to describe its own chain; the block it reports is bound into the subject (ADR 0003).
+`readOutputObservation` returns the observation the attestor expects, and checks the response's transaction hash against the locator before reading anything else. The source is still trusted to describe its own chain; the block it reports is bound into the subject (ADR 0003).
 
 The evidence a client sends is only a [locator](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#kinds), `{ txHash, outputIndex }`. The attestor re-reads the output and its block and derives every field that describes the event from that read; the app id, holder and slot counts come from the proposal.
 

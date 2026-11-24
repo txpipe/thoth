@@ -9,7 +9,7 @@ import {
   createDolosSource,
   type DolosSource,
   lovelaceOf,
-  readRawEvent,
+  readOutputObservation,
 } from '../../src/dolos/index.js';
 
 const BLOCK_HASH = 'ab'.repeat(32);
@@ -100,9 +100,9 @@ const sourceWith = (
 });
 
 const read = (source: DolosSource = sourceWith(), outputIndex = 0) =>
-  readRawEvent({ source, txHash: TX_HASH, outputIndex });
+  readOutputObservation({ source, txHash: TX_HASH, outputIndex });
 
-describe('readRawEvent', () => {
+describe('readOutputObservation', () => {
   it('reads one output and its block as raw fields', async () => {
     expect(await read()).toEqual({
       networkMagic: 2,
@@ -230,16 +230,20 @@ describe('readRawEvent', () => {
 
   it('rejects a non-uint32 output index', async () => {
     await expect(
-      readRawEvent({ source: sourceWith(), txHash: TX_HASH, outputIndex: -1 }),
+      readOutputObservation({ source: sourceWith(), txHash: TX_HASH, outputIndex: -1 }),
     ).rejects.toThrow('uint32');
     await expect(
-      readRawEvent({ source: sourceWith(), txHash: TX_HASH, outputIndex: 2 ** 32 }),
+      readOutputObservation({ source: sourceWith(), txHash: TX_HASH, outputIndex: 2 ** 32 }),
     ).rejects.toThrow('uint32');
   });
 
   it('rejects a transaction hash that is not 64 lowercase hex characters', async () => {
     await expect(
-      readRawEvent({ source: sourceWith(), txHash: TX_HASH.toUpperCase(), outputIndex: 0 }),
+      readOutputObservation({
+        source: sourceWith(),
+        txHash: TX_HASH.toUpperCase(),
+        outputIndex: 0,
+      }),
     ).rejects.toThrow('64 lowercase hex');
   });
 

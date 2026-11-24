@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cardano, query } from '@utxorpc/spec';
 import { describe, expect, it } from 'vitest';
-import { type DolosSource, readRawEvent } from '../../src/dolos/index.js';
+import { type DolosSource, readOutputObservation } from '../../src/dolos/index.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
@@ -37,7 +37,7 @@ const source: DolosSource = {
 
 describe('recorded Dolos fixture', () => {
   it('reads the recorded preview output and block as raw fields', async () => {
-    const event = await readRawEvent({ source, txHash: TX_HASH, outputIndex: 0 });
+    const event = await readOutputObservation({ source, txHash: TX_HASH, outputIndex: 0 });
 
     expect(event).toEqual({
       networkMagic: 2,

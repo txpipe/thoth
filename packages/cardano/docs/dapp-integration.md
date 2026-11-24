@@ -42,7 +42,7 @@ A complete setup:
 import { buildTrustedSet } from '@thoth/client';
 import { jubjubVerifier } from '@thoth/client/jubjub';
 import { cardanoClient } from '@thoth/cardano/client';
-import { createDolosSource, readRawEvent } from '@thoth/cardano/dolos';
+import { createDolosSource, readOutputObservation } from '@thoth/cardano/dolos';
 
 const source = createDolosSource({ uri: 'http://localhost:50051' }); // your UTxO-RPC endpoint
 
@@ -60,18 +60,18 @@ const client = cardanoClient.init({
   appId, // 32 bytes
   valueSlots: 3, // the contract's #V
   byteSlots: 1, // one byte value; the contract's #B is 2
-  read: (locator) => readRawEvent({ source, ...locator }),
+  read: (locator) => readOutputObservation({ source, ...locator }),
 });
 ```
 
 `createDolosSource` builds a reader over a UTxO-RPC endpoint, and
-`readRawEvent` reads one transaction, its block and the tip in one call and
-returns the observation. A different provider works if it returns the same
-`CardanoObservation`.
+`readOutputObservation` reads one transaction, its block and the tip in one
+call and returns the observation. A different provider works if it returns the
+same `CardanoObservation`.
 
-`readRawEvent` checks the response's transaction hash against the locator, so
-an endpoint that answers with a different transaction is caught before
-anything is read. The source is still trusted to describe its own chain
+`readOutputObservation` checks the response's transaction hash against the
+locator, so an endpoint that answers with a different transaction is caught
+before anything is read. The source is still trusted to describe its own chain
 ([ADR 0003](../../../docs/adr/0003-colluding-attestors-out-of-scope.md)): the
 block it reports is bound into the subject, and each attestor derives the claim
 again from its own read, so a client endpoint that invents a block yields a

@@ -148,7 +148,7 @@ export const lovelaceOf = (coin: cardano.BigInt | undefined): bigint =>
  *   whole seconds, or the tip block has no header.
  * @throws `ZodError` if the result does not fit the observation schema.
  */
-export const readRawEvent = async (options: {
+export const readOutputObservation = async (options: {
   source: DolosSource;
   /** The transaction hash, 64 lowercase hex characters. */
   txHash: string;

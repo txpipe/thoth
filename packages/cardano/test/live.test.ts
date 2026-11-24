@@ -23,7 +23,7 @@ import {
 } from '@thoth/cardano';
 import { cardanoAttestor } from '@thoth/cardano/attestor';
 import { type CardanoAttestationInput, cardanoClient } from '@thoth/cardano/client';
-import { createDolosSource, type DolosSource, readRawEvent } from '@thoth/cardano/dolos';
+import { createDolosSource, type DolosSource, readOutputObservation } from '@thoth/cardano/dolos';
 import { buildTrustedSet } from '@thoth/client';
 import { jubjubVerifier } from '@thoth/client/jubjub';
 import { claimToMessage } from '@thoth/core/claim';
@@ -84,7 +84,7 @@ const keyPairOf = (): KeyPair<JubjubPoint, JubjubSchnorrSignature> => {
 /** Read the event, naming the setting to try when the endpoint cannot serve it. */
 const readFrom = async (source: DolosSource): Promise<CardanoObservation> => {
   try {
-    return await readRawEvent({ source, txHash: TX_HASH, outputIndex: OUTPUT_INDEX });
+    return await readOutputObservation({ source, txHash: TX_HASH, outputIndex: OUTPUT_INDEX });
   } catch (error) {
     throw new Error(
       `endpoint could not read ${TX_HASH}:${OUTPUT_INDEX}; ` +
@@ -104,7 +104,7 @@ describe.skipIf(ENDPOINT === '')('live UTxO-RPC endpoint', () => {
     const attestor = cardanoAttestor({
       id: 'live-endpoint',
       keyPair: keyPairOf(),
-      read: (event) => readRawEvent({ source, ...event }),
+      read: (event) => readOutputObservation({ source, ...event }),
     });
     const holderSecret = randomBytes(32);
     const holder = holderCommitmentOf(holderSecret);
