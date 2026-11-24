@@ -213,6 +213,16 @@ describe('readRawEvent', () => {
     await expect(read(sourceWith({ response }))).rejects.toThrow('timestamp is missing');
   });
 
+  it('rejects a missing block height', async () => {
+    const response = readTxResponse({ blockRef: point({ height: 0n }) });
+    await expect(read(sourceWith({ response }))).rejects.toThrow('height is missing');
+  });
+
+  it('rejects a missing block slot', async () => {
+    const response = readTxResponse({ blockRef: point({ slot: 0n }) });
+    await expect(read(sourceWith({ response }))).rejects.toThrow('slot is missing');
+  });
+
   it('rejects a block time that is not whole seconds', async () => {
     const response = readTxResponse({ blockRef: point({ timestamp: 1_700_000_000_500n }) });
     await expect(read(sourceWith({ response }))).rejects.toThrow('whole seconds');

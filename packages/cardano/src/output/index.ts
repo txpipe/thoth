@@ -193,8 +193,10 @@ export const cardanoOutputObservationSchema: z.ZodType<OutputObservation> = z.st
   tipBlockNumber: z.number().int().nonnegative(),
   block: z.strictObject({
     hash: z.string().regex(HEX_64, 'expected 64 lowercase hex characters'),
-    slot: z.number().int().nonnegative(),
-    blockNumber: z.number().int().nonnegative(),
+    // No transaction lives in the genesis block, so a zero slot or height is a
+    // field the reader left unset; as a height it would pass any depth check.
+    slot: z.number().int().positive(),
+    blockNumber: z.number().int().positive(),
     time: z.number().int().nonnegative(),
   }),
   output: z.strictObject({

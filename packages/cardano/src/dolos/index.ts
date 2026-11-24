@@ -204,6 +204,14 @@ export const readRawEvent = async (options: {
   if (blockRef.timestamp === 0n) {
     throw new Error('block timestamp is missing');
   }
+  // UTxO-RPC decodes an unset height or slot as 0. No transaction lives in the
+  // genesis block, and a zero height would pass any depth check.
+  if (blockRef.height === 0n) {
+    throw new Error('block height is missing');
+  }
+  if (blockRef.slot === 0n) {
+    throw new Error('block slot is missing');
+  }
   if (blockRef.timestamp % 1000n !== 0n) {
     throw new Error(`block timestamp ${blockRef.timestamp} is not whole seconds`);
   }

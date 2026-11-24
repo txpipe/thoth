@@ -158,6 +158,15 @@ describe('cardanoAttestor', () => {
     ).rejects.toThrow('values do not match');
   });
 
+  it('refuses a read with no block height, which would pass any depth', async () => {
+    const observed = { ...OBSERVATION, block: { ...OBSERVATION.block, blockNumber: 0 } };
+    const { attestor } = attestorFor(observed);
+
+    await expect(
+      attestor.attest({ policy: POLICY, evidence: LOCATOR, claim: claimFor(observed) }),
+    ).rejects.toThrow('expected number to be >0');
+  });
+
   it('refuses a client-supplied observation in the evidence', async () => {
     const { attestor, reads } = attestorFor();
     const evidence = { ...LOCATOR, observation: OBSERVATION } as unknown as OutputLocator;
