@@ -14,7 +14,7 @@ npm install && npm run build
 cd /path/to/your-app && npm install /path/to/thoth/packages/cardano
 ```
 
-Once it is published, it installs as `@txpipe/thoth-cardano`.
+Once it is published, it installs as `@txpipe/thoth-cardano`. It needs `zod@^4.6.7` as a peer dependency.
 
 ## Usage
 

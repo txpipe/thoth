@@ -14,7 +14,7 @@ npm install && npm run build
 cd /path/to/your-app && npm install /path/to/thoth/packages/zk-tls
 ```
 
-Once it is published, it installs as `@txpipe/thoth-zk-tls`.
+Once it is published, it installs as `@txpipe/thoth-zk-tls`. It needs `zod@^4.6.7` as a peer dependency.
 
 It depends on [`re2`](https://github.com/uhop/node-re2), a native Node module. `npm install` downloads a prebuilt binary for common platforms and otherwise builds one, which needs a C++ toolchain. The prover and the policy schema refuse to run without it ([Regex engine](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#regex-engine)).
 

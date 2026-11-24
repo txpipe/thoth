@@ -27,6 +27,7 @@
   "files": [
     "dist",
     "README.md",
+    "src",
     "NOTICE"
   ],
   "publishConfig": {
@@ -38,15 +39,18 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./claim": {
       "types": "./dist/claim.d.ts",
-      "import": "./dist/claim.js"
+      "import": "./dist/claim.js",
+      "default": "./dist/claim.js"
     },
     "./claim-context": {
       "types": "./dist/claim-context.d.ts",
-      "import": "./dist/claim-context.js"
+      "import": "./dist/claim-context.js",
+      "default": "./dist/claim-context.js"
     }
   },
   "scripts": {
@@ -54,7 +58,12 @@
     "types": "tsc --noEmit"
   },
   "dependencies": {
-    "@midnight-ntwrk/compact-runtime": "0.21.0",
+    "@midnight-ntwrk/compact-runtime": "0.21.0"
+  },
+  "peerDependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
     "zod": "^4.6.7"
   }
 }
