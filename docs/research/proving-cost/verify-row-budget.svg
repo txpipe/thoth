@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 290" width="880" height="290" font-family='system-ui, -apple-system, "Segoe UI", sans-serif' role="img" aria-label="Where verifyAttestation's rows go">
+<title>Where verifyAttestation's rows go</title>
+<desc>Stacked bars: baseline is 67,686 rows of byte splitting, 16,940 SHA-256, 4,872 signatures and 1,112 other; this branch is 7,561 SHA-256, 2,324 signatures and 1,348 other.</desc>
+<rect width="880" height="290" rx="8" fill="#fcfcfb"/>
+<text x="24.0" y="34.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">Where verifyAttestation's rows go</text>
+<text x="24.0" y="54.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Numeric mock (V=3, 2-of-3). Byte splitting is gone; SHA-256 is now two thirds of what is left.</text>
+<rect x="24" y="71" width="10" height="10" rx="2" fill="#2a78d6"/>
+<text x="39.0" y="80.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Byte splitting</text>
+<rect x="150.60000000000002" y="71" width="10" height="10" rx="2" fill="#eb6834"/>
+<text x="165.6" y="80.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">SHA-256</text>
+<rect x="232.40000000000003" y="71" width="10" height="10" rx="2" fill="#1baf7a"/>
+<text x="247.4" y="80.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Signatures</text>
+<rect x="333.40000000000003" y="71" width="10" height="10" rx="2" fill="#eda100"/>
+<text x="348.4" y="80.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Everything else</text>
+<text x="24.0" y="112.0" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600">Same scale</text>
+<text x="164.0" y="140.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">Baseline (main)</text>
+<rect x="174.0" y="124.0" width="401.4" height="24" fill="#2a78d6"/>
+<text x="374.7" y="140.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="600">67,686</text>
+<rect x="577.4" y="124.0" width="99.0" height="24" fill="#eb6834"/>
+<text x="626.9" y="140.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="600">16,940</text>
+<rect x="678.4" y="124.0" width="27.0" height="24" fill="#1baf7a"/>
+<path d="M707.4,124.0 h3.3 a3.31376,3.31376 0 0 1 3.31376,3.31376 v17.4 a3.31376,3.31376 0 0 1 -3.31376,3.31376 h-3.3 z" fill="#eda100"/>
+<text x="722.0" y="140.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">90,610 rows</text>
+<text x="164.0" y="176.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">This branch</text>
+<rect x="174.0" y="160.0" width="43.1" height="24" fill="#eb6834"/>
+<rect x="219.1" y="160.0" width="11.9" height="24" fill="#1baf7a"/>
+<path d="M232.9,160.0 h4.0 a4,4 0 0 1 4,4 v16.0 a4,4 0 0 1 -4,4 h-4.0 z" fill="#eda100"/>
+<text x="248.9" y="176.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">11,233 rows</text>
+<text x="24.0" y="220.0" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600">This branch, enlarged</text>
+<text x="164.0" y="248.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">This branch</text>
+<rect x="174.0" y="232.0" width="358.5" height="24" fill="#eb6834"/>
+<text x="353.3" y="248.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="600">7,561</text>
+<rect x="534.5" y="232.0" width="108.8" height="24" fill="#1baf7a"/>
+<text x="588.9" y="248.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="600">2,324</text>
+<path d="M645.3,232.0 h60.3 a4,4 0 0 1 4,4 v16.0 a4,4 0 0 1 -4,4 h-60.3 z" fill="#eda100"/>
+<text x="677.5" y="248.0" font-size="12" fill="#0b0b0b" text-anchor="middle" font-weight="600">1,348</text>
+<text x="717.6" y="248.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">11,233 rows</text>
+<text x="24.0" y="278.0" font-size="11" fill="#898781" text-anchor="start" font-weight="400">Baseline split measured by stubbing the byte splitting; the branch's parts come from per-instruction row deltas.</text>
+</svg>

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 446" width="880" height="446" font-family='system-ui, -apple-system, "Segoe UI", sans-serif' role="img" aria-label="verifyAttestation circuit size, by option">
+<title>verifyAttestation circuit size, by option</title>
+<desc>Horizontal bars of verifyAttestation rows for nine options, from 90,610 rows at baseline to 11,233 on this branch.</desc>
+<rect width="880" height="446" rx="8" fill="#fcfcfb"/>
+<text x="24.0" y="34.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">verifyAttestation circuit size, by option</text>
+<text x="24.0" y="54.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Rows of the numeric mock (V=3, 2-of-3). Crossing a line to the left halves the proving key and the proving time.</text>
+<line x1="324.0" y1="90" x2="324.0" y2="402" stroke="#e1e0d9"/>
+<text x="324.0" y="420.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">0</text>
+<line x1="405.2" y1="90" x2="405.2" y2="402" stroke="#e1e0d9"/>
+<text x="405.2" y="420.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">20K</text>
+<line x1="486.4" y1="90" x2="486.4" y2="402" stroke="#e1e0d9"/>
+<text x="486.4" y="420.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">40K</text>
+<line x1="567.6" y1="90" x2="567.6" y2="402" stroke="#e1e0d9"/>
+<text x="567.6" y="420.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">60K</text>
+<line x1="648.8" y1="90" x2="648.8" y2="402" stroke="#e1e0d9"/>
+<text x="648.8" y="420.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">80K</text>
+<line x1="730.0" y1="90" x2="730.0" y2="402" stroke="#e1e0d9"/>
+<text x="730.0" y="420.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">100K</text>
+<line x1="390.5" y1="82" x2="390.5" y2="402" stroke="#52514e" stroke-width="1"/>
+<text x="395.5" y="88.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">k=14 limit</text>
+<line x1="457.0" y1="82" x2="457.0" y2="402" stroke="#52514e" stroke-width="1"/>
+<text x="462.0" y="88.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">k=15 limit</text>
+<line x1="590.1" y1="82" x2="590.1" y2="402" stroke="#52514e" stroke-width="1"/>
+<text x="595.1" y="88.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">k=16 limit</text>
+<text x="314.0" y="117.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">Baseline (main)</text>
+<path d="M324.0,103.0 h363.9 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-363.9 z" fill="#aeaca4"/>
+<text x="699.9" y="117.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">90,610 · k=17</text>
+<text x="314.0" y="151.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">C: verify N of M signatures</text>
+<path d="M324.0,137.0 h354.5 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-354.5 z" fill="#aeaca4"/>
+<text x="690.5" y="151.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">88,291 · k=17</text>
+<text x="314.0" y="185.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">B: hash diet</text>
+<path d="M324.0,171.0 h326.8 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-326.8 z" fill="#aeaca4"/>
+<text x="662.8" y="185.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">81,481 · k=17</text>
+<text x="314.0" y="219.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">A: limbs encoding</text>
+<path d="M324.0,205.0 h95.0 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-95.0 z" fill="#aeaca4"/>
+<text x="431.0" y="219.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">24,384 · k=15</text>
+<text x="314.0" y="253.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">F: sign the nullifier</text>
+<path d="M324.0,239.0 h89.9 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-89.9 z" fill="#aeaca4"/>
+<text x="425.9" y="253.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">23,127 · k=15</text>
+<text x="314.0" y="287.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">A: Poseidon digest</text>
+<path d="M324.0,273.0 h87.8 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-87.8 z" fill="#aeaca4"/>
+<text x="423.8" y="287.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">22,599 · k=15</text>
+<text x="314.0" y="321.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">B + C + limbs (circuit only)</text>
+<path d="M324.0,307.0 h48.5 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-48.5 z" fill="#aeaca4"/>
+<text x="384.5" y="321.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">12,940 · k=14</text>
+<text x="314.0" y="355.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">A + B + C, Poseidon digest</text>
+<path d="M324.0,341.0 h42.1 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-42.1 z" fill="#aeaca4"/>
+<text x="378.1" y="355.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">11,343 · k=14</text>
+<text x="314.0" y="389.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">B + C + sign the nullifier (this branch)</text>
+<path d="M324.0,375.0 h41.6 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-41.6 z" fill="#2a78d6"/>
+<text x="377.6" y="389.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">11,233 · k=14</text>
+<line x1="324" y1="90" x2="324" y2="402" stroke="#c3c2b7"/>
+</svg>

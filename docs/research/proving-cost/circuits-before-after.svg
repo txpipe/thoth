@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 452" width="880" height="452" font-family='system-ui, -apple-system, "Segoe UI", sans-serif' role="img" aria-label="Proving time per circuit, before and after">
+<title>Proving time per circuit, before and after</title>
+<desc>Grouped horizontal bars of proving time for six circuits on main and on this branch.</desc>
+<rect width="880" height="452" rx="8" fill="#fcfcfb"/>
+<text x="24.0" y="34.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">Proving time per circuit, before and after</text>
+<text x="24.0" y="54.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Warm median of three proofs on proof server 9.0.0. Every proof on this branch is verified by the server.</text>
+<rect x="24" y="71" width="10" height="10" rx="2" fill="#aeaca4"/>
+<text x="39.0" y="80.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Baseline (main)</text>
+<rect x="157.0" y="71" width="10" height="10" rx="2" fill="#2a78d6"/>
+<text x="172.0" y="80.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">This branch</text>
+<line x1="234.0" y1="100" x2="234.0" y2="412" stroke="#e1e0d9"/>
+<text x="234.0" y="430.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">0 s</text>
+<line x1="345.2" y1="100" x2="345.2" y2="412" stroke="#e1e0d9"/>
+<text x="345.2" y="430.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">2 s</text>
+<line x1="456.4" y1="100" x2="456.4" y2="412" stroke="#e1e0d9"/>
+<text x="456.4" y="430.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">4 s</text>
+<line x1="567.6" y1="100" x2="567.6" y2="412" stroke="#e1e0d9"/>
+<text x="567.6" y="430.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">6 s</text>
+<line x1="678.8" y1="100" x2="678.8" y2="412" stroke="#e1e0d9"/>
+<text x="678.8" y="430.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">8 s</text>
+<line x1="790.0" y1="100" x2="790.0" y2="412" stroke="#e1e0d9"/>
+<text x="790.0" y="430.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">10 s</text>
+<text x="224.0" y="130.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">verifyAttestation, numeric</text>
+<path d="M234.0,106.0 h518.6 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-518.6 z" fill="#aeaca4"/>
+<text x="764.6" y="119.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">9.40 s</text>
+<path d="M234.0,126.0 h79.4 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-79.4 z" fill="#2a78d6"/>
+<text x="325.4" y="139.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">1.50 s</text>
+<text x="224.0" y="182.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">verifyAttestation, bytes</text>
+<path d="M234.0,158.0 h522.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-522.0 z" fill="#aeaca4"/>
+<text x="768.0" y="171.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">9.46 s</text>
+<path d="M234.0,178.0 h80.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-80.0 z" fill="#2a78d6"/>
+<text x="326.0" y="191.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">1.51 s</text>
+<text x="224.0" y="234.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">openAndReadBytes</text>
+<path d="M234.0,210.0 h120.5 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-120.5 z" fill="#aeaca4"/>
+<text x="366.5" y="223.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">2.24 s</text>
+<path d="M234.0,230.0 h62.7 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-62.7 z" fill="#2a78d6"/>
+<text x="308.7" y="243.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">1.20 s</text>
+<text x="224.0" y="286.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">openAndRead</text>
+<path d="M234.0,262.0 h60.5 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-60.5 z" fill="#aeaca4"/>
+<text x="306.5" y="275.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">1.16 s</text>
+<path d="M234.0,282.0 h34.4 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-34.4 z" fill="#2a78d6"/>
+<text x="280.4" y="295.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">0.69 s</text>
+<text x="224.0" y="338.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">openAndReadPresence</text>
+<path d="M234.0,314.0 h59.4 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-59.4 z" fill="#aeaca4"/>
+<text x="305.4" y="327.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">1.14 s</text>
+<path d="M234.0,334.0 h34.4 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-34.4 z" fill="#2a78d6"/>
+<text x="280.4" y="347.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">0.69 s</text>
+<text x="224.0" y="390.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">openAndRequireMetric0</text>
+<path d="M234.0,366.0 h60.5 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-60.5 z" fill="#aeaca4"/>
+<text x="306.5" y="379.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">1.16 s</text>
+<path d="M234.0,386.0 h33.8 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-33.8 z" fill="#2a78d6"/>
+<text x="279.8" y="399.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">0.68 s</text>
+<line x1="234" y1="100" x2="234" y2="412" stroke="#c3c2b7"/>
+</svg>

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 350" width="880" height="350" font-family='system-ui, -apple-system, "Segoe UI", sans-serif' role="img" aria-label="D: proof server, proving time by CPU allocation">
+<title>D: proof server, proving time by CPU allocation</title>
+<desc>Horizontal bars of k=17 proving time for six CPU allocations, from 44.55 seconds on one core to 9.92 seconds on the default 16 threads.</desc>
+<rect width="880" height="350" rx="8" fill="#fcfcfb"/>
+<text x="24.0" y="34.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">D: proof server, proving time by CPU allocation</text>
+<text x="24.0" y="54.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Warm proof of the baseline verifyAttestation (k=17) on proof server 9.0.0, Ryzen 7 5700G.</text>
+<line x1="244.0" y1="74" x2="244.0" y2="284" stroke="#e1e0d9"/>
+<text x="244.0" y="302.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">0 s</text>
+<line x1="341.2" y1="74" x2="341.2" y2="284" stroke="#e1e0d9"/>
+<text x="341.2" y="302.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">10 s</text>
+<line x1="438.4" y1="74" x2="438.4" y2="284" stroke="#e1e0d9"/>
+<text x="438.4" y="302.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">20 s</text>
+<line x1="535.6" y1="74" x2="535.6" y2="284" stroke="#e1e0d9"/>
+<text x="535.6" y="302.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">30 s</text>
+<line x1="632.8" y1="74" x2="632.8" y2="284" stroke="#e1e0d9"/>
+<text x="632.8" y="302.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">40 s</text>
+<line x1="730.0" y1="74" x2="730.0" y2="284" stroke="#e1e0d9"/>
+<text x="730.0" y="302.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">50 s</text>
+<text x="234.0" y="101.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">1 core</text>
+<path d="M244.0,87.0 h429.0 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-429.0 z" fill="#aeaca4"/>
+<text x="685.0" y="101.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">44.55 s</text>
+<text x="234.0" y="135.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">2 cores</text>
+<path d="M244.0,121.0 h238.3 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-238.3 z" fill="#aeaca4"/>
+<text x="494.3" y="135.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">24.93 s</text>
+<text x="234.0" y="169.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">4 cores</text>
+<path d="M244.0,155.0 h141.5 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-141.5 z" fill="#aeaca4"/>
+<text x="397.5" y="169.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">14.97 s</text>
+<text x="234.0" y="203.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">4 cores, 8 threads</text>
+<path d="M244.0,189.0 h120.9 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-120.9 z" fill="#aeaca4"/>
+<text x="376.9" y="203.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">12.85 s</text>
+<text x="234.0" y="237.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">8 cores</text>
+<path d="M244.0,223.0 h96.1 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-96.1 z" fill="#aeaca4"/>
+<text x="352.1" y="237.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">10.30 s</text>
+<text x="234.0" y="271.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">8 cores, 16 threads (default)</text>
+<path d="M244.0,257.0 h92.4 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-92.4 z" fill="#2a78d6"/>
+<text x="348.4" y="271.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">9.92 s</text>
+<line x1="244" y1="74" x2="244" y2="284" stroke="#c3c2b7"/>
+<text x="24.0" y="334.0" font-size="11" fill="#898781" text-anchor="start" font-weight="400">No setting beats the default for one proof; about 90% of the time is proving.</text>
+</svg>

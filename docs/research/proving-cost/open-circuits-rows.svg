@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 332" width="880" height="332" font-family='system-ui, -apple-system, "Segoe UI", sans-serif' role="img" aria-label="Open circuits, by option">
+<title>Open circuits, by option</title>
+<desc>Two panels of horizontal bars: openAndRead falls from 8,610 to 6,604 rows, openAndReadBytes from 19,188 to 8,573.</desc>
+<rect width="880" height="332" rx="8" fill="#fcfcfb"/>
+<text x="24.0" y="34.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">Open circuits, by option</text>
+<text x="24.0" y="54.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Rows of the circuits that open a vaulted claim. B's vault change and whole byte values do the work here.</text>
+<text x="224.0" y="131.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">Baseline (main)</text>
+<text x="224.0" y="161.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">C: verify N of M signatures</text>
+<text x="224.0" y="191.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">F: sign the nullifier</text>
+<text x="224.0" y="221.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">A: either encoding</text>
+<text x="224.0" y="251.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">B: hash diet</text>
+<text x="224.0" y="281.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">This branch</text>
+<text x="234.0" y="82.0" font-size="13" fill="#0b0b0b" text-anchor="start" font-weight="600">openAndRead</text>
+<line x1="234.0" y1="112" x2="234.0" y2="292" stroke="#e1e0d9"/>
+<text x="234.0" y="310.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">0</text>
+<line x1="289.2" y1="112" x2="289.2" y2="292" stroke="#e1e0d9"/>
+<text x="289.2" y="310.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">2.5K</text>
+<line x1="344.5" y1="112" x2="344.5" y2="292" stroke="#e1e0d9"/>
+<text x="344.5" y="310.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">5K</text>
+<line x1="399.8" y1="112" x2="399.8" y2="292" stroke="#e1e0d9"/>
+<text x="399.8" y="310.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">7.5K</text>
+<line x1="455.0" y1="112" x2="455.0" y2="292" stroke="#e1e0d9"/>
+<text x="455.0" y="310.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">10K</text>
+<line x1="415.0" y1="100" x2="415.0" y2="292" stroke="#52514e"/>
+<text x="419.0" y="106.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">k=13 limit</text>
+<path d="M234.0,118.0 h186.3 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-186.3 z" fill="#aeaca4"/>
+<text x="430.3" y="131.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">8,610</text>
+<path d="M234.0,148.0 h185.9 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-185.9 z" fill="#aeaca4"/>
+<text x="429.9" y="161.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">8,592</text>
+<path d="M234.0,178.0 h186.3 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-186.3 z" fill="#aeaca4"/>
+<text x="430.3" y="191.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">8,610</text>
+<path d="M234.0,208.0 h186.3 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-186.3 z" fill="#aeaca4"/>
+<text x="430.3" y="221.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">8,610</text>
+<path d="M234.0,238.0 h151.4 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-151.4 z" fill="#aeaca4"/>
+<text x="395.4" y="251.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">7,030</text>
+<path d="M234.0,268.0 h141.9 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-141.9 z" fill="#2a78d6"/>
+<text x="385.9" y="281.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">6,604</text>
+<line x1="234.0" y1="112" x2="234.0" y2="292" stroke="#c3c2b7"/>
+<text x="565.0" y="82.0" font-size="13" fill="#0b0b0b" text-anchor="start" font-weight="600">openAndReadBytes</text>
+<line x1="565.0" y1="112" x2="565.0" y2="292" stroke="#e1e0d9"/>
+<text x="565.0" y="310.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">0</text>
+<line x1="620.2" y1="112" x2="620.2" y2="292" stroke="#e1e0d9"/>
+<text x="620.2" y="310.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">5K</text>
+<line x1="675.5" y1="112" x2="675.5" y2="292" stroke="#e1e0d9"/>
+<text x="675.5" y="310.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">10K</text>
+<line x1="730.8" y1="112" x2="730.8" y2="292" stroke="#e1e0d9"/>
+<text x="730.8" y="310.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">15K</text>
+<line x1="786.0" y1="112" x2="786.0" y2="292" stroke="#e1e0d9"/>
+<text x="786.0" y="310.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">20K</text>
+<line x1="655.5" y1="100" x2="655.5" y2="292" stroke="#52514e"/>
+<text x="659.5" y="106.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">k=13 limit</text>
+<line x1="746.0" y1="100" x2="746.0" y2="292" stroke="#52514e"/>
+<text x="750.0" y="106.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">k=14 limit</text>
+<path d="M565.0,118.0 h208.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-208.0 z" fill="#aeaca4"/>
+<text x="783.0" y="131.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">19,188</text>
+<path d="M565.0,148.0 h207.8 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-207.8 z" fill="#aeaca4"/>
+<text x="782.8" y="161.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">19,170</text>
+<path d="M565.0,178.0 h208.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-208.0 z" fill="#aeaca4"/>
+<text x="783.0" y="191.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">19,188</text>
+<path d="M565.0,208.0 h112.9 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-112.9 z" fill="#aeaca4"/>
+<text x="687.9" y="221.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">10,578</text>
+<path d="M565.0,238.0 h95.5 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-95.5 z" fill="#aeaca4"/>
+<text x="670.5" y="251.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">9,003</text>
+<path d="M565.0,268.0 h90.7 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-90.7 z" fill="#2a78d6"/>
+<text x="665.7" y="281.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">8,573</text>
+<line x1="565.0" y1="112" x2="565.0" y2="292" stroke="#c3c2b7"/>
+</svg>

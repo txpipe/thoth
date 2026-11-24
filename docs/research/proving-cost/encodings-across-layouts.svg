@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 440" width="880" height="440" font-family='system-ui, -apple-system, "Segoe UI", sans-serif' role="img" aria-label="The three signed-message encodings, across layouts">
+<title>The three signed-message encodings, across layouts</title>
+<desc>Grouped columns for nine layouts and three encodings. Sign the nullifier and the digest are within 350 rows of each other everywhere; limbs is 1,600 to 4,300 rows higher.</desc>
+<rect width="880" height="440" rx="8" fill="#fcfcfb"/>
+<text x="24.0" y="34.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">The three signed-message encodings, across layouts</text>
+<text x="24.0" y="54.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">verifyAttestation rows on the same hash-diet + verify-N base. A bar under the line proves at k=14.</text>
+<rect x="24" y="71" width="10" height="10" rx="2" fill="#2a78d6"/>
+<text x="39.0" y="80.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Sign the nullifier</text>
+<rect x="176.2" y="71" width="10" height="10" rx="2" fill="#eb6834"/>
+<text x="191.2" y="80.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Poseidon digest</text>
+<rect x="309.2" y="71" width="10" height="10" rx="2" fill="#1baf7a"/>
+<text x="324.2" y="80.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Limbs</text>
+<line x1="70" y1="364.0" x2="856" y2="364.0" stroke="#e1e0d9"/>
+<text x="62.0" y="368.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400">0</text>
+<line x1="70" y1="326.9" x2="856" y2="326.9" stroke="#e1e0d9"/>
+<text x="62.0" y="330.9" font-size="11" fill="#898781" text-anchor="end" font-weight="400">4K</text>
+<line x1="70" y1="289.7" x2="856" y2="289.7" stroke="#e1e0d9"/>
+<text x="62.0" y="293.7" font-size="11" fill="#898781" text-anchor="end" font-weight="400">8K</text>
+<line x1="70" y1="252.6" x2="856" y2="252.6" stroke="#e1e0d9"/>
+<text x="62.0" y="256.6" font-size="11" fill="#898781" text-anchor="end" font-weight="400">12K</text>
+<line x1="70" y1="215.4" x2="856" y2="215.4" stroke="#e1e0d9"/>
+<text x="62.0" y="219.4" font-size="11" fill="#898781" text-anchor="end" font-weight="400">16K</text>
+<line x1="70" y1="178.3" x2="856" y2="178.3" stroke="#e1e0d9"/>
+<text x="62.0" y="182.3" font-size="11" fill="#898781" text-anchor="end" font-weight="400">20K</text>
+<line x1="70" y1="141.1" x2="856" y2="141.1" stroke="#e1e0d9"/>
+<text x="62.0" y="145.1" font-size="11" fill="#898781" text-anchor="end" font-weight="400">24K</text>
+<line x1="70" y1="104.0" x2="856" y2="104.0" stroke="#e1e0d9"/>
+<text x="62.0" y="108.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400">28K</text>
+<line x1="70" y1="211.9" x2="856" y2="211.9" stroke="#52514e"/>
+<text x="76.0" y="205.9" font-size="11" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">k=14 limit (16,384 rows)</text>
+<path d="M96.0,364.0 v-100.3 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v100.3 z" fill="#2a78d6"/>
+<path d="M114.0,364.0 v-101.3 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v101.3 z" fill="#eb6834"/>
+<path d="M132.0,364.0 v-116.2 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v116.2 z" fill="#1baf7a"/>
+<text x="122.0" y="382.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="400">2-of-3</text>
+<path d="M174.0,364.0 v-111.3 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v111.3 z" fill="#2a78d6"/>
+<path d="M192.0,364.0 v-111.7 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v111.7 z" fill="#eb6834"/>
+<path d="M210.0,364.0 v-128.4 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v128.4 z" fill="#1baf7a"/>
+<text x="200.0" y="382.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="400">3-of-5</text>
+<path d="M252.0,364.0 v-133.5 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v133.5 z" fill="#2a78d6"/>
+<path d="M270.0,364.0 v-132.8 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v132.8 z" fill="#eb6834"/>
+<path d="M288.0,364.0 v-152.9 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v152.9 z" fill="#1baf7a"/>
+<text x="278.0" y="382.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="400">5-of-8</text>
+<text x="200.0" y="402.0" font-size="12" fill="#0b0b0b" text-anchor="middle" font-weight="600">V=3, W=0</text>
+<path d="M364.0,364.0 v-118.4 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v118.4 z" fill="#2a78d6"/>
+<path d="M382.0,364.0 v-119.6 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v119.6 z" fill="#eb6834"/>
+<path d="M400.0,364.0 v-137.7 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v137.7 z" fill="#1baf7a"/>
+<text x="390.0" y="382.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="400">2-of-3</text>
+<path d="M442.0,364.0 v-129.4 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v129.4 z" fill="#2a78d6"/>
+<path d="M460.0,364.0 v-130.0 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v130.0 z" fill="#eb6834"/>
+<path d="M478.0,364.0 v-150.2 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v150.2 z" fill="#1baf7a"/>
+<text x="468.0" y="382.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="400">3-of-5</text>
+<path d="M520.0,364.0 v-151.5 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v151.5 z" fill="#2a78d6"/>
+<path d="M538.0,364.0 v-150.9 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v150.9 z" fill="#eb6834"/>
+<path d="M556.0,364.0 v-175.7 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v175.7 z" fill="#1baf7a"/>
+<text x="546.0" y="382.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="400">5-of-8</text>
+<text x="468.0" y="402.0" font-size="12" fill="#0b0b0b" text-anchor="middle" font-weight="600">V=3, W=1</text>
+<path d="M632.0,364.0 v-156.8 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v156.8 z" fill="#2a78d6"/>
+<path d="M650.0,364.0 v-160.0 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v160.0 z" fill="#eb6834"/>
+<path d="M668.0,364.0 v-187.6 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v187.6 z" fill="#1baf7a"/>
+<text x="658.0" y="382.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="400">2-of-3</text>
+<path d="M710.0,364.0 v-167.8 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v167.8 z" fill="#2a78d6"/>
+<path d="M728.0,364.0 v-170.4 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v170.4 z" fill="#eb6834"/>
+<path d="M746.0,364.0 v-202.1 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v202.1 z" fill="#1baf7a"/>
+<text x="736.0" y="382.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="400">3-of-5</text>
+<path d="M788.0,364.0 v-190.0 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v190.0 z" fill="#2a78d6"/>
+<path d="M806.0,364.0 v-191.4 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v191.4 z" fill="#eb6834"/>
+<path d="M824.0,364.0 v-231.3 a4,4 0 0 1 4,-4 h8.0 a4,4 0 0 1 4,4 v231.3 z" fill="#1baf7a"/>
+<text x="814.0" y="382.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="400">5-of-8</text>
+<text x="736.0" y="402.0" font-size="12" fill="#0b0b0b" text-anchor="middle" font-weight="600">V=8, W=4</text>
+<line x1="70" y1="364" x2="856" y2="364" stroke="#c3c2b7"/>
+<text x="24.0" y="426.0" font-size="11" fill="#898781" text-anchor="start" font-weight="400">V value slots, W byte values, N-of-M signatures. Digest and sign-the-nullifier were built and sized on this tree; limbs was compiled only.</text>
+</svg>

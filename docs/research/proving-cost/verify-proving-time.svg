@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 384" width="880" height="384" font-family='system-ui, -apple-system, "Segoe UI", sans-serif' role="img" aria-label="verifyAttestation proving time, by option">
+<title>verifyAttestation proving time, by option</title>
+<desc>Horizontal bars of warm proving time for seven benchmarked options, from 9.40 seconds at baseline to 1.50 seconds on this branch.</desc>
+<rect width="880" height="384" rx="8" fill="#fcfcfb"/>
+<text x="24.0" y="34.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">verifyAttestation proving time, by option</text>
+<text x="24.0" y="54.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Warm median of three proofs on proof server 9.0.0, numeric mock, with the proving key size.</text>
+<line x1="324.0" y1="74" x2="324.0" y2="318" stroke="#e1e0d9"/>
+<text x="324.0" y="336.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">0 s</text>
+<line x1="405.2" y1="74" x2="405.2" y2="318" stroke="#e1e0d9"/>
+<text x="405.2" y="336.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">2 s</text>
+<line x1="486.4" y1="74" x2="486.4" y2="318" stroke="#e1e0d9"/>
+<text x="486.4" y="336.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">4 s</text>
+<line x1="567.6" y1="74" x2="567.6" y2="318" stroke="#e1e0d9"/>
+<text x="567.6" y="336.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">6 s</text>
+<line x1="648.8" y1="74" x2="648.8" y2="318" stroke="#e1e0d9"/>
+<text x="648.8" y="336.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">8 s</text>
+<line x1="730.0" y1="74" x2="730.0" y2="318" stroke="#e1e0d9"/>
+<text x="730.0" y="336.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400">10 s</text>
+<text x="314.0" y="101.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">Baseline (main)</text>
+<path d="M324.0,87.0 h377.6 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-377.6 z" fill="#aeaca4"/>
+<text x="713.6" y="101.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">9.40 s · 197.2 MB key</text>
+<text x="314.0" y="135.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">C: verify N of M signatures</text>
+<path d="M324.0,121.0 h372.4 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-372.4 z" fill="#aeaca4"/>
+<text x="708.4" y="135.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">9.27 s · 197.2 MB key</text>
+<text x="314.0" y="169.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">B: hash diet</text>
+<path d="M324.0,155.0 h394.3 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-394.3 z" fill="#aeaca4"/>
+<text x="730.3" y="169.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">9.81 s · 197.2 MB key</text>
+<text x="314.0" y="203.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">F: sign the nullifier</text>
+<path d="M324.0,189.0 h109.3 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-109.3 z" fill="#aeaca4"/>
+<text x="445.3" y="203.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">2.79 s · 49.3 MB key</text>
+<text x="314.0" y="237.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">A: Poseidon digest</text>
+<path d="M324.0,223.0 h98.3 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-98.3 z" fill="#aeaca4"/>
+<text x="434.3" y="237.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">2.52 s · 49.3 MB key</text>
+<text x="314.0" y="271.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">A + B + C, Poseidon digest</text>
+<path d="M324.0,257.0 h56.9 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-56.9 z" fill="#aeaca4"/>
+<text x="392.9" y="271.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">1.50 s · 24.7 MB key</text>
+<text x="314.0" y="305.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="400">B + C + sign the nullifier (this branch)</text>
+<path d="M324.0,291.0 h56.9 a4,4 0 0 1 4,4 v12.0 a4,4 0 0 1 -4,4 h-56.9 z" fill="#2a78d6"/>
+<text x="392.9" y="305.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" paint-order="stroke" stroke="#fcfcfb" stroke-width="5" stroke-linejoin="round">1.50 s · 24.7 MB key</text>
+<line x1="324" y1="74" x2="324" y2="318" stroke="#c3c2b7"/>
+<text x="24.0" y="368.0" font-size="11" fill="#898781" text-anchor="start" font-weight="400">Runs come from different sessions on one machine; session drift was 5 to 10%. The limbs options were not timed.</text>
+</svg>
