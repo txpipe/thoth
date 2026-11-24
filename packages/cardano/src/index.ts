@@ -4,7 +4,6 @@
 import type { AttestationInput } from '@thoth/core';
 import type { Claim, ClaimInput, FlatMessage } from '@thoth/core/claim';
 import { claimSchema } from '@thoth/core/claim';
-import type { CanonicalValue } from '@thoth/core/claim-context';
 import { z } from 'zod';
 import { cardanoAddressHashOf } from './bytes.js';
 import { CARDANO_LIMITS } from './limits.js';
@@ -12,6 +11,7 @@ import {
   type AssetClass,
   cardanoOutputEvidenceSchema,
   cardanoOutputObservationSchema,
+  cardanoOutputPolicyHashOf,
   cardanoOutputPolicySchema,
   cardanoOutputSaltOf,
   cardanoOutputSubjectHashOf,
@@ -35,7 +35,6 @@ import {
   type CardanoNetwork,
   type CardanoPolicyBase,
   type CardanoSlot,
-  policyHashOfCardano,
 } from './policy.js';
 
 export type {
@@ -113,13 +112,12 @@ export const normalizeCardanoPolicy = (policy: CardanoPolicy): CardanoPolicy =>
 
 /**
  * Hash a policy under the `cardano@1` law and the claim wire version.
+ * Policies that parse the same hash the same. Today it is the output
+ * variant's hash; a second variant turns it into a dispatch on `kind`.
  *
- * Policies that parse the same hash the same.
- *
- * @throws `ZodError` if the policy fails {@link cardanoPolicySchema}.
+ * @throws `ZodError` if the policy fails its variant's schema.
  */
-export const cardanoPolicyHashOf = (policy: CardanoPolicy): Uint8Array =>
-  policyHashOfCardano(normalizeCardanoPolicy(policy) as CanonicalValue);
+export const cardanoPolicyHashOf: (policy: CardanoPolicy) => Uint8Array = cardanoOutputPolicyHashOf;
 
 /**
  * Runtime validator for a cardano@1 claim: the standard claim, sized by the

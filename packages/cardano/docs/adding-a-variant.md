@@ -104,7 +104,7 @@ The client runs the first two checks on its own read before it contacts any atte
 
 A variant is registered in four places.
 
-- `src/index.ts`: add the schema to `cardanoPolicySchema` and the type to `CardanoPolicy`, and re-export the variant's public types and schemas. Widen the law-level aliases (`CardanoLocator`, `CardanoObservation`, `CardanoObservedEvidence`, `cardanoEvidenceSchema`, `cardanoObservationSchema`), then extend `deriveCardanoClaim` to dispatch on `policy.kind`. The output variant is the only case today; when the second lands, turn the direct call into a `switch`.
+- `src/index.ts`: add the schema to `cardanoPolicySchema` and the type to `CardanoPolicy`, and re-export the variant's public types and schemas. Widen the law-level aliases (`CardanoLocator`, `CardanoObservation`, `CardanoObservedEvidence`, `cardanoEvidenceSchema`, `cardanoObservationSchema`), then extend `deriveCardanoClaim` and `cardanoPolicyHashOf` to dispatch on `policy.kind`. Both are the output variant's functions today; when the second variant lands, turn each into a `switch`.
 - `src/attestor/law.ts`: extend `createCardanoDefinition`'s `verify` to dispatch on `policy.kind`, and widen the definition's evidence and observation types through the aliases.
 - `src/attestor/index.ts`: the attestor parses the policy, the locator and the proposal, calls `read`, parses the observation, verifies, derives and signs. It reads the law-level aliases, so widening them carries the new variant here; the dispatch stays in the law and in `deriveCardanoClaim`.
 - `src/client/index.ts`: the client parses the policy, the app id and the slot counts at init, then reads, checks, derives and collects. Extend its two read checks beside the law's `verify`.
@@ -138,6 +138,6 @@ The variant's `kind` is part of the hashed bytes, and the policy schema sorts th
 - [ ] The observation schema is strict and pins the encodings every attestor must derive.
 - [ ] The subject, the salt and every claim value come from the read; only `appId`, the holder and the slot counts come from the proposal.
 - [ ] The law's `verify` and the client's two read checks call the variant's checks.
-- [ ] `cardanoPolicySchema`, `CardanoPolicy`, the law-level aliases and `deriveCardanoClaim` dispatch to the variant.
+- [ ] `cardanoPolicySchema`, `CardanoPolicy`, the law-level aliases, `cardanoPolicyHashOf` and `deriveCardanoClaim` dispatch to the variant.
 - [ ] The variant's tests and pins are under `test/<variant>/`.
 - [ ] The existing output pin `43a36f36210e42c8d3357821afb855b739ec22c832ecf7a5df3b79b05221d907` still matches. Changing a shared field, such as `networkMagic`, changes every variant's hash, so update the pins deliberately.
