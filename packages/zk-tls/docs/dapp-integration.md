@@ -225,7 +225,10 @@ string becomes.
 
 Numeric rules fill a `Uint<64>` slot:
 
-- `int` accepts decimal digits only and requires a value below `2^64`.
+- `int` accepts decimal digits, or `0x`/`0X` followed by one or more hex
+  digits. The prefix is required, so `10` is ten and `1f` is invalid. Leading
+  zeros are allowed in either form: `0x10` is 16, `0x0001` is 1, and `0x0` is
+  0. The value must be below `2^64`.
 - `float` accepts a whole string matching
   `[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?`: digits, an optional decimal
   point followed by digits, and an optional base-10 exponent. Leading zeros are
@@ -241,7 +244,9 @@ Byte rules fill a 32-byte slot and reject a value that does not fit:
   characters. Trailing NUL bytes merge into the padding and unpaired surrogates
   become U+FFFD, so equality is over the padded bytes, not the source string.
 - `hex` decodes hex digits, case-insensitively, with an optional `0x`/`0X`
-  prefix. A 64-character key is 32 bytes; a 40-character address is 20.
+  prefix. It needs an even number of digits, two per byte; a hex-encoded
+  integer below `2^64` uses `int`. A 64-character key is 32 bytes; a
+  40-character address is 20.
 - `base64` decodes the standard or URL-safe alphabet, with optional `=`
   padding.
 

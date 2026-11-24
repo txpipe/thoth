@@ -448,6 +448,24 @@ describe('zkFetch attestor + client', () => {
     });
   });
 
+  describe("the 'int' rule through the client", () => {
+    it('derives an odd-length hex integer into a numeric slot and collects a threshold', async () => {
+      const intPolicy: ZkFetchPolicy = {
+        allowedHosts: ['api.github.com'],
+        slots: [{ slot: 0, name: 'blockNumber', parse: 'int' }],
+        bodyPolicy: 'ignored',
+        ...disclosureRules('blockNumber'),
+      };
+      const { claim, collected } = await clientWith({
+        policy: intPolicy,
+        provers: proversWith({ values: () => ({ blockNumber: '0x1938381' }) }),
+      }).collect(collectionRequest, options());
+      expect(collected).toHaveLength(2);
+      expect(claim.present).toEqual([true, false, false]);
+      expect(claim.values).toEqual([26_444_673n, 0n, 0n]);
+    });
+  });
+
   it('collects a threshold of distinct registry slots in one call', async () => {
     const result = await clientWith().collect(collectionRequest, options());
     expect(slots(result)).toEqual([0, 1]);

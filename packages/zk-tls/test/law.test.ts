@@ -250,21 +250,34 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
     return { present: claim.present[0] ?? false, value: claim.values[0] ?? 0n };
   };
 
-  it('parses non-negative integers within the Uint<64> wire range', () => {
-    expect(derived('0', 'int')).toEqual({ present: true, value: 0n });
-    expect(derived('007', 'int')).toEqual({ present: true, value: 7n });
-    expect(derived('18446744073709551615', 'int')).toEqual({
-      present: true,
-      value: (1n << 64n) - 1n,
-    });
+  it('parses non-negative integers in decimal or 0x-prefixed hex', () => {
+    for (const [form, value] of [
+      ['0', 0n],
+      ['007', 7n],
+      ['18446744073709551615', (1n << 64n) - 1n],
+      ['0x1938381', 26_444_673n],
+      ['1938381', 1_938_381n],
+      ['0x10', 16n],
+      ['10', 10n],
+      ['0x0', 0n],
+      ['0x00', 0n],
+      ['0X1f', 31n],
+      ['0x0001', 1n],
+      ['0xffffffffffffffff', (1n << 64n) - 1n],
+    ] as const) {
+      expect(derived(form, 'int')).toEqual({ present: true, value });
+    }
   });
 
-  it('leaves out-of-range, negative, and non-integer strings unpresent', () => {
+  it('leaves out-of-range, negative, and malformed integer strings unpresent', () => {
     expect(derived('18446744073709551616', 'int').present).toBe(false);
+    expect(derived('0x10000000000000000', 'int').present).toBe(false);
     expect(derived('-1', 'int').present).toBe(false);
     expect(derived('1.5', 'int').present).toBe(false);
-    expect(derived('0x10', 'int').present).toBe(false);
     expect(derived('1e3', 'int').present).toBe(false);
+    for (const form of ['1f', '0x', '0xG', '0x 10', '-0x10', '0x1.0']) {
+      expect(derived(form, 'int').present).toBe(false);
+    }
   });
 
   it('rounds floats to the nearest whole value', () => {
@@ -1035,8 +1048,20 @@ describe('byte value parse rules', () => {
     }
   });
 
-  it('rejects hex separators, whitespace, and other non-data characters', () => {
-    const forms = ['', '0x', 'abc', 'ab:cd', 'ab-cd', 'ab cd', 'ab,cd', 'ab.cd', 'abcd\n', 'abcz'];
+  it('rejects odd digit counts, separators, whitespace, and other non-data characters', () => {
+    const forms = [
+      '',
+      '0x',
+      '0xabc',
+      'abc',
+      'ab:cd',
+      'ab-cd',
+      'ab cd',
+      'ab,cd',
+      'ab.cd',
+      'abcd\n',
+      'abcz',
+    ];
     for (const form of forms) {
       expect(parseDisclosedValue(form, 'hex')).toBeNull();
     }
