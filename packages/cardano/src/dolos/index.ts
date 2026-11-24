@@ -193,6 +193,8 @@ export const readOutputObservation = async (options: {
     throw new Error(`readGenesis returned network magic ${genesis.networkMagic}`);
   }
 
+  // Dolos leaves the height unset in both the ledger tip and ReadTip, so the
+  // tip's height comes from its block header.
   const tipPoint = response.ledgerTip ?? (await source.readTip());
   const tipBlock = await source.fetchBlock({ slot: tipPoint.slot, hash: tipPoint.hash });
   const tipHeader = tipBlock.header;
