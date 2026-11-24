@@ -40,6 +40,14 @@ _Avoid_: Type, scheme, provider.
 What a kind implements: its policy, evidence and claim schemas, the `verify` step, and the `message` encoding. Keyless and shareable; many attestor instances run one law. A law may take operator configuration with no secret in it, such as the witness zkFetch trusts. Its versioned tag, such as `zk-fetch@1`, is the kind identifier and is hashed into every policy hash.
 _Avoid_: Driver, plugin.
 
+**Chain-event kind**:
+A kind whose attestors certify an event they read from a chain, such as an output at a Cardano address. The client sends a locator and each attestor re-reads the event from its own source (ADR 0014). `cardano@1` is the first.
+_Avoid_: Chain kind, oracle kind.
+
+**Policy variant**:
+One event shape a chain-event law can describe, tagged by the policy's `kind` field, such as `cardano@1`'s `output`. The tag is part of the policy hash, so adding a variant leaves existing hashes unchanged (ADR 0014).
+_Avoid_: Subkind, event type.
+
 **Locator**:
 The evidence a chain-event client sends: the minimal fields an attestor needs to find the event, such as the transaction hash and output index of one Cardano output (an output reference; `TxIn` in the ledger). The attestor re-reads the event from its own source, so the locator can only choose which event to attest, never shape the claim (ADR 0014).
 _Avoid_: Pointer, outpoint, payload.
@@ -65,6 +73,10 @@ _Avoid_: Rules, config.
 **Slot map**:
 The part of a policy that says which value slot each fact fills (`slots`). In zkFetch it also gives the parse rule that turns the field's string into the slot's value.
 _Avoid_: Schema, field map.
+
+**Confirmation depth**:
+The number of blocks a chain-event kind requires below the event's block at read time before an attestor signs (`confirmationDepth`). It is part of the policy, so each app sets its own (ADR 0014).
+_Avoid_: Confirmations, finality.
 
 **Disclosure rules**:
 The zkFetch policy's response patterns and reveal whitelist (`responseMatches` and `responseRedactions`): the exact extraction the witness executed and signed into the claim. The attestor requires the signed rules to equal the policy's, and the policy hash commits to them, so a claim slot cannot be pointed at a different field than the policy intends.

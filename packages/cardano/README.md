@@ -1,6 +1,6 @@
 # @thoth/cardano
 
-The cardano@1 chain-event kind for Thoth, which attests one lovelace output at a watched Cardano address, for dApp developers who act on Cardano deposits and for the operators who run their attestors.
+The cardano@1 [chain-event kind](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#kinds) for Thoth, which attests one lovelace output at a watched Cardano address, for dApp developers who act on Cardano deposits and for the operators who run their attestors.
 
 > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
@@ -67,13 +67,13 @@ A dApp reads the event once and collects a threshold of attestations. The [dApp 
 ## Concepts
 
 - [Policy](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the network, its magic, depth, address and slot map. `cardanoPolicyHashOf(policy)` is the claim's `policyHash`.
-- Variant: one event shape the policy can describe, tagged by `kind`. `cardano@1` has one variant today, `output`.
-- Law: `cardano@1`, the kind's tag. It covers one chain, Cardano, and its hashes include the tag.
+- [Policy variant](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#kinds): one event shape the policy can describe, tagged by `kind`. `cardano@1` has one variant today, `output`.
+- [Law](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#kinds): `cardano@1`, the kind's tag. It covers one chain, Cardano, and its hashes include the tag.
 - [Observation](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the output and block an attestor read. The claim is derived from it; the client never supplies it.
 - [Evidence](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles): the locator `{ txHash, outputIndex }`. It points at the event without carrying its values.
 - [Subject](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the event's identity: the network magic, the transaction hash, the output index and the block hash. The watched address is pinned by the policy; its hash can fill an `addressHash` byte slot.
 - [Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the event's block time.
-- Depth: the number of blocks the event's block must sit below the chain tip before the attestor signs. It is part of the policy.
+- [Confirmation depth](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the number of blocks the event's block must sit below the chain tip before the attestor signs. It is part of the policy.
 - [Holder](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): a per-claim commitment from `holderCommitmentOf(secret)`.
 
 ## Guarantees and limits
