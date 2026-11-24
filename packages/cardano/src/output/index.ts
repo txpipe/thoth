@@ -212,13 +212,7 @@ export const cardanoOutputObservationSchema: z.ZodType<OutputObservation> = z.st
         message: 'address must be lowercase bech32',
       }),
     lovelace: z.bigint().min(0n).max(MAX_LOVELACE),
-    assets: z.array(
-      z.strictObject({
-        policyId: z.string().regex(HEX_56, 'expected 56 lowercase hex characters'),
-        assetName: z.string().regex(HEX_NAME, 'expected up to 64 lowercase hex characters'),
-        quantity: z.bigint().min(0n).max(MAX_LOVELACE),
-      }),
-    ),
+    assets: z.array(assetClassSchema.extend({ quantity: z.bigint().min(0n).max(MAX_LOVELACE) })),
   }),
 });
 
