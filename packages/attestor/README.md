@@ -1,4 +1,4 @@
-# @thoth/attestor
+# @txpipe/thoth-attestor
 
 The attestor side of Thoth: the interfaces a kind author implements to hold a
 signing key and turn verified evidence into a signed claim.
@@ -15,7 +15,7 @@ npm install && npm run build
 cd /path/to/your-app && npm install /path/to/thoth/packages/attestor
 ```
 
-Its package name is `@thoth/attestor`; that name may change until the npm scope is settled.
+Once it is published, it installs as `@txpipe/thoth-attestor`. It needs `zod@^4.6.7` as a peer dependency.
 
 ## Usage
 
@@ -23,8 +23,8 @@ You write a kind in three pieces: the keyless law with `defineAttestor`, a
 `KeyPair` from your key package, and the instance with `buildAttestor`.
 
 ```ts
-import { buildAttestor, defineAttestor, descriptorOf } from '@thoth/attestor';
-import { claimSchema, claimToMessage } from '@thoth/core/claim';
+import { buildAttestor, defineAttestor, descriptorOf } from '@txpipe/thoth-attestor';
+import { claimSchema, claimToMessage } from '@txpipe/thoth-core/claim';
 
 const law = defineAttestor({
   kind: 'my-kind@1', // the versioned law tag
@@ -60,7 +60,7 @@ const descriptor = descriptorOf(attestor);
 ```
 
 `attest` is yours to write: parse, `verify`, then sign `message(claim)`. Throw
-to reject. [`@thoth/zk-tls`](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls)
+to reject. [`@txpipe/thoth-zk-tls`](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls)
 is the reference kind.
 
 ## Concepts
@@ -70,7 +70,7 @@ is the reference kind.
   satisfied. `Attestor` is one deployable instance.
 - [**Kind** and **law**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#kinds):
   a family of attestors sharing one law. The law is the keyless
-  `AttestorDefinition` from [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core);
+  `AttestorDefinition` from [`@txpipe/thoth-core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core);
   many instances run it.
 - [**Claim** and **message**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim):
   the claim is what the attestor signs; the message is its flat encoding,
@@ -80,7 +80,7 @@ is the reference kind.
   signature.
 - [**Registry slot**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection):
   the position of an attestor's key in an app's registry. The app assigns it
-  in its trusted set ([`@thoth/client`](https://github.com/txpipe-shop/thoth/tree/main/packages/client));
+  in its trusted set ([`@txpipe/thoth-client`](https://github.com/txpipe-shop/thoth/tree/main/packages/client));
   the attestor never knows it.
 
 ## Guarantees and limits
@@ -119,6 +119,6 @@ is the reference kind.
 - [Thoth (repo root)](https://github.com/txpipe-shop/thoth)
 - [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md): architecture, the claim and its wire order
 - [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md): how to add an attestor kind
-- [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): the keyless law this package instantiates with a key
-- [`@thoth/client`](https://github.com/txpipe-shop/thoth/tree/main/packages/client): the dApp side that collects attestations
-- [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies signatures by slot
+- [`@txpipe/thoth-core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): the keyless law this package instantiates with a key
+- [`@txpipe/thoth-client`](https://github.com/txpipe-shop/thoth/tree/main/packages/client): the dApp side that collects attestations
+- [`@txpipe/thoth-contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies signatures by slot

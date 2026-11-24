@@ -1,4 +1,4 @@
-# @thoth/contracts
+# @txpipe/thoth-contracts
 
 The Compact modules a Midnight contract embeds to verify N-of-M attestations
 in-circuit, for dApp developers who consume Thoth claims on-chain.
@@ -8,18 +8,19 @@ in-circuit, for dApp developers who consume Thoth claims on-chain.
 ## Install
 
 The package is not on npm. Use the modules from a checkout of this repo: point
-`COMPACT_PATH` at `packages/contracts`, or vendor `attestation.compact` and
-`attestor_registry.compact` unchanged into your project (they import each
-other as siblings). Compile with Compact `0.36.1` and pin
-`@midnight-ntwrk/compact-runtime` to `0.21.0` in the driver: the off-chain
-message encoder matches the circuit only at that version.
+`COMPACT_PATH` at `packages/contracts`. Once it is published, it installs as
+`@txpipe/thoth-contracts`, and `COMPACT_PATH` points at
+`node_modules/@txpipe/thoth-contracts`. Depend on the package instead of
+copying the modules: a copy forks the attestation semantics. Compile with
+Compact `0.36.1` and pin `@midnight-ntwrk/compact-runtime` to `0.21.0` in the
+driver: the off-chain message encoder matches the circuit only at that version.
 
 ## Usage
 
-| File | Module | Role |
-|------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
-| `attestor_registry.compact` | `attestor_registry<#M, #K>` | Seals the `M` pinned attestor keys at deploy and counts the signatures that verify, each against its own slot. |
+| File                        | Module                            | Role                                                                                                                                                                                      |
+| --------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `attestation.compact`       | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
+| `attestor_registry.compact` | `attestor_registry<#M, #K>`       | Seals the `M` pinned attestor keys at deploy and counts the signatures that verify, each against its own slot.                                                                            |
 
 Embed both modules in your top-level contract, seal the deploy-time values in
 the constructor, and export `verifyAttestation` as the entry point:
@@ -143,21 +144,20 @@ What the module does not check, and what your app does itself:
   a matching flag. Honest attestors give both halves the slot's flag; a claim
   with unpaired flags carries at least `N` dishonest signatures, which are out
   of scope (ADR 0003).
-- The window is when the attestor's witness looked, not when the fact
-  happened, and a zkFetch fetch may precede `windowStart` by about 10 minutes.
-  Do not read it as the time of the fact
+- The kind decides the window. Read it as the time the kind's observation
+  happened, not as a universal fact timestamp
   ([Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim)
   explains why).
-- The module does not check where the `salt` came from. The nullifier hides
-  the values only while the salt is secret, so your kind's attestors must
-  derive it from the evidence, keep it off-chain, and include an input an
-  outsider cannot guess or enumerate, such as the holder commitment through the
-  claim context digest. A hash of public or guessable evidence alone hides
-  nothing
-  ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
-  Never disclose the salt or `claim.holder` in your own circuits: a kind may
-  derive the salt from the holder, as zkFetch does. Key holder state on the
-  vault pseudonym (`holderOf`) instead.
+- The module does not check where the `salt` came from. The kind decides it:
+  secret when the values are secret or guessable, so the nullifier cannot
+  confirm a guess
+  ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md));
+  public when they are public chain data, so the nullifier reveals the event
+  ([ADR 0014](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0014-chain-event-kinds.md)).
+  Your attestors must derive it from the evidence and refuse another, so a
+  client cannot vary it to replay one observation. Never disclose
+  `claim.holder` in your own circuits; where the salt follows the holder, keep
+  it secret too and key holder state on the vault pseudonym (`holderOf`).
 - The nullifier does not stop one fact from being claimed again under a fresh
   holder when the kind's salt follows the holder, as zkFetch's does: a new
   fetch under a fresh holder gets a new salt and a new nullifier, even in the
@@ -188,17 +188,17 @@ What the module does not check, and what your app does itself:
   an unsigned side channel.
 - **Replay protection keys on the observation identity.** The nullifier hashes
   `appId`, `policyHash`, `subjectHash`, `salt`, the window, the values and the
-  flags. It does not hash `holder` or `version`, but the holder can reach it
-  through the kind's salt, so a fresh holder may get a fresh nullifier. What
-  stops a fresh holder from re-claiming an observation is the kind's evidence
-  binding: a new holder needs new evidence, which gets a new nullifier when the
-  salt follows the holder ([Guarantees and limits](#guarantees-and-limits))
+  flags. It does not hash `holder` or `version`. In zkFetch the holder can
+  reach it through the kind's salt, so a fresh holder may get a fresh
+  nullifier; what stops a fresh holder from re-claiming an observation is the
+  kind's evidence binding: a new holder needs new evidence, which gets a new
+  nullifier when the salt follows the holder ([Guarantees and limits](#guarantees-and-limits))
   ([ADR 0006](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0006-nullifier-keys-on-the-observation-identity.md),
   [ADR 0011](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
-- **The nullifier hashes a secret salt.** The salt never reaches the ledger, so
-  only those who hold the evidence, such as the witnesses and attestors, can
-  confirm a guessed value by recomputing the nullifier; they already see the
-  values. The
+- **In zkFetch the nullifier hashes a secret salt.** The salt never reaches the
+  ledger, so only those who hold the evidence, such as the witnesses and
+  attestors, can confirm a guessed value by recomputing the nullifier; they
+  already see the values. The
   attestors derive it from the evidence, so a client cannot vary it to replay
   one observation ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
 - **No kind on-chain; the policy hash is the commitment.** A requester cannot
@@ -216,7 +216,7 @@ What the module does not check, and what your app does itself:
   ([ADR 0001](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0001-source-binding-by-in-circuit-subject-hash.md)).
 - **The holder is a per-claim commitment, not an identity.** The pure
   `holderCommitment(secret)` circuit derives it, and `holderCommitmentOf` in
-  `@thoth/core/claim-context` matches it off-chain. Cross-claim or per-user
+  `@txpipe/thoth-core/claim-context` matches it off-chain. Cross-claim or per-user
   state is your app's ([ADR 0004](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
 - **The window is when the attestor observed.** The contract checks it against
   block time; a fact's own time is a claim value ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).

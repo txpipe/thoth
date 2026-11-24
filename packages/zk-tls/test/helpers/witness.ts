@@ -9,7 +9,7 @@ import {
   SelectedServiceSignatureType,
   SIGNATURES,
 } from '@reclaimprotocol/attestor-core';
-import type { ProviderClaimData, ZkFetchEvidence } from '@thoth/zk-tls';
+import type { ProviderClaimData, ZkFetchEvidence } from '@txpipe/thoth-zk-tls';
 
 const scheme = SIGNATURES[SelectedServiceSignatureType];
 

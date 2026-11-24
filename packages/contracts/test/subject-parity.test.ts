@@ -1,5 +1,5 @@
 // Parity between the off-chain claim-context subject hash
-// (`@thoth/core/claim-context`'s `subjectHashOf`) and the compiled circuit's
+// (`@txpipe/thoth-core/claim-context`'s `subjectHashOf`) and the compiled circuit's
 // `persistentHash<Subject>` over a struct of four `Bytes<32>` fields.
 //
 // ADR 0001 binds a claim to its source with an in-circuit hash, so an app
@@ -7,7 +7,7 @@
 // only sound if the off-chain helper and the circuit agree, and a pinned
 // literal alone cannot fail if the compiler's struct layout changes. Here the
 // compiled pure circuit is the oracle.
-import { subjectHashOf } from '@thoth/core/claim-context';
+import { subjectHashOf } from '@txpipe/thoth-core/claim-context';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 

@@ -1,0 +1,15 @@
+// Test mock: the circuit hash of one fixed-length address literal, the oracle
+// the address-parity test checks cardanoAddressHashOf against.
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+export pure circuit bakedHash(): Bytes<32> {
+  return persistentHash<Bytes<103>>(
+           pad(103, "addr_test1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq")
+           );
+}
+
+export pure circuit hashOf(a: Bytes<103>): Bytes<32> {
+  return persistentHash<Bytes<103>>(a);
+}

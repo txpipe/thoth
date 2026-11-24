@@ -10,9 +10,9 @@ import {
   buildTrustedSet,
   memberOf,
   resolveAttestation,
-} from '@thoth/client';
-import { AttestorNotInTrustedSetError } from '@thoth/client/errors';
-import { jubjubVerifier } from '@thoth/client/jubjub';
+} from '@txpipe/thoth-client';
+import { AttestorNotInTrustedSetError } from '@txpipe/thoth-client/errors';
+import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 

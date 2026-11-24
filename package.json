@@ -4,6 +4,7 @@
   "private": true,
   "workspaces": [
     "packages/attestor",
+    "packages/cardano",
     "packages/client",
     "packages/contracts",
     "packages/core",
@@ -13,12 +14,12 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
-    "compact": "compact compile +0.36.1 packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.36.1 packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes",
-    "compact:no-zk": "compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes",
+    "compact": "compact compile +0.36.1 packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.36.1 packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes && compact compile +0.36.1 packages/contracts/test/mocks/MockAddressHash.compact packages/contracts/artifacts/mock_address_hash",
+    "compact:no-zk": "compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes && compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAddressHash.compact packages/contracts/artifacts/mock_address_hash",
     "pretest": "npm run compact && npm run build",
     "test": "vitest run",
-    "build": "npm run build --workspace=packages/core && npm run build --workspaces --if-present",
-    "types": "npm run build --workspace=packages/core && npm run build --workspace=packages/attestor && npm run build --workspace=packages/client && npm run build --workspace=packages/zk-tls && tsc --noEmit && npm run types --workspaces --if-present",
+    "build": "npm run build --workspace=packages/core && npm run build --workspace=packages/attestor && npm run build --workspace=packages/client && npm run build --workspace=packages/cardano && npm run build --workspaces --if-present",
+    "types": "npm run build --workspace=packages/core && npm run build --workspace=packages/attestor && npm run build --workspace=packages/client && npm run build --workspace=packages/cardano && npm run build --workspace=packages/zk-tls && tsc --noEmit && npm run types --workspaces --if-present",
     "check": "npm run check:biome && npm run check:compact",
     "check:fix": "npm run check:fix:biome && npm run check:fix:compact",
     "check:ci": "npm run check:biome && npm run check:compact",
@@ -26,6 +27,9 @@
     "check:fix:biome": "biome check . --write",
     "check:compact": "compact format -c packages/contracts",
     "check:fix:compact": "compact format packages/contracts",
+    "changeset": "changeset",
+    "changeset:status": "changeset status --since=origin/main",
+    "changeset:version": "changeset version && npm install --package-lock-only",
     "prepare": "husky"
   },
   "keywords": [
@@ -35,11 +39,12 @@
     "zk"
   ],
   "devDependencies": {
-    "@biomejs/biome": "^2.5.10",
+    "@biomejs/biome": "^2.6.8",
+    "@changesets/cli": "3.0.3",
     "@midnight-ntwrk/compact-runtime": "0.21.0",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.6.6",
     "husky": "^9.1.7",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.11"
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
   }
 }

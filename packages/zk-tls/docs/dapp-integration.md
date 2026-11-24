@@ -1,4 +1,4 @@
-# @thoth/zk-tls dApp integration
+# @txpipe/thoth-zk-tls dApp integration
 
 How to use the zkFetch kind from a dApp: configure the client, write the
 policy and the request, collect a threshold, and hand the attestment to the
@@ -9,16 +9,16 @@ contract. The [package README](../README.md) explains the terms; the
 
 `zkFetchClient.init` takes:
 
-- **`trusted`.** The attestors your app pins, built with `@thoth/client`'s
+- **`trusted`.** The attestors your app pins, built with `@txpipe/thoth-client`'s
   `buildTrustedSet({ registrySize, attestors })`. `registrySize` is your
   registry's `#M`; each member pairs an attestor's descriptor
   (`{ id, definition, publicKey }`) with the `registryIndex` of its key in your
   deployed registry. The attestor does not choose its slot.
 - **`transport`.** How the client reaches each attestor. You supply it; the
-  attestor side is `Attestor.attest`, and `@thoth/client` has a minimal HTTP
+  attestor side is `Attestor.attest`, and `@txpipe/thoth-client` has a minimal HTTP
   example.
 - **`verifier`.** The attestor signature verifier. For Jubjub Schnorr, use
-  `jubjubVerifier` from `@thoth/client/jubjub`.
+  `jubjubVerifier` from `@txpipe/thoth-client/jubjub`.
 - **`policy`.** The policy every attestor in the set enforces; see
   [Building the policy](#building-the-policy). Every claim carries
   `zkFetchPolicyHashOf(policy)` as its `policyHash`, and your contract must
@@ -39,12 +39,12 @@ contract. The [package README](../README.md) explains the terms; the
 A complete setup:
 
 ```ts
-import { buildTrustedSet, type AttestorTransport } from '@thoth/client';
-import { jubjubVerifier } from '@thoth/client/jubjub';
-import { holderCommitmentOf } from '@thoth/core/claim-context';
-import { type ZkFetchDefinition, zkFetchPolicySchema } from '@thoth/zk-tls';
-import { zkFetchClient } from '@thoth/zk-tls/client';
-import { zkFetchProver } from '@thoth/zk-tls/prover';
+import { buildTrustedSet, type AttestorTransport } from '@txpipe/thoth-client';
+import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
+import { holderCommitmentOf } from '@txpipe/thoth-core/claim-context';
+import { type ZkFetchDefinition, zkFetchPolicySchema } from '@txpipe/thoth-zk-tls';
+import { zkFetchClient } from '@txpipe/thoth-zk-tls/client';
+import { zkFetchProver } from '@txpipe/thoth-zk-tls/prover';
 
 const trusted = buildTrustedSet({
   registrySize: 3, // the registry's #M
@@ -56,7 +56,7 @@ const trusted = buildTrustedSet({
 });
 
 // JSON carries neither bigint nor bytes, so toJson and fromJson (defined in the
-// @thoth/client README) tag them; your attestor's server must decode with the same pair.
+// @txpipe/thoth-client README) tag them; your attestor's server must decode with the same pair.
 const transport: AttestorTransport<ZkFetchDefinition, PublicKey, Signature> = {
   async request(attestor, input) {
     const res = await fetch(`https://${attestor.id}/attest`, {
@@ -81,10 +81,7 @@ const policy = zkFetchPolicySchema.parse({
     { type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' },
     { type: 'regex', value: '"moving_time":\\s*(?<movingTime>\\d+)' },
   ],
-  responseRedactions: [
-    { regex: '"distance":\\s*[\\d.]+' },
-    { regex: '"moving_time":\\s*\\d+' },
-  ],
+  responseRedactions: [{ regex: '"distance":\\s*[\\d.]+' }, { regex: '"moving_time":\\s*\\d+' }],
   // Safe only if a body cannot change this endpoint's response at any layer.
   bodyPolicy: 'ignored',
 });
@@ -181,7 +178,9 @@ The policy owns both. The client proves every request with the policy's rules:
 a request that omits them gets the policy's, and one that supplies its own must
 carry exactly the policy's or the client refuses before any witness is
 contacted. A slot is certifiable only when a `responseMatches` group extracted
-it from a revealed slice, so name the slot exactly like the group.
+it from a revealed slice, so name the slot exactly like the group. The policy
+schema refuses a slot `name` that no `regex` match declares as a named group; a
+`contains` match and a redaction regex declare no groups.
 
 Put a per-user URL in the request as a concrete URL
 (`https://example.com/user/42`), never as a Reclaim `{{param}}` template.
@@ -192,6 +191,16 @@ caller-chosen `paramValues`, so a template in the host or the userinfo
 client and the attestor refuse evidence whose signed URL, body, `geoLocation`
 or `proxySessionId` contains `{{`, in the URL also when written as `%7B`/`%7D`
 or split by a tab or line break, which URL parsing drops.
+
+The signed URL cannot contain `*`. Reclaim compares a signed `*` as equal to a
+[redaction marker](../../../CONTEXT.md#roles) in the transcript, and the caller
+chooses which request bytes it redacts, so each `*` would leave a sent byte
+unbound. The client and the attestor refuse a `*` in the URL text, and a host
+that URL parsing turns into one, as it does with `%2A.example.com` or a
+full-width `＊`. Write a literal `*` in the path or query as `%2A`, which
+Reclaim compares byte for byte. The subject keeps that spelling, so pass the
+`%2A` form to `zkFetchSubjectOf` when you compute the subject hash your
+contract expects.
 
 The subject hash binds the **signed** body. An empty body contributes
 `sha256('')` and does not bind the body the witness sent: the witness checks the
@@ -216,7 +225,10 @@ string becomes.
 
 Numeric rules fill a `Uint<64>` slot:
 
-- `int` accepts decimal digits only and requires a value below `2^64`.
+- `int` accepts decimal digits, or `0x`/`0X` followed by one or more hex
+  digits. The prefix is required, so `10` is ten and `1f` is invalid. Leading
+  zeros are allowed in either form: `0x10` is 16, `0x0001` is 1, and `0x0` is
+  0. The value must be below `2^64`.
 - `float` accepts a whole string matching
   `[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?`: digits, an optional decimal
   point followed by digits, and an optional base-10 exponent. Leading zeros are
@@ -232,7 +244,9 @@ Byte rules fill a 32-byte slot and reject a value that does not fit:
   characters. Trailing NUL bytes merge into the padding and unpaired surrogates
   become U+FFFD, so equality is over the padded bytes, not the source string.
 - `hex` decodes hex digits, case-insensitively, with an optional `0x`/`0X`
-  prefix. A 64-character key is 32 bytes; a 40-character address is 20.
+  prefix. It needs an even number of digits, two per byte; a hex-encoded
+  integer below `2^64` uses `int`. A 64-character key is 32 bytes; a
+  40-character address is 20.
 - `base64` decodes the standard or URL-safe alphabet, with optional `=`
   padding.
 
@@ -263,7 +277,7 @@ flags `sgiu` when its optional native `re2` module has loaded, and JavaScript's
 `RegExp` otherwise. The two read some patterns differently, so Thoth pins the
 engine to RE2:
 
-- `@thoth/zk-tls` depends on `re2`. The prover waits for it before its first
+- `@txpipe/thoth-zk-tls` depends on `re2`. The prover waits for it before its first
   proof and refuses to prove without it.
 - Every witness loads `re2` too
   ([attestor guide](attestor-guide.md#running-a-reclaim-witness)).
@@ -309,7 +323,7 @@ An endpoint that accepts a body but has nothing to say in it should send a
 harmless non-empty sentinel and pin it, rather than using `ignored`:
 
 ```ts
-import { zkFetchBodyHashOf, type ZkFetchPolicy } from '@thoth/zk-tls';
+import { zkFetchBodyHashOf, type ZkFetchPolicy } from '@txpipe/thoth-zk-tls';
 
 const SENTINEL = '{"thoth":"ignored"}';
 const policy: ZkFetchPolicy = {
@@ -341,13 +355,13 @@ each signature at its slot in the contract's fixed signature vector and call
 [wire order](../../../docs/DESIGN.md#wire-order) shows that shape.
 
 ```ts
-import { toContractClaim } from '@thoth/core/claim';
+import { toContractClaim } from '@txpipe/thoth-core/claim';
 
 // In getAttestationWitness:
 const claim = toContractClaim(attestment.claim);
 ```
 
-See `@thoth/contracts` for the circuit and the registry wiring.
+See `@txpipe/thoth-contracts` for the circuit and the registry wiring.
 
 Replay protection keys on the signed observation: app id, policy hash, subject
 hash, salt, window, values and `present`. The salt is the claim context digest
@@ -374,7 +388,7 @@ carries the `witnesses[].url` it used) and retries. Wrap it as a
 
 ```ts
 import { type Options, ReclaimClient } from '@reclaimprotocol/zk-fetch';
-import { toCanonicalEvidence, type ZkFetchProver } from '@thoth/zk-tls/client';
+import { toCanonicalEvidence, type ZkFetchProver } from '@txpipe/thoth-zk-tls/client';
 
 const hostedProver = (client: ReclaimClient): ZkFetchProver => ({
   prove: async (request) => {

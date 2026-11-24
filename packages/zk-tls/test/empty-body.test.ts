@@ -1,5 +1,6 @@
 // Reclaim 5.1.6 skips the sent-body comparison for an empty signed body
-// (lib/index.js:7468-7471), so a caller can sign no body and send one.
+// (lib/index.js:7468-7471), so a caller can sign no body and send one. It also
+// matches a signed `*` against the redaction markers in the transcript path.
 import { randomBytes } from 'node:crypto';
 import {
   CURRENT_ATTESTOR_VERSION,
@@ -12,7 +13,7 @@ import {
 } from '@reclaimprotocol/attestor-core';
 import { setCryptoImplementation } from '@reclaimprotocol/tls';
 import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto';
-import type { FlatMessage } from '@thoth/core/claim';
+import type { FlatMessage } from '@txpipe/thoth-core/claim';
 import {
   assertEvidenceMatchesPolicy,
   deriveClaimFromEvidence,
@@ -21,8 +22,8 @@ import {
   type ZkFetchPolicy,
   zkFetchClaimContextDigestOf,
   zkFetchSubjectHashOf,
-} from '@thoth/zk-tls';
-import { verifyZkFetchProof, zkFetchAttestor } from '@thoth/zk-tls/attestor';
+} from '@txpipe/thoth-zk-tls';
+import { verifyZkFetchProof, zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 /** The app id every claim in this suite is for. */
@@ -117,6 +118,35 @@ const checkRedactedReceipt = (body: string): unknown =>
     ctx: PROVIDER_CTX,
   });
 
+/** A URL whose path carries the caller's redaction markers, standing for the bytes it sent. */
+const STARRED_URL = 'https://httpbin.org/users/****/stats';
+const STARRED_REQUEST = [
+  'GET /users/****/stats HTTP/1.1',
+  'Host: httpbin.org',
+  'Connection: close',
+  'Accept-Encoding: identity',
+  '',
+].join('\r\n');
+const starredReceipt = [
+  { sender: 'client', message: strToUint8Array(STARRED_REQUEST) },
+  { sender: 'server', message: strToUint8Array(OFFLINE_RESPONSE) },
+] satisfies Transcript<Uint8Array>;
+
+const checkStarredReceipt = (): unknown =>
+  providers.http.assertValidProviderReceipt({
+    clientVersion: CURRENT_ATTESTOR_VERSION,
+    receipt: starredReceipt,
+    params: {
+      url: STARRED_URL,
+      method: 'GET' as const,
+      body: '',
+      responseMatches: [{ type: 'regex' as const, value: '(?<data>.*)' }],
+      responseRedactions: [],
+    },
+    logger,
+    ctx: PROVIDER_CTX,
+  });
+
 describe('Reclaim receipt check', () => {
   it('accepts a signed empty body when the request carries a body', () => {
     expect(() => checkReceipt('')).not.toThrow();
@@ -134,6 +164,12 @@ describe('Reclaim receipt check', () => {
   // `*`s matches any hidden bytes; this is why the attestor refuses `*` in a signed body.
   it('accepts a signed body of redaction markers for a redacted transcript', () => {
     expect(() => checkRedactedReceipt(REDACTED_BODY)).not.toThrow();
+  });
+
+  // The same holds for the URL path: the signed `*`s match the markers the caller
+  // redacted the sent path to, so the client and attestor refuse `*` in a signed URL.
+  it('accepts a signed path of redaction markers for a redacted transcript', () => {
+    expect(() => checkStarredReceipt()).not.toThrow();
   });
 });
 

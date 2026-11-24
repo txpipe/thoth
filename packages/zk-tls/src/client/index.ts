@@ -3,11 +3,11 @@ import type {
   AttestorTransport,
   CollectedAttestation,
   TrustedSet,
-} from '@thoth/client';
-import { attestorIdsOf, memberOf } from '@thoth/client';
-import type { AttestationInput } from '@thoth/core';
-import type { Claim, FlatMessage } from '@thoth/core/claim';
-import { claimToMessage } from '@thoth/core/claim';
+} from '@txpipe/thoth-client';
+import { attestorIdsOf, memberOf } from '@txpipe/thoth-client';
+import type { AttestationInput } from '@txpipe/thoth-core';
+import type { Claim, FlatMessage } from '@txpipe/thoth-core/claim';
+import { claimToMessage } from '@txpipe/thoth-core/claim';
 import { z } from 'zod';
 import type {
   ProviderClaimData,
@@ -30,13 +30,15 @@ import {
   bindRequestToClaimContext,
   bindRequestToPolicy,
   buildClaimProposal,
+  EvidenceTooDeepError,
   proveOptionsShape,
   proveWith,
+  SecretHeaderError,
   windowInOrder,
 } from './proposal.js';
 
 export type { ZkFetchAttestorFailure, ZkFetchThresholdAttestment, ZkFetchThresholdOptions };
-export { ZkFetchProverError, ZkFetchThresholdError };
+export { EvidenceTooDeepError, SecretHeaderError, ZkFetchProverError, ZkFetchThresholdError };
 
 /** Byte length of a claim's `appId`. */
 const APP_ID_BYTES = 32;
@@ -163,7 +165,7 @@ export interface Attestment<V extends number, PK, S> {
 
 /** The configuration a dApp fixes once, at `zkFetchClient.init`. */
 export interface ZkFetchClientConfig<V extends number, PK, S> {
-  /** The dApp's pinned attestors, from `@thoth/client`'s `buildTrustedSet`. */
+  /** The dApp's pinned attestors, from `@txpipe/thoth-client`'s `buildTrustedSet`. */
   readonly trusted: TrustedSet<ZkFetchDefinition, PK>;
   readonly transport: AttestorTransport<ZkFetchDefinition, PK, S>;
   /** Verifies attestor signatures before a response counts. */
@@ -234,6 +236,8 @@ export interface ZkFetchClient<V extends number, PK, S> {
    * @throws `ZodError` if the holder is not 32 bytes, the window is out of range or
    *   inverted, or a prover returns malformed evidence.
    * @throws `SecretHeaderError` if evidence carries a secret header value.
+   * @throws `EvidenceTooDeepError` if the secret scan cannot finish because the
+   *   evidence's JSON is nested too deeply.
    * @throws {@link ZkFetchProverError} if a witness or the source cannot be reached, or
    *   a response fails the policy's disclosure rules.
    * @throws `Error` if the request carries disclosure rules other than the policy's or
@@ -266,8 +270,8 @@ export interface ZkFetchClient<V extends number, PK, S> {
  *
  * @example
  * ```ts
- * import { zkFetchClient } from '@thoth/zk-tls/client';
- * import { zkFetchProver } from '@thoth/zk-tls/prover';
+ * import { zkFetchClient } from '@txpipe/thoth-zk-tls/client';
+ * import { zkFetchProver } from '@txpipe/thoth-zk-tls/prover';
  *
  * // `trusted` pins attestor-a and attestor-b; each needs its own prover.
  * const client = zkFetchClient.init({

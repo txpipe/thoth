@@ -5,7 +5,7 @@
 //
 // The message is computed with the contract's own compiled pure circuit
 // (`pureCircuits.message`), or supplied directly (e.g. from
-// `@thoth/core/claim`'s `claimToMessage`) — never a hand-rolled encoding — so
+// `@txpipe/thoth-core/claim`'s `claimToMessage`) — never a hand-rolled encoding — so
 // a signature produced here must verify in-circuit.
 import {
   CompactTypeField,

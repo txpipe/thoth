@@ -1,6 +1,6 @@
 # The window is when the attestor observed
 
-Status: accepted
+Status: accepted; for chain-event kinds, amended by [ADR 0014](0014-chain-event-kinds.md): the window is the event's block time, so the fact's own time is the window.
 
 The claim's observation window is when the attestor looked, not when the underlying fact happened. The contract checks the window against its own clock, Midnight block time, so it bounds how late a claim can be submitted and stays identical for every kind. When the fact happened, for example an event's block number or timestamp, travels as a claim value. The attestor's law checks that value for recency and finality against the source chain, because only the attestor can see that chain, and the app predicate can apply its own bound to the same value. A kind therefore never asks the contract to understand source-chain time, and a window never carries the fact's time.
 

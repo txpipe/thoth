@@ -1,4 +1,4 @@
-# @thoth/core
+# @txpipe/thoth-core
 
 The keyless types a kind of attestor implements and the claim its attestors sign, for kind authors.
 
@@ -14,18 +14,18 @@ npm install && npm run build
 cd /path/to/your-app && npm install /path/to/thoth/packages/core zod
 ```
 
-Its package name is `@thoth/core`; that name may change until the npm scope is settled.
+Once it is published, it installs as `@txpipe/thoth-core`. It needs `zod@^4.6.7` as a peer dependency.
 
 ## Usage
 
 A kind is a law: zod schemas for its policy, evidence and claim, a `verify`
-step, and a `message` encoding. You write that law against `@thoth/core` and
-pair it with a key in [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor).
+step, and a `message` encoding. You write that law against `@txpipe/thoth-core` and
+pair it with a key in [`@txpipe/thoth-attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor).
 
 ```ts
-import type { AttestorDefinition } from '@thoth/core';
-import { claimSchema, claimToMessage } from '@thoth/core/claim';
-import { policyHashOf } from '@thoth/core/claim-context';
+import type { AttestorDefinition } from '@txpipe/thoth-core';
+import { claimSchema, claimToMessage } from '@txpipe/thoth-core/claim';
+import { policyHashOf } from '@txpipe/thoth-core/claim-context';
 import { z } from 'zod';
 
 const LAW = 'my-kind@1';
@@ -55,7 +55,12 @@ export const definition = {
     }
   },
   message: (claim) => claimToMessage(claim),
-} satisfies AttestorDefinition<typeof LAW, typeof policySchema, typeof evidenceSchema, typeof claim>;
+} satisfies AttestorDefinition<
+  typeof LAW,
+  typeof policySchema,
+  typeof evidenceSchema,
+  typeof claim
+>;
 ```
 
 A dApp sends an `AttestationInput` (policy, evidence, claim proposal); the
@@ -65,9 +70,9 @@ attestor: its definition and public key, without key material.
 
 The three entry points:
 
-- **`@thoth/core`**: `AttestorDefinition`, `AttestationInput`, `Attestation`, `AttestorDescriptor`, `MessageOf`.
-- **`@thoth/core/claim`**: `Claim`, `ClaimInput`, `claimSchema`, `bytes32Schema`, `claimToMessage`, `toContractClaim`, `ContractClaim`, `FlatMessage`, `CLAIM_VERSION`.
-- **`@thoth/core/claim-context`**: `policyHashOf`, `subjectHashOf`, `holderCommitmentOf`, `claimContextDigestOf`, `ClaimContext`, `CanonicalValue`.
+- **`@txpipe/thoth-core`**: `AttestorDefinition`, `AttestationInput`, `Attestation`, `AttestorDescriptor`, `MessageOf`.
+- **`@txpipe/thoth-core/claim`**: `Claim`, `ClaimInput`, `claimSchema`, `bytes32Schema`, `claimToMessage`, `toContractClaim`, `ContractClaim`, `FlatMessage`, `CLAIM_VERSION`.
+- **`@txpipe/thoth-core/claim-context`**: `policyHashOf`, `subjectHashOf`, `holderCommitmentOf`, `claimContextDigestOf`, `ClaimContext`, `CanonicalValue`.
 
 ## Concepts
 
@@ -76,8 +81,8 @@ The three entry points:
 - [Policy and policyHash](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): the rules an attestor enforced; the claim commits to them through `policyHashOf`.
 - [Subject and subjectHash](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): what the claim is about, a struct of 32-byte fields hashed by `subjectHashOf`.
 - [Holder](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): a per-claim commitment of a secret, from `holderCommitmentOf`.
-- [Salt](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): 32 secret bytes the nullifier hashes, derived by your kind from the evidence.
-- [Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): when the attestor observed, in Unix seconds.
+- [Salt](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): 32 bytes the nullifier hashes, derived by your kind from the evidence.
+- [Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): when the observation happened, in Unix seconds.
 - [Claim context](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): policy hash, subject hash, holder and window, the part every attestor derives the same claim from.
 - [Message and wire layout](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the flat field vector the attestors sign and the contract rebuilds; the layout is in the [`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact) header and the [design doc](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#the-claim).
 
@@ -93,26 +98,24 @@ What the package checks:
 
 What it does not do:
 
-- It verifies no evidence and signs nothing. `verify` is the kind's job; signing is `@thoth/attestor`'s.
+- It verifies no evidence and signs nothing. `verify` is the kind's job; signing is `@txpipe/thoth-attestor`'s.
 - It does not check `appId`. The contract checks it against the app id it seals at deploy.
-- It does not derive or check the salt. Your kind's law derives it from the evidence and keeps it secret ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#5-the-claim)).
-- It does not bind a claim context to evidence. `claimContextDigestOf` only hashes it; your kind has its [witness](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles) sign the digest and its `verify` check it ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#5-the-claim)).
+- It does not derive or check the salt. Your kind's law derives it from the evidence ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#5-the-claim)).
+- It does not bind a claim context to evidence. `claimContextDigestOf` only hashes it; whether a kind binds it is the kind's `verify` ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#5-the-claim)).
 
 What your app must do:
 
 - Use a fresh high-entropy secret per claim. Reusing a secret links claims; the layer promises no cross-claim identity or unlinkability.
-- Read the window as when the attestor observed, not as the time of the fact.
+- Read the window as the time the observation happened; what that means for the fact is the kind's decision.
 - Give a byte slot's two halves the same flag. `toContractClaim` and `claimToMessage` do this from one `present` flag; the contract does not check the pairing.
 
 ## Design decisions
 
-- **Claim types are keyless.** `@thoth/core` carries no signing key; anything that commits to a message calls the kind's `message()`. Key-holding instances live in `@thoth/attestor`.
+- **Claim types are keyless.** `@txpipe/thoth-core` carries no signing key; anything that commits to a message calls the kind's `message()`. Key-holding instances live in `@txpipe/thoth-attestor`.
 - **The claim carries no kind.** The policy hash, tagged with the law and wire version, is what the contract checks, so a second kind is a new policy hash served by the same module ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
 - **The holder is a per-claim commitment, not an identity.** Only the owner of that claim's secret can vault it; per-user state is yours to build ([ADR 0004](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
-- **The window is when the attestor observed.** A fact's own time travels as a claim value, and your predicate bounds it ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
-- **Evidence binds the claim context.** Your kind's witness signs the `claimContextDigestOf` digest with its evidence and your `verify` recomputes it from the proposal, so the holder and window are fixed before the witness observes ([ADR 0011](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
-- **The nullifier hashes a secret salt your kind fixes.** Your `verify` derives `claim.salt` from the evidence and refuses any other, so a client cannot vary it to mint several claims from one observation. Derive it from something outsiders cannot guess, or the public nullifier confirms guessed values ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
-- **A `Claim` is not the contract's struct.** A `Claim` has one `present` mask over `V + W` slots; the contract carries each byte value as two 16-byte halves with a flag per half, so you convert with `toContractClaim` before handing it to a witness ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
+- **The kind owns the observation rules.** The window, the salt and evidence binding belong to the kind; `@txpipe/thoth-core` only hashes and encodes them ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#5-the-claim)).
+- **A `Claim` is not the contract's struct.** A `Claim` has one `present` mask over `V + W` slots; the contract carries each byte value as two 16-byte halves with a flag per half, so you convert with `toContractClaim` before handing it to a contract witness ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
 - **`FlatMessage` is the default message type.** A kind that needs another shape gives `message()` another return type; `MessageOf<D>` carries it through the signer, key pair and attestation.
 
 ## Links
@@ -121,5 +124,5 @@ What your app must do:
 - [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md): the claim and its wire order
 - [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md): how to add an attestor kind
 - [CONTEXT.md](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md): the glossary
-- [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor): pairs a definition with a signing key
-- [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the Compact modules the claim mirrors
+- [`@txpipe/thoth-attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor): pairs a definition with a signing key
+- [`@txpipe/thoth-contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the Compact modules the claim mirrors

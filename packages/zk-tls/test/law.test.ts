@@ -1,4 +1,4 @@
-// Unit tests for the zkFetch kind's shared logic (`@thoth/zk-tls`): value
+// Unit tests for the zkFetch kind's shared logic (`@txpipe/thoth-zk-tls`): value
 // parsing, redaction handling, claim derivation, disclosure matching, and
 // policy checks.
 //
@@ -23,14 +23,14 @@ import {
   zkFetchPolicyHashOf,
   zkFetchPolicySchema,
   zkFetchSubjectHashOf,
-} from '@thoth/zk-tls';
+} from '@txpipe/thoth-zk-tls';
 import {
   assertClaimMatchesContext,
   assertClaimMatchesDisclosures,
   assertClaimMatchesSubject,
-} from '@thoth/zk-tls/attestor';
+} from '@txpipe/thoth-zk-tls/attestor';
 import { describe, expect, it } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
+import { disclosureRules, disclosureRulesOf } from './helpers/helper.js';
 
 /** The app id every claim in this suite is for. */
 const APP_ID = new Uint8Array(32).fill(0xa1);
@@ -100,7 +100,7 @@ describe('zkFetchPolicySchema disclosure rules', () => {
 
   it('refuses a rule field the policy cannot declare', () => {
     const policy = {
-      ...policyWith(DISCLOSURE_RULES),
+      ...policyWith(disclosureRules('distance')),
       responseMatches: [{ type: 'contains', value: 'error', invert: true }],
     } as never;
     expect(() => zkFetchPolicySchema.parse(policy)).toThrow(/[Uu]nrecognized key/);
@@ -129,7 +129,7 @@ describe('zkFetchPolicySchema slots', () => {
         { slot: 0, name: 'b', parse: 'int' },
       ],
       bodyPolicy: 'ignored',
-      ...DISCLOSURE_RULES,
+      ...disclosureRules('a', 'b'),
     } as const;
     expect(() => zkFetchPolicySchema.parse(policy)).toThrow(
       /claim slot 0 is declared more than once/,
@@ -138,12 +138,96 @@ describe('zkFetchPolicySchema slots', () => {
   });
 });
 
+describe('zkFetchPolicySchema slot groups', () => {
+  const policyWith = (
+    name: string,
+    responseMatches: ZkFetchPolicy['responseMatches'],
+    responseRedactions: ZkFetchPolicy['responseRedactions'] = [],
+  ) => ({
+    allowedHosts: ['api.github.com'],
+    slots: [{ slot: 0, name, parse: 'int' }],
+    bodyPolicy: 'ignored',
+    responseMatches,
+    responseRedactions,
+  });
+  const regex = (value: string) => ({ type: 'regex' as const, value });
+
+  it('refuses a slot name no regex match declares a group for', () => {
+    const parsed = zkFetchPolicySchema.safeParse(policyWith('balance', [regex('(?<score>\\d+)')]));
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues).toMatchObject([
+        { path: ['slots', 0, 'name'], message: expect.stringContaining('balance') },
+      ]);
+    }
+  });
+
+  it('accepts a slot name one of several regex matches declares', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(
+        policyWith('balance', [regex('(?<score>\\d+)'), regex('(?<balance>\\d+)')]),
+      ),
+    ).not.toThrow();
+  });
+
+  it('reads a (?P<name> group, which RE2 accepts', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(policyWith('balance', [regex('(?P<balance>\\d+)')])),
+    ).not.toThrow();
+  });
+
+  it('ignores a group-like contains match', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(
+        policyWith('balance', [{ type: 'contains', value: '(?<balance>\\d+)' }]),
+      ),
+    ).toThrow(/balance/);
+  });
+
+  it('ignores groups a redaction regex declares', () => {
+    expect(() =>
+      zkFetchPolicySchema.parse(
+        policyWith(
+          'balance',
+          [{ type: 'contains', value: 'balance' }],
+          [{ regex: '(?<balance>\\d+)' }],
+        ),
+      ),
+    ).toThrow(/balance/);
+  });
+
+  // RE2 decides what a group is; these pin that the schema asks it rather than
+  // searching the text for `(?<`.
+  it.each([
+    ['escaped', '\\(?<balance>a\\)'],
+    ['in a character class', '[(?<balance>]'],
+    ['in a \\Q…\\E quote', '\\Q(?<balance>\\E'],
+  ])('ignores a group-like sequence %s', (_case, source) => {
+    expect(() => zkFetchPolicySchema.parse(policyWith('balance', [regex(source)]))).toThrow(
+      /'balance'/,
+    );
+  });
+
+  it.each([
+    ['an unclosed group', '(?<balance>\\d+'],
+    ['a lookbehind', '(?<=x)(?<balance>\\d+)'],
+  ])('reports only the RE2 error for %s', (_case, source) => {
+    const parsed = zkFetchPolicySchema.safeParse(policyWith('balance', [regex(source)]));
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.path)).toEqual([
+        ['responseMatches', 0, 'value'],
+      ]);
+    }
+  });
+});
+
 describe('zkFetchPolicySchema claimVersion', () => {
   const policyWith = (claimVersion: bigint) => ({
     allowedHosts: ['api.github.com'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
     bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
+    ...disclosureRules('distance'),
     claimVersion,
   });
 
@@ -168,7 +252,7 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 0, name: 'v', parse }],
         bodyPolicy: 'ignored',
-        ...DISCLOSURE_RULES,
+        ...disclosureRules('v'),
       },
       appId: APP_ID,
       holder: new Uint8Array(32).fill(0xc1),
@@ -179,21 +263,34 @@ describe('parse law (through deriveClaimFromEvidence)', () => {
     return { present: claim.present[0] ?? false, value: claim.values[0] ?? 0n };
   };
 
-  it('parses non-negative integers within the Uint<64> wire range', () => {
-    expect(derived('0', 'int')).toEqual({ present: true, value: 0n });
-    expect(derived('007', 'int')).toEqual({ present: true, value: 7n });
-    expect(derived('18446744073709551615', 'int')).toEqual({
-      present: true,
-      value: (1n << 64n) - 1n,
-    });
+  it('parses non-negative integers in decimal or 0x-prefixed hex', () => {
+    for (const [form, value] of [
+      ['0', 0n],
+      ['007', 7n],
+      ['18446744073709551615', (1n << 64n) - 1n],
+      ['0x1938381', 26_444_673n],
+      ['1938381', 1_938_381n],
+      ['0x10', 16n],
+      ['10', 10n],
+      ['0x0', 0n],
+      ['0x00', 0n],
+      ['0X1f', 31n],
+      ['0x0001', 1n],
+      ['0xffffffffffffffff', (1n << 64n) - 1n],
+    ] as const) {
+      expect(derived(form, 'int')).toEqual({ present: true, value });
+    }
   });
 
-  it('leaves out-of-range, negative, and non-integer strings unpresent', () => {
+  it('leaves out-of-range, negative, and malformed integer strings unpresent', () => {
     expect(derived('18446744073709551616', 'int').present).toBe(false);
+    expect(derived('0x10000000000000000', 'int').present).toBe(false);
     expect(derived('-1', 'int').present).toBe(false);
     expect(derived('1.5', 'int').present).toBe(false);
-    expect(derived('0x10', 'int').present).toBe(false);
     expect(derived('1e3', 'int').present).toBe(false);
+    for (const form of ['1f', '0x', '0xG', '0x 10', '-0x10', '0x1.0']) {
+      expect(derived(form, 'int').present).toBe(false);
+    }
   });
 
   it('rounds floats to the nearest whole value', () => {
@@ -284,7 +381,7 @@ describe('deriveClaimFromEvidence', () => {
     allowedHosts: ['api.github.com'],
     slots,
     bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
+    ...disclosureRulesOf(slots),
   });
 
   it('maps disclosed values into the declared slots', () => {
@@ -496,7 +593,7 @@ describe('assertClaimMatchesContext', () => {
     allowedHosts: ['api.github.com'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
     bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
+    ...disclosureRules('distance'),
   };
   const window = { holder: new Uint8Array(32).fill(7), windowStart: 10n, windowEnd: 20n };
   const digestUnder = (signedPolicy: ZkFetchPolicy, request: typeof REQUEST = REQUEST) =>
@@ -549,7 +646,7 @@ describe('assertClaimMatchesDisclosures', () => {
     allowedHosts: ['api.github.com'],
     slots,
     bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
+    ...disclosureRulesOf(slots),
   });
 
   it('accepts a claim that reflects the disclosures', () => {
@@ -624,13 +721,13 @@ describe('assertEvidenceMatchesPolicy', () => {
     allowedHosts: ['api.github.com'],
     slots: [{ slot: 0, name: 'distance', parse: 'float' }],
     bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
+    ...disclosureRules('distance'),
   };
 
   const verified = (url: string, method = 'GET', body = ''): VerifiedEvidence =>
     verifiedOf(
       claimWith(
-        { url, method, body, ...DISCLOSURE_RULES },
+        { url, method, body, ...disclosureRules('distance') },
         { extractedParameters: { distance: '12.4' } },
       ),
       {
@@ -649,13 +746,22 @@ describe('assertEvidenceMatchesPolicy', () => {
   });
 
   it('rejects a required __proto__ slot when nothing named it is disclosed', () => {
+    const rules = disclosureRules('__proto__');
     const protoPolicy: ZkFetchPolicy = {
       ...policy,
       slots: [{ slot: 0, name: '__proto__', parse: 'bytes' }],
+      ...rules,
     };
-    expect(() =>
-      assertEvidenceMatchesPolicy(verified('https://api.github.com/x'), protoPolicy),
-    ).toThrow(/did not disclose a parseable value/);
+    const evidence = verifiedOf(
+      claimWith(
+        { url: 'https://api.github.com/x', method: 'GET', body: '', ...rules },
+        { extractedParameters: {} },
+      ),
+      {},
+    );
+    expect(() => assertEvidenceMatchesPolicy(evidence, protoPolicy)).toThrow(
+      /did not disclose a parseable value/,
+    );
   });
 
   it('accepts an https claim against an allowlisted host', () => {
@@ -695,7 +801,12 @@ describe('assertEvidenceMatchesPolicy', () => {
   it('refuses a required slot whose disclosure is missing or unparseable', () => {
     const missing = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
+        {
+          url: 'https://api.github.com/x',
+          method: 'GET',
+          body: '',
+          ...disclosureRules('distance'),
+        },
         { extractedParameters: {} },
       ),
       {},
@@ -705,7 +816,12 @@ describe('assertEvidenceMatchesPolicy', () => {
     );
     const unparseable = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
+        {
+          url: 'https://api.github.com/x',
+          method: 'GET',
+          body: '',
+          ...disclosureRules('distance'),
+        },
         { extractedParameters: { distance: 'abc' } },
       ),
       { distance: 'abc' },
@@ -748,7 +864,12 @@ describe('assertEvidenceMatchesPolicy', () => {
     };
     const missing = verifiedOf(
       claimWith(
-        { url: 'https://api.github.com/x', method: 'GET', body: '', ...DISCLOSURE_RULES },
+        {
+          url: 'https://api.github.com/x',
+          method: 'GET',
+          body: '',
+          ...disclosureRules('distance'),
+        },
         { extractedParameters: {} },
       ),
       {},
@@ -843,7 +964,7 @@ describe('byte value parse rules', () => {
     allowedHosts: ['api.github.com'],
     slots,
     bodyPolicy: 'ignored',
-    ...DISCLOSURE_RULES,
+    ...disclosureRulesOf(slots),
   });
 
   const padded = (value: string): Uint8Array => {
@@ -940,8 +1061,20 @@ describe('byte value parse rules', () => {
     }
   });
 
-  it('rejects hex separators, whitespace, and other non-data characters', () => {
-    const forms = ['', '0x', 'abc', 'ab:cd', 'ab-cd', 'ab cd', 'ab,cd', 'ab.cd', 'abcd\n', 'abcz'];
+  it('rejects odd digit counts, separators, whitespace, and other non-data characters', () => {
+    const forms = [
+      '',
+      '0x',
+      '0xabc',
+      'abc',
+      'ab:cd',
+      'ab-cd',
+      'ab cd',
+      'ab,cd',
+      'ab.cd',
+      'abcd\n',
+      'abcz',
+    ];
     for (const form of forms) {
       expect(parseDisclosedValue(form, 'hex')).toBeNull();
     }
@@ -993,7 +1126,7 @@ describe('byte value parse rules', () => {
         allowedHosts: ['api.github.com'],
         slots: [slot],
         bodyPolicy: 'ignored',
-        ...DISCLOSURE_RULES,
+        ...disclosureRules(slot.name),
       });
     expect(() => policyWith({ slot: 0, name: 'id', parse: 'int', length: 4 })).toThrow(/length/);
     expect(() => policyWith({ slot: 1, name: 'id', parse: 'hex', length: 0 })).toThrow();

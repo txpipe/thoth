@@ -43,22 +43,26 @@ Attestors certify facts, not decisions: a claim states what was observed, and
 your app defines the predicate over it.
 
 Claim values are private witness data and are not stored on-chain. The public
-nullifier hashes them with a secret [salt](CONTEXT.md#the-claim), so an outsider
-cannot confirm a guessed value from it; the contracts README
+nullifier hashes them with a [salt](CONTEXT.md#the-claim). In zkFetch the salt is
+secret, so an outsider cannot confirm a guessed value from it; a chain-event
+kind's salt is public instead, since its values already sit on the chain
+([ADR 0014](docs/adr/0014-chain-event-kinds.md)). The contracts README
 [says what is public and who holds the salt](packages/contracts/README.md#guarantees-and-limits).
 
 ## Which package to use
 
-| Package | Use it to |
-|---------|-----------|
-| [`@thoth/contracts`](packages/contracts/README.md) | Embed N-of-M verification in your Midnight contract |
-| [`@thoth/zk-tls`](packages/zk-tls/README.md) | Attest a web fact with zkFetch, as a dApp or as an attestor operator |
-| [`@thoth/client`](packages/client/README.md) | Write a kind's client: the trusted set and the attestation checks |
-| [`@thoth/attestor`](packages/attestor/README.md) | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
-| [`@thoth/core`](packages/core/README.md) | Write a kind's law against the shared claim types |
+| Package                                                   | Use it to                                                                    |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [`@txpipe/thoth-contracts`](packages/contracts/README.md) | Embed N-of-M verification in your Midnight contract                          |
+| [`@txpipe/thoth-zk-tls`](packages/zk-tls/README.md)       | Attest a web fact with zkFetch, as a dApp or as an attestor operator         |
+| [`@txpipe/thoth-cardano`](packages/cardano/README.md)     | Attest a Cardano chain event, as a dApp or as an attestor operator           |
+| [`@txpipe/thoth-client`](packages/client/README.md)       | Write a kind's client: the trusted set and the attestation checks            |
+| [`@txpipe/thoth-attestor`](packages/attestor/README.md)   | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
+| [`@txpipe/thoth-core`](packages/core/README.md)           | Write a kind's law against the shared claim types                            |
 
-If you are building a dApp on web data, start with `@thoth/contracts` and
-`@thoth/zk-tls`. To add a new kind of attestor, follow
+If you are building a dApp on web data, start with `@txpipe/thoth-contracts` and
+`@txpipe/thoth-zk-tls`; on chain data, start with `@txpipe/thoth-contracts` and
+`@txpipe/thoth-cardano`. To add a new kind of attestor, follow
 [docs/kind-author-guide.md](docs/kind-author-guide.md).
 
 ## Quickstart
@@ -93,11 +97,21 @@ const client = zkFetchClient.init({
     registrySize: 3,
     attestors: attestors.map((a, registryIndex) => ({ attestor: descriptorOf(a), registryIndex })),
   }),
-  transport, verifier: jubjubVerifier, policy, appId, valueSlots: 3, byteSlots: 1, provers,
+  transport,
+  verifier: jubjubVerifier,
+  policy,
+  appId,
+  valueSlots: 3,
+  byteSlots: 1,
+  provers,
 });
 const { claim, collected } = await client.collect(request, {
   holder: holderCommitmentOf(holderSecret),
-  windowStart, windowEnd, expiresAt, threshold: 2, attestorTimeoutMs: 5_000,
+  windowStart,
+  windowEnd,
+  expiresAt,
+  threshold: 2,
+  attestorTimeoutMs: 5_000,
 });
 
 // 4. Your contract's getAttestationWitness returns toContractClaim(claim), the
@@ -133,4 +147,4 @@ replace.
 - [docs/adr/](docs/adr/): the design decisions and their reasons
 - [CONTEXT.md](CONTEXT.md): the glossary
 - [CONTRIBUTING.md](CONTRIBUTING.md): dev setup, repo layout and commands
-- License: [Apache-2.0](LICENSE), except [`@thoth/zk-tls`](packages/zk-tls), which is [AGPL-3.0-only](packages/zk-tls/LICENSE) because it links Reclaim Protocol's AGPL-licensed attestor-core
+- License: [Apache-2.0](LICENSE), except [`@txpipe/thoth-zk-tls`](packages/zk-tls), which is [AGPL-3.0-only](packages/zk-tls/LICENSE) because it links Reclaim Protocol's AGPL-licensed attestor-core

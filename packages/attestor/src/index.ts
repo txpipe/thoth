@@ -4,8 +4,8 @@ import type {
   AttestorDefinition,
   AttestorDescriptor,
   MessageOf,
-} from '@thoth/core';
-import type { FlatMessage } from '@thoth/core/claim';
+} from '@txpipe/thoth-core';
+import type { FlatMessage } from '@txpipe/thoth-core/claim';
 import type { z } from 'zod';
 
 /**
@@ -66,7 +66,7 @@ export interface KeyPair<PK, S, Msg = FlatMessage> {
  * and the public key it attests under.
  *
  * It carries no registry slot; each app assigns one in its trusted set
- * (`@thoth/client`).
+ * (`@txpipe/thoth-client`).
  */
 export interface Attestor<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,

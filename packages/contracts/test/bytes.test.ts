@@ -5,7 +5,7 @@
 // not confirm a guessed value.
 import { randomBytes } from 'node:crypto';
 import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
-import { claimToMessage, toContractClaim } from '@thoth/core/claim';
+import { claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits as mockPureCircuits } from '../artifacts/mock_attestation/contract/index.js';

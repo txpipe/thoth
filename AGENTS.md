@@ -7,15 +7,15 @@ Agent-facing guide for the Thoth monorepo. Human-oriented docs live in
 
 Thoth is a private N-of-M attestation system for Midnight. Three layers:
 
-- **Contract layer** — `packages/contracts` (`@thoth/contracts`): embeddable
-  Compact modules that verify N-of-M signatures over a flat signed message
-  (`attestation.compact`), count valid signatures against a pinned key vector
-  (`attestor_registry.compact`) with the stdlib `jubjubSchnorrVerify`.
+- **Contract layer** — `packages/contracts` (`@txpipe/thoth-contracts`):
+  embeddable Compact modules that verify N-of-M signatures over a flat signed
+  message (`attestation.compact`), count valid signatures against a pinned key
+  vector (`attestor_registry.compact`) with the stdlib `jubjubSchnorrVerify`.
 - **Attestor SDK** — `packages/attestor` + `packages/core`: the types and
   interfaces attestor kinds implement to provide attestation. Kinds verify
   evidence and sign a canonical claim. `packages/client` holds the dApp side
   (the trusted set and the attestation checks), and `packages/zk-tls` is the
-  zkFetch kind.
+  zkFetch kind. `packages/cardano` is the cardano@1 chain-event kind.
 
 Attestors certify facts, not decisions: a claim is a canonical statement of
 what was observed; the application defines the predicate over it.
@@ -49,14 +49,17 @@ file.
   placeholder and is not compiled
   ([`CONTRIBUTING.md`](CONTRIBUTING.md#repository-layout)).
 - **`@midnight-ntwrk/compact-runtime` stays pinned to `0.21.0`** in every
-  workspace, with Compact compiler `0.36.1` (the `compact` scripts in the root
-  and contracts `package.json`, both CI workflows, `CONTRIBUTING.md` and the
-  contracts README).
-  Never bump one workspace alone; [`CONTRIBUTING.md`](CONTRIBUTING.md#dev-setup)
-  says why.
-- **Claim types are keyless.** `@thoth/core` carries no signing key; anything
-  that commits to a message delegates to the kind's `message()`. Keep it that
-  way.
+  workspace, with Compact compiler `0.36.1`. Never bump one workspace alone;
+  [`CONTRIBUTING.md`](CONTRIBUTING.md#dev-setup) says why and lists every
+  place the compiler is pinned.
+- **Claim types are keyless.** `@txpipe/thoth-core` carries no signing key;
+  anything that commits to a message delegates to the kind's `message()`. Keep
+  it that way.
+- **Published packages carry a changeset.** A user-facing change to `core`,
+  `attestor`, `client`, `zk-tls`, `cardano` or `contracts` adds one
+  (`npm run changeset`); internal dependencies between them use a `^` range,
+  never `*`, which changesets would publish as is
+  ([`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-changeset)).
 - **`registryIndex` is positional and app-owned.** `attestor_registry.compact`
   verifies signatures positionally (`signatures[i]` against `keys[i]`). The slot
   lives only on the client's `TrustedSet` member (`{ attestor, registryIndex }`,
@@ -71,8 +74,9 @@ file.
   (import from `./claim.js`, not `./claim`). Shared config in
   `tsconfig.base.json`.
 - **Biome** is the formatter/linter (`biome.json`). Notable rules:
-  - `noBarrelFile` / `noReExportAll` are errors (except `*.config.*`). Never
-    add `export *` barrels; use subpath exports instead (see `@thoth/core/claim`).
+  - `noBarrelFile` / `noReExportAll` are errors (except `*.config.*`). Never add
+    `export *` barrels; use subpath exports instead (see
+    `@txpipe/thoth-core/claim`).
   - `noUnusedImports`, `noUnusedVariables`, `useErrorMessage` are errors.
   - 100-column line width, single quotes, semicolons.
 - **Compact**: `pragma language_version >= 0.22`; follow the style in
@@ -100,23 +104,24 @@ file.
   file header is 1–2 `//` lines.
 - **Comments explain why**: invariants, security reasons, non-obvious
   constraints. The code says what. History, ticket and PR numbers stay out of
-  source; cite decisions as `ADR 000N`.
+  source, and so do ADR citations: a comment states the reason itself, and
+  docs link the ADR.
 
 ## Docs conventions
 
 Who reads what:
 
-| Doc | Reader | Contains |
-|-----|--------|----------|
-| `README.md` | someone evaluating Thoth | what it is, status, how it works, which package to use, the demo, roadmap links |
-| `packages/*/README.md` | a developer using that package (it is the npm page) | the package README template below |
-| `docs/kind-author-guide.md`, `packages/zk-tls/docs/*` | a developer building a kind or integrating a dApp | step-by-step guides |
-| `docs/DESIGN.md` | anyone who wants the architecture | overview, the claim and its wire order, flow, out of scope; links the ADRs and never restates them |
-| `docs/adr/` | maintainers | one decision each with its full reasoning; the only place for history and ticket references |
-| `CONTEXT.md` | everyone | the glossary |
-| `CONTRIBUTING.md` | contributors | dev setup, repo layout, commands |
-| `AGENTS.md` | coding agents | the rules agents follow here; links to the docs above for everything else |
-| source comments | someone reading the code | why: invariants, security reasons, non-obvious constraints |
+| Doc                                                   | Reader                                              | Contains                                                                                           |
+| ----------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `README.md`                                           | someone evaluating Thoth                            | what it is, status, how it works, which package to use, the demo, roadmap links                    |
+| `packages/*/README.md`                                | a developer using that package (it is the npm page) | the package README template below                                                                  |
+| `docs/kind-author-guide.md`, `packages/zk-tls/docs/*` | a developer building a kind or integrating a dApp   | step-by-step guides                                                                                |
+| `docs/DESIGN.md`                                      | anyone who wants the architecture                   | overview, the claim and its wire order, flow, out of scope; links the ADRs and never restates them |
+| `docs/adr/`                                           | maintainers                                         | one decision each with its full reasoning; the only place for history and ticket references        |
+| `CONTEXT.md`                                          | everyone                                            | the glossary                                                                                       |
+| `CONTRIBUTING.md`                                     | contributors                                        | dev setup, repo layout, commands                                                                   |
+| `AGENTS.md`                                           | coding agents                                       | the rules agents follow here; links to the docs above for everything else                          |
+| source comments                                       | someone reading the code                            | why: invariants, security reasons, non-obvious constraints                                         |
 
 Voice, for every doc and comment:
 
@@ -136,12 +141,13 @@ Voice, for every doc and comment:
 Package README template, headings in this order (skip a section only if it
 would be empty):
 
-1. `# @thoth/<name>`, then one sentence saying what it is and who it's for.
+1. `# @txpipe/thoth-<name>`, then one sentence saying what it is and who it's
+   for.
 2. The status line, identical in every README and the root:
    > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 3. `## Install`: how to install or use it today. A package with an npm name
-   gives it, plus one line saying the name may change until the npm scope is
-   settled; a private package skips both.
+   gives it (`@txpipe/thoth-<name>`), plus one line saying whether it is
+   published yet; a private package skips both.
 4. `## Usage`: the shortest working example of the main task. For `core`,
    `attestor` and `client` the reader is a kind author, so the example is from
    their side.
@@ -158,9 +164,9 @@ Where decisions live: a decision that changes how you use a package goes in
 that package's "Design decisions", written as its consequence for the reader.
 A decision that spans packages is an ADR in `docs/adr/`, linked from every
 README it affects. A decision that is local to one package and has no ADR
-lives only in that package's README. `docs/kind-author-guide.md` spans
-packages: update it when an interface a kind implements changes
-(`@thoth/core`, `@thoth/attestor`, `@thoth/client`, or the claim).
+lives only in that package's README. `docs/kind-author-guide.md` spans packages:
+update it when an interface a kind implements changes (`@txpipe/thoth-core`,
+`@txpipe/thoth-attestor`, `@txpipe/thoth-client`, or the claim).
 
 The roadmap lives in GitHub: the `v0` and `Next` milestones and the `frozen`
 label. The root README's Roadmap section only links those three; package
@@ -172,10 +178,11 @@ READMEs don't repeat it.
   `packages/contracts/test/`. The mock top-level shells
   (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, K=20, M=3,
   N=2 — and `MockAttestationBytes.compact` — V=3, B=2, K=24) specialize the
-  modules so tests run against real artifacts.
+  modules so tests run against real artifacts. `MockAddressHash.compact` is the
+  compiled oracle for the cardano address hash.
 - `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
   compiled pure circuits — never hand-roll the message encoding; use
-  `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.
+  `pureCircuits.message` or `@txpipe/thoth-core/claim`'s `claimToMessage`.
 - After changing Compact sources, recompile before running tests:
   `npm run compact:no-zk` (the `pretest` hook does this automatically).
 - `packages/contracts/test/acceptance.test.ts` is the end-to-end check (zkFetch
@@ -183,6 +190,9 @@ READMEs don't repeat it.
 - `packages/zk-tls/test/live.test.ts` is an opt-in live check against two real
   witnesses; it skips unless `WITNESS_URLS` names them, so `npm test` and CI
   stay offline. See "Live check" in `packages/zk-tls/docs/attestor-guide.md`.
+- `packages/cardano/test/live.test.ts` is the same kind of check for one real
+  UTxO-RPC endpoint; it skips unless `DOLOS_URL` names it. See "Live check" in
+  `packages/cardano/docs/dapp-integration.md`.
 - Never skip the `present` mask semantics: `present[i] = true` means slot `i`
   was measured (value may still be `0`).
 

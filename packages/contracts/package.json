@@ -1,10 +1,9 @@
 {
-  "name": "@thoth/contracts",
+  "name": "@txpipe/thoth-contracts",
   "version": "0.0.0",
   "description": "Thoth Compact modules: N-of-M attestation and attestor registry.",
   "type": "module",
   "license": "Apache-2.0",
-  "private": true,
   "author": "TxPipe-Shop",
   "keywords": [
     "thoth",
@@ -30,11 +29,16 @@
     "attestation.compact",
     "attestor_registry.compact",
     "examples/",
-    "README.md"
+    "README.md",
+    "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
-    "compact": "compact compile +0.36.1 test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.36.1 test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes",
-    "compact:no-zk": "compact compile +0.36.1 --skip-zk test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.36.1 --skip-zk test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes",
+    "compact": "compact compile +0.36.1 test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.36.1 test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes && compact compile +0.36.1 test/mocks/MockAddressHash.compact artifacts/mock_address_hash",
+    "compact:no-zk": "compact compile +0.36.1 --skip-zk test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.36.1 --skip-zk test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes && compact compile +0.36.1 --skip-zk test/mocks/MockAddressHash.compact artifacts/mock_address_hash",
     "pretest": "npm run compact:no-zk",
     "test": "vitest run",
     "types": "tsc --noEmit",
@@ -47,14 +51,15 @@
     "check:fix:compact": "compact format ."
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.10",
+    "@biomejs/biome": "^2.6.8",
     "@midnight-ntwrk/compact-runtime": "0.21.0",
-    "@thoth/attestor": "*",
-    "@thoth/client": "*",
-    "@thoth/core": "*",
-    "@thoth/zk-tls": "*",
-    "@types/node": "^26.2.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.11"
+    "@txpipe/thoth-attestor": "*",
+    "@txpipe/thoth-cardano": "*",
+    "@txpipe/thoth-client": "*",
+    "@txpipe/thoth-core": "*",
+    "@txpipe/thoth-zk-tls": "*",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
   }
 }

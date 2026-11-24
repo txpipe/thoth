@@ -1,0 +1,32 @@
+# Installs the Compact CLI from a pinned release, checked against its SHA-256, and
+# selects the compiler. Dependabot can't bump these pins; see CONTRIBUTING.md#dev-setup.
+name: Set up Compact
+description: Install the pinned Compact CLI and select the pinned compiler.
+
+runs:
+  using: composite
+  steps:
+    - name: Install Compact CLI and compiler
+      shell: bash
+      env:
+        COMPACT_CLI_VERSION: 0.5.3
+        # sha256 of compact-x86_64-unknown-linux-musl.tar.xz in the compact-v0.5.3 release.
+        COMPACT_CLI_SHA256: dfaaeccefe0d77095293208171bcefc48529b8d094dada3670b0e0684932d605
+        COMPACT_COMPILER_VERSION: 0.36.1
+      run: |
+        set -euo pipefail
+        if [ "$RUNNER_OS" != Linux ] || [ "$RUNNER_ARCH" != X64 ]; then
+          echo "::error::setup-compact pins the x86_64 Linux build only, got $RUNNER_OS/$RUNNER_ARCH"
+          exit 1
+        fi
+        asset=compact-x86_64-unknown-linux-musl
+        tmp="$(mktemp -d)"
+        curl --proto '=https' --tlsv1.2 -fsSL -o "$tmp/$asset.tar.xz" \
+          "https://github.com/midnightntwrk/compact/releases/download/compact-v${COMPACT_CLI_VERSION}/$asset.tar.xz"
+        echo "${COMPACT_CLI_SHA256}  $tmp/$asset.tar.xz" | sha256sum --check --strict -
+        tar -xJf "$tmp/$asset.tar.xz" -C "$tmp"
+        install -D -m 0755 "$tmp/$asset/compact" "$HOME/.local/bin/compact"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        echo "$HOME/.compact/bin" >> "$GITHUB_PATH"
+        "$HOME/.local/bin/compact" update "$COMPACT_COMPILER_VERSION"
+        "$HOME/.local/bin/compact" compile --version

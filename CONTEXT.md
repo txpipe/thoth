@@ -15,16 +15,20 @@ The public view of an attestor that a dApp pins: its id, its law and its public 
 _Avoid_: Attestor info, handle.
 
 **Witness**:
-The entity that runs the fetch and signs the evidence behind a claim. Each attestor trusts one witness. Not a Compact `witness` function, which is how the contract reads private input.
+A zkFetch role: the entity that runs the fetch and signs the evidence behind a claim. Each zkFetch attestor trusts one witness. Not a Compact `witness` function, which is how the contract reads private input.
 _Avoid_: Prover, node.
 
 **Prover**:
-The client-side component that obtains evidence from a witness.
+The zkFetch client-side component that obtains evidence from a witness.
 _Avoid_: Witness, attestor.
 
 **Evidence**:
-What a prover obtains from a witness and an attestor verifies before signing, such as a zkFetch proof of an HTTPS fetch. The claim does not commit to it (ADR 0007).
+What an attestor verifies before signing. In zkFetch it is what a prover obtains from a witness, such as a proof of an HTTPS fetch; in a chain-event kind it is a [locator](#kinds) the client sends, and the attestor re-reads the event itself. The claim does not commit to it (ADR 0007).
 _Avoid_: Proof.
+
+**Redaction marker**:
+A `*` the prover writes into the TLS transcript in place of a request byte it hides from the witness. The prover chooses which bytes it redacts, and Reclaim compares a `*` in the signed request as equal to a marker, so a signed `*` binds no sent byte.
+_Avoid_: Mask, wildcard.
 
 ### Kinds
 
@@ -35,6 +39,18 @@ _Avoid_: Type, scheme, provider.
 **Law**:
 What a kind implements: its policy, evidence and claim schemas, the `verify` step, and the `message` encoding. Keyless and shareable; many attestor instances run one law. A law may take operator configuration with no secret in it, such as the witness zkFetch trusts. Its versioned tag, such as `zk-fetch@1`, is the kind identifier and is hashed into every policy hash.
 _Avoid_: Driver, plugin.
+
+**Chain-event kind**:
+A kind whose attestors certify an event they read from a chain, such as an output at a Cardano address. The client sends a locator and each attestor re-reads the event from its own source (ADR 0014). `cardano@1` is the first.
+_Avoid_: Chain kind, oracle kind.
+
+**Policy variant**:
+One event shape a chain-event law can describe, tagged by the policy's `kind` field, such as `cardano@1`'s `output`. The tag is part of the policy hash, so adding a variant leaves existing hashes unchanged (ADR 0014).
+_Avoid_: Subkind, event type.
+
+**Locator**:
+The evidence a chain-event client sends: the minimal fields an attestor needs to find the event, such as the transaction hash and output index of one Cardano output (an output reference; `TxIn` in the ledger). The attestor re-reads the event from its own source, so the locator can only choose which event to attest, never shape the claim (ADR 0014).
+_Avoid_: Pointer, outpoint, payload.
 
 ### The claim
 
@@ -55,8 +71,12 @@ The rules an attestor enforced to produce an attestation, for example which host
 _Avoid_: Rules, config.
 
 **Slot map**:
-The part of a policy that says which value slot each extracted field fills and the parse rule that turns the field's string into the slot's value (`slots` in a zkFetch policy).
+The part of a policy that says which value slot each fact fills (`slots`). In zkFetch it also gives the parse rule that turns the field's string into the slot's value.
 _Avoid_: Schema, field map.
+
+**Confirmation depth**:
+The number of blocks a chain-event kind requires below the event's block at read time before an attestor signs (`confirmationDepth`). It is part of the policy, so each app sets its own (ADR 0014).
+_Avoid_: Confirmations, finality.
 
 **Disclosure rules**:
 The zkFetch policy's response patterns and reveal whitelist (`responseMatches` and `responseRedactions`): the exact extraction the witness executed and signed into the claim. The attestor requires the signed rules to equal the policy's, and the policy hash commits to them, so a claim slot cannot be pointed at a different field than the policy intends.
@@ -83,11 +103,11 @@ A per-claim commitment, not a user id. Only the owner of that claim's secret can
 _Avoid_: Owner, user, account, identity.
 
 **Salt**:
-A secret 32-byte value the claim carries and the nullifier hashes, so the nullifier cannot confirm a guessed value. The kind fixes it from the evidence, so the client cannot change it without new evidence. zkFetch uses the claim context digest, so the salt follows the holder and window the client binds before proving. It never appears on-chain (ADR 0012).
+A 32-byte value the claim carries and the nullifier hashes. In zkFetch it is secret, so the nullifier cannot confirm a guessed value. The kind fixes it from the evidence, so the client cannot change it without new evidence. zkFetch uses the claim context digest, so the salt follows the holder and window the client binds before proving. A chain-event kind's salt is public instead: a tagged hash of the event's identity, since the event's values are public chain data (ADR 0014). It never appears on-chain (ADR 0012).
 _Avoid_: Nonce, randomness.
 
 **Window**:
-When the attestor's witness observed, in Unix seconds, not when the underlying fact happened. It is not the exact fetch time: a zkFetch witness's observation time (`timestampS`) comes from the request, and Reclaim rejects it only if it is more than 10 minutes in the future, with no lower bound. So the window shows the fetch happened no earlier than about 10 minutes before `windowStart`. Freshness still holds on-chain, because post-dating is capped. The contract checks the window against its own clock; a fact's own time travels as a value (ADR 0005).
+When the observation happened, in Unix seconds. The kind decides what that is: a zkFetch witness's read, or a chain-event kind's block time (ADR 0005, ADR 0014). The contract checks it against its own clock.
 _Avoid_: Timestamp, event time.
 
 **present**:
@@ -103,19 +123,19 @@ A value slot carrying a 32-byte string, for facts that are not numbers, such as 
 _Avoid_: Blob, string slot.
 
 **Claim proposal**:
-The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder, window and the requested numeric and byte value-slot counts from the proposal, and refuses a proposal whose salt differs from the one it derives.
+The claim the client sends an attestor with the evidence. The attestor signs the claim it derives itself, taking only the app id, holder and the requested numeric and byte value-slot counts from the proposal. In zkFetch the client also chooses the window; a chain-event kind derives it from the event and refuses a proposal that differs. A proposal whose salt differs is refused either way.
 _Avoid_: Draft, request.
 
 **Claim context**:
-The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` hashes it. The witness signs that digest with its evidence and the attestor recomputes it from the claim proposal, so evidence signed for one holder and window yields no claim for another (ADR 0011). The app id is not part of it: each attestor takes the app id from the claim proposal.
+The shared part of one attestation: policy hash, subject hash, holder, and window. Every attestor given the same claim context and the same observation derives the same claim. `claimContextDigestOf` hashes it. In zkFetch the witness signs that digest with its evidence and the attestor recomputes it from the claim proposal, so evidence signed for one holder and window yields no claim for another (ADR 0011). A chain-event kind does not bind the context to the evidence: the attestor reads the event itself and the window follows from the block (ADR 0014). The app id is not part of it: each attestor takes the app id from the claim proposal.
 _Avoid_: Intent, request, session.
 
 **Observation**:
-One attested session: the single fetch or event read the witnesses signed. Unique by construction.
+One attested session: the single fetch or event read the attestor signs. In zkFetch the witness performs and signs it; in a chain-event kind the attestor reads the chain itself.
 _Avoid_: Request, session.
 
 **Observation identity**:
-The fields that make an observation unique: app id, policy hash, subject hash, salt, window, numeric values, byte values, and present. It does not include holder or version directly; the holder reaches it only through the kind's salt.
+The fields that make an observation unique: app id, policy hash, subject hash, salt, window, numeric values, byte values, and present. It does not include holder or version directly. In zkFetch the holder reaches it through the kind's salt; a chain-event kind's salt does not follow the holder, so a fresh holder gets the same nullifier (ADR 0014).
 _Avoid_: Claim id, nonce.
 
 **Fact**:
@@ -171,7 +191,7 @@ The N in N-of-M: how many registry keys must sign the same message.
 _Avoid_: Quorum, majority.
 
 **Nullifier**:
-The hash of the observation identity. The contract stores it so the same observation is not accepted twice. It is public, but it hashes the secret salt, so a guess at a claim's values cannot be confirmed by recomputing it.
+The hash of the observation identity. The contract stores it so the same observation is not accepted twice. It is public. In zkFetch it hashes a secret salt, so a guess at a claim's values cannot be confirmed by recomputing it; a chain-event kind's salt is public, so the nullifier reveals which event the claim attests (ADR 0012, ADR 0014).
 _Avoid_: Replay marker, nonce.
 
 **Claims vault**:
@@ -180,7 +200,7 @@ _Avoid_: Vault, storage.
 
 ## Relationships
 
-- A **kind** has one **law**; many **attestors** run it, each trusting its own **witness**.
+- A **kind** has one **law**; many **attestors** run it, each trusting its own **witness** (zkFetch) or its own chain source (chain-event kinds).
 - A **policy** belongs to one law; its **policyHash** is what the contract seals.
-- An **observation** produces one **claim** for each app id and slot count; the **nullifier** keys on its **observation identity**, so the same claim cannot be accepted twice. The evidence binds the **claim context**, so a fresh **holder** needs a new observation; where the **salt** follows the holder, that observation gets a new nullifier even for the same fact ([details](packages/contracts/README.md#guarantees-and-limits)).
+- An **observation** produces one **claim** for each app id and slot count; the **nullifier** keys on its **observation identity**, so the same claim cannot be accepted twice ([details](packages/contracts/README.md#guarantees-and-limits)).
 - An **attestment** is N **attestations** over one **message**, each placed at its **registry slot** from the **trusted set**.

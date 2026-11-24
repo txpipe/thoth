@@ -8,11 +8,11 @@ the address of your Reclaim witness, and run that witness. The
 ## Building an instance
 
 An attestor instance is a signing key pair and the public address of the
-Reclaim witness you run. `@thoth/attestor`'s `AttestorSigner` holds the key;
+Reclaim witness you run. `@txpipe/thoth-attestor`'s `AttestorSigner` holds the key;
 nothing in this package reads a private key.
 
 ```ts
-import { zkFetchAttestor } from '@thoth/zk-tls/attestor';
+import { zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
 
 const attestor = zkFetchAttestor({
   id: 'zkFetch-strava-1',
@@ -22,8 +22,8 @@ const attestor = zkFetchAttestor({
 ```
 
 Serve `attestor.attest(input)` to dApps over the transport you choose;
-`@thoth/client` shows a minimal HTTP one. Share `descriptorOf(attestor)` from
-`@thoth/attestor` with the dApps that pin you.
+`@txpipe/thoth-client` shows a minimal HTTP one. Share `descriptorOf(attestor)` from
+`@txpipe/thoth-attestor` with the dApps that pin you.
 
 The instance takes no registry slot and no slot counts, so one instance
 serves any dApp ([why](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
@@ -83,7 +83,8 @@ before signing:
    the claim, checks the claim identifier against its signed content, and reads
    the values the witness disclosed.
 3. `assertEvidenceMatchesPolicy(verified, policy)` refuses a signed url, body,
-   `geoLocation` or `proxySessionId` that carries a `{{param}}` template (see
+   `geoLocation` or `proxySessionId` that carries a `{{param}}` template, and a
+   signed URL that contains `*` or whose host parses to one (see
    [Building the request](dapp-integration.md#building-the-request)), checks
    the attested URL against the host allowlist, checks the signed request body
    against the policy's required [body policy](dapp-integration.md#body-policy),
@@ -117,7 +118,7 @@ you certify a reading the evidence does not support.
 
 Self-host a witness from the
 [`attestor-core`](https://github.com/reclaimprotocol/attestor-core) repo, at
-the commit `@thoth/zk-tls` pins:
+the commit `@txpipe/thoth-zk-tls` pins:
 
 ```bash
 git clone --filter=blob:none https://github.com/reclaimprotocol/attestor-core
@@ -131,7 +132,7 @@ node -e "require('re2')" &&
 
 The witness listens on `ws://localhost:8001/ws`.
 
-- The commit is the source of the attestor-core release `@thoth/zk-tls`
+- The commit is the source of the attestor-core release `@txpipe/thoth-zk-tls`
   depends on. Upstream has no release tags, so the pin is a commit.
 - The witness needs the native `re2` module. It compiles your policy's regexes
   with `re2`. If `re2` doesn't load, it falls back to JavaScript `RegExp` and

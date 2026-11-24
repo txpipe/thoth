@@ -1,11 +1,11 @@
 // Per-attestor steps shared by `proveReq` and `collect`.
 
 import { isDeepStrictEqual } from 'node:util';
-import type { TrustedAttestor } from '@thoth/client';
-import { resolveAttestation } from '@thoth/client';
-import type { AttestorDescriptor } from '@thoth/core';
-import type { Claim } from '@thoth/core/claim';
-import { bytes32Schema, claimSchema } from '@thoth/core/claim';
+import type { TrustedAttestor } from '@txpipe/thoth-client';
+import { resolveAttestation } from '@txpipe/thoth-client';
+import type { AttestorDescriptor } from '@txpipe/thoth-core';
+import type { Claim } from '@txpipe/thoth-core/claim';
+import { bytes32Schema, claimSchema } from '@txpipe/thoth-core/claim';
 import { z } from 'zod';
 import type {
   ZkFetchDefinition,
@@ -246,6 +246,8 @@ export const bindRequestToClaimContext = (
  * @throws `ZkFetchProverError` with the prover's reason and no cause, if the
  *   prover throws one with a known reason.
  * @throws {@link SecretHeaderError} if the evidence carries a secret header value.
+ * @throws {@link EvidenceTooDeepError} if the secret scan cannot finish because
+ *   the evidence's JSON is nested too deeply.
  * @throws `ZodError` if the evidence is malformed.
  * @throws `Error` if the attestor has no prover, the prover fails otherwise, or
  *   the evidence is for another origin, subject or claim context.
@@ -303,12 +305,18 @@ const containsSecret = (value: unknown, secrets: readonly string[]): boolean => 
     if (secrets.some((secret) => value.includes(secret))) {
       return true;
     }
-    // Decoding catches escaped forms such as `private`.
+    // Decoding catches escaped forms such as `\u0070rivate`. A parse failure
+    // means the string is not JSON; any other error must not read as clean.
+    let decoded: unknown;
     try {
-      return containsSecret(JSON.parse(value), secrets);
-    } catch {
+      decoded = JSON.parse(value);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) {
+        throw error;
+      }
       return false;
     }
+    return containsSecret(decoded, secrets);
   }
   if (typeof value === 'object' && value !== null) {
     return Object.entries(value).some(
@@ -327,17 +335,44 @@ export class SecretHeaderError extends Error {
 }
 
 /**
+ * The secret scan could not finish because the evidence's JSON is nested too
+ * deeply. Carries no evidence value itself.
+ */
+export class EvidenceTooDeepError extends Error {
+  /**
+   * Build the error from the overflow that stopped the scan.
+   *
+   * @param options — `cause` is the local `RangeError`; it carries no evidence text.
+   */
+  constructor(options?: ErrorOptions) {
+    super('evidence is nested too deeply to scan for secret header values', options);
+    this.name = 'EvidenceTooDeepError';
+  }
+}
+
+/**
  * Refuse evidence that carries a secret header value as written,
  * percent-encoded, or JSON-escaped. A prover must still redact; no check can
  * recognize every transformation of a secret.
  *
  * @throws {@link SecretHeaderError} if the evidence carries a secret header value.
+ * @throws {@link EvidenceTooDeepError} if the scan cannot finish because the
+ *   evidence's JSON is nested too deeply.
  */
 const assertNoSecretHeaders = (evidence: ZkFetchEvidence, request: ZkFetchRequest): void => {
   const secrets = Object.values(request.secretHeaders ?? {})
     .filter(Boolean)
     .flatMap((secret) => [secret, encodeURIComponent(secret)]);
-  if (containsSecret(evidence, secrets)) {
+  let found: boolean;
+  try {
+    found = containsSecret(evidence, secrets);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      throw new EvidenceTooDeepError({ cause: error });
+    }
+    throw error;
+  }
+  if (found) {
     throw new SecretHeaderError();
   }
 };

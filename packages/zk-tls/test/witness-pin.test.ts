@@ -19,7 +19,7 @@ const pinnedVersion = /^PINNED_VERSION=(\S+)$/m.exec(script)?.[1];
 const pinnedRef = /^PINNED_REF="\$\{WITNESS_REF:-(\S+)\}"$/m.exec(script)?.[1];
 
 describe('witness pin', () => {
-  it('pins the witness to the attestor-core version @thoth/zk-tls depends on', () => {
+  it('pins the witness to the attestor-core version @txpipe/thoth-zk-tls depends on', () => {
     const manifest = JSON.parse(read('package.json')) as {
       dependencies: Record<string, string>;
     };

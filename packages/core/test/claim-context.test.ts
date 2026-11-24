@@ -1,4 +1,4 @@
-// Unit tests for the claim context hashes (`@thoth/core/claim-context`): the
+// Unit tests for the claim context hashes (`@txpipe/thoth-core/claim-context`): the
 // policy hash, the subject hash, the holder commitment, and the claim context
 // digest.
 //
@@ -15,7 +15,7 @@ import {
   holderCommitmentOf,
   policyHashOf,
   subjectHashOf,
-} from '@thoth/core/claim-context';
+} from '@txpipe/thoth-core/claim-context';
 import { describe, expect, it } from 'vitest';
 
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');

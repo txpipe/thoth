@@ -20,9 +20,9 @@
 // is split in two halves so every byte is signed; a 16-byte half is read
 // little-endian (byte 0 least significant) when cast to Uint<128>, the
 // runtime's `convertBytesToUint` convention, which `claimToMessage` in
-// `@thoth/core/claim` mirrors. The header signs B because K alone fixes only
-// 2*V + 2*B: two layouts (V=3, B=4 and V=1, B=6) share a length, and a message
-// signed under one must fail verification under the other.
+// `@txpipe/thoth-core/claim` mirrors. The header signs B because K alone fixes
+// only 2*V + 2*B: two layouts (V=3, B=4 and V=1, B=6) share a length, and a
+// message signed under one must fail verification under the other.
 //
 // Module parameters (import "attestation"<K, V, B, N, M>), fixed when a
 // contract embeds the module:
@@ -158,8 +158,8 @@ module attestation<#K, #V, #B, #N, #M> {
 
   /// The per-claim holder commitment (ADR 0004). Its tag differs from
   /// `deriveHolder`'s, so one secret yields unrelated values in the two roles.
-  /// Exported pure so `holderCommitmentOf` in `@thoth/core/claim-context` can
-  /// match it.
+  /// Exported pure so `holderCommitmentOf` in
+  /// `@txpipe/thoth-core/claim-context` can match it.
   export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
     return persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:holder-commitment:v1"), secret]);
   }
