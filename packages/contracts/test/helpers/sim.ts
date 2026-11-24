@@ -6,9 +6,7 @@ import {
   createCircuitContext,
   createConstructorContext,
   dummyContractAddress,
-  type Effects,
   type JubjubPoint,
-  type JubjubSchnorrSignature,
   type StateValue,
 } from '@midnight-ntwrk/compact-runtime';
 import {
@@ -47,21 +45,12 @@ type ContractLike<PS> = {
  * @param options — how to construct the artifact's contract and read its ledger.
  * @returns a class whose `create` deploys the mock and whose `call` runs circuits.
  */
-const makeSimClass = <PS extends { signatures: JubjubSchnorrSignature[] }, L>(options: {
-  newContract: (
-    privateState: PS,
-    registryKeys: JubjubPoint[],
-    seals: DeploySeals,
-  ) => ContractLike<PS>;
+const makeSimClass = <PS, L>(options: {
+  newContract: (registryKeys: JubjubPoint[], seals: DeploySeals) => ContractLike<PS>;
   ledgerOf: (state: SimState) => L;
 }) => {
   const { newContract, ledgerOf } = options;
   return class MockSim {
-    // Internal simulator bookkeeping (kept public so the factory's class type
-    // can be exported; tests should use effects()/lastSignatures()).
-    lastEffects: Effects | null = null;
-    lastSigs: JubjubSchnorrSignature[] | null = null;
-
     // Block-time override (seconds). Leave null to use the runtime default;
     // set it (e.g. to the claim window ± offsets) to test the window checks.
     now: number | null = null;
@@ -81,7 +70,7 @@ const makeSimClass = <PS extends { signatures: JubjubSchnorrSignature[] }, L>(op
       registryKeys: JubjubPoint[],
       seals: DeploySeals = {},
     ): Promise<MockSim> {
-      const contract = newContract(privateState, registryKeys, seals);
+      const contract = newContract(registryKeys, seals);
       const deploy = await contract.initialState(createConstructorContext(privateState, COIN_PK));
       return new MockSim(contract, deploy.currentContractState.data);
     }
@@ -106,23 +95,7 @@ const makeSimClass = <PS extends { signatures: JubjubSchnorrSignature[] }, L>(op
       }
       const res = await circuit(ctx, ...args);
       this.state = res.context.callContext.currentQueryContext.state;
-      this.lastEffects = res.context.callContext.currentQueryContext.effects;
-      this.lastSigs = ps.signatures;
       return res.result;
-    }
-
-    effects(): Effects {
-      if (!this.lastEffects) {
-        throw new Error('no circuit call executed yet');
-      }
-      return this.lastEffects;
-    }
-
-    lastSignatures(): JubjubSchnorrSignature[] {
-      if (!this.lastSigs) {
-        throw new Error('no circuit call executed yet');
-      }
-      return this.lastSigs;
     }
 
     ledgerView(): L {
@@ -133,7 +106,7 @@ const makeSimClass = <PS extends { signatures: JubjubSchnorrSignature[] }, L>(op
 
 /** Simulator for the numeric-only mock (`MockAttestation.compact`). */
 export const MockAttestationSim = makeSimClass<PrivateState<A_Claim>, MockLedger>({
-  newContract: (_privateState, registryKeys, seals) =>
+  newContract: (registryKeys, seals) =>
     new MockContract<PrivateState<A_Claim>>(makeWitnesses<A_Claim>(registryKeys, seals)),
   ledgerOf: mockLedger,
 });
@@ -141,7 +114,7 @@ export type MockAttestationSim = InstanceType<typeof MockAttestationSim>;
 
 /** Simulator for the byte-slot mock (`MockAttestationBytes.compact`). */
 export const MockAttestationBytesSim = makeSimClass<PrivateState<B_Claim>, BytesLedger>({
-  newContract: (_privateState, registryKeys, seals) =>
+  newContract: (registryKeys, seals) =>
     new BytesContract<PrivateState<B_Claim>>(makeWitnesses<B_Claim>(registryKeys, seals)),
   ledgerOf: bytesLedger,
 });
