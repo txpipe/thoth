@@ -84,7 +84,7 @@ DOLOS_HEADERS='{"dmtr-api-key":"…"}' \
 
 The endpoint must retain the event's block: a Dolos in ledger-only or sliding-history mode may not serve it. The default event is the preview transaction in the recorded fixture; `CARDANO_TX_HASH` and `CARDANO_OUTPUT_INDEX` name another one, and `CARDANO_CONFIRMATION_DEPTH` sets the policy depth (default `0`).
 
-The check covers the live read, policy derivation, signing and client verification. It does not check agreement between independent sources or an N-of-M set; the [acceptance test](../../contracts/test/acceptance-cardano.test.ts) covers those offline.
+The check covers the live read, policy derivation, signing and client verification. It does not check agreement between independent sources or an N-of-M set; the [acceptance test](../contracts/test/acceptance-cardano.test.ts) covers those offline.
 
 ## Concepts
 
