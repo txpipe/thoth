@@ -1,6 +1,5 @@
-// The Dolos UTxO-RPC source: one read of a Cardano transaction, its block and
-// the chain tip, returned as the kind's validated observation. This module
-// only speaks UTxO-RPC.
+// The Dolos UTxO-RPC source: reads one Cardano transaction, its block and the
+// chain tip, and returns the kind's validated observation.
 
 import { CardanoQueryClient, CardanoSyncClient } from '@utxorpc/sdk';
 import type { cardano, query } from '@utxorpc/spec';

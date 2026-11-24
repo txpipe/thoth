@@ -1,6 +1,5 @@
-// The output variant's checks: the proposal must say exactly what the
-// observation shows. The attestor runs them all; the client runs the first two
-// on its own read to fail fast before contacting an attestor.
+// The output variant's checks: the proposal must say exactly what the observation
+// shows. The attestor runs them all; the client runs the first two on its own read.
 
 import type { AttestationInput } from '@thoth/core';
 import type { Claim } from '@thoth/core/claim';
