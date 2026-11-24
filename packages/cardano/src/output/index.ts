@@ -127,7 +127,7 @@ export const cardanoOutputPolicySchema = z
  * Hash an output policy under the `cardano@1` law and the claim wire version.
  * Policies that parse the same hash the same.
  *
- * @throws if the policy fails {@link cardanoOutputPolicySchema}.
+ * @throws `ZodError` if the policy fails {@link cardanoOutputPolicySchema}.
  */
 export const cardanoOutputPolicyHashOf = (policy: OutputPolicy): Uint8Array =>
   policyHashOfCardano(cardanoOutputPolicySchema.parse(policy) as CanonicalValue);

@@ -126,7 +126,9 @@ export interface CardanoClient<PK, S> {
    * @returns the claim and its attestations, sorted by registry slot.
    * @throws {@link CardanoThresholdError} if the options are invalid, the
    *   deadline expires, or the candidates run out before the threshold.
-   * @throws if the locator, the read or the claim derivation fails.
+   * @throws `ZodError` if the locator or the read fails its schema.
+   * @throws if the read does not match the locator or the policy, or the claim
+   *   derivation fails.
    */
   collect(
     locator: CardanoLocator,
@@ -253,9 +255,9 @@ const runAttempt = async <PK, S>(
  * the replies that equal the derived claim and verify against their pinned
  * key.
  *
- * @throws if the policy, app id or slot count fails its schema, a slot count
- *   exceeds {@link CARDANO_LIMITS}, or a policy slot does not fit the claim
- *   size, at init.
+ * @throws `ZodError` if the policy, app id or slot count fails its schema, or a
+ *   slot count exceeds {@link CARDANO_LIMITS}.
+ * @throws if a policy slot does not fit the claim size.
  */
 export const cardanoClient = {
   init<PK, S>(config: CardanoClientConfig<PK, S>): CardanoClient<PK, S> {

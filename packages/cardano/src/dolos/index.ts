@@ -145,8 +145,8 @@ export const lovelaceOf = (coin: cardano.BigInt | undefined): bigint =>
  * @throws if the transaction is missing, not Cardano, carries no hash or a
  *   hash other than the requested one, failed, has no such output or block
  *   reference, the genesis magic is missing, the block time is missing or not
- *   whole seconds, the tip block has no header, or the result does not fit the
- *   observation schema.
+ *   whole seconds, or the tip block has no header.
+ * @throws `ZodError` if the result does not fit the observation schema.
  */
 export const readRawEvent = async (options: {
   source: DolosSource;

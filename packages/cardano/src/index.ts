@@ -106,7 +106,7 @@ export const cardanoPolicySchema: z.ZodType<CardanoPolicy> = z.discriminatedUnio
  * Parse a policy into the form every hash and check reads. Every field is
  * canonical as written, so the parsed policy is the normalized one.
  *
- * @throws if the policy fails {@link cardanoPolicySchema}.
+ * @throws `ZodError` if the policy fails {@link cardanoPolicySchema}.
  */
 export const normalizeCardanoPolicy = (policy: CardanoPolicy): CardanoPolicy =>
   cardanoPolicySchema.parse(policy);
@@ -116,7 +116,7 @@ export const normalizeCardanoPolicy = (policy: CardanoPolicy): CardanoPolicy =>
  *
  * Policies that parse the same hash the same.
  *
- * @throws if the policy fails {@link cardanoPolicySchema}.
+ * @throws `ZodError` if the policy fails {@link cardanoPolicySchema}.
  */
 export const cardanoPolicyHashOf = (policy: CardanoPolicy): Uint8Array =>
   policyHashOfCardano(normalizeCardanoPolicy(policy) as CanonicalValue);
