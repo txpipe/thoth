@@ -6,6 +6,7 @@ export default defineConfig({
     environment: 'node',
     include: [
       'packages/contracts/**/*.test.ts',
+      'packages/cardano/**/*.test.ts',
       'packages/core/**/*.test.ts',
       'packages/client/**/*.test.ts',
       'packages/zk-tls/**/*.test.ts',

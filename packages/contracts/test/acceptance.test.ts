@@ -7,8 +7,6 @@
 // fresh ledger so a rejection can only come from the signature check, never from
 // a nullifier the honest submission left behind.
 import { randomBytes } from 'node:crypto';
-import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
-import type { KeyPair } from '@thoth/attestor';
 import { descriptorOf } from '@thoth/attestor';
 import { buildTrustedSet } from '@thoth/client';
 import { jubjubVerifier } from '@thoth/client/jubjub';
@@ -27,6 +25,7 @@ import { disclosureRules } from '../../zk-tls/test/helpers/helper.js';
 import { testWitness } from '../../zk-tls/test/helpers/witness.js';
 import type { B_Claim } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
+import { jubjubKeyPair, type Submission, submit } from './helpers/acceptance.js';
 import {
   APP_ID,
   bytesIdOf,
@@ -38,14 +37,7 @@ import {
   splitHalves,
 } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
-import { signMessage } from './helpers/sign.js';
 import { MockAttestationBytesSim } from './helpers/sim.js';
-
-/** A Jubjub key pair whose signer signs the flat message the registry verifies. */
-const jubjubKeyPair = (): KeyPair<JubjubPoint, JubjubSchnorrSignature> => {
-  const { sk, pk } = makeNotaryKey();
-  return { publicKey: pk, signer: { sign: (message) => signMessage(sk, message).signature } };
-};
 
 const VALUE_SLOTS = 3;
 const BYTE_SLOTS = 1;
@@ -82,8 +74,6 @@ const attestors = operators.map(({ attestor }) => attestor);
 const registryKeys = [...attestors.map((attestor) => attestor.publicKey), makeNotaryKey().pk];
 
 const holderSecret = randomBytes(32);
-
-type Submission = { claim: B_Claim; signatures: JubjubSchnorrSignature[]; commitRand: Uint8Array };
 
 /** The evidence each attestor's witness signed for the honest holder, by attestor id. */
 const honestEvidence: Record<string, ZkFetchEvidence> = {};
@@ -175,9 +165,6 @@ const freshLedger = async (appId = APP_ID): Promise<MockAttestationBytesSim> => 
   return sim;
 };
 
-const submit = (sim: MockAttestationBytesSim, submission: Submission, secret = holderSecret) =>
-  sim.call('verifyAttestation', { ...submission, holderSecret: secret });
-
 describe('cross-seam acceptance', () => {
   let honest: Submission;
 
@@ -214,7 +201,7 @@ describe('cross-seam acceptance', () => {
 
   it('accepts the honest claim end to end', async () => {
     const sim = await freshLedger();
-    await submit(sim, honest);
+    await submit(sim, honest, holderSecret);
     expect(sim.ledgerView().B_claimsVault.member(bytesIdOf(honest.claim, honest.commitRand))).toBe(
       true,
     );
@@ -286,9 +273,9 @@ describe('cross-seam acceptance', () => {
     'rejects the signatures over a claim with $name mutated',
     async ({ mutate, secret, sealedAppId }) => {
       const sim = await freshLedger(sealedAppId);
-      await expect(submit(sim, { ...honest, claim: mutate(honest.claim) }, secret)).rejects.toThrow(
-        'Insufficient valid signatures',
-      );
+      await expect(
+        submit(sim, { ...honest, claim: mutate(honest.claim) }, secret ?? holderSecret),
+      ).rejects.toThrow('Insufficient valid signatures');
     },
   );
 });
