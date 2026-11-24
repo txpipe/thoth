@@ -100,7 +100,8 @@ file.
   file header is 1–2 `//` lines.
 - **Comments explain why**: invariants, security reasons, non-obvious
   constraints. The code says what. History, ticket and PR numbers stay out of
-  source; cite decisions as `ADR 000N`.
+  source, and so do ADR citations: a comment states the reason itself, and
+  docs link the ADR.
 
 ## Docs conventions
 
