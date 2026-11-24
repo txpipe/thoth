@@ -82,14 +82,10 @@ const checkBlockDepth = (policy: OutputPolicy, observation: OutputObservation): 
  * @throws on the first failed check.
  */
 const checkClaimMatchesObservation = (
-  input: AttestationInput<OutputPolicy, OutputObservedEvidence, Claim<number, number>>,
+  policy: OutputPolicy,
+  observation: OutputObservation,
+  claim: Claim<number, number>,
 ): void => {
-  const { policy, claim, evidence } = input;
-  const observation = evidence.observation;
-  if (observation === undefined) {
-    throw new Error('observation missing');
-  }
-
   // Structural policy sanity first, so a policy that cannot fit the claim
   // fails before the claim-dependent checks.
   assertPolicySlotsInRange(policy.slots, claim.values.length, claim.byteValues.length);
@@ -160,5 +156,5 @@ export const verifyOutputObservation = (
   checkLocatorMatchesObservation(input.evidence, observation);
   checkObservationMatchesPolicy(input.policy, observation);
   checkBlockDepth(input.policy, observation);
-  checkClaimMatchesObservation(input);
+  checkClaimMatchesObservation(input.policy, observation, input.claim);
 };
