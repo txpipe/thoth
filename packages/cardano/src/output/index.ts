@@ -132,6 +132,13 @@ export const cardanoOutputPolicySchema = z
 export const cardanoOutputPolicyHashOf = (policy: OutputPolicy): Uint8Array =>
   policyHashOfCardano(cardanoOutputPolicySchema.parse(policy) as CanonicalValue);
 
+/** An output's index within its transaction, a uint32. */
+const outputIndexSchema = z
+  .number()
+  .int()
+  .min(0)
+  .max(2 ** 32 - 1);
+
 /** Points at one output of one Cardano transaction. */
 export interface OutputLocator {
   /** The transaction hash, 64 lowercase hex characters. */
@@ -146,11 +153,7 @@ export interface OutputLocator {
  */
 export const cardanoOutputEvidenceSchema: z.ZodType<OutputLocator> = z.strictObject({
   txHash: z.string().regex(HEX_64, 'expected 64 lowercase hex characters'),
-  outputIndex: z
-    .number()
-    .int()
-    .min(0)
-    .max(2 ** 32 - 1),
+  outputIndex: outputIndexSchema,
 });
 
 /** One output and the block it landed in, as the attestor read them. */
@@ -200,11 +203,7 @@ export const cardanoOutputObservationSchema: z.ZodType<OutputObservation> = z.st
   }),
   output: z.strictObject({
     txHash: z.string().regex(HEX_64, 'expected 64 lowercase hex characters'),
-    outputIndex: z
-      .number()
-      .int()
-      .min(0)
-      .max(2 ** 32 - 1),
+    outputIndex: outputIndexSchema,
     address: z
       .string()
       .min(1)
