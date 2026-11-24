@@ -38,6 +38,7 @@
     "compact:no-zk": "compact compile +0.36.1 --skip-zk test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.36.1 --skip-zk test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes",
     "pretest": "npm run compact:no-zk",
     "test": "vitest run",
+    "bench": "vitest run --config bench/vitest.config.ts",
     "types": "tsc --noEmit",
     "check": "npm run check:biome && npm run check:compact",
     "check:fix": "npm run check:fix:biome && npm run check:fix:compact",
@@ -50,6 +51,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.6.8",
     "@midnight-ntwrk/compact-runtime": "0.21.0",
+    "@midnight-ntwrk/ledger-v9": "1.0.2",
     "@thoth/attestor": "*",
     "@thoth/client": "*",
     "@thoth/core": "*",
