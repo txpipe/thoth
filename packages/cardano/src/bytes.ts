@@ -5,6 +5,9 @@ import { CompactTypeBytes, persistentHash } from '@midnight-ntwrk/compact-runtim
 
 const FIELD_BYTES = 32;
 
+/** The largest uint32, the bound of a network magic and an output index. */
+export const MAX_UINT32 = 2 ** 32 - 1;
+
 /** The lowercase hex pattern every 32-byte hash uses. */
 export const HEX_64 = /^[0-9a-f]{64}$/;
 
@@ -34,7 +37,7 @@ export const bytes32OfText = (text: string): Uint8Array => {
  * @throws if the value is not an integer from 0 to 2^32-1.
  */
 export const bytes32OfUint32 = (value: number): Uint8Array => {
-  if (!Number.isInteger(value) || value < 0 || value > 2 ** 32 - 1) {
+  if (!Number.isInteger(value) || value < 0 || value > MAX_UINT32) {
     throw new Error(`expected a uint32, got ${value}`);
   }
   const field = new Uint8Array(FIELD_BYTES);

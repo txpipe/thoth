@@ -4,6 +4,7 @@
 import type { CanonicalValue } from '@thoth/core/claim-context';
 import { policyHashOf } from '@thoth/core/claim-context';
 import { z } from 'zod';
+import { MAX_UINT32 } from './bytes.js';
 
 /** The cardano@1 kind's law tag, also its kind identifier. */
 export const CARDANO_LAW = 'cardano@1';
@@ -22,7 +23,7 @@ const PUBLIC_MAGICS = {
 } as const;
 
 /** Largest network magic: Cardano's magic is a 32-bit unsigned integer. */
-export const MAX_NETWORK_MAGIC = 2 ** 32 - 1;
+export const MAX_NETWORK_MAGIC = MAX_UINT32;
 
 /** Fields every variant shares: the network, its magic and the depth. */
 export type CardanoPolicyBase = {

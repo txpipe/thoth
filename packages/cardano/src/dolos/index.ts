@@ -4,7 +4,7 @@
 import { CardanoQueryClient, CardanoSyncClient } from '@utxorpc/sdk';
 import type { cardano, query } from '@utxorpc/spec';
 import { bech32 } from 'bech32';
-import { bytes32OfHex, bytesToHex } from '../bytes.js';
+import { bytes32OfHex, bytesToHex, MAX_UINT32 } from '../bytes.js';
 import { cardanoOutputObservationSchema, type OutputObservation } from '../output/index.js';
 
 /** Connection options for {@link createDolosSource}. */
@@ -156,7 +156,7 @@ export const readRawEvent = async (options: {
   outputIndex: number;
 }): Promise<OutputObservation> => {
   const { source, txHash, outputIndex } = options;
-  if (!Number.isInteger(outputIndex) || outputIndex < 0 || outputIndex > 2 ** 32 - 1) {
+  if (!Number.isInteger(outputIndex) || outputIndex < 0 || outputIndex > MAX_UINT32) {
     throw new Error(`output index must be a uint32, got ${outputIndex}`);
   }
 

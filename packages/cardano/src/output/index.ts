@@ -12,6 +12,7 @@ import {
   bytes32OfUint32,
   cardanoAddressHashOf,
   HEX_64,
+  MAX_UINT32,
 } from '../bytes.js';
 import {
   addressSchema,
@@ -133,11 +134,7 @@ export const cardanoOutputPolicyHashOf = (policy: OutputPolicy): Uint8Array =>
   policyHashOfCardano(cardanoOutputPolicySchema.parse(policy) as CanonicalValue);
 
 /** An output's index within its transaction, a uint32. */
-const outputIndexSchema = z
-  .number()
-  .int()
-  .min(0)
-  .max(2 ** 32 - 1);
+const outputIndexSchema = z.number().int().min(0).max(MAX_UINT32);
 
 /** Points at one output of one Cardano transaction. */
 export interface OutputLocator {
