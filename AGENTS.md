@@ -189,6 +189,8 @@ READMEs don't repeat it.
   `npm run compact:no-zk` (the `pretest` hook does this automatically).
 - `packages/contracts/test/acceptance.test.ts` is the end-to-end check (zkFetch
   witnesses → attestors → client → simulator); its header explains the setup.
+  `acceptance-tlsn.test.ts` runs the tlsn@1 prototype the same way, with its
+  presentations' cryptography stubbed.
 - `packages/zk-tls/test/live.test.ts` is an opt-in live check against two real
   witnesses; it skips unless `WITNESS_URLS` names them, so `npm test` and CI
   stay offline. See "Live check" in `packages/zk-tls/docs/attestor-guide.md`.
