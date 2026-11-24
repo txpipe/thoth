@@ -26,6 +26,7 @@ import {
   zkFetchEvidenceSchema,
   zkFetchSubjectHashOf,
 } from '../index.js';
+import { ZkFetchProverError } from '../prover-error.js';
 import type {
   ZkFetchAttestationInput,
   ZkFetchClientConfig,
@@ -45,6 +46,15 @@ export const proveOptionsShape = {
   windowStart: z.bigint().nonnegative().max(MAX_WINDOW),
   windowEnd: z.bigint().nonnegative().max(MAX_WINDOW),
 };
+
+/**
+ * The reasons a prover can report. A JS prover can set any `reason` at
+ * runtime, so only these count.
+ */
+const PROVER_REASONS: ReadonlySet<string> = new Set<ZkFetchProverError['reason']>([
+  'transport',
+  'no-match',
+]);
 
 /** Whether a window starts no later than it ends. */
 export const windowInOrder = (window: { windowStart: bigint; windowEnd: bigint }): boolean =>
@@ -225,14 +235,18 @@ export const bindRequestToClaimContext = (
  * Prove `request` with the attestor's own witness and check the evidence.
  *
  * The prover gets its own copy, so it cannot change the request that other
- * provers or the secret header check read.
+ * provers or the secret header check read. A prover's error can carry the
+ * witness's or the source's text, so it is replaced by one that carries only
+ * its reason.
  *
- * @throws `ZkFetchProverError` as the prover throws it.
+ * @throws `ZkFetchProverError` with the prover's reason and no cause, if the
+ *   prover throws one with a known reason.
  * @throws {@link SecretHeaderError} if the evidence carries a secret header value.
  * @throws {@link EvidenceTooDeepError} if the secret scan cannot finish because
  *   the evidence's JSON is nested too deeply.
- * @throws if the attestor has no prover, the prover fails otherwise, or the
- *   evidence is invalid or for another origin, subject or claim context.
+ * @throws `ZodError` if the evidence is malformed.
+ * @throws `Error` if the attestor has no prover, the prover fails otherwise, or
+ *   the evidence is for another origin, subject or claim context.
  */
 export const proveWith = async <PK>(
   provers: ZkFetchClientConfig<number, PK, unknown>['provers'],
@@ -243,7 +257,16 @@ export const proveWith = async <PK>(
   if (prover === undefined) {
     throw new Error(`no prover configured for attestor ${attestor.id}`);
   }
-  const evidence = zkFetchEvidenceSchema.parse(await prover.prove(copyRequest(request)));
+  let proved: ZkFetchEvidence;
+  try {
+    proved = await prover.prove(copyRequest(request));
+  } catch (error) {
+    if (error instanceof ZkFetchProverError && PROVER_REASONS.has(error.reason)) {
+      throw new ZkFetchProverError(error.reason);
+    }
+    throw new Error(`zkFetch prover for attestor ${attestor.id} failed`);
+  }
+  const evidence = zkFetchEvidenceSchema.parse(proved);
   assertEvidenceMatchesRequest(evidence, request);
   assertEvidenceMatchesClaimContext(evidence, request);
   assertNoSecretHeaders(evidence, request);
