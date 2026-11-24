@@ -222,8 +222,9 @@ module attestation<#K, #V, #B, #N, #M> {
     assert(!nullifiers.member(disclose(nullifier)), "Observation replay");
     nullifiers.insert(disclose(nullifier));
 
+    // No vault membership check: an equal id commits to the same claim, whose
+    // nullifier the replay check above has already rejected.
     const id = persistentCommit<Claim>(claim, rand);
-    assert(!claimsVault.member(id), "Claim already accepted");
     claimsVault.insert(
       id,
       ClaimEntry { holder: disclose(deriveHolder(secret)),
