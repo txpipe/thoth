@@ -65,7 +65,7 @@ export const checkObservationMatchesPolicy = (
  *
  * @throws if the block is not deep enough.
  */
-export const checkBlockDepth = (policy: OutputPolicy, observation: OutputObservation): void => {
+const checkBlockDepth = (policy: OutputPolicy, observation: OutputObservation): void => {
   const depth = observation.tipBlockNumber - observation.block.blockNumber;
   if (depth < policy.confirmationDepth) {
     throw new Error(
@@ -81,7 +81,7 @@ export const checkBlockDepth = (policy: OutputPolicy, observation: OutputObserva
  *
  * @throws on the first failed check.
  */
-export const checkClaimMatchesObservation = (
+const checkClaimMatchesObservation = (
   input: AttestationInput<OutputPolicy, OutputObservedEvidence, Claim<number, number>>,
 ): void => {
   const { policy, claim, evidence } = input;
