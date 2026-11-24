@@ -1,0 +1,49 @@
+{
+  "tx": {
+    "nativeBytes": "hKMA2QECgYJYINLfK9Y06MjMxI6jr9EUI9Jc/mPZQ7n0DHUV+skRe4sSGFgBgYJYOQBhw2dyUnbtXi6qsN3jWA8ekWjhLj5ONNoOjm7EBpwayuv3YSaI+UOcPs51x3omBsVj4cmVq2jtjRsAAAACVAvkAAIaAAMNQKEA2QECgYJYIGhV/7jL3pFjxVwkBfk6jPoGOmMdgRKB2VThZ4ISOVanWEBS7+7zjKD8rLPK69sDQmbtngAGmzkemVjd//suOXTOoEk1YOiQfIl3ZbmpqtKkGZMUjd2ii03fXkUHgdZHSAIK9fY=",
+    "cardano": {
+      "inputs": [
+        {
+          "txHash": "0t8r1jToyMzEjqOv0RQj0lz+Y9lDufQMdRX6yRF7ixI=",
+          "outputIndex": 88,
+          "asOutput": {
+            "address": "YDPDeM7kGy4VrISPf28dL3gVWrEtk7cT3omNhV8=",
+            "coin": { "int": "10000200000" },
+            "datum": {}
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "address": "AGHDZ3JSdu1eLqqw3eNYDx6RaOEuPk402g6ObsQGnBrK6/dhJoj5Q5w+znXHeiYGxWPhyZWraO2N",
+          "coin": { "int": "10000000000" },
+          "datum": {}
+        }
+      ],
+      "witnesses": {
+        "vkeywitness": [
+          {
+            "vkey": "aFX/uMvekWPFXCQF+TqM+gY6Yx2BEoHZVOFnghI5Vqc=",
+            "signature": "Uu/u84yg/KyzyuvbA0Jm7Z4ABps5HplY3f/7Ljl0zqBJNWDokHyJd2W5qarSpBmTFI3dootN315FB4HWR0gCCg=="
+          }
+        ]
+      },
+      "collateral": { "totalCollateral": { "int": "0" } },
+      "fee": { "int": "200000" },
+      "validity": {},
+      "successful": true,
+      "auxiliary": {},
+      "hash": "ZdEsGoIEkZ2FBznp7ax5Xdaa/PCf1td9hcH/rnb9/o8="
+    },
+    "blockRef": {
+      "slot": "127168698",
+      "hash": "BBmKRhomtqWvBruW07Pjcw/gIQqT+wRkgetS+JxXh/0=",
+      "height": "4825241",
+      "timestamp": "1793824698000"
+    }
+  },
+  "ledgerTip": {
+    "slot": "127169496",
+    "hash": "H9Rqoh3TT9yut9iKJ0RgqfwFuWWtb7JnrSE2tcQC3e0="
+  }
+}

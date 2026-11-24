@@ -15,7 +15,7 @@ Thoth is a private N-of-M attestation system for Midnight. Three layers:
   interfaces attestor kinds implement to provide attestation. Kinds verify
   evidence and sign a canonical claim. `packages/client` holds the dApp side
   (the trusted set and the attestation checks), and `packages/zk-tls` is the
-  zkFetch kind.
+  zkFetch kind. `packages/cardano` is the cardano@1 chain-event kind.
 
 Attestors certify facts, not decisions: a claim is a canonical statement of
 what was observed; the application defines the predicate over it.
@@ -56,9 +56,9 @@ file.
   anything that commits to a message delegates to the kind's `message()`. Keep
   it that way.
 - **Published packages carry a changeset.** A user-facing change to `core`,
-  `attestor`, `client` or `zk-tls` adds one (`npm run changeset`); internal
-  dependencies between them use a `^` range, never `*`, which changesets
-  would publish as is
+  `attestor`, `client`, `zk-tls`, `cardano` or `contracts` adds one
+  (`npm run changeset`); internal dependencies between them use a `^` range,
+  never `*`, which changesets would publish as is
   ([`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-changeset)).
 - **`registryIndex` is positional and app-owned.** `attestor_registry.compact`
   verifies signatures positionally (`signatures[i]` against `keys[i]`). The slot
@@ -104,7 +104,8 @@ file.
   file header is 1–2 `//` lines.
 - **Comments explain why**: invariants, security reasons, non-obvious
   constraints. The code says what. History, ticket and PR numbers stay out of
-  source; cite decisions as `ADR 000N`.
+  source, and so do ADR citations: a comment states the reason itself, and
+  docs link the ADR.
 
 ## Docs conventions
 
@@ -177,7 +178,8 @@ READMEs don't repeat it.
   `packages/contracts/test/`. The mock top-level shells
   (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, K=20, M=3,
   N=2 — and `MockAttestationBytes.compact` — V=3, B=2, K=24) specialize the
-  modules so tests run against real artifacts.
+  modules so tests run against real artifacts. `MockAddressHash.compact` is the
+  compiled oracle for the cardano address hash.
 - `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
   compiled pure circuits — never hand-roll the message encoding; use
   `pureCircuits.message` or `@txpipe/thoth-core/claim`'s `claimToMessage`.
@@ -188,6 +190,9 @@ READMEs don't repeat it.
 - `packages/zk-tls/test/live.test.ts` is an opt-in live check against two real
   witnesses; it skips unless `WITNESS_URLS` names them, so `npm test` and CI
   stay offline. See "Live check" in `packages/zk-tls/docs/attestor-guide.md`.
+- `packages/cardano/test/live.test.ts` is the same kind of check for one real
+  UTxO-RPC endpoint; it skips unless `DOLOS_URL` names it. See "Live check" in
+  `packages/cardano/docs/dapp-integration.md`.
 - Never skip the `present` mask semantics: `present[i] = true` means slot `i`
   was measured (value may still be `0`).
 

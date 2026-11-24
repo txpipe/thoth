@@ -36,6 +36,7 @@ To move to a new compiler, update in one change:
 thoth/
 ├── packages/                   # npm workspace packages
 │   ├── attestor/               # @txpipe/thoth-attestor: pairs a kind's law with a signing key
+│   ├── cardano/                # @txpipe/thoth-cardano: the cardano@1 chain-event kind (attestor, client, Dolos reader)
 │   ├── client/                 # @txpipe/thoth-client: trusted set, transport, attestation checks
 │   ├── contracts/              # @txpipe/thoth-contracts: Compact modules
 │   │   ├── attestation.compact        # N-of-M verification, replay and window checks, claims vault
@@ -79,21 +80,24 @@ Run them from the repo root:
 For one package: `npm run <script> --workspace=packages/<name>`.
 
 Workspaces import each other through their built `dist/`. The root `build` and
-`types` scripts build `core`, `attestor`, `client` and `zk-tls` first; if you
-add a package that another workspace imports, add it to that chain too. A
-stale `dist/` shows up as confusing type errors such as "Generic type requires
-N type argument(s)".
+`types` scripts build `core`, `attestor`, `client`, `cardano` and `zk-tls`
+first; if you add a package that another workspace imports, add it to that
+chain too. A stale `dist/` shows up as confusing type errors such as "Generic
+type requires N type argument(s)".
 
 `packages/zk-tls/test/live.test.ts` runs against two real witnesses and skips
 unless `WITNESS_URLS` names them; see the attestor guide's
 [live check](packages/zk-tls/docs/attestor-guide.md#live-check).
+`packages/cardano/test/live.test.ts` runs against one real UTxO-RPC endpoint
+and skips unless `DOLOS_URL` names it; see the cardano dApp guide's
+[live check](packages/cardano/docs/dapp-integration.md#live-check).
 
 ## Adding a changeset
 
 A change that a user of `@txpipe/thoth-core`, `@txpipe/thoth-attestor`,
-`@txpipe/thoth-client`, `@txpipe/thoth-zk-tls` or `@txpipe/thoth-contracts`
-would notice needs a changeset, which becomes the package's version bump and
-changelog entry. Add one with your pull request:
+`@txpipe/thoth-client`, `@txpipe/thoth-zk-tls`, `@txpipe/thoth-cardano` or
+`@txpipe/thoth-contracts` would notice needs a changeset, which becomes the
+package's version bump and changelog entry. Add one with your pull request:
 
 ```bash
 npm run changeset
