@@ -4,8 +4,8 @@
 #
 # The clone is pinned so the live check does not drift with upstream. Upstream
 # has no release tags, so the commit is set by hand: PINNED_VERSION must equal
-# @reclaimprotocol/attestor-core in package.json (test/witness-pin.test.ts fails
-# otherwise), and PINNED_REF moves with it once a newer witness is verified.
+# @reclaimprotocol/attestor-core in package.json, and PINNED_REF must be the
+# commit test/witness-pin.test.ts records as verified for that version.
 # Upstream's package.json still reads 5.1.4 at this commit; it carries the same
 # source as the npm 5.1.6 release.
 set -euo pipefail
@@ -34,9 +34,14 @@ if [ "$(git -C "$CLONE_DIR" rev-parse HEAD)" != "$PINNED_REF" ]; then
   git -C "$CLONE_DIR" checkout --quiet --detach "$PINNED_REF"
 fi
 
-if [ ! -d "$CLONE_DIR/node_modules/re2" ]; then
+# The stamp records the commit the dependencies were installed for, so a new
+# pin never runs on the previous commit's node_modules.
+STAMP="$CLONE_DIR/node_modules/.thoth-installed-ref"
+HEAD_REF=$(git -C "$CLONE_DIR" rev-parse HEAD)
+if [ "$(cat "$STAMP" 2>/dev/null || true)" != "$HEAD_REF" ]; then
   log "installing dependencies (install scripts skipped)"
   (cd "$CLONE_DIR" && npm install --ignore-scripts --include=dev --no-audit --no-fund >/dev/null)
+  printf '%s\n' "$HEAD_REF" >"$STAMP"
 fi
 
 # The witness needs re2; see "Running a Reclaim witness" in docs/attestor-guide.md.
