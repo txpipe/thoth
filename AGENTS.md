@@ -110,17 +110,17 @@ file.
 
 Who reads what:
 
-| Doc | Reader | Contains |
-|-----|--------|----------|
-| `README.md` | someone evaluating Thoth | what it is, status, how it works, which package to use, the demo, roadmap links |
-| `packages/*/README.md` | a developer using that package (it is the npm page) | the package README template below |
-| `docs/kind-author-guide.md`, `packages/zk-tls/docs/*` | a developer building a kind or integrating a dApp | step-by-step guides |
-| `docs/DESIGN.md` | anyone who wants the architecture | overview, the claim and its wire order, flow, out of scope; links the ADRs and never restates them |
-| `docs/adr/` | maintainers | one decision each with its full reasoning; the only place for history and ticket references |
-| `CONTEXT.md` | everyone | the glossary |
-| `CONTRIBUTING.md` | contributors | dev setup, repo layout, commands |
-| `AGENTS.md` | coding agents | the rules agents follow here; links to the docs above for everything else |
-| source comments | someone reading the code | why: invariants, security reasons, non-obvious constraints |
+| Doc                                                   | Reader                                              | Contains                                                                                           |
+| ----------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `README.md`                                           | someone evaluating Thoth                            | what it is, status, how it works, which package to use, the demo, roadmap links                    |
+| `packages/*/README.md`                                | a developer using that package (it is the npm page) | the package README template below                                                                  |
+| `docs/kind-author-guide.md`, `packages/zk-tls/docs/*` | a developer building a kind or integrating a dApp   | step-by-step guides                                                                                |
+| `docs/DESIGN.md`                                      | anyone who wants the architecture                   | overview, the claim and its wire order, flow, out of scope; links the ADRs and never restates them |
+| `docs/adr/`                                           | maintainers                                         | one decision each with its full reasoning; the only place for history and ticket references        |
+| `CONTEXT.md`                                          | everyone                                            | the glossary                                                                                       |
+| `CONTRIBUTING.md`                                     | contributors                                        | dev setup, repo layout, commands                                                                   |
+| `AGENTS.md`                                           | coding agents                                       | the rules agents follow here; links to the docs above for everything else                          |
+| source comments                                       | someone reading the code                            | why: invariants, security reasons, non-obvious constraints                                         |
 
 Voice, for every doc and comment:
 

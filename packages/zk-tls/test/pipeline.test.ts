@@ -27,6 +27,8 @@ import {
 import { verifyZkFetchProof, zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
 import {
   addressFromWitnessId,
+  EvidenceTooDeepError,
+  SecretHeaderError,
   toCanonicalEvidence,
   type ZkFetchAttestorFailure,
   type ZkFetchProver,
@@ -36,7 +38,8 @@ import {
   zkFetchClient,
 } from '@txpipe/thoth-zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
-import { DISCLOSURE_RULES, FIXTURE } from './helpers/helper.js';
+import { ZodError } from 'zod';
+import { disclosureRules, disclosureRulesOf, FIXTURE } from './helpers/helper.js';
 import { type TestWitness, testWitness } from './helpers/witness.js';
 
 /** The app id every claim in this suite is for. */
@@ -50,7 +53,7 @@ const policy = (
   allowedHosts: ['api.github.com'],
   slots,
   bodyPolicy: 'ignored',
-  ...DISCLOSURE_RULES,
+  ...disclosureRulesOf(slots),
 });
 
 type FakePublicKey = { id: string };
@@ -257,7 +260,9 @@ describe('zkFetch attestor + client', () => {
         url: overrides.url ?? request.url,
         method: request.method ?? 'GET',
         body: request.body ?? '',
-        ...DISCLOSURE_RULES,
+        // The client binds the policy's rules to the request it proves.
+        responseMatches: request.responseMatches ?? disclosureRules('data').responseMatches,
+        responseRedactions: request.responseRedactions ?? [],
       },
       context: request.context,
     });
@@ -344,7 +349,7 @@ describe('zkFetch attestor + client', () => {
       allowedHosts: ['api.github.com'],
       slots: [{ slot: 3, name: 'data', parse: 'bytes', optional }],
       bodyPolicy: 'ignored',
-      ...DISCLOSURE_RULES,
+      ...disclosureRules('data'),
     });
 
     const padded = (value: string): Uint8Array => {
@@ -395,7 +400,7 @@ describe('zkFetch attestor + client', () => {
           { slot: 4, name: 'second', parse: 'bytes' },
         ],
         bodyPolicy: 'ignored',
-        ...DISCLOSURE_RULES,
+        ...disclosureRules('first', 'second'),
       };
       const { claim, collected } = await clientWith({
         policy: twoBytePolicy,
@@ -413,7 +418,7 @@ describe('zkFetch attestor + client', () => {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 3, name: 'data', parse: 'hex', length: 2 }],
         bodyPolicy: 'ignored',
-        ...DISCLOSURE_RULES,
+        ...disclosureRules('data'),
       };
       const { claim, collected } = await clientWith({
         policy: hexPolicy,
@@ -431,7 +436,7 @@ describe('zkFetch attestor + client', () => {
         allowedHosts: ['api.github.com'],
         slots: [{ slot: 3, name: 'data', parse: 'hex', length: 3 }],
         bodyPolicy: 'ignored',
-        ...DISCLOSURE_RULES,
+        ...disclosureRules('data'),
       };
       await expect(
         clientWith({
@@ -593,22 +598,45 @@ describe('zkFetch attestor + client', () => {
     ]);
   });
 
+  /** `json` with the secret echoed inside 5000 levels of escaped JSON arrays. */
+  const deeplyNestedSecret = (json: string): string =>
+    JSON.stringify({
+      ...JSON.parse(json),
+      echo: `${'['.repeat(5000)}"Bearer\\u0020private-token"${']'.repeat(5000)}`,
+    });
+
   it.each([
-    { encoding: 'plain', secret: 'Bearer private-token', encode: (json: string) => json },
+    {
+      encoding: 'plain',
+      reason: 'secret',
+      secret: 'Bearer private-token',
+      encode: (json: string) => json,
+    },
     {
       encoding: 'JSON-escaped',
+      reason: 'secret',
       secret: 'Bearer "private-token"\n',
       encode: (json: string) => json,
     },
     {
       encoding: 'Unicode-escaped',
+      reason: 'secret',
       secret: 'Bearer private-token',
       encode: (json: string) => json.replace('private-token', '\\u0070rivate-token'),
     },
     {
       encoding: 'percent-encoded',
+      reason: 'secret',
       secret: 'Bearer private-token',
       encode: (json: string) => json.replace('Bearer private-token', 'Bearer%20private-token'),
+    },
+    {
+      encoding: 'deeply-nested',
+      // The scan overflows before it can find the secret; EvidenceTooDeepError
+      // is not a SecretHeaderError, so `collect` reports an evidence failure.
+      reason: 'evidence',
+      secret: 'Bearer private-token',
+      encode: deeplyNestedSecret,
     },
   ])('never forwards evidence carrying a $encoding secret header value', async (leak) => {
     const { seen, watched } = watchSlot0();
@@ -631,7 +659,7 @@ describe('zkFetch attestor + client', () => {
       options(),
     );
     expect(slots(result)).toEqual([1, 2]);
-    expect(result.failures).toEqual([{ registryIndex: 0, reason: 'secret' }]);
+    expect(result.failures).toEqual([{ registryIndex: 0, reason: leak.reason }]);
     expect(seen.contacted).toBe(false);
   });
 
@@ -679,7 +707,28 @@ describe('zkFetch attestor + client', () => {
         { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
         binding(),
       ),
-    ).rejects.toThrow(/secret header value/);
+    ).rejects.toThrow(SecretHeaderError);
+  });
+
+  it('refuses a proof handle whose evidence is too deeply nested to scan', async () => {
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async (request) => {
+            const evidence = await observe(aliceWitness, request);
+            evidence.claim.context = deeplyNestedSecret(evidence.claim.context);
+            return evidence;
+          },
+        },
+      },
+    });
+    await expect(
+      client.proveReq(
+        { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
+        binding(),
+      ),
+    ).rejects.toThrow(EvidenceTooDeepError);
   });
 
   it.each(['prover', 'transport', 'verifier'] as const)(
@@ -774,6 +823,11 @@ describe('zkFetch attestor + client', () => {
     { expiresAt: Number.NaN },
     { holder: new Uint8Array(31) },
     { windowStart: BigInt(BASE_TIMESTAMP_S + 61) },
+    { windowEnd: 2n ** 32n },
+    {
+      windowStart: BigInt(BASE_TIMESTAMP_S) * 1_000n,
+      windowEnd: BigInt(BASE_TIMESTAMP_S + 60) * 1_000n,
+    },
     { attestorIds: ['attestor-0', 'attestor-0'] },
     { attestorIds: ['unknown'] },
   ])('rejects invalid options or selection before contacting witnesses: %o', async (override) => {
@@ -788,6 +842,24 @@ describe('zkFetch attestor + client', () => {
     await expect(
       client.collect(collectionRequest, { ...options(), ...override }),
     ).rejects.toMatchObject({ reason: 'invalid-options' });
+    expect(contacted).toBe(false);
+  });
+
+  it('refuses a millisecond window in proveReq before contacting any prover', async () => {
+    let contacted = false;
+    const client = clientWith({
+      provers: proversWith({
+        onProve: () => {
+          contacted = true;
+        },
+      }),
+    });
+    const milliseconds = {
+      ...binding(),
+      windowStart: BigInt(BASE_TIMESTAMP_S) * 1_000n,
+      windowEnd: BigInt(BASE_TIMESTAMP_S + 60) * 1_000n,
+    };
+    await expect(client.proveReq(collectionRequest, milliseconds)).rejects.toThrow(ZodError);
     expect(contacted).toBe(false);
   });
 
@@ -1001,6 +1073,12 @@ describe('zkFetch attestor + client', () => {
     await expect(
       hostile.proveReq({ url: 'https://api.github.com/x', method: 'GET' }, binding()),
     ).rejects.toThrow(/not in allowlist/);
+  });
+
+  it('refuses a starred signed URL before any attestor is contacted', async () => {
+    await expect(
+      clientWith().proveReq({ url: 'https://api.github.com/repos/*', method: 'GET' }, binding()),
+    ).rejects.toThrow(/url cannot contain \*/);
   });
 
   it('binds a pinned body end to end', async () => {

@@ -11,7 +11,7 @@ import {
   zkFetchSubjectOf,
 } from '@txpipe/thoth-zk-tls';
 import { describe, expect, it } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
+import { disclosureRules } from './helpers/helper.js';
 
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 const sha256 = (text: string): string => createHash('sha256').update(text, 'utf-8').digest('hex');
@@ -20,7 +20,7 @@ const policy: ZkFetchPolicy = {
   allowedHosts: ['api.example.com'],
   slots: [{ slot: 0, name: 'price', parse: 'int' }],
   bodyPolicy: 'ignored',
-  ...DISCLOSURE_RULES,
+  ...disclosureRules('price'),
 };
 
 describe('zkFetchPolicyHashOf', () => {
@@ -28,7 +28,7 @@ describe('zkFetchPolicyHashOf', () => {
     const normalized = {
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'price', parse: 'int', optional: false }],
-      responseMatches: [{ type: 'regex', value: '(?<data>.*)' }],
+      responseMatches: [{ type: 'regex', value: '(?<price>.*)' }],
       responseRedactions: [],
       bodyPolicy: 'ignored',
       claimVersion: 1n,
@@ -51,7 +51,7 @@ describe('zkFetchPolicyHashOf', () => {
         { slot: 0, name: 'price', parse: 'int' },
       ],
       bodyPolicy: 'ignored',
-      ...DISCLOSURE_RULES,
+      ...disclosureRules('price', 'volume'),
     };
     const spelledOut: ZkFetchPolicy = {
       allowedHosts: ['A.example', 'b.example', 'a.example'],
@@ -61,7 +61,7 @@ describe('zkFetchPolicyHashOf', () => {
       ],
       bodyPolicy: 'ignored',
       claimVersion: 1n,
-      ...DISCLOSURE_RULES,
+      ...disclosureRules('price', 'volume'),
     };
 
     expect(hex(zkFetchPolicyHashOf(spelledOut))).toBe(hex(zkFetchPolicyHashOf(twoSlots)));
@@ -179,7 +179,7 @@ describe('zkFetchPolicyHashOf', () => {
     expect(hex(zkFetchPolicyHashOf(policy))).toBe(
       sha256(
         '["zk-fetch@1","1",{"allowedHosts":["api.example.com"],"bodyPolicy":"ignored",' +
-          '"claimVersion":"1","responseMatches":[{"type":"regex","value":"(?<data>.*)"}],' +
+          '"claimVersion":"1","responseMatches":[{"type":"regex","value":"(?<price>.*)"}],' +
           '"responseRedactions":[],"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
       ),
     );
@@ -192,7 +192,7 @@ describe('zkFetchPolicyHashOf', () => {
     const multiRule: ZkFetchPolicy = {
       allowedHosts: ['api.example.com'],
       bodyPolicy: 'ignored',
-      slots: [{ slot: 0, name: 'price', parse: 'int' }],
+      slots: [{ slot: 0, name: 'distance', parse: 'int' }],
       responseMatches: [
         { value: '(?<distance>[0-9.]+)', type: 'regex' },
         { value: 'moving_time', type: 'contains' },
@@ -210,7 +210,7 @@ describe('zkFetchPolicyHashOf', () => {
           '{"type":"regex","value":"(?<distance>[0-9.]+)"}],' +
           '"responseRedactions":[{"jsonPath":"$.a","regex":"b","xPath":""},' +
           '{"jsonPath":"$.z","regex":"a","xPath":""}],' +
-          '"slots":[{"name":"price","optional":false,"parse":"int","slot":0}]}]',
+          '"slots":[{"name":"distance","optional":false,"parse":"int","slot":0}]}]',
       ),
     );
   });

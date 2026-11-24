@@ -30,7 +30,8 @@
     "attestation.compact",
     "attestor_registry.compact",
     "examples/",
-    "README.md"
+    "README.md",
+    "NOTICE"
   ],
   "scripts": {
     "compact": "compact compile +0.36.1 test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.36.1 test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes",
@@ -47,14 +48,14 @@
     "check:fix:compact": "compact format ."
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.10",
+    "@biomejs/biome": "^2.6.8",
     "@midnight-ntwrk/compact-runtime": "0.21.0",
     "@txpipe/thoth-attestor": "*",
     "@txpipe/thoth-client": "*",
     "@txpipe/thoth-core": "*",
     "@txpipe/thoth-zk-tls": "*",
-    "@types/node": "^26.2.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.11"
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
   }
 }

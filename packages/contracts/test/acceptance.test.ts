@@ -27,7 +27,7 @@ import {
   zkFetchClient,
 } from '@txpipe/thoth-zk-tls/client';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { DISCLOSURE_RULES } from '../../zk-tls/test/helpers/helper.js';
+import { disclosureRules } from '../../zk-tls/test/helpers/helper.js';
 import { testWitness } from '../../zk-tls/test/helpers/witness.js';
 import type { B_Claim } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
@@ -67,7 +67,7 @@ const policy: ZkFetchPolicy = {
     { slot: 3, name: 'owner', parse: 'bytes' },
   ],
   bodyPolicy: 'ignored',
-  ...DISCLOSURE_RULES,
+  ...disclosureRules('stars', 'forks', 'owner'),
 };
 const request: ZkFetchRequest = { url: 'https://api.github.com/repos/x', method: 'GET' };
 
@@ -146,7 +146,7 @@ const collectSubmission = async (): Promise<Submission> => {
                 url: proved.url,
                 method: proved.method ?? 'GET',
                 body: '',
-                ...DISCLOSURE_RULES,
+                ...disclosureRules('stars', 'forks', 'owner'),
               },
               context: proved.context,
             });

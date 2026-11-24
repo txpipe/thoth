@@ -16,10 +16,10 @@ message encoder matches the circuit only at that version.
 
 ## Usage
 
-| File | Module | Role |
-|------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
-| `attestor_registry.compact` | `attestor_registry<#M, #K>` | Seals the `M` pinned attestor keys at deploy and counts the signatures that verify, each against its own slot. |
+| File                        | Module                            | Role                                                                                                                                                                                      |
+| --------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `attestation.compact`       | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
+| `attestor_registry.compact` | `attestor_registry<#M, #K>`       | Seals the `M` pinned attestor keys at deploy and counts the signatures that verify, each against its own slot.                                                                            |
 
 Embed both modules in your top-level contract, seal the deploy-time values in
 the constructor, and export `verifyAttestation` as the entry point:

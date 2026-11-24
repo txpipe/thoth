@@ -26,6 +26,10 @@ _Avoid_: Witness, attestor.
 What a prover obtains from a witness and an attestor verifies before signing, such as a zkFetch proof of an HTTPS fetch. The claim does not commit to it (ADR 0007).
 _Avoid_: Proof.
 
+**Redaction marker**:
+A `*` the prover writes into the TLS transcript in place of a request byte it hides from the witness. The prover chooses which bytes it redacts, and Reclaim compares a `*` in the signed request as equal to a marker, so a signed `*` binds no sent byte.
+_Avoid_: Mask, wildcard.
+
 ### Kinds
 
 **Kind**:

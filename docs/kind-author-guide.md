@@ -15,18 +15,18 @@ hash (ADR 0002, ADR 0008).
 
 ## What you build
 
-| Piece | Where it runs | Built on | zkFetch example |
-|-------|---------------|----------|-----------------|
-| Law tag | everywhere | — | `ZK_FETCH_LAW = 'zk-fetch@1'` |
-| Policy schema, normalizer and hash | shared | `policyHashOf` (`@txpipe/thoth-core/claim-context`) | `zkFetchPolicySchema`, `normalizePolicy`, `zkFetchPolicyHashOf` |
-| Subject struct and hash | shared | `subjectHashOf` | `zkFetchSubjectOf`, `zkFetchSubjectHashOf` |
-| Claim context binding | shared, checked by the attestor | `claimContextDigestOf` | `zkFetchClaimContextDigestOf`, `assertClaimMatchesContext` |
-| Evidence schema | shared | zod | `zkFetchEvidenceSchema` |
-| Claim derivation | shared | `Claim` (`@txpipe/thoth-core/claim`) | `deriveClaimFromEvidence` |
-| Definition (`verify`, `message`) | attestor | `defineAttestor` (`@txpipe/thoth-attestor`) | `createZkFetchDefinition` |
-| Input limits | attestor | zod `.max()` | `ZK_FETCH_DEFAULT_LIMITS`, `zkFetchSchemasWithin` |
-| Instance builder | attestor | `buildAttestor` | `zkFetchAttestor` |
-| Client | dApp | `@txpipe/thoth-client` | `zkFetchClient` |
+| Piece                              | Where it runs                   | Built on                                            | zkFetch example                                                 |
+| ---------------------------------- | ------------------------------- | --------------------------------------------------- | --------------------------------------------------------------- |
+| Law tag                            | everywhere                      | —                                                   | `ZK_FETCH_LAW = 'zk-fetch@1'`                                   |
+| Policy schema, normalizer and hash | shared                          | `policyHashOf` (`@txpipe/thoth-core/claim-context`) | `zkFetchPolicySchema`, `normalizePolicy`, `zkFetchPolicyHashOf` |
+| Subject struct and hash            | shared                          | `subjectHashOf`                                     | `zkFetchSubjectOf`, `zkFetchSubjectHashOf`                      |
+| Claim context binding              | shared, checked by the attestor | `claimContextDigestOf`                              | `zkFetchClaimContextDigestOf`, `assertClaimMatchesContext`      |
+| Evidence schema                    | shared                          | zod                                                 | `zkFetchEvidenceSchema`                                         |
+| Claim derivation                   | shared                          | `Claim` (`@txpipe/thoth-core/claim`)                | `deriveClaimFromEvidence`                                       |
+| Definition (`verify`, `message`)   | attestor                        | `defineAttestor` (`@txpipe/thoth-attestor`)         | `createZkFetchDefinition`                                       |
+| Input limits                       | attestor                        | zod `.max()`                                        | `ZK_FETCH_DEFAULT_LIMITS`, `zkFetchSchemasWithin`               |
+| Instance builder                   | attestor                        | `buildAttestor`                                     | `zkFetchAttestor`                                               |
+| Client                             | dApp                            | `@txpipe/thoth-client`                              | `zkFetchClient`                                                 |
 
 Put shared logic at the package root, so a client-only app never imports
 `@txpipe/thoth-attestor`. Give the attestor and the client their own subpath entries, as

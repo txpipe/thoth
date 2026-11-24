@@ -22,7 +22,12 @@ A kind's client does three things with this package: build the trusted set from 
 
 ```ts
 import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
-import { type AttestorTransport, buildTrustedSet, memberOf, resolveAttestation } from '@txpipe/thoth-client';
+import {
+  type AttestorTransport,
+  buildTrustedSet,
+  memberOf,
+  resolveAttestation,
+} from '@txpipe/thoth-client';
 import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
 
 // The app assigns each attestor the index of its key in the deployed registry.
@@ -37,11 +42,19 @@ const trusted = buildTrustedSet({
 // JSON carries neither bigint nor bytes, so tag them; the attestor's server must use the same pair.
 const toJson = (value: unknown): string =>
   JSON.stringify(value, (_, v) =>
-    typeof v === 'bigint' ? { $bigint: v.toString() } : v instanceof Uint8Array ? { $bytes: [...v] } : v,
+    typeof v === 'bigint'
+      ? { $bigint: v.toString() }
+      : v instanceof Uint8Array
+        ? { $bytes: [...v] }
+        : v,
   );
 const fromJson = (text: string) =>
   JSON.parse(text, (_, v) =>
-    v?.$bigint !== undefined ? BigInt(v.$bigint) : v?.$bytes !== undefined ? Uint8Array.from(v.$bytes) : v,
+    v?.$bigint !== undefined
+      ? BigInt(v.$bigint)
+      : v?.$bytes !== undefined
+        ? Uint8Array.from(v.$bytes)
+        : v,
   );
 
 // Your kind's client supplies the transport; this package only defines the interface.
