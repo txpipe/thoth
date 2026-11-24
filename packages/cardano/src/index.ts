@@ -179,30 +179,10 @@ export interface CardanoDefinition {
 }
 
 /**
- * Derive the claim of one observed output. `appId`, `holder` and the slot
- * counts come from the proposal; every other field comes from the observation
- * and the policy, never from the proposal.
+ * Derive the claim of one observed event. Today it is the output variant's
+ * derivation; a second variant turns it into a dispatch on `policy.kind`.
  *
  * @throws if a policy slot is out of range or in the wrong region for its
  *   fact's type.
  */
-export const deriveCardanoClaim = (options: {
-  policy: CardanoPolicy;
-  observation: CardanoObservation;
-  /** 32 bytes, from the proposal. */
-  appId: Uint8Array;
-  /** 32 bytes, from the proposal. */
-  holder: Uint8Array;
-  /** The contract's numeric value count, from the proposal's `values.length`. */
-  valueSlots: number;
-  /** The contract's byte value count, from the proposal's `byteValues.length`. */
-  byteSlots: number;
-}): Claim<number, number> =>
-  deriveOutputClaim({
-    policy: options.policy,
-    observation: options.observation,
-    appId: options.appId,
-    holder: options.holder,
-    valueSlots: options.valueSlots,
-    byteSlots: options.byteSlots,
-  });
+export const deriveCardanoClaim: typeof deriveOutputClaim = deriveOutputClaim;
