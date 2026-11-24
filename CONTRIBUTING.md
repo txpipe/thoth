@@ -44,6 +44,7 @@ thoth/
 │   │   ├── examples/example_app.compact  # a 2-of-3 embedding
 │   │   └── test/                      # simulator tests, mock contracts, helpers
 │   ├── core/                   # @txpipe/thoth-core: keyless claim and law types
+│   ├── tlsn/                   # @txpipe/thoth-tlsn: the tlsn@1 TLSNotary kind (prototype), native/ is its Rust tool
 │   └── zk-tls/                 # @txpipe/thoth-zk-tls: the zkFetch kind (attestor, client, prover)
 ├── .changeset/                 # pending changesets and their config
 ├── .github/                    # CI and release workflows, setup-compact action
@@ -88,6 +89,9 @@ type requires N type argument(s)".
 `packages/zk-tls/test/live.test.ts` runs against two real witnesses and skips
 unless `WITNESS_URLS` names them; see the attestor guide's
 [live check](packages/zk-tls/docs/attestor-guide.md#live-check).
+`packages/tlsn/test/live.test.ts` runs real TLSNotary sessions against a local
+HTTPS server and skips unless `THOTH_TLSN_BIN` names a `thoth-tlsn` binary,
+built with `npm run build:native --workspace=packages/tlsn` (needs Rust).
 `packages/cardano/test/live.test.ts` runs against one real UTxO-RPC endpoint
 and skips unless `DOLOS_URL` names it; see the cardano dApp guide's
 [live check](packages/cardano/docs/dapp-integration.md#live-check).

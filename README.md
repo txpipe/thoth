@@ -56,6 +56,7 @@ kind's salt is public instead, since its values already sit on the chain
 | [`@txpipe/thoth-contracts`](packages/contracts/README.md) | Embed N-of-M verification in your Midnight contract                          |
 | [`@txpipe/thoth-zk-tls`](packages/zk-tls/README.md)       | Attest a web fact with zkFetch, as a dApp or as an attestor operator         |
 | [`@txpipe/thoth-cardano`](packages/cardano/README.md)     | Attest a Cardano chain event, as a dApp or as an attestor operator           |
+| [`@txpipe/thoth-tlsn`](packages/tlsn/README.md)           | Prototype: attest a web fact with TLSNotary instead of zkFetch               |
 | [`@txpipe/thoth-client`](packages/client/README.md)       | Write a kind's client: the trusted set and the attestation checks            |
 | [`@txpipe/thoth-attestor`](packages/attestor/README.md)   | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
 | [`@txpipe/thoth-core`](packages/core/README.md)           | Write a kind's law against the shared claim types                            |

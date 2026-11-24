@@ -26,6 +26,14 @@ _Avoid_: Witness, attestor.
 What an attestor verifies before signing. In zkFetch it is what a prover obtains from a witness, such as a proof of an HTTPS fetch; in a chain-event kind it is a [locator](#kinds) the client sends, and the attestor re-reads the event itself. The claim does not commit to it (ADR 0007).
 _Avoid_: Proof.
 
+**Notary**:
+A tlsn@1 role: the TLSNotary party that runs MPC-TLS with the prover and signs the attestation behind a presentation, including the claim context digest. Each tlsn@1 attestor pins one notary's key, as each zkFetch attestor trusts one witness. Not an attestor.
+_Avoid_: Witness, verifier.
+
+**Presentation**:
+The tlsn@1 evidence: a notary-signed TLSNotary attestation with the server's identity and the transcript bytes the prover reveals.
+_Avoid_: Proof.
+
 **Redaction marker**:
 A `*` the prover writes into the TLS transcript in place of a request byte it hides from the witness. The prover chooses which bytes it redacts, and Reclaim compares a `*` in the signed request as equal to a marker, so a signed `*` binds no sent byte.
 _Avoid_: Mask, wildcard.
