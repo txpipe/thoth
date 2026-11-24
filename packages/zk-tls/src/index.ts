@@ -429,8 +429,16 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
             xPath: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
           })
           .superRefine((redaction, context) => {
+            // Reclaim reads an empty rule text as absent, and refuses a
+            // redaction with none on every prove.
+            if (!redaction.regex && !redaction.jsonPath && !redaction.xPath) {
+              context.addIssue({
+                code: 'custom',
+                message: 'a redaction needs a non-empty regex, jsonPath or xPath',
+              });
+            }
             // Reclaim compiles a redaction regex only when it is non-empty.
-            if (redaction.regex !== undefined && redaction.regex !== '') {
+            if (redaction.regex) {
               refineRe2(redaction.regex, context, ['regex']);
             }
           }),
@@ -482,15 +490,16 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
  * Runtime validator for {@link ZkFetchPolicy}.
  *
  * Rule entries are strict, so Reclaim's `invert` and `hash` are refused, and
- * rule texts cannot carry `{{param}}` templates. Every `regex` match and
- * redaction regex must compile under RE2, the engine the prover and the
- * witnesses run it with (the dApp guide's "Regex engine"); parsing throws if the
- * native `re2` module does not load. Every slot `name` must be declared as a
- * named group by a `regex` match, so the slot has a disclosed value to read; a
- * `contains` match and a redaction regex declare no groups. `bodyPolicy` is
- * required; a pin is 32 bytes and not the empty body's hash. Every
- * `allowedHosts` entry is a non-empty host with an optional port in 1–65535.
- * `claimVersion` is 0–255, the claim's `Uint<8>` range.
+ * rule texts cannot carry `{{param}}` templates. A redaction needs a non-empty
+ * `regex`, `jsonPath` or `xPath`. Every `regex` match and redaction regex must
+ * compile under RE2, the engine the prover and the witnesses run it with (the
+ * dApp guide's "Regex engine"); parsing throws if the native `re2` module does
+ * not load. Every slot `name` must be declared as a named group by a `regex`
+ * match, so the slot has a disclosed value to read; a `contains` match and a
+ * redaction regex declare no groups. `bodyPolicy` is required; a pin is 32
+ * bytes and not the empty body's hash. Every `allowedHosts` entry is a
+ * non-empty host with an optional port in 1–65535. `claimVersion` is 0–255,
+ * the claim's `Uint<8>` range.
  * It caps no size; an attestor parses with its own {@link ZkFetchLimits}.
  */
 export const zkFetchPolicySchema = policySchemaWithin(UNCAPPED);
