@@ -282,6 +282,40 @@ acceptance: if your predicate grants the event to a user, bind the claimant;
 otherwise first-come-first-served is the semantics you chose. The README's
 [Guarantees and limits](../README.md#guarantees-and-limits) lists these limits.
 
+## Live check
+
+The live check reads one event from a real UTxO-RPC endpoint, runs one
+attestor over that read, and collects a 1-of-1 claim through the client. It
+skips unless `DOLOS_URL` names an endpoint, so `npm test` stays offline. Run it
+from the repo root after building the packages:
+
+```bash
+npm run build
+DOLOS_URL=http://localhost:50051 \
+  npx vitest run packages/cardano/test/live.test.ts
+```
+
+A hosted endpoint takes its key in a header; `DOLOS_HEADERS` is a JSON object
+sent on every call:
+
+```bash
+DOLOS_URL=https://cardano-preview.utxorpc-m1.demeter.run \
+DOLOS_HEADERS='{"dmtr-api-key":"…"}' \
+  npx vitest run packages/cardano/test/live.test.ts
+```
+
+The endpoint must retain the event's block: a Dolos in ledger-only or
+sliding-history mode may not serve it. The default event is the preview
+transaction in the recorded fixture; `CARDANO_TX_HASH` and
+`CARDANO_OUTPUT_INDEX` name another one, and `CARDANO_CONFIRMATION_DEPTH` sets
+the policy depth (default `0`).
+
+The check covers the live read, policy derivation, signing and client
+verification. It does not check agreement between independent sources or an
+N-of-M set; the
+[acceptance test](../../contracts/test/acceptance-cardano.test.ts) covers
+those offline.
+
 ## Links
 
 - [Package README](../README.md): the policy, the attestor, the guarantees and

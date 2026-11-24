@@ -74,8 +74,8 @@ type requires N type argument(s)".
 unless `WITNESS_URLS` names them; see the attestor guide's
 [live check](packages/zk-tls/docs/attestor-guide.md#live-check).
 `packages/cardano/test/live.test.ts` runs against one real UTxO-RPC endpoint
-and skips unless `DOLOS_URL` names it; see the cardano
-[live check](packages/cardano/README.md#live-check).
+and skips unless `DOLOS_URL` names it; see the cardano dApp guide's
+[live check](packages/cardano/docs/dapp-integration.md#live-check).
 
 ## CI and commits
 

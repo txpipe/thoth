@@ -186,7 +186,7 @@ READMEs don't repeat it.
   stay offline. See "Live check" in `packages/zk-tls/docs/attestor-guide.md`.
 - `packages/cardano/test/live.test.ts` is the same kind of check for one real
   UTxO-RPC endpoint; it skips unless `DOLOS_URL` names it. See "Live check" in
-  `packages/cardano/README.md`.
+  `packages/cardano/docs/dapp-integration.md`.
 - Never skip the `present` mask semantics: `present[i] = true` means slot `i`
   was measured (value may still be `0`).
 
