@@ -55,8 +55,8 @@ and pins only the fields it needs, such as the host ([ADR 0001](adr/0001-source-
 
 ## The claim
 
-The claim is the same object everywhere (client, attestors, contract) and it
-is the whole signed message: anything the contract checks is a field of it.
+The claim is the same object everywhere (client, attestors, contract) and the
+signed message covers all of it: anything the contract checks is a field of it.
 The terms are defined in [`CONTEXT.md`](../CONTEXT.md#the-claim).
 
 | Field                      | What it is                                                                                                                                                                   |
@@ -81,36 +81,49 @@ identity ([ADR 0006](adr/0006-nullifier-keys-on-the-observation-identity.md)).
 
 ### Wire order
 
-Attestors sign, and the contract rebuilds, a flat vector of
-`K = 2*V + 2*B + 14` fields (`B = 2*W` is the number of byte halves).
-`buildMessage` in
-[`attestation.compact`](../packages/contracts/attestation.compact) defines it;
-`claimToMessage` in `@thoth/core/claim` mirrors it, and a parity test keeps the
-two equal. Each 32-byte field is split into two 16-byte halves, each read as a
-`Uint<128>` little-endian (byte 0 least significant, the runtime's
-`convertBytesToUint` convention), so every byte is signed.
+Attestors sign, and the contract rebuilds, seven field elements: the claim's
+`version`, the layout's slot counts `V` and `W`, the claim's nullifier and its
+`holder` ([ADR 0014](adr/0014-attestors-sign-the-nullifier.md)). The
+nullifier is the SHA-256 of every other claim field, so every field reaches
+the message, and the contract hashes the claim once for the signatures, replay
+and the claims vault. `buildMessage` and `nullifierOf` in
+[`attestation.compact`](../packages/contracts/attestation.compact) define
+them; `claimToMessage` and `nullifierOf` in `@thoth/core/claim` mirror them,
+and parity tests keep the two equal. A 32-byte value is two elements, byte 31,
+then bytes 0–30 read little-endian (byte 0 least significant, the runtime's
+`convertBytesToUint` convention), which is how the circuit holds it, so no
+byte is sliced.
 
-| Index                 | Field                                 | Encoding                                                      |
-| --------------------- | ------------------------------------- | ------------------------------------------------------------- |
-| 0                     | `version`                             | `1`                                                           |
-| 1, 2                  | `appId`                               | bytes 0–15, then bytes 16–31                                  |
-| 3, 4                  | `policyHash`                          | two halves                                                    |
-| 5                     | `windowStart`                         | Unix seconds                                                  |
-| 6                     | `windowEnd`                           | Unix seconds                                                  |
-| 7, 8                  | `subjectHash`                         | two halves                                                    |
-| 9, 10                 | `holder`                              | two halves                                                    |
-| 11, 12                | `salt`                                | two halves                                                    |
-| 13                    | `B`                                   | the byte-half count `2W`; the contract writes its own `#B`    |
-| 14 … 13+V             | `present[0]` … `present[V-1]`         | `1` measured, `0` absent                                      |
-| 14+V … 13+V+B         | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
-| 14+V+B … 13+V+B+V     | `values[0]` … `values[V-1]`           | the value; `0` when absent                                    |
-| 14+V+B+V … 13+V+B+V+B | `byteHalves[0]` … `byteHalves[B-1]`   | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]`           |
+| Index | Field       | Encoding                                                 |
+| ----- | ----------- | -------------------------------------------------------- |
+| 0     | `version`   | `1`                                                      |
+| 1     | `V`         | the numeric slot count; the contract writes its own `#V` |
+| 2     | `W`         | the byte slot count; the contract writes its own `#W`    |
+| 3, 4  | `nullifier` | byte 31, then bytes 0–30, of the SHA-256 below           |
+| 5, 6  | `holder`    | byte 31, then bytes 0–30                                 |
 
-`K` alone fixes only `2*V + 2*B`, so two layouts can share a length (`V = 3,
-W = 2` and `V = 1, W = 3` both give `K = 28`). Index 13 signs the layout: the
-contract rebuilds it from its own `#B`, so a message signed under another
-layout fails verification. With `W = 0` every byte row disappears and index 13
-is `0`. The contract does not check that a byte value's two flags agree.
+The nullifier hashes the observation identity, `136 + 9*V + 33*W` bytes in
+this order:
+
+| Bytes                   | Field                                 | Encoding                               |
+| ----------------------- | ------------------------------------- | -------------------------------------- |
+| 0–31                    | `appId`                               | as is                                  |
+| 32–63                   | `policyHash`                          | as is                                  |
+| 64–95                   | `subjectHash`                         | as is                                  |
+| 96–127                  | `salt`                                | as is                                  |
+| 128–131                 | `windowStart`                         | Unix seconds, 4 bytes little-endian    |
+| 132–135                 | `windowEnd`                           | Unix seconds, 4 bytes little-endian    |
+| 8 each, from 136        | `values[0]` … `values[V-1]`           | 8 bytes little-endian; `0` when absent |
+| 32 each, from 136+8V    | `byteValues[0]` … `byteValues[W-1]`   | as is; zero bytes when absent          |
+| 1 each, from 136+8V+32W | `present[0]` … `present[V-1]`         | `1` measured, `0` absent               |
+| 1 each, from 136+9V+32W | `bytePresent[0]` … `bytePresent[W-1]` | one flag per byte value                |
+
+The identity's length fixes only `9*V + 33*W`, so two layouts can hash the same
+bytes (`V = 11, W = 0` and `V = 0, W = 3`). Indexes 1 and 2 sign the layout:
+the contract rebuilds them from its own `#V` and `#W`, so a message signed
+under another layout fails verification. The sealed app id does not separate
+layouts: every contract of one app seals the same one. With `W = 0` every byte
+row disappears.
 
 ## Flow
 
@@ -147,13 +160,18 @@ sequenceDiagram
 2. Each attestor verifies its own witness's evidence, checks that it signed
    the proposal's holder and window, derives the claim itself, salt included,
    and signs it.
-   The client checks every signature and places it at the attestor's registry
+   The client checks every signature and tags it with the attestor's registry
    slot, which the app assigned in its trusted set.
-3. The contract verifies, in-circuit, the version, the policy hash, at least N
-   valid signatures each against its own registry slot, the absent slots, the
-   holder secret, the window and replay. The
+3. The contract verifies, in-circuit, the version, the policy hash, N valid
+   signatures from distinct registry slots, each against its own slot's key,
+   the absent slots, the holder secret, the window and replay
+   ([ADR 0015](adr/0015-contract-verifies-n-named-signatures.md)). The
    [`@thoth/contracts` README](../packages/contracts/README.md#guarantees-and-limits)
-   lists every check. Only then does the app's predicate run.
+   lists every check. It then vaults the claim under its nullifier, with a
+   pseudonym of the holder secret
+   ([ADR 0016](adr/0016-claims-vault-keyed-by-the-nullifier.md),
+   [ADR 0017](adr/0017-vault-pseudonym-survives-network-upgrades.md)). Only
+   then does the app's predicate run, opening the claim by its nullifier.
 
 ## Out of scope
 

@@ -16,10 +16,10 @@ message encoder matches the circuit only at that version.
 
 ## Usage
 
-| File                        | Module                            | Role                                                                                                                                                                                      |
-| --------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `attestation.compact`       | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
-| `attestor_registry.compact` | `attestor_registry<#M, #K>`       | Seals the `M` pinned attestor keys at deploy and counts the signatures that verify, each against its own slot.                                                                            |
+| File                        | Module                        | Role                                                                                                                                                                                                   |
+| --------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `attestation.compact`       | `attestation<#V, #W, #N, #M>` | Verifies `N` signatures from distinct registry slots over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
+| `attestor_registry.compact` | `attestor_registry<#M, Msg>`  | Seals the `M` pinned attestor keys at deploy and checks each signature against the key of the slot it names. The attestation module embeds it with its `SignedMessage` as `Msg`.                       |
 
 Embed both modules in your top-level contract, seal the deploy-time values in
 the constructor, and export `verifyAttestation` as the entry point:
@@ -29,14 +29,16 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=24 msg fields  V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
-import "attestation"<24, 3, 2, 2, 3> prefix A_;
+//           V=3 values  W=1 byte value  N=2 threshold  M=3 registry slots
+import "attestation"<3, 1, 2, 3> prefix A_;
 
-import "attestor_registry"<3, 24> prefix R_;
+// The registry instance the attestation module embeds: same slot count, and
+// the module's signed message type.
+import "attestor_registry"<3, A_SignedMessage> prefix R_;
 
-export { A_Claim, A_ClaimEntry };
+export { A_Claim, A_ClaimEntry, A_Observation, A_SignedMessage };
 
-export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
+export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault };
 
 witness seedPolicies(): Vector<1, Bytes<32>>;
 
@@ -56,11 +58,11 @@ export circuit verifyAttestation(): [] {
 }
 
 // The signed message, so the attestor side and tests can reproduce it.
-export pure circuit message(a: A_Claim): Vector<24, Field> {
+export pure circuit message(a: A_Claim): A_SignedMessage {
   return A_buildMessage(a);
 }
 
-// An app predicate: open a vaulted claim and read it in-circuit.
+// An app predicate: open a vaulted claim by its nullifier and read it in-circuit.
 export circuit requireStars(id: Bytes<32>, min: Uint<64>): [] {
   const c = A_openClaim(id);
   assert(c.present[0], "slot 0 not measured");
@@ -72,18 +74,40 @@ export circuit requireStars(id: Bytes<32>, min: Uint<64>): [] {
 is this contract without the predicate; the mocks in `test/mocks/` show more predicates,
 including source binding and reading a byte value.
 
+Your dApp implements the module witnesses. `getAttestationWitness` returns the
+claim, `getHolderSecret` the holder secret, `getHolderScalar` the scalar
+`openClaim` proves ownership with (`degradeToTransient(holderSecret)` from
+`@midnight-ntwrk/compact-runtime`: the secret's first 31 bytes read
+little-endian), and `getSignatures` exactly `N` signatures, each tagged with the
+`registryIndex` of the key it verifies against, in increasing slot order:
+
+```ts
+// From the threshold set your client collected, already in slot order:
+const signatures = collected.map(({ registryIndex, attestation }) => ({
+  registryIndex: BigInt(registryIndex),
+  signature: attestation.signature, // the runtime's JubjubSchnorrSignature
+}));
+
+// Keep them in your private state, and in your witnesses:
+getSignatures: ({ privateState }) => [privateState, privateState.signatures],
+```
+
 The module parameters, fixed when you embed:
 
-- `#V` numeric value slots and `#B` byte halves, two per 32-byte byte value,
-  so `#B` is even (`B = 0` is the numeric-only layout).
-- `#K`, the signed-message length; the `attestation.compact` header gives the formula.
-- `#N` of `#M` signatures must verify; `#M` is also the registry's key count.
+- `#V` numeric value slots and `#W` 32-byte value slots (`W = 0` is the
+  numeric-only layout).
+- `#N`, the threshold: how many signatures `getSignatures` supplies, all of
+  which must verify; `#M`, the registry's key count. Import the registry as
+  `attestor_registry<M, A_SignedMessage>`, with the attestation module's
+  prefix: other parameters compile to a second registry that the module never
+  reads, and no claim verifies.
 
 The header of
 [`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact)
-documents each parameter and the wire layout `buildMessage` produces;
+documents each parameter and the wire layout: the seven fields `buildMessage`
+produces and the bytes `nullifierOf` hashes;
 [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#wire-order)
-has the same layout as a table. Attestors sign that exact field vector.
+has the same layout as tables.
 
 ## Concepts
 
@@ -95,14 +119,16 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
   window, `present` mask, numeric values and byte slots.
 - [Registry](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain)
   and [registry slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection):
-  the pinned keys, checked positionally; `signatures[i]` is verified against
-  `keys[i]`.
+  the pinned keys; each signature names its slot and is verified only against
+  that slot's key.
 - [Threshold](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
   the `N` in N-of-M.
 - [Nullifier](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
-  the hash of the observation identity that blocks replay.
+  the SHA-256 of the observation identity; the attestors sign it, and it
+  blocks replay.
 - [Claims vault](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
-  the accepted claims, keyed by `persistentCommit(claim, rand)`.
+  the accepted claims, keyed by their nullifier. Compute a claim's key with
+  the pure `nullifierOf(claim)` and pass it to `openClaim`.
 
 ## Guarantees and limits
 
@@ -114,23 +140,23 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
   policy.
 - `policyHash` is in the sealed `policyHashes` set (`"Unaccepted policy"`).
   The membership check discloses which accepted policy the claim used.
-- At least `N` of the `M` signatures verify, each against its own registry
-  slot (`"Insufficient valid signatures"`). Empty slots never count, and the
-  registry cannot see `N`: pin at least `N` distinct keys or no claim is ever
+- `N` signatures verify, each against the key of the registry slot it names
+  (`"Insufficient valid signatures"`). The slots are strictly increasing, so no
+  slot counts twice (`"Registry slots not increasing"`), and each holds a key
+  (`"Empty registry slot"`, also for a slot at or past `M`). The registry
+  cannot see `N`: pin at least `N` distinct keys or no claim is ever
   accepted. `initRegistry` rejects duplicate keys (`"Duplicate registry keys"`)
   and a second call (`"Registry already initialized"`).
-- Every slot whose flag is false carries zero, numeric slots and byte halves
-  alike (`"Absent slot has nonzero value"`). A measured zero is valid with its
-  flag true, including a short byte value whose padding leaves a half all
-  zeros.
+- Every slot whose flag is false carries zero, numeric and byte slots alike
+  (`"Absent slot has nonzero value"`). A measured zero is valid with its flag
+  true.
 - The window is not inverted (`"Window inverted"`), is at most `maxWindow`
   long (`"Window too long"`), and the block time is at or after `windowStart`
   (`"Window in the future"`) and before `windowEnd + freshnessWindow`
   (`"Window too old"`). A zero `freshnessWindow` does not disable the check.
 - The caller's secret matches `holder` (`"Holder mismatch"`).
 - The observation identity has not been accepted before (`"Observation
-  replay"`), and the claim is not already vaulted under the same randomness
-  (`"Claim already accepted"`).
+  replay"`): its nullifier is not already a vault key.
 
 What the module does not check, and what your app does itself:
 
@@ -139,10 +165,6 @@ What the module does not check, and what your app does itself:
   claim's `subjectHash`, pinning only the fields you need (the mock's
   `openAndBindHost` pins the host and keeps the path private). The claim does
   not commit to the evidence behind it (ADR 0007).
-- The two halves of a byte value are checked against zero one by one, not for
-  a matching flag. Honest attestors give both halves the slot's flag; a claim
-  with unpaired flags carries at least `N` dishonest signatures, which are out
-  of scope (ADR 0003).
 - The window is when the attestor's witness looked, not when the fact
   happened, and a zkFetch fetch may precede `windowStart` by about 10 minutes.
   Do not read it as the time of the fact
@@ -165,7 +187,7 @@ What the module does not check, and what your app does itself:
   say), keep your own set keyed on that fact. That set is public, so it
   confirms guesses at whatever it keys on
   ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
-  The ledger stores each claim's nullifier, commitment, vault pseudonym
+  The ledger stores each claim's nullifier (the vault key), vault pseudonym
   (derived from the holder secret) and window in public, and the transaction
   discloses which accepted policy it used.
 - Holder secrets are not checked for freshness. Use a fresh, high-entropy
@@ -173,10 +195,16 @@ What the module does not check, and what your app does itself:
   holder, a guessable secret makes the salt guessable too, and the nullifier
   can then confirm guessed values. Reusing a secret links its
   commitments and vault entries.
-- `openClaim` consumes no nullifier, so opening is repeatable. "Use once"
+- `openClaim` returns the claim's `Observation`: every field the nullifier
+  binds, which is all but `holder` and `version`. The caller's tie to the
+  claim is the vault pseudonym, checked against the holder scalar it was
+  derived from.
+- `openClaim` consumes nothing, so opening is repeatable. "Use once"
   rules are your own state, keyed on the vault pseudonym. Never re-export
   `openClaim` as a top-level entry point: its return value is tainted and
   would force a `disclose()` that publishes every value.
+- A slot is a `Uint<8>`, so in a registry of more than 256 keys the slots
+  past 255 can never sign.
 - Key provenance is your trust decision; the registry checks only that the
   pinned keys are distinct. The keys are fixed at deploy: to rotate an
   attestor, deploy a new contract.
@@ -184,8 +212,17 @@ What the module does not check, and what your app does itself:
 ## Design decisions
 
 - **The claim is the entire message.** Everything the contract inspects is a
-  field of the signed vector, so a kind cannot pass the contract data through
-  an unsigned side channel.
+  field of the claim the signatures cover, so a kind cannot pass the contract
+  data through an unsigned side channel.
+- **Attestors sign the nullifier.** The message is seven fields: the claim's
+  version, `V`, `W`, its nullifier and its holder. `verifyAttestation` hashes
+  the claim once, for the signatures, replay and the vault key, no byte is
+  sliced in-circuit, and a signature costs the same to verify whatever your
+  slot counts are. A signature binds every claim byte as far as SHA-256 is
+  collision resistant, which the vault already relies on. The observation
+  identity is then part of the wire format: changing the `Observation` struct
+  or its hash changes what every attestor signs
+  ([ADR 0014](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0014-attestors-sign-the-nullifier.md)).
 - **Replay protection keys on the observation identity.** The nullifier hashes
   `appId`, `policyHash`, `subjectHash`, `salt`, the window, the values and the
   flags. It does not hash `holder` or `version`, but the holder can reach it
@@ -209,6 +246,16 @@ What the module does not check, and what your app does itself:
   replay set, so the nullifier alone would not stop a claim stored in one app
   from being stored again in another
   ([ADR 0013](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0013-contract-seals-its-app-id.md)).
+- **The vault is keyed by the nullifier.** A claim's nullifier is public
+  anyway, so a separate vault commitment would hide nothing more and cost
+  `verifyAttestation` a second hash of the whole claim. You open a claim with
+  `nullifierOf(claim)`, and your witness supplies no commitment randomness
+  ([ADR 0016](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0016-claims-vault-keyed-by-the-nullifier.md)).
+- **The vault pseudonym survives network upgrades.** It is `x(s * G)` on
+  Jubjub for the holder secret `s`, so a hard fork that changes Midnight's
+  transient hash does not lock vaulted claims. Use the holder secret only as a
+  holder secret, never as a signing key
+  ([ADR 0017](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0017-vault-pseudonym-survives-network-upgrades.md)).
 - **A contract seals a set of policy hashes.** One contract serves several
   policies, and so several kinds ([ADR 0008](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0008-contract-accepts-a-set-of-policy-hashes.md)).
 - **Source binding is your in-circuit check.** `subjectHash` is a circuit hash
@@ -220,16 +267,28 @@ What the module does not check, and what your app does itself:
   state is your app's ([ADR 0004](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
 - **The window is when the attestor observed.** The contract checks it against
   block time; a fact's own time is a claim value ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
-- **A byte value is two adjacent 16-byte halves.** Reassemble it in-circuit
-  with `Bytes[...c.byteHalves[2 * i], ...c.byteHalves[2 * i + 1]]`; the header
-  signs `B` so a claim signed for another layout of the same `K` is rejected
-  ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
+- **A byte value is one `Bytes<32>`.** Compare `c.byteValues[i]` in your
+  predicate directly; the message signs `V` and `W`, so a claim signed for
+  another layout is rejected
+  ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md),
+  [ADR 0014](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0014-attestors-sign-the-nullifier.md)).
   How a source string becomes those 32 bytes is the kind's parse rule, not the
   contract's ([ADR 0010](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0010-encoded-byte-rules.md)).
 - **Registry slots are positional and the keys are sealed.** You assign each
-  attestor its slot and place its signature there; the module never reorders.
-  `keys` is unexported and only `initRegistry` writes it, so the distinctness
-  check cannot be skipped.
+  attestor its slot and tag its signature with it; the module checks the
+  signature only against that slot's key and never reorders. `keys` is
+  unexported and only `initRegistry` writes it, so the distinctness check
+  cannot be skipped.
+- **The contract verifies N signatures, not M.** You pass the threshold set
+  and no dummies, so proving cost grows with `N`; each extra registry slot
+  costs only a few rows. Which slots signed stays private: the indices are
+  witness data and the circuit reads every key
+  ([ADR 0015](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0015-contract-verifies-n-named-signatures.md)).
+- **The registry verifies Schnorr signatures itself.** It repeats the stdlib
+  check over a signature whose response is a `JubjubScalar`, which saves about
+  350 rows per signature; attestors sign with the runtime's `jubjubSchnorrSign`
+  as before
+  ([ADR 0015](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0015-contract-verifies-n-named-signatures.md)).
 
 ## Links
 

@@ -1,7 +1,9 @@
 import {
   CompactTypeField,
   CompactTypeVector,
+  JUBJUB_SCALAR_MODULUS,
   jubjubSchnorrSign,
+  jubjubSchnorrVerify,
   jubjubSchnorrVerifyingKey,
 } from '@midnight-ntwrk/compact-runtime';
 import {
@@ -166,6 +168,18 @@ describe('resolveAttestation', () => {
   it('rejects a malformed signature', async () => {
     await expect(
       resolveAttestation({ ...options, attestation: { ...attestation, signature: {} as never } }),
+    ).rejects.toMatchObject({ reason: 'signature' });
+  });
+
+  it('rejects a response the contract cannot take, even though it verifies mod the order', async () => {
+    const response = signature.response + JUBJUB_SCALAR_MODULUS;
+    const type = new CompactTypeVector(1, CompactTypeField);
+    expect(jubjubSchnorrVerify(type, message, publicKey, { ...signature, response })).toBe(true);
+    await expect(
+      resolveAttestation({
+        ...options,
+        attestation: { ...attestation, signature: { ...signature, response } },
+      }),
     ).rejects.toMatchObject({ reason: 'signature' });
   });
 

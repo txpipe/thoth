@@ -1,4 +1,4 @@
-import type { JubjubPoint } from '@midnight-ntwrk/compact-runtime';
+import { degradeToTransient, type JubjubPoint } from '@midnight-ntwrk/compact-runtime';
 import {
   ACCEPTED_POLICIES,
   APP_ID,
@@ -27,7 +27,7 @@ export type DeploySeals = {
 
 /**
  * Witness implementations shared by every mock artifact: the attestation
- * witness pair is typed to the artifact's `Claim`, everything else is
+ * witness is typed to the artifact's `Claim`, everything else is
  * artifact-independent.
  *
  * @typeParam Claim — the artifact's claim type.
@@ -44,21 +44,29 @@ export const makeWitnesses = <Claim>(
     policyHashes = ACCEPTED_POLICIES,
   }: DeploySeals = {},
 ) => ({
-  getAttestationWitness: ({
-    privateState,
-  }: WitnessBase<Claim>): [
-    PrivateState<Claim>,
-    [Claim, PrivateState<Claim>['signatures'], Uint8Array],
-  ] => {
+  getAttestationWitness: ({ privateState }: WitnessBase<Claim>): [PrivateState<Claim>, Claim] => {
     if (!privateState.claim) {
       throw new Error('getAttestationWitness: no claim in private state');
     }
-    return [privateState, [privateState.claim, privateState.signatures, privateState.commitRand]];
+    return [privateState, privateState.claim];
   },
+
+  getSignatures: ({
+    privateState,
+  }: WitnessBase<Claim>): [PrivateState<Claim>, PrivateState<Claim>['signatures']] => [
+    privateState,
+    privateState.signatures,
+  ],
 
   getHolderSecret: ({ privateState }: WitnessBase<Claim>): [PrivateState<Claim>, Uint8Array] => [
     privateState,
     privateState.holderSecret,
+  ],
+
+  // The pseudonym's scalar: the secret's first 31 bytes read little-endian.
+  getHolderScalar: ({ privateState }: WitnessBase<Claim>): [PrivateState<Claim>, bigint] => [
+    privateState,
+    degradeToTransient(privateState.holderSecret),
   ],
 
   seedKeys: ({ privateState }: WitnessBase<Claim>): [PrivateState<Claim>, JubjubPoint[]] => [

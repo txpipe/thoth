@@ -71,7 +71,7 @@ attestor: its definition and public key, without key material.
 The three entry points:
 
 - **`@thoth/core`**: `AttestorDefinition`, `AttestationInput`, `Attestation`, `AttestorDescriptor`, `MessageOf`.
-- **`@thoth/core/claim`**: `Claim`, `ClaimInput`, `claimSchema`, `bytes32Schema`, `claimToMessage`, `toContractClaim`, `ContractClaim`, `FlatMessage`, `CLAIM_VERSION`.
+- **`@thoth/core/claim`**: `Claim`, `ClaimInput`, `claimSchema`, `bytes32Schema`, `claimToMessage`, `nullifierOf`, `toContractClaim`, `ContractClaim`, `FlatMessage`, `CLAIM_VERSION`.
 - **`@thoth/core/claim-context`**: `policyHashOf`, `subjectHashOf`, `holderCommitmentOf`, `claimContextDigestOf`, `ClaimContext`, `CanonicalValue`.
 
 ## Concepts
@@ -84,14 +84,15 @@ The three entry points:
 - [Salt](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): 32 secret bytes the nullifier hashes, derived by your kind from the evidence.
 - [Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): when the attestor observed, in Unix seconds.
 - [Claim context](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): policy hash, subject hash, holder and window, the part every attestor derives the same claim from.
-- [Message and wire layout](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the flat field vector the attestors sign and the contract rebuilds; the layout is in the [`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact) header and the [design doc](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#the-claim).
+- [Message and wire layout](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the seven fields the attestors sign and the contract rebuilds, the claim's version, layout, nullifier and holder; the layout is in the [`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact) header and the [design doc](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#wire-order).
+- [Nullifier](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain): the SHA-256 of the claim's observation identity, every field but the version and the holder. The message signs it, and a dApp opens a vaulted claim with it.
 
 ## Guarantees and limits
 
 What the package checks:
 
 - `claimSchema(v, w)` validates the claim shape and lengths, checks each numeric field fits its contract type (`values` are `Uint<64>`, `windowStart` and `windowEnd` are `Uint<32>`, `version` is `Uint<8>`), coerces numeric fields to `bigint`, and defaults an omitted `byteValues` to `[]`. Without `v` it skips the exact-length checks but still requires one `present` flag per value.
-- `claimToMessage` produces the exact message the contract's `buildMessage` rebuilds; the contracts suite checks the parity.
+- `claimToMessage` produces the exact message the contract's `buildMessage` rebuilds, and `nullifierOf` the contract's `nullifierOf`, with standard SHA-256 over the documented bytes; the contracts suite checks the parity, including that signatures over `claimToMessage` verify in-circuit. `nullifierOf` throws on an integer outside its contract type rather than wrap it.
 - `toContractClaim` produces the contract's `Claim` struct from a `Claim`. A dApp always converts, even with `W = 0`.
 - `policyHashOf` and `claimContextDigestOf` are SHA-256 over a canonical JSON serialization: sorted keys, no whitespace, a `bigint` as a quoted decimal string, bytes as lowercase hex. Another implementation reproduces them from those rules alone.
 - `subjectHashOf` and `holderCommitmentOf` are circuit hashes, equal to the circuit's `persistentHash` of the subject struct and its `holderCommitment`, so an app can recompute them in-circuit.
@@ -107,7 +108,6 @@ What your app must do:
 
 - Use a fresh high-entropy secret per claim. Reusing a secret links claims; the layer promises no cross-claim identity or unlinkability.
 - Read the window as when the attestor observed, not as the time of the fact.
-- Give a byte slot's two halves the same flag. `toContractClaim` and `claimToMessage` do this from one `present` flag; the contract does not check the pairing.
 
 ## Design decisions
 
@@ -117,7 +117,8 @@ What your app must do:
 - **The window is when the attestor observed.** A fact's own time travels as a claim value, and your predicate bounds it ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
 - **Evidence binds the claim context.** Your kind's witness signs the `claimContextDigestOf` digest with its evidence and your `verify` recomputes it from the proposal, so the holder and window are fixed before the witness observes ([ADR 0011](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
 - **The nullifier hashes a secret salt your kind fixes.** Your `verify` derives `claim.salt` from the evidence and refuses any other, so a client cannot vary it to mint several claims from one observation. Derive it from something outsiders cannot guess, or the public nullifier confirms guessed values ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
-- **A `Claim` is not the contract's struct.** A `Claim` has one `present` mask over `V + W` slots; the contract carries each byte value as two 16-byte halves with a flag per half, so you convert with `toContractClaim` before handing it to a witness ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
+- **A `Claim` is not the contract's struct.** A `Claim` has one `present` mask over `V + W` slots; the contract splits it into `present` for the numeric slots and `bytePresent` for the byte slots, so you convert with `toContractClaim` before handing it to a witness ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
+- **The message signs the nullifier.** `claimToMessage` returns seven fields: the version, `V`, `W`, the nullifier and the holder. It shows no other claim field; read the claim it signs and recompute its nullifier with SHA-256. Changing the observation identity changes what every attestor signs ([ADR 0014](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0014-attestors-sign-the-nullifier.md)).
 - **`FlatMessage` is the default message type.** A kind that needs another shape gives `message()` another return type; `MessageOf<D>` carries it through the signer, key pair and attestation.
 
 ## Links

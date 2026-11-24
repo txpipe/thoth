@@ -8,9 +8,11 @@ Agent-facing guide for the Thoth monorepo. Human-oriented docs live in
 Thoth is a private N-of-M attestation system for Midnight. Three layers:
 
 - **Contract layer** — `packages/contracts` (`@thoth/contracts`): embeddable
-  Compact modules that verify N-of-M signatures over a flat signed message
-  (`attestation.compact`), count valid signatures against a pinned key vector
-  (`attestor_registry.compact`) with the stdlib `jubjubSchnorrVerify`.
+  Compact modules that verify N-of-M signatures over the claim's version,
+  layout, nullifier and holder (`attestation.compact`) and check each of the N
+  signatures against the pinned key of the registry slot it names
+  (`attestor_registry.compact`), with the stdlib `jubjubSchnorrVerify` equation
+  over a scalar-typed response.
 - **Attestor SDK** — `packages/attestor` + `packages/core`: the types and
   interfaces attestor kinds implement to provide attestation. Kinds verify
   evidence and sign a canonical claim. `packages/client` holds the dApp side
@@ -58,10 +60,12 @@ file.
   that commits to a message delegates to the kind's `message()`. Keep it that
   way.
 - **`registryIndex` is positional and app-owned.** `attestor_registry.compact`
-  verifies signatures positionally (`signatures[i]` against `keys[i]`). The slot
-  lives only on the client's `TrustedSet` member (`{ attestor, registryIndex }`,
-  bounded by the registry's `registrySize`), never on `Attestor` or
-  `AttestorDescriptor`. Never order signatures by anything other than that slot.
+  checks each signature only against the key of the slot it names
+  (`sigs[j].signature` against `keys[sigs[j].registryIndex]`), with the slots
+  strictly increasing. The slot lives only on the client's `TrustedSet` member
+  (`{ attestor, registryIndex }`, bounded by the registry's `registrySize`),
+  never on `Attestor` or `AttestorDescriptor`. Never order signatures by
+  anything other than that slot.
 
 ## Code conventions
 
@@ -76,7 +80,8 @@ file.
   - `noUnusedImports`, `noUnusedVariables`, `useErrorMessage` are errors.
   - 100-column line width, single quotes, semicolons.
 - **Compact**: `pragma language_version >= 0.22`; follow the style in
-  `packages/contracts/*.compact`; module params are uppercase (`<#K, #V, #N, #M>`).
+  `packages/contracts/*.compact`; size params are uppercase (`<#V, #W, #N, #M>`)
+  and a type param is capitalized (`<#M, Msg>`).
   A module header (`attestation.compact`, `attestor_registry.compact`) covers
   purpose, the wire layout (`attestation.compact` only) and the module
   parameters, and skips prose that restates the asserts below it. A top-level
@@ -85,9 +90,11 @@ file.
   change the wire layout freely and keep `version = 1`.
 - **The wire layout is written out in exactly two places**: the
   `attestation.compact` header (canonical, next to `buildMessage`) and the
-  table in `docs/DESIGN.md` (the reader's view). `claimToMessage`, the `#K`
-  doc, `buildMessage`'s doc and `CONTEXT.md` link to them instead of restating
-  it. A layout change edits both places in the same PR.
+  tables in `docs/DESIGN.md` (the reader's view). It covers the message and
+  the nullifier's preimage, since the attestors sign the nullifier.
+  `claimToMessage`, `nullifierOf`, `buildMessage`'s doc and `CONTEXT.md` link
+  to them instead of restating it. A layout change edits both places in the
+  same PR, and a change to the `Observation` struct is a layout change.
 - **JSDoc is the API reference** (there is no generated site): it is what
   callers see on hover and in the shipped `.d.ts`. Every export gets a summary
   sentence; interface fields and simple types can stop there. `@throws` on
@@ -170,12 +177,13 @@ READMEs don't repeat it.
 
 - Contract logic is tested with the simulator via vitest in
   `packages/contracts/test/`. The mock top-level shells
-  (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, K=20, M=3,
-  N=2 — and `MockAttestationBytes.compact` — V=3, B=2, K=24) specialize the
+  (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, W=0, M=3,
+  N=2 — and `MockAttestationBytes.compact` — V=3, W=1) specialize the
   modules so tests run against real artifacts.
-- `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
-  compiled pure circuits — never hand-roll the message encoding; use
-  `pureCircuits.message` or `@thoth/core/claim`'s `claimToMessage`.
+- `packages/contracts/test/helpers/fixtures.ts` builds signed claims over
+  `@thoth/core/claim`'s `claimToMessage`, as an attestor signs — never
+  hand-roll the message encoding. `pureCircuits.message` returns the same
+  message as the contract's struct; the parity tests hold the two equal.
 - After changing Compact sources, recompile before running tests:
   `npm run compact:no-zk` (the `pretest` hook does this automatically).
 - `packages/contracts/test/acceptance.test.ts` is the end-to-end check (zkFetch

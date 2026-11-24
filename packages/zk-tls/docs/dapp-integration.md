@@ -29,8 +29,8 @@ contract. The [package README](../README.md) explains the terms; the
   attestor caps the slot counts it accepts; check its
   [limits](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls#guarantees-and-limits)
   with its operator.
-- **`byteSlots`.** Optional: half your contract's `#B`, since the contract
-  stores each 32-byte value as two 16-byte halves. Defaults to `0`.
+- **`byteSlots`.** Optional: your contract's `#W`, the 32-byte value slot
+  count. Defaults to `0`.
 - **`provers`.** Where evidence comes from, keyed by attestor id. Each entry
   points at that attestor's own witness: `zkFetchProver({ witnessUrl })`, or any
   object with a `prove(request)` method. Every attestor in `trusted` needs an
@@ -340,18 +340,32 @@ separately if you need to.
 ## Handing it to the contract
 
 `attestment.claim` is the claim every attestor signed and `attestment.message`
-is its flat encoding; each `attestment.collected[i]` carries the
-`registryIndex` your trusted set assigned to the attestor that signed it. Place
-each signature at its slot in the contract's fixed signature vector and call
-`verifyAttestation` with the claim in the contract's shape,
-`toContractClaim(attestment.claim)`, for numeric-only claims too; the
-[wire order](../../../docs/DESIGN.md#wire-order) shows that shape.
+the seven fields they signed: its version, layout, nullifier and holder. Each
+`attestment.collected[i]` carries the
+`registryIndex` your trusted set assigned to the attestor that signed it, in
+increasing slot order. The contract takes exactly its threshold `N` of
+signatures, each tagged with its slot in that order, so collect with
+`threshold` equal to the contract's `N`. Return them from `getSignatures`,
+return the claim in the contract's shape, `toContractClaim(attestment.claim)`,
+from `getAttestationWitness`, for numeric-only claims too, and call
+`verifyAttestation`; the [wire order](../../../docs/DESIGN.md#wire-order) shows
+what the attestors signed.
 
 ```ts
-import { toContractClaim } from '@thoth/core/claim';
+import { nullifierOf, toContractClaim } from '@thoth/core/claim';
 
 // In getAttestationWitness:
 const claim = toContractClaim(attestment.claim);
+
+// To open it later in a predicate, the vault key is its nullifier. It equals
+// your contract's exported pure circuit, pureCircuits.nullifierOf(claim).
+const vaultKey = nullifierOf(attestment.claim);
+
+// In getSignatures:
+const signatures = attestment.collected.map(({ registryIndex, attestation }) => ({
+  registryIndex: BigInt(registryIndex),
+  signature: attestation.signature,
+}));
 ```
 
 See `@thoth/contracts` for the circuit and the registry wiring.

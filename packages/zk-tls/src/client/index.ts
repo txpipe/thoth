@@ -179,7 +179,7 @@ export interface ZkFetchClientConfig<V extends number, PK, S> {
   readonly appId: Uint8Array;
   /** The contract's `#V`. */
   readonly valueSlots: V;
-  /** Half the contract's `#B`: each byte value takes two halves. Defaults to `0`. */
+  /** The contract's `#W`. Defaults to `0`. */
   readonly byteSlots?: number;
   /** One evidence source per attestor id, each pointing at that attestor's own witness. */
   readonly provers: Readonly<Record<string, ZkFetchProver>>;

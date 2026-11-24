@@ -73,8 +73,9 @@ is the reference kind.
   `AttestorDefinition` from [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core);
   many instances run it.
 - [**Claim** and **message**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim):
-  the claim is what the attestor signs; the message is its flat encoding,
-  produced by the law's `message(claim)`.
+  the claim is what the attestor signs; the message encodes it, produced by
+  the law's `message(claim)`. For the standard claim it is seven fields: the
+  version, the layout, the claim's nullifier and its holder.
 - [**Attestation**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection):
   what `attest` returns: the claim, the message, the public key and the
   signature.

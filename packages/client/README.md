@@ -92,7 +92,7 @@ const collected = await resolveAttestation({
 
 - `buildTrustedSet` rejects an invalid registry size, an empty set, duplicate ids, duplicate public keys, duplicate slots and slots outside `[0, registrySize)`, so a `TrustedSet` is valid by construction. It may pin fewer attestors than the registry holds.
 - `resolveAttestation` checks that the member is in the trusted set, that the returned key is the pinned key, that the claim equals the parsed claim you asked for, that the message encodes that claim, and that the signature verifies. A verifier that throws counts as an invalid signature. It compares schema outputs and does not apply input transforms again.
-- `registryIndex` is positional and app-owned. The contract verifies `signatures[i]` against `keys[i]`, and the signed message binds no slot, registry or contract. You assign each attestor the index of its key in your deployed registry; a wrong slot is not detected here, only by the contract. Never order signatures by anything else.
+- `registryIndex` is positional and app-owned. The contract verifies each signature only against `keys[registryIndex]`, and the signed message binds no slot, registry or contract. You assign each attestor the index of its key in your deployed registry; a wrong slot is not detected here, only by the contract. The contract takes the signatures in increasing slot order; never order them by anything else.
 - The threshold and the registry are enforced by the contract, not here. This package vets one attestation at a time; the kind's client drives the fan-out and the threshold.
 - No transport is included. The kind's client or the app supplies one and decodes wire values into the typed `Attestation` before vetting.
 - Honest attestors are assumed. Vetting proves who signed, not that what they signed is true; N colluding attestors can certify a false claim (ADR 0003).
@@ -101,7 +101,7 @@ const collected = await resolveAttestation({
 
 - **Registry slots belong to the trusted set, not to the attestor.** One attestor serves many apps at different slots, so each app records the slot its own registry assigned. `resolveAttestation` takes the trusted member itself, so a result only carries a slot the set assigned, and transports see only the descriptor.
 - **Signatures are verified before collection.** A broken or malicious transport could otherwise return a forged signature with the right key and message, and the transaction would fail after submission and cost fees.
-- **The verifier is pluggable, and the main entry point imports no crypto library.** `@thoth/client/jubjub` ships the contracts' Jubjub Schnorr scheme on Compact runtime `0.21.0`, the version the contracts pin.
+- **The verifier is pluggable, and the main entry point imports no crypto library.** `@thoth/client/jubjub` ships the contracts' Jubjub Schnorr scheme on Compact runtime `0.21.0`, the version the contracts pin. It accepts exactly what the contract accepts, so it rejects a response outside the Jubjub scalar range even though the runtime's own verifier reduces it.
 - **The response carries no kind label.** The pinned definition is the kind; for zkFetch the signed policy hash commits to the law tag, policy and wire version ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
 
 ## Links
@@ -113,4 +113,4 @@ const collected = await resolveAttestation({
 - [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): `AttestorDescriptor`, `Attestation`, `AttestationInput`
 - [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor): the attestor-side `Attestor.attest` that `AttestorTransport` mirrors
 - [`@thoth/zk-tls`](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls): the zkFetch kind, a client built on this package
-- [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies the signatures positionally
+- [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies each signature against its registry slot

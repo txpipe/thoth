@@ -156,7 +156,7 @@ const claimSchemaWithin = (limits: ZkFetchLimits) => {
   >((input: unknown, context) => {
     if (typeof input !== 'object' || input === null) return input;
     // `claimSchema()` exposes no arrays to cap, so the counts are checked here,
-    // before any element is parsed: the signed message has one field per slot.
+    // before any element is parsed: every slot adds bytes the nullifier hashes.
     // The schema then parses these copies, so a getter or Proxy cannot pass the
     // count with one array and hand the parser a larger one.
     const bounded: Record<string, unknown> = { ...input };
@@ -1071,7 +1071,7 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
   holder: Uint8Array;
   /** The contract's `#V`. */
   valueSlots: V;
-  /** Half the contract's `#B`: each byte value takes two halves. Defaults to `0`. */
+  /** The contract's `#W`. Defaults to `0`. */
   byteSlots?: W;
   /** Unix seconds. */
   windowStart: bigint;

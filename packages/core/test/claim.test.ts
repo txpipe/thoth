@@ -1,14 +1,22 @@
 // Unit tests for the canonical claim shape (`@thoth/core/claim`): the schema's
-// length and numeric-bound validation, `claimToMessage`'s wire encoding
-// (per-half byte flag duplication, adjacent 16-byte halves), and
-// `toContractClaim`'s mask guard (its parity lives in the contracts tests).
-import { type Claim, claimSchema, claimToMessage, toContractClaim } from '@thoth/core/claim';
+// length and numeric-bound validation, the wire encoding (`nullifierOf`'s
+// preimage, `claimToMessage`'s fields, layout binding, every byte bound), and
+// `toContractClaim`'s split. Parity with the compiled circuits lives in the
+// contracts tests.
+import { createHash } from 'node:crypto';
+import {
+  type Claim,
+  claimSchema,
+  claimToMessage,
+  nullifierOf,
+  toContractClaim,
+} from '@thoth/core/claim';
 import { describe, expect, it } from 'vitest';
 
 const bytes32 = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
 
-// A value whose bytes differ across the 16-byte half boundary, so a swapped or
-// reversed half cannot pass the assertions below.
+// A value whose 32 bytes all differ, so a swapped or reversed byte order
+// cannot pass the assertions below.
 const fullSpan = (): Uint8Array => Uint8Array.from({ length: 32 }, (_, i) => i);
 
 // Little-endian value of a byte vector, as Compact's `convertBytesToUint` reads
@@ -157,67 +165,169 @@ describe('claimSchema numeric bounds', () => {
   });
 });
 
-describe('claimToMessage', () => {
-  it('duplicates the byte flag per half and splits each value into adjacent halves', () => {
-    const value = fullSpan();
-    const message = claimToMessage(claimSchema(3, 1).parse(byteBase));
-    // header(14) + present(3) + bytePresent(2) + values(3) + halves(2) = 24
-    expect(message).toHaveLength(14 + 2 * 3 + 2 * 2);
-    // the header's last field is the byte-half count B = 2W
-    expect(message[13]).toBe(2n);
-    // numeric flags, then the byte slot's flag once per half
-    expect(message.slice(14, 19)).toEqual([1n, 0n, 1n, 1n, 1n]);
-    expect(message.slice(19, 22)).toEqual([7n, 0n, 9n]);
-    // bytes 0–15 then bytes 16–31, each as its little-endian value; the two
-    // differ, so a swapped or reversed half would fail this.
-    const low = le(value.slice(0, 16));
-    const high = le(value.slice(16));
-    expect(low).not.toBe(high);
-    expect(message.slice(22, 24)).toEqual([low, high]);
+// The observation preimage written out from the wire layout in the
+// `attestation.compact` header, independently of the encoder: the 32-byte
+// fields, the windows as 4-byte and the values as 8-byte little-endian
+// integers, the byte values, then one flag byte per slot.
+const preimageOf = (claim: Claim<number, number>): Buffer => {
+  const integers = Buffer.alloc(8 + 8 * claim.values.length);
+  integers.writeUInt32LE(Number(claim.windowStart), 0);
+  integers.writeUInt32LE(Number(claim.windowEnd), 4);
+  claim.values.forEach((value, i) => {
+    integers.writeBigUInt64LE(value, 8 + 8 * i);
+  });
+  return Buffer.concat([
+    claim.appId,
+    claim.policyHash,
+    claim.subjectHash,
+    claim.salt,
+    integers,
+    ...claim.byteValues,
+    Buffer.from(claim.present.map(Number)),
+  ]);
+};
+
+const sha256 = (bytes: Uint8Array): Uint8Array =>
+  new Uint8Array(createHash('sha256').update(bytes).digest());
+
+// A 32-byte value's two message fields: byte 31, then bytes 0–30 little-endian.
+const limbsOf = (bytes: Uint8Array): bigint[] => [BigInt(bytes[31] ?? 0), le(bytes.slice(0, 31))];
+
+describe('nullifierOf', () => {
+  it('hashes the documented observation preimage', () => {
+    const numeric = claimSchema(3).parse(numericBase);
+    expect(preimageOf(numeric)).toHaveLength(136 + 9 * 3);
+    expect(nullifierOf(numeric)).toEqual(sha256(preimageOf(numeric)));
+    const bytes = claimSchema(3, 1).parse(byteBase);
+    expect(preimageOf(bytes)).toHaveLength(136 + 9 * 3 + 33);
+    expect(nullifierOf(bytes)).toEqual(sha256(preimageOf(bytes)));
   });
 
-  it('signs the salt in the two header fields after the holder', () => {
-    const salt = fullSpan();
-    const message = claimToMessage(claimSchema(3).parse({ ...numericBase, salt }));
-    expect(message.slice(11, 13)).toEqual([le(salt.slice(0, 16)), le(salt.slice(16))]);
+  it('pins the numeric-only nullifier against serialization drift', () => {
+    expect(Buffer.from(nullifierOf(claimSchema(3).parse(numericBase))).toString('hex')).toBe(
+      '772d284dab51211b2f772099e7ea9fd2c353db35acc09cc380a7f44b35d9c8a4',
+    );
   });
 
-  it('keeps the numeric-only layout when W = 0', () => {
-    const claim: Claim<3, 0> = claimSchema(3).parse(numericBase);
-    const message = claimToMessage(claim);
-    expect(message).toHaveLength(2 * 3 + 14);
-    expect(message.slice(13, 17)).toEqual([0n, 1n, 0n, 1n]);
-    expect(message.slice(17, 20)).toEqual([7n, 0n, 9n]);
+  it('hashes neither the holder nor the version', () => {
+    const claim = claimSchema(3, 1).parse(byteBase);
+    expect(nullifierOf({ ...claim, holder: bytes32(0x99), version: 2n })).toEqual(
+      nullifierOf(claim),
+    );
   });
 
-  it('interleaves flags and halves across two byte slots (W = 2)', () => {
-    const first = Uint8Array.from({ length: 32 }, (_, i) => i);
+  it('hashes the byte values after the numeric values, and the byte flags last', () => {
+    const first = fullSpan();
     const second = Uint8Array.from({ length: 32 }, (_, i) => 0x80 + i);
     const claim = claimSchema(2, 2).parse({
       ...numericBase,
       present: [false, true, true, false],
-      values: [0n, 0n],
+      values: [0n, 5n],
       byteValues: [first, second],
     });
-    const message = claimToMessage(claim);
-    // header(14) + present(2) + bytePresent(4) + values(2) + halves(4) = 26
-    expect(message).toHaveLength(14 + 2 * 2 + 2 * 4);
-    expect(message[13]).toBe(4n);
-    // numeric flags, then each byte slot's flag duplicated once per half
-    expect(message.slice(14, 16)).toEqual([0n, 1n]);
-    expect(message.slice(16, 20)).toEqual([1n, 1n, 0n, 0n]);
-    expect(message.slice(20, 22)).toEqual([0n, 0n]);
-    // halves in value order, each value bytes 0–15 / 16–31 as LE Uint<128>
-    expect(message.slice(22, 26)).toEqual([
-      le(first.slice(0, 16)),
-      le(first.slice(16)),
-      le(second.slice(0, 16)),
-      le(second.slice(16)),
+    const preimage = preimageOf(claim);
+    expect(preimage.subarray(-68, -4)).toEqual(Buffer.concat([first, second]));
+    expect(preimage.subarray(-4)).toEqual(Buffer.from([0, 1, 1, 0]));
+    expect(nullifierOf(claim)).toEqual(sha256(preimage));
+  });
+
+  it('rejects an integer outside its contract type instead of wrapping it', () => {
+    const claim = claimSchema(3).parse(numericBase);
+    expect(() => nullifierOf({ ...claim, values: [1n << 64n, 0n, 9n] })).toThrow(/values\[0\]/);
+    expect(() => nullifierOf({ ...claim, windowEnd: 1n << 32n })).toThrow(/windowEnd/);
+    expect(() => nullifierOf({ ...claim, windowStart: -1n })).toThrow(/windowStart/);
+  });
+
+  // V = 11, W = 0 and V = 0, W = 3 have identities of one length (136 + 99
+  // bytes): the 11 values and 8 of their flags read as 3 byte values, the
+  // other 3 flags as the byte flags. The nullifier alone cannot tell them
+  // apart, so the message signs the layout.
+  it('shares one nullifier between two layouts of one identity length', () => {
+    const values = Array.from({ length: 11 }, (_, i) => 0x0101_0101_0101_0101n * BigInt(i + 1));
+    const wide = claimSchema(11).parse({ ...numericBase, present: values.map(() => true), values });
+    const tail = Buffer.concat([
+      ...values.map((value) => {
+        const bytes = Buffer.alloc(8);
+        bytes.writeBigUInt64LE(value);
+        return bytes;
+      }),
+      Buffer.alloc(8, 1),
     ]);
+    const byteValues = [0, 1, 2].map((i) => Uint8Array.from(tail.subarray(32 * i, 32 * i + 32)));
+    const bytes = claimSchema(0, 3).parse({
+      ...numericBase,
+      present: [true, true, true],
+      values: [],
+      byteValues,
+    });
+    expect(nullifierOf(bytes)).toEqual(nullifierOf(wide));
+    const [wideMessage, bytesMessage] = [claimToMessage(wide), claimToMessage(bytes)];
+    expect(wideMessage.slice(1, 3)).toEqual([11n, 0n]);
+    expect(bytesMessage.slice(1, 3)).toEqual([0n, 3n]);
+    const withoutLayout = (message: readonly bigint[]) => [message[0], ...message.slice(3)];
+    expect(withoutLayout(wideMessage)).toEqual(withoutLayout(bytesMessage));
+  });
+});
+
+describe('claimToMessage', () => {
+  it('signs the version, the layout, the nullifier and the holder, in that order', () => {
+    const claim = claimSchema(3, 1).parse({ ...byteBase, holder: fullSpan() });
+    const message = claimToMessage(claim);
+    expect(message).toEqual([
+      1n,
+      3n,
+      1n,
+      ...limbsOf(sha256(preimageOf(claim))),
+      ...limbsOf(fullSpan()),
+    ]);
+    // Byte 31 first, then bytes 0–30, so a reversed or rotated holder fails.
+    expect(message.slice(5)).toEqual([31n, le(fullSpan().slice(0, 31))]);
+  });
+
+  it('signs W = 0 for a numeric-only claim', () => {
+    const claim: Claim<3, 0> = claimSchema(3).parse(numericBase);
+    const message = claimToMessage(claim);
+    expect(message).toHaveLength(7);
+    expect(message.slice(0, 3)).toEqual([1n, 3n, 0n]);
+  });
+
+  it('changes with every byte of every 32-byte field and every other field', () => {
+    const claim = claimSchema(3, 1).parse(byteBase);
+    const message = claimToMessage(claim);
+    for (const field of ['appId', 'policyHash', 'subjectHash', 'holder', 'salt'] as const) {
+      for (let i = 0; i < 32; i++) {
+        const bytes = claim[field].slice();
+        bytes[i] = (bytes[i] ?? 0) ^ 0x01;
+        expect(claimToMessage({ ...claim, [field]: bytes })).not.toEqual(message);
+      }
+    }
+    for (let i = 0; i < 32; i++) {
+      const bytes = fullSpan();
+      bytes[i] = (bytes[i] ?? 0) ^ 0x01;
+      expect(claimToMessage({ ...claim, byteValues: [bytes] })).not.toEqual(message);
+    }
+    for (const changed of [
+      { version: 2n },
+      { windowStart: 101n },
+      { windowEnd: 201n },
+      { values: [7n, 1n, 9n] },
+      { present: [true, true, true, true] },
+      { present: [true, false, true, false] },
+    ]) {
+      expect(claimToMessage({ ...claim, ...changed })).not.toEqual(message);
+    }
   });
 });
 
 describe('toContractClaim', () => {
+  it('splits the mask into numeric and byte flags and keeps each byte value whole', () => {
+    const value = fullSpan();
+    const contract = toContractClaim(claimSchema(3, 1).parse(byteBase));
+    expect(contract.present).toEqual([true, false, true]);
+    expect(contract.bytePresent).toEqual([true]);
+    expect(contract.byteValues).toEqual([value]);
+  });
+
   it('rejects a mask without one flag per slot', () => {
     const claim = claimSchema().parse(byteBase);
     expect(() => toContractClaim({ ...claim, present: [true] })).toThrow(

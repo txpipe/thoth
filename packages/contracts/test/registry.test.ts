@@ -2,7 +2,6 @@
 // and empty-slot pinning) and claim verification against a registry with empty
 // slots. The init guards (compile-time exposure, runtime double-init) live in
 // sealed-init.test.ts.
-import { randomBytes } from 'node:crypto';
 import {
   CompactTypeField,
   CompactTypeVector,
@@ -19,6 +18,7 @@ import {
   signClaim,
 } from './helpers/fixtures.js';
 import { createPrivateState, type PrivateState } from './helpers/private-state.js';
+import { messageOf } from './helpers/sign.js';
 import { MockAttestationSim } from './helpers/sim.js';
 
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
@@ -67,19 +67,17 @@ describe('registry init', () => {
   it('accepts a threshold claim with an empty slot', async () => {
     const sim = await MockAttestationSim.create(createPrivateState(holder), [a.pk, b.pk, empty]);
     const claim = makeClaim();
-    const signed = signClaim(claim, [a, b, null], randomBytes(32));
+    const signed = signClaim(claim, [a, b, null]);
     await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
-    expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
+    expect(sim.ledgerView().A_claimsVault.member(idOf(claim))).toBe(true);
   });
 
-  it('does not count a signature forged for the empty slot', async () => {
+  it('rejects a signature forged for the empty slot', async () => {
     const sim = await MockAttestationSim.create(createPrivateState(holder), [a.pk, b.pk, empty]);
     const claim = makeClaim();
-    const msg = pureCircuits.message(claim);
+    const msg = messageOf(claim);
     // The dummy is a valid Schnorr signature for the identity point (the
-    // empty key) off-chain, so only `slotValid`'s empty-slot skip keeps it
-    // from counting: without that skip the compiled verifier rejects the
-    // identity key and aborts instead.
+    // empty key), so only the registry's empty-slot check rejects it.
     expect(
       jubjubSchnorrVerify(
         new CompactTypeVector(msg.length, CompactTypeField),
@@ -88,7 +86,21 @@ describe('registry init', () => {
         DUMMY_SIGNATURE,
       ),
     ).toBe(true);
-    const signed = signClaim(claim, [a, null, null], randomBytes(32));
+    const signed = signClaim(claim, [a, null, null]);
+    const [first] = signed.signatures;
+    if (first === undefined) {
+      throw new Error('no signature');
+    }
+    const signatures = [first, { registryIndex: 2n, signature: DUMMY_SIGNATURE }];
+    await expect(
+      sim.call('verifyAttestation', ps({ ...signed, signatures, holderSecret: holder })),
+    ).rejects.toThrow('Empty registry slot');
+  });
+
+  it('does not count the dummy signature at a filled slot', async () => {
+    const sim = await MockAttestationSim.create(createPrivateState(holder), [a.pk, b.pk, empty]);
+    const signed = signClaim(makeClaim(), [a, null, null]);
+    expect(signed.signatures.map((s) => s.registryIndex)).toEqual([0n, 1n]);
     await expect(
       sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
     ).rejects.toThrow('Insufficient valid signatures');

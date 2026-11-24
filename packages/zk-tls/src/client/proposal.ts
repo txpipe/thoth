@@ -121,7 +121,7 @@ export const buildClaimProposal = async <V extends number>(options: {
   holder: Uint8Array;
   /** The contract's `#V`. */
   valueSlots: V;
-  /** Half the contract's `#B`. Defaults to `0`. */
+  /** The contract's `#W`. Defaults to `0`. */
   byteSlots?: number;
   /** Unix seconds. */
   windowStart: bigint;

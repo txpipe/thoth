@@ -1,8 +1,8 @@
 // Test fixtures: claims, notary keys, and seeded valid signatures over the
 // FROZEN message shape (see sign.ts). Zero-filled absent slots are the
 // canonical "not present" encoding; `present[i] = true` marks numeric slot i
-// populated and `bytePresent[j] = true` marks byte half j populated.
-import { randomBytes } from 'node:crypto';
+// populated and `bytePresent[j] = true` marks byte slot j populated.
+import { randomBytes, randomInt } from 'node:crypto';
 import {
   type JubjubPoint,
   type JubjubSchnorrSignature,
@@ -13,6 +13,7 @@ import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js
 import { pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
 import type { B_Claim } from '../../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits as bytesPureCircuits } from '../../artifacts/mock_attestation_bytes/contract/index.js';
+import type { SlotSignature } from './private-state.js';
 import { signClaim as signSingle } from './sign.js';
 
 export const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
@@ -56,20 +57,12 @@ export const padded32 = (value: string): Uint8Array => {
 /** Default byte value fixture: `"abc"` zero-padded to 32 bytes. */
 export const DEFAULT_BYTE_VALUE = padded32('abc');
 
-/** Split a 32-byte value into its two `Bytes<16>` halves, in order. */
-export const splitHalves = (value: Uint8Array): [Uint8Array, Uint8Array] => {
-  if (value.length !== 32) {
-    throw new Error(`splitHalves: expected 32 bytes, got ${value.length}`);
-  }
-  return [value.slice(0, 16), value.slice(16, 32)];
-};
-
 // Build a valid numeric-only `Claim` fixture (length 3 for this embedding);
 // `present` marks populated slots (present[i] = true means slot i was
 // measured). If any value is `0` it must still be marked present via
 // `present[i] = true`.
 export const makeClaim = (
-  overrides: Partial<Omit<A_Claim, 'values' | 'present' | 'bytePresent' | 'byteHalves'>> & {
+  overrides: Partial<Omit<A_Claim, 'values' | 'present' | 'bytePresent' | 'byteValues'>> & {
     values?: bigint[];
     present?: boolean[];
   } = {},
@@ -88,45 +81,69 @@ export const makeClaim = (
     values,
     present,
     bytePresent: [],
-    byteHalves: [],
+    byteValues: [],
     ...overrides,
   };
 };
 
+// A random claim every contract check accepts, with `byteSlots` byte slots:
+// a fresh holder secret (so a random holder commitment), salt and subject, a
+// sealed policy, a window inside the limits, and random values with random
+// presence (absent slots carry zero).
+const randomClaimOf = (byteSlots: number, holderCommitment: (secret: Uint8Array) => Uint8Array) => {
+  const secret = randomBytes(32);
+  const present = [0, 1, 2].map(() => randomInt(2) === 1);
+  const bytePresent = Array.from({ length: byteSlots }, () => randomInt(2) === 1);
+  const windowEnd = nowSeconds() - BigInt(randomInt(60));
+  return {
+    secret,
+    claim: {
+      version: 1n,
+      appId: APP_ID,
+      policyHash: ACCEPTED_POLICIES[randomInt(ACCEPTED_POLICIES.length)] ?? POLICY_A,
+      windowStart: windowEnd - BigInt(randomInt(Number(DEFAULT_MAX_WINDOW) + 1)),
+      windowEnd,
+      subjectHash: randomBytes(32),
+      holder: holderCommitment(secret),
+      salt: randomBytes(32),
+      present,
+      bytePresent,
+      values: present.map((p) => (p ? randomBytes(8).readBigUInt64LE() : 0n)),
+      byteValues: bytePresent.map((p) =>
+        p ? new Uint8Array(randomBytes(32)) : new Uint8Array(32),
+      ),
+    },
+  };
+};
+
+/** A random numeric-mock claim every check accepts, and the holder secret it binds. */
+export const randomClaim = (): { claim: A_Claim; secret: Uint8Array } =>
+  randomClaimOf(0, pureCircuits.holderCommitment);
+
+/** A random bytes-mock claim every check accepts, and the holder secret it binds. */
+export const randomByteClaim = (): { claim: B_Claim; secret: Uint8Array } =>
+  randomClaimOf(1, bytesPureCircuits.holderCommitment);
+
 // Build a valid one-byte-value `Claim` fixture for the bytes mock (V = 3,
-// B = 2). The byte flag covers both halves, matching the attestor law.
+// W = 1).
 export const makeByteClaim = ({
   byteValue = DEFAULT_BYTE_VALUE,
   ...overrides
-}: Partial<B_Claim> & { byteValue?: Uint8Array } = {}): B_Claim => {
-  const [low, high] = splitHalves(byteValue);
-  return {
-    version: 1n,
-    appId: APP_ID,
-    policyHash: POLICY_A,
-    windowStart: nowSeconds() - 10n,
-    windowEnd: nowSeconds(),
-    subjectHash: randomBytes(32),
-    holder: bytesPureCircuits.holderCommitment(DEFAULT_HOLDER_SECRET),
-    salt: randomBytes(32),
-    present: [true, false, false],
-    bytePresent: [true, true],
-    values: [12345n, 0n, 0n],
-    byteHalves: [low, high],
-    ...overrides,
-  };
-};
-
-/** Reassemble a `Bytes<32>` value from two `Bytes<16>` halves. */
-export const mergeHalves = (low: Uint8Array | undefined, high: Uint8Array | undefined) => {
-  if (!low || !high) {
-    throw new Error('mergeHalves: missing a half');
-  }
-  const value = new Uint8Array(low.length + high.length);
-  value.set(low, 0);
-  value.set(high, low.length);
-  return value;
-};
+}: Partial<B_Claim> & { byteValue?: Uint8Array } = {}): B_Claim => ({
+  version: 1n,
+  appId: APP_ID,
+  policyHash: POLICY_A,
+  windowStart: nowSeconds() - 10n,
+  windowEnd: nowSeconds(),
+  subjectHash: randomBytes(32),
+  holder: bytesPureCircuits.holderCommitment(DEFAULT_HOLDER_SECRET),
+  salt: randomBytes(32),
+  present: [true, false, false],
+  bytePresent: [true],
+  values: [12345n, 0n, 0n],
+  byteValues: [byteValue],
+  ...overrides,
+});
 
 // A copy of `bytes` with byte `i` inverted. Throws on an out-of-range index,
 // which a typed array would otherwise ignore, leaving the copy unchanged.
@@ -140,36 +157,56 @@ export const flip = (bytes: Uint8Array, i: number): Uint8Array => {
   return copy;
 };
 
+/** Both mocks' threshold `#N`: `getSignatures` returns exactly this many entries. */
+export const THRESHOLD = 2;
+
 export type SignedClaim = {
   claim: A_Claim;
-  signatures: JubjubSchnorrSignature[]; // valid sigs for the keys given; absent slot = dummy (never verifies)
-  commitRand: Uint8Array;
+  signatures: SlotSignature[];
 };
 
-// Dummy signature for an empty slot: identity announcement, zero response —
-// it can never verify against a non-empty registry slot.
+// Dummy signature: identity announcement, zero response. It verifies only
+// against the empty key, and the registry rejects an empty slot before
+// verifying.
 export const DUMMY_SIGNATURE: JubjubSchnorrSignature = {
   announcement: { x: 0n, y: 1n },
   response: 0n,
 };
 
-// Sign a claim with the given notary keys. A `null` key yields the dummy
-// signature, which never verifies.
-export const signClaim = (
-  claim: A_Claim,
-  keys: readonly (NotaryKey | null)[],
-  commitRand: Uint8Array,
-): SignedClaim => {
-  const signatures: JubjubSchnorrSignature[] = keys.map((key) =>
-    key === null ? DUMMY_SIGNATURE : signSingle(key.sk, claim).signature,
+/**
+ * Lay out signatures held by registry slot (index = slot, `null` = that slot
+ * did not sign) as the `getSignatures` witness: the first {@link THRESHOLD}
+ * signed slots in increasing order. A set short of the threshold is padded with
+ * the dummy at the lowest unsigned slots, as a prover short of signatures would
+ * try.
+ */
+export const bySlot = (signatures: readonly (JubjubSchnorrSignature | null)[]): SlotSignature[] => {
+  const signed = signatures.flatMap((signature, slot) =>
+    signature === null ? [] : [{ registryIndex: BigInt(slot), signature }],
   );
-  return { claim, signatures, commitRand };
+  const padding = signatures
+    .flatMap((signature, slot) =>
+      signature === null ? [{ registryIndex: BigInt(slot), signature: DUMMY_SIGNATURE }] : [],
+    )
+    .slice(0, Math.max(0, THRESHOLD - signed.length));
+  return [...signed.slice(0, THRESHOLD), ...padding].sort((a, b) =>
+    a.registryIndex < b.registryIndex ? -1 : 1,
+  );
 };
 
-export const idOf = (claim: A_Claim, rand: Uint8Array): Uint8Array =>
-  pureCircuits.computeId(claim, rand);
+// Sign a claim with the notary key held at each registry slot; a `null` key
+// leaves that slot unsigned. See `bySlot` for the witness layout.
+export const signClaim = (claim: A_Claim, keys: readonly (NotaryKey | null)[]): SignedClaim => ({
+  claim,
+  signatures: bySlot(
+    keys.map((key) => (key === null ? null : signSingle(key.sk, claim).signature)),
+  ),
+});
 
-export const bytesIdOf = (claim: B_Claim, rand: Uint8Array): Uint8Array =>
-  bytesPureCircuits.computeId(claim, rand);
+/** The vault key of a claim: its nullifier. */
+export const idOf = (claim: A_Claim): Uint8Array => pureCircuits.nullifierOf(claim);
+
+/** The vault key of a bytes-mock claim: its nullifier. */
+export const bytesIdOf = (claim: B_Claim): Uint8Array => bytesPureCircuits.nullifierOf(claim);
 
 export const holderOf = (secret: Uint8Array): bigint => pureCircuits.holderOf(secret);

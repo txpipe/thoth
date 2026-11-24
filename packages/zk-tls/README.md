@@ -191,6 +191,6 @@ AGPL-3.0-only: this package links Reclaim Protocol's [attestor-core](https://git
 - [`@thoth/core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): the claim, `claimToMessage` and `holderCommitmentOf`
 - [`@thoth/attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor): `KeyPair`, `Attestor`, `buildAttestor`
 - [`@thoth/client`](https://github.com/txpipe-shop/thoth/tree/main/packages/client): `buildTrustedSet`, the transport, `resolveAttestation`
-- [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies the signatures positionally
+- [`@thoth/contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies each signature against its registry slot
 - [Reclaim attestor-core](https://github.com/reclaimprotocol/attestor-core): the witness this kind verifies
 - [Reclaim zkFetch](https://github.com/reclaimprotocol/zk-fetch): the hosted-witness client; see the dApp guide's [hosted adapter](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/docs/dapp-integration.md#reclaims-hosted-zkfetch-sdk)

@@ -1,12 +1,13 @@
 // Off-chain Jubjub-Schnorr signing via the runtime's `jubjubSchnorrSign`, the
-// counterpart of the stdlib `jubjubSchnorrVerify` the registry counts with.
-// Both hash (R, pk, msg) identically and reduce the challenge mod the Jubjub
-// order. The simulator tests exercise this end to end.
+// counterpart of the registry's Schnorr check (`verifySignature`). Both hash
+// (R, pk, msg) identically and reduce the challenge mod the Jubjub order. The
+// simulator tests exercise this end to end.
 //
-// The message is computed with the contract's own compiled pure circuit
-// (`pureCircuits.message`), or supplied directly (e.g. from
-// `@thoth/core/claim`'s `claimToMessage`) — never a hand-rolled encoding — so
-// a signature produced here must verify in-circuit.
+// A claim is signed over `@thoth/core/claim`'s `claimToMessage`, the seven
+// fields an attestor signs — never a hand-rolled encoding. The contract's
+// `buildMessage` returns the same message as a struct, which the registry's
+// challenge absorbs as those seven fields, so a signature produced here must
+// verify in-circuit.
 import {
   CompactTypeField,
   CompactTypeVector,
@@ -15,14 +16,15 @@ import {
   jubjubSchnorrSign,
   jubjubSchnorrVerifyingKey,
 } from '@midnight-ntwrk/compact-runtime';
-import { type A_Claim, pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
+import { type Claim, claimToMessage } from '@thoth/core/claim';
+import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js';
+import type { B_Claim } from '../../artifacts/mock_attestation_bytes/contract/index.js';
 
 /**
  * Sign an arbitrary flat message with the given secret key.
  *
  * The message is used as-is (not re-derived from a claim), so callers can sign
- * a message produced by `claimToMessage` (the off-chain encoder) and verify it
- * against the contract's own `buildMessage`.
+ * a message the contract must reject, such as one for another layout.
  *
  * @param sk — the Jubjub scalar signing key.
  * @param msg — the flat message to commit to.
@@ -36,8 +38,19 @@ export const signMessage = (
   signature: jubjubSchnorrSign(new CompactTypeVector(msg.length, CompactTypeField), [...msg], sk),
 });
 
+/**
+ * A mock's contract claim as the kind-facing core claim: one `present` mask,
+ * the numeric slots' flags, then the byte slots'.
+ */
+export const coreOf = (claim: A_Claim | B_Claim): Claim<number, number> => ({
+  ...claim,
+  present: [...claim.present, ...claim.bytePresent],
+});
+
+/** The message an attestor signs for a mock's contract claim. */
+export const messageOf = (claim: A_Claim | B_Claim): bigint[] => [...claimToMessage(coreOf(claim))];
+
 export const signClaim = (
   sk: bigint,
-  claim: A_Claim,
-): { pk: JubjubPoint; signature: JubjubSchnorrSignature } =>
-  signMessage(sk, pureCircuits.message(claim));
+  claim: A_Claim | B_Claim,
+): { pk: JubjubPoint; signature: JubjubSchnorrSignature } => signMessage(sk, messageOf(claim));

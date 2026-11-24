@@ -45,12 +45,9 @@ const CLAIM_CONTEXT_TAG = 'thoth:claim-context';
 
 const HASH_BYTES = 32;
 
-// Zero-padded like the circuit's `pad(32, …)`, so the hash matches in-circuit.
-const HOLDER_COMMITMENT_TAG = (() => {
-  const tag = new Uint8Array(HASH_BYTES);
-  tag.set(new TextEncoder().encode('thoth:holder-commitment:v1'));
-  return tag;
-})();
+// The circuit's `pad(22, …)` tag. 22 tag bytes and the 32-byte secret make a
+// 54-byte preimage, which fits one SHA-256 block in-circuit.
+const HOLDER_COMMITMENT_TAG = new TextEncoder().encode('thoth:holder-commit:v1');
 
 /**
  * Serialize a value canonically: JSON with object keys sorted by UTF-16 code
@@ -145,20 +142,21 @@ export function subjectHashOf(fields: readonly Uint8Array[]): Uint8Array {
 /**
  * Derive the per-claim holder commitment from a holder secret.
  *
- * Equals the circuit's `holderCommitment(secret)`:
- * `persistentHash<Vector<2, Bytes<32>>>([pad(32, 'thoth:holder-commitment:v1'), secret])`.
- * The tag keeps it apart from the vault pseudonym the contract derives from
- * the same secret. Use a fresh secret per claim (ADR 0004).
+ * Equals the circuit's `holderCommitment(secret)`: SHA-256 of the 22-byte tag
+ * `thoth:holder-commit:v1` followed by the secret, which is the circuit's
+ * `persistentHash` of that struct. It is unrelated to the vault pseudonym the
+ * contract derives from the same secret. Use a fresh secret per claim
+ * (ADR 0004).
  *
  * @param secret — 32 bytes.
  * @throws if the secret is not 32 bytes.
  */
 export function holderCommitmentOf(secret: Uint8Array): Uint8Array {
   assertHashBytes('holder secret', secret);
-  return persistentHash(new CompactTypeVector(2, new CompactTypeBytes(HASH_BYTES)), [
-    HOLDER_COMMITMENT_TAG,
-    secret,
-  ]);
+  const preimage = new Uint8Array(HOLDER_COMMITMENT_TAG.length + HASH_BYTES);
+  preimage.set(HOLDER_COMMITMENT_TAG);
+  preimage.set(secret, HOLDER_COMMITMENT_TAG.length);
+  return new Uint8Array(createHash('sha256').update(preimage).digest());
 }
 
 /**

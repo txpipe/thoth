@@ -1,28 +1,26 @@
-// Test mock: the modules at V=3, B=2 (one byte value), K=24, 2-of-3, with the
-// pure circuits and byte-value predicates the simulator tests read.
+// Test mock: the modules at V=3, W=1 (one byte value), 2-of-3, with the pure
+// circuits and byte-value predicates the simulator tests read.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=24 msg fields  V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
-import "../../attestation"<24, 3, 2, 2, 3> prefix B_;
+//           V=3 values  W=1 byte value  N=2 threshold  M=3 registry slots
+import "../../attestation"<3, 1, 2, 3> prefix B_;
 
-import "../../attestor_registry"<3, 24> prefix R_;
+// The registry instance the attestation module embeds: same slot count, and
+// the module's signed message type.
+import "../../attestor_registry"<3, B_SignedMessage> prefix R_;
 
-export { B_Claim, B_ClaimEntry };
+export { B_Claim, B_ClaimEntry, B_Observation, B_SignedMessage };
 
-export { B_appId, B_freshnessWindow, B_maxWindow, B_policyHashes, B_claimsVault, B_nullifiers };
+export { B_appId, B_freshnessWindow, B_maxWindow, B_policyHashes, B_claimsVault };
 
 export circuit verifyAttestation(): [] {
   B_verifyAttestation();
 }
 
-export pure circuit message(a: B_Claim): Vector<24, Field> {
+export pure circuit message(a: B_Claim): B_SignedMessage {
   return B_buildMessage(a);
-}
-
-export pure circuit computeId(a: B_Claim, rand: Bytes<32>): Bytes<32> {
-  return B_computeId(a, rand);
 }
 
 export pure circuit nullifierOf(a: B_Claim): Bytes<32> {
@@ -41,11 +39,10 @@ export pure circuit keysDistinct(ks: Vector<3, JubjubPoint>): Boolean {
   return R_keysDistinct(ks);
 }
 
-// App-predicate demo: reassemble byte value 0 from its two halves and compare
-// it to a caller-supplied Bytes<32>.
+// App-predicate demo: compare byte value 0 to a caller-supplied Bytes<32>.
 export circuit openAndReadBytes(id: Bytes<32>, expected: Bytes<32>): [] {
   const c = B_openClaim(id);
-  assert(Bytes[...c.byteHalves[0], ...c.byteHalves[1]] == expected, "byteValue[0] mismatch");
+  assert(c.byteValues[0] == expected, "byteValue[0] mismatch");
 }
 
 witness seedAppId(): Bytes<32>;

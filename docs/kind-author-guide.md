@@ -93,8 +93,11 @@ let it drive a policy decision.
 ## 5. The claim
 
 Use the canonical claim: `claimSchema(V, W)` for the schema and
-`claimToMessage` for `message` (omit `W` for a numeric-only kind). Your kind
-decides only the header fields that come from the evidence and the values:
+`claimToMessage` for `message` (omit `W` for a numeric-only kind).
+`claimToMessage` returns seven fields: the version, `V`, `W`, the claim's
+nullifier (`nullifierOf`, the SHA-256 of every other claim field) and its
+holder, so a signature covers every claim field (ADR 0014). Your kind decides
+only the header fields that come from the evidence and the values:
 
 - `policyHash` is your policy hash and `subjectHash` is your subject hash.
 - `windowStart` and `windowEnd` are the window the client proposed. Sign it
@@ -111,11 +114,11 @@ decides only the header fields that come from the evidence and the values:
   byte slot. The policy's byte rule canonicalizes a disclosed string into the
   32-byte slot, zero-padding shorter values; a value that does not fit is not
   certifiable and its slot stays unpresent. Your claim carries one flag per
-  byte slot (`present[V + i]`); the message and the contract use the split
-  shape in the [wire order](DESIGN.md#wire-order). So a dApp returns
-  `toContractClaim(claim)` (from `@thoth/core/claim`) from
+  byte slot (`present[V + i]`); the contract splits the mask into `present` and
+  `bytePresent`, as the [wire order](DESIGN.md#wire-order) shows. So a dApp
+  returns `toContractClaim(claim)` (from `@thoth/core/claim`) from
   `getAttestationWitness`, never your claim itself, even with `W = 0`, whose
-  empty `bytePresent`/`byteHalves` the contract still requires.
+  empty `bytePresent`/`byteValues` the contract still requires.
 - `appId` and `holder` come from the claim proposal. The contract checks
   `holder` against the caller's secret and `appId` against the app id it
   seals.
@@ -139,7 +142,7 @@ decides only the header fields that come from the evidence and the values:
   ledger, so a new fetch under a fresh holder gets a new nullifier.
 
 The claim does not commit to the evidence (ADR 0007). Everything the contract
-or app must rely on has to be a field of the signed message.
+or app must rely on has to be a field of the claim the message signs.
 
 ## 6. The definition
 
@@ -165,7 +168,10 @@ definition, as `createZkFetchDefinition({ witnessAddress })` does. Then `verify`
 checks them, so an operator who pairs the definition with `buildAttestor` keeps
 them.
 
-`message` is `claimToMessage(claim)`. A kind that needs a different message
+`message` is `claimToMessage(claim)`. The message is hashes, not readable
+fields: to show a person what an attestor signs, show the claim and its
+`nullifierOf`, which anyone recomputes with standard SHA-256 from the
+[wire layout](DESIGN.md#wire-order). A kind that needs a different message
 shape can return another type, but then it needs its own contract module.
 
 ## 7. The instance
@@ -176,7 +182,7 @@ In your `attest`:
 - parse every input with the definition's schemas, capped to the instance's
   input limits. The attestor serves untrusted callers, so cap every array and
   string before any element is parsed, or a request with millions of slots
-  costs you a message with millions of fields. zkFetch takes the operator's
+  costs you a claim with millions of values to parse and hash. zkFetch takes the operator's
   `limits` and parses with `zkFetchSchemasWithin(limits)`;
 - run `definition.verify`;
 - derive the claim yourself from the verified evidence and sign that, not the
@@ -193,7 +199,7 @@ parsed proposal to stay short; a real kind signs the claim it derived, as
 The instance has no registry slot
 ([why](../packages/attestor/README.md#design-decisions)) and no fixed slot
 counts, so one instance and signing key can serve apps with different claim
-layouts. Each consuming contract enforces its own fixed `#V` and `#B`.
+layouts. Each consuming contract enforces its own fixed `#V` and `#W`.
 
 Infer the requested counts from `claim.values.length` and
 `claim.byteValues.length`, as `zkFetchAttestor` does. Derive the authoritative
@@ -213,8 +219,10 @@ The client runs on the user's machine and builds on `@thoth/client` (see its
 - Derive the expected claim from the evidence yourself. Then vet every reply
   with `resolveAttestation({ trusted, member, attestation, verifier,
   expectedClaim })`, using `jubjubVerifier` from `@thoth/client/jubjub`.
-- Group the replies by exact message. Place each signature at its member's
-  `registryIndex`, never by reply order.
+- Group the replies by exact message. Tag each signature with its member's
+  `registryIndex` and return the threshold set in increasing slot order, never
+  in reply order: the contract checks each signature against the slot it
+  names.
 - Keep request secrets on the user's machine. The attestors see evidence, not
   credentials.
 

@@ -27,17 +27,8 @@ import { disclosureRules } from '../../zk-tls/test/helpers/helper.js';
 import { testWitness } from '../../zk-tls/test/helpers/witness.js';
 import type { B_Claim } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
-import {
-  APP_ID,
-  bytesIdOf,
-  DUMMY_SIGNATURE,
-  flip,
-  makeNotaryKey,
-  POLICY_B,
-  padded32,
-  splitHalves,
-} from './helpers/fixtures.js';
-import { createPrivateState } from './helpers/private-state.js';
+import { APP_ID, bytesIdOf, flip, makeNotaryKey, POLICY_B, padded32 } from './helpers/fixtures.js';
+import { createPrivateState, type SlotSignature } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
 import { MockAttestationBytesSim } from './helpers/sim.js';
 
@@ -83,7 +74,7 @@ const registryKeys = [...attestors.map((attestor) => attestor.publicKey), makeNo
 
 const holderSecret = randomBytes(32);
 
-type Submission = { claim: B_Claim; signatures: JubjubSchnorrSignature[]; commitRand: Uint8Array };
+type Submission = { claim: B_Claim; signatures: SlotSignature[] };
 
 /** The evidence each attestor's witness signed for the honest holder, by attestor id. */
 const honestEvidence: Record<string, ZkFetchEvidence> = {};
@@ -126,8 +117,8 @@ const collectOptions = (secret: Uint8Array) => ({
   attestorTimeoutMs: 5_000,
 });
 
-// Collect the honest threshold set through the zkFetch client and lay its
-// signatures out at their registry slots, the dummy filling the unqueried one.
+// Collect the honest threshold set through the zkFetch client and tag each
+// signature with its registry slot. The client returns the set in slot order.
 const collectSubmission = async (): Promise<Submission> => {
   const client = clientWith(
     Object.fromEntries(
@@ -155,12 +146,11 @@ const collectSubmission = async (): Promise<Submission> => {
   );
   const { claim, collected } = await client.collect(request, collectOptions(holderSecret));
   honestClaim = claim;
-  const signatures = registryKeys.map(
-    (_, slot) =>
-      collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
-      DUMMY_SIGNATURE,
-  );
-  return { claim: toContractClaim(claim), signatures, commitRand: randomBytes(32) };
+  const signatures = collected.map((entry) => ({
+    registryIndex: BigInt(entry.registryIndex),
+    signature: entry.attestation.signature,
+  }));
+  return { claim: toContractClaim(claim), signatures };
 };
 
 // A fresh ledger that seals the app id and the policy the attestors enforced,
@@ -194,11 +184,11 @@ describe('cross-seam acceptance', () => {
       windowStart: BigInt(OBSERVED_AT),
       windowEnd: WINDOW_END,
       present: [true, false, false],
-      bytePresent: [true, true],
+      bytePresent: [true],
       values: [42n, 0n, 0n],
-      byteHalves: splitHalves(padded32(OWNER)),
+      byteValues: [padded32(OWNER)],
     });
-    expect(honest.signatures[2]).toBe(DUMMY_SIGNATURE);
+    expect(honest.signatures.map((entry) => entry.registryIndex)).toEqual([0n, 1n]);
   });
 
   it('has every attestor sign the claim context digest the witnesses signed as the salt', () => {
@@ -215,9 +205,7 @@ describe('cross-seam acceptance', () => {
   it('accepts the honest claim end to end', async () => {
     const sim = await freshLedger();
     await submit(sim, honest);
-    expect(sim.ledgerView().B_claimsVault.member(bytesIdOf(honest.claim, honest.commitRand))).toBe(
-      true,
-    );
+    expect(sim.ledgerView().B_claimsVault.member(bytesIdOf(honest.claim))).toBe(true);
   });
 
   const otherSecret = randomBytes(32);
@@ -246,16 +234,13 @@ describe('cross-seam acceptance', () => {
     },
     {
       name: 'the byte presence mask',
-      mutate: (c: B_Claim) => ({ ...c, bytePresent: [true, false] }),
+      mutate: (c: B_Claim) => ({ ...c, bytePresent: [false] }),
     },
     {
       name: 'the byte value',
       mutate: (c: B_Claim) => ({
         ...c,
-        byteHalves: [
-          flip(c.byteHalves[0] ?? new Uint8Array(16), 0),
-          c.byteHalves[1] ?? new Uint8Array(16),
-        ],
+        byteValues: [flip(c.byteValues[0] ?? new Uint8Array(32), 0)],
       }),
     },
     // POLICY_B is sealed too, so only the signatures can reject it.

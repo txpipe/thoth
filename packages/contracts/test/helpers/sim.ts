@@ -8,7 +8,6 @@ import {
   dummyContractAddress,
   type Effects,
   type JubjubPoint,
-  type JubjubSchnorrSignature,
   type StateValue,
 } from '@midnight-ntwrk/compact-runtime';
 import {
@@ -23,7 +22,7 @@ import {
   type Ledger as BytesLedger,
   ledger as bytesLedger,
 } from '../../artifacts/mock_attestation_bytes/contract/index.js';
-import type { PrivateState } from './private-state.js';
+import type { PrivateState, SlotSignature } from './private-state.js';
 import { type DeploySeals, makeWitnesses } from './witnesses.js';
 
 const ADDR = dummyContractAddress();
@@ -47,7 +46,7 @@ type ContractLike<PS> = {
  * @param options — how to construct the artifact's contract and read its ledger.
  * @returns a class whose `create` deploys the mock and whose `call` runs circuits.
  */
-const makeSimClass = <PS extends { signatures: JubjubSchnorrSignature[] }, L>(options: {
+const makeSimClass = <PS extends { signatures: SlotSignature[] }, L>(options: {
   newContract: (
     privateState: PS,
     registryKeys: JubjubPoint[],
@@ -60,7 +59,7 @@ const makeSimClass = <PS extends { signatures: JubjubSchnorrSignature[] }, L>(op
     // Internal simulator bookkeeping (kept public so the factory's class type
     // can be exported; tests should use effects()/lastSignatures()).
     lastEffects: Effects | null = null;
-    lastSigs: JubjubSchnorrSignature[] | null = null;
+    lastSigs: SlotSignature[] | null = null;
 
     // Block-time override (seconds). Leave null to use the runtime default;
     // set it (e.g. to the claim window ± offsets) to test the window checks.
@@ -118,7 +117,7 @@ const makeSimClass = <PS extends { signatures: JubjubSchnorrSignature[] }, L>(op
       return this.lastEffects;
     }
 
-    lastSignatures(): JubjubSchnorrSignature[] {
+    lastSignatures(): SlotSignature[] {
       if (!this.lastSigs) {
         throw new Error('no circuit call executed yet');
       }

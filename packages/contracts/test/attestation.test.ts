@@ -1,6 +1,6 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
+import type { A_Claim, A_SignedMessage } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import {
   ACCEPTED_POLICIES,
@@ -17,6 +17,7 @@ import {
   UNSEALED_POLICY,
 } from './helpers/fixtures.js';
 import { createPrivateState, type PrivateState } from './helpers/private-state.js';
+import { messageOf } from './helpers/sign.js';
 import { MockAttestationSim } from './helpers/sim.js';
 
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
@@ -36,50 +37,78 @@ describe('mock attestation', () => {
   });
 
   describe('buildMessage (frozen wire shape)', () => {
-    it('returns exactly K=20 fields in the frozen order', () => {
-      const claim = makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] });
-      const msg = pureCircuits.message(claim);
-      expect(msg).toHaveLength(20);
-      // [version, appId0, appId1, policyHash0, policyHash1, windowStart, windowEnd,
-      //  subjectHash0, subjectHash1, holder0, holder1, salt0, salt1, B, p0, p1, p2, v0, v1, v2]
-      // APP_ID is 32 × 0xa1 and POLICY_A 32 × 0xb1, so each half repeats the byte.
-      const half = (byte: string): bigint => BigInt(`0x${byte.repeat(16)}`);
-      expect(msg.slice(0, 7)).toEqual([
-        1n,
-        half('a1'),
-        half('a1'),
-        half('b1'),
-        half('b1'),
-        claim.windowStart,
-        claim.windowEnd,
+    // The observation preimage and the seven message fields the
+    // `attestation.compact` header lists, built here from the documented
+    // layout, independently of both encoders.
+    const le = (bytes: Uint8Array): bigint =>
+      bytes.reduceRight((acc, byte) => (acc << 8n) | BigInt(byte), 0n);
+    const limbsOf = (bytes: Uint8Array): bigint[] => [
+      BigInt(bytes[31] ?? 0),
+      le(bytes.slice(0, 31)),
+    ];
+    const documentedNullifier = (c: A_Claim): Uint8Array => {
+      const integers = Buffer.alloc(8 + 8 * c.values.length);
+      integers.writeUInt32LE(Number(c.windowStart), 0);
+      integers.writeUInt32LE(Number(c.windowEnd), 4);
+      c.values.forEach((value, i) => {
+        integers.writeBigUInt64LE(value, 8 + 8 * i);
+      });
+      const preimage = Buffer.concat([
+        c.appId,
+        c.policyHash,
+        c.subjectHash,
+        c.salt,
+        integers,
+        Buffer.from(c.present.map(Number)),
       ]);
-      // B = 0: the numeric-only layout signs a zero byte-half count.
-      expect(msg.slice(13)).toEqual([0n, 1n, 1n, 1n, 100n, 200n, 300n]);
+      expect(preimage).toHaveLength(136 + 9 * 3);
+      return new Uint8Array(createHash('sha256').update(preimage).digest());
+    };
+    const flatten = (m: A_SignedMessage): bigint[] => [
+      m.version,
+      m.v,
+      m.w,
+      ...limbsOf(m.nullifier),
+      ...limbsOf(m.holder),
+    ];
+
+    it('is the version, the layout, the documented nullifier and the holder', () => {
+      const claim = makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] });
+      expect(pureCircuits.message(claim)).toEqual({
+        version: 1n,
+        v: 3n,
+        w: 0n,
+        nullifier: documentedNullifier(claim),
+        holder: claim.holder,
+      });
     });
 
-    it('pins each 16-byte half to its slot (little-endian)', () => {
-      const subjectHash = new Uint8Array(32);
-      subjectHash[0] = 1;
-      subjectHash[16] = 2;
-      const msg = pureCircuits.message(makeClaim({ subjectHash }));
-      expect(msg.slice(7, 9)).toEqual([1n, 2n]);
+    it('flattens to the seven fields an attestor signs', () => {
+      for (const claim of [
+        makeClaim(),
+        makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] }),
+        makeClaim({ holder: Uint8Array.from({ length: 32 }, (_, i) => i) }),
+      ]) {
+        const fields = flatten(pureCircuits.message(claim));
+        expect(fields).toHaveLength(7);
+        expect(fields).toEqual(messageOf(claim));
+      }
     });
 
-    it('pins every holder byte to its two signed header slots', () => {
+    it('signs each 32-byte value as byte 31, then bytes 0–30 little-endian', () => {
       const holder = new Uint8Array(32);
       holder[0] = 3;
-      holder[15] = 4;
-      holder[16] = 5;
+      holder[30] = 4;
       holder[31] = 6;
-      const msg = pureCircuits.message(makeClaim({ holder }));
-      expect(msg.slice(9, 11)).toEqual([3n + (4n << 120n), 5n + (6n << 120n)]);
+      expect(messageOf(makeClaim({ holder })).slice(5)).toEqual([6n, 3n + (4n << 240n)]);
     });
 
-    it('signs the salt in the two header slots after the holder', () => {
-      const salt = new Uint8Array(32);
-      salt[0] = 7;
-      salt[16] = 8;
-      expect(pureCircuits.message(makeClaim({ salt })).slice(11, 13)).toEqual([7n, 8n]);
+    it('signs the nullifier the contract vaults the claim under', async () => {
+      const claim = makeClaim();
+      const signed = signClaim(claim, notaryKeys);
+      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+      const keys = [...sim.ledgerView().A_claimsVault].map(([key]) => key);
+      expect(keys).toEqual([pureCircuits.message(claim).nullifier]);
     });
 
     it('distinguishes the window start from the window end', () => {
@@ -100,11 +129,22 @@ describe('mock attestation', () => {
       }
     });
 
+    it('distinguishes a change to the version, any value or any flag', () => {
+      const claim = makeClaim({ values: [1n, 2n, 3n], present: [true, true, true] });
+      const msg = pureCircuits.message(claim);
+      expect(pureCircuits.message({ ...claim, version: 2n })).not.toEqual(msg);
+      for (let slot = 0; slot < 3; slot++) {
+        const values = claim.values.map((value, i) => (i === slot ? value ^ (1n << 63n) : value));
+        const present = claim.present.map((flag, i) => (i === slot ? !flag : flag));
+        expect(pureCircuits.message({ ...claim, values })).not.toEqual(msg);
+        expect(pureCircuits.message({ ...claim, present })).not.toEqual(msg);
+      }
+    });
+
     it('distinguishes absent (present all false) from a genuine 0 value', () => {
       const absent = makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] });
       const presentZero = makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] });
       expect(pureCircuits.message(absent)).not.toEqual(pureCircuits.message(presentZero));
-      expect(pureCircuits.message(presentZero)[14]).toBe(1n);
     });
   });
 
@@ -113,7 +153,7 @@ describe('mock attestation', () => {
       const values = [0n, 0n, 0n];
       values[slot] = 1n;
       const claim = makeClaim({ values, present: [false, false, false] });
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const signed = signClaim(claim, notaryKeys);
       await expect(sim.call('verifyAttestation', ps(signed))).rejects.toThrow(
         'Absent slot has nonzero value',
       );
@@ -121,7 +161,7 @@ describe('mock attestation', () => {
 
     it('rejects a caller who does not know the signed holder secret', async () => {
       const claim = makeClaim();
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const signed = signClaim(claim, notaryKeys);
       await expect(
         sim.call('verifyAttestation', ps({ ...signed, holderSecret: randomBytes(32) })),
       ).rejects.toThrow('Holder mismatch');
@@ -130,19 +170,19 @@ describe('mock attestation', () => {
     it('accepts a claim bound to a fresh caller secret', async () => {
       const secret = randomBytes(32);
       const claim = makeClaim({ holder: pureCircuits.holderCommitment(secret) });
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const signed = signClaim(claim, notaryKeys);
       await sim.call('verifyAttestation', ps({ ...signed, holderSecret: secret }));
       await sim.call(
         'openAndRead',
         ps({ ...signed, holderSecret: secret }),
-        idOf(claim, signed.commitRand),
+        idOf(claim),
         12345n,
         0n,
       );
     });
 
     it('rejects replacing the signed holder even when the new caller knows its secret', async () => {
-      const signed = signClaim(makeClaim(), notaryKeys, randomBytes(32));
+      const signed = signClaim(makeClaim(), notaryKeys);
       const secret = randomBytes(32);
       const claim = { ...signed.claim, holder: pureCircuits.holderCommitment(secret) };
       await expect(
@@ -152,29 +192,41 @@ describe('mock attestation', () => {
 
     it('accepts 2-of-3 valid signatures (threshold N=2)', async () => {
       const claim = makeClaim();
-      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
+      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null]);
       await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
-      expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
+      expect(sim.ledgerView().A_claimsVault.member(idOf(claim))).toBe(true);
     });
 
     it('rejects valid signatures made over a different message', async () => {
       const claim = makeClaim();
-      const other = signClaim(makeClaim(), notaryKeys, randomBytes(32));
+      const other = signClaim(makeClaim(), notaryKeys);
       await expect(
         sim.call('verifyAttestation', ps({ ...other, claim, holderSecret: holder })),
       ).rejects.toThrow('Insufficient valid signatures');
     });
 
-    it('accepts 3-of-3 valid signatures', async () => {
+    it.each([
+      [0, 2],
+      [1, 2],
+    ])('accepts the threshold from slots %i and %i', async (first, second) => {
       const claim = makeClaim();
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const keys = notaryKeys.map((key, slot) => (slot === first || slot === second ? key : null));
+      const signed = signClaim(claim, keys);
       await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
-      expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
+      expect(sim.ledgerView().A_claimsVault.member(idOf(claim))).toBe(true);
+    });
+
+    it('accepts any threshold subset when every attestor signed', async () => {
+      const claim = makeClaim();
+      const signed = signClaim(claim, notaryKeys);
+      expect(signed.signatures.map((s) => s.registryIndex)).toEqual([0n, 1n]);
+      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
+      expect(sim.ledgerView().A_claimsVault.member(idOf(claim))).toBe(true);
     });
 
     it('rejects 1-of-3 valid signatures', async () => {
       const claim = makeClaim();
-      const signed = signClaim(claim, [notaryKeys[0], null, null], randomBytes(32));
+      const signed = signClaim(claim, [notaryKeys[0], null, null]);
       await expect(
         sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
       ).rejects.toThrow('Insufficient valid signatures');
@@ -182,16 +234,58 @@ describe('mock attestation', () => {
 
     it('rejects the same key signing into two slots (positional verification)', async () => {
       const claim = makeClaim();
-      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[0], null], randomBytes(32));
+      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[0], null]);
       await expect(
         sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
       ).rejects.toThrow('Insufficient valid signatures');
     });
 
+    it("rejects valid signatures named at each other's slots", async () => {
+      const claim = makeClaim();
+      const signed = signClaim(claim, [notaryKeys[1], notaryKeys[0], null]);
+      await expect(
+        sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
+      ).rejects.toThrow('Insufficient valid signatures');
+    });
+
+    it('rejects slots out of increasing order', async () => {
+      const signed = signClaim(makeClaim(), [notaryKeys[0], notaryKeys[1], null]);
+      const signatures = [...signed.signatures].reverse();
+      await expect(
+        sim.call('verifyAttestation', ps({ ...signed, signatures, holderSecret: holder })),
+      ).rejects.toThrow('Registry slots not increasing');
+    });
+
+    it('rejects one signature named twice', async () => {
+      const signed = signClaim(makeClaim(), [notaryKeys[0], notaryKeys[1], null]);
+      const [first] = signed.signatures;
+      if (first === undefined) {
+        throw new Error('no signature');
+      }
+      await expect(
+        sim.call(
+          'verifyAttestation',
+          ps({ ...signed, signatures: [first, first], holderSecret: holder }),
+        ),
+      ).rejects.toThrow('Registry slots not increasing');
+    });
+
+    it('rejects a slot outside the registry', async () => {
+      const signed = signClaim(makeClaim(), [notaryKeys[0], notaryKeys[1], null]);
+      const [first, second] = signed.signatures;
+      if (first === undefined || second === undefined) {
+        throw new Error('no signature');
+      }
+      const signatures = [first, { ...second, registryIndex: 3n }];
+      await expect(
+        sim.call('verifyAttestation', ps({ ...signed, signatures, holderSecret: holder })),
+      ).rejects.toThrow('Empty registry slot');
+    });
+
     it('rejects a signature from an unregistered key', async () => {
       const outsider = makeNotaryKey();
       const claim = makeClaim();
-      const signed = signClaim(claim, [outsider, outsider, null], randomBytes(32));
+      const signed = signClaim(claim, [outsider, outsider, null]);
       await expect(
         sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
       ).rejects.toThrow('Insufficient valid signatures');
@@ -199,11 +293,8 @@ describe('mock attestation', () => {
 
     it('rejects a tampered claim (value flipped)', async () => {
       const claim = makeClaim({ values: [12345n, 0n, 0n], present: [true, false, false] });
-      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
-      const tampered = {
-        claim: { ...signed.claim, values: [54321n, 0n, 0n] },
-        commitRand: signed.commitRand,
-      };
+      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null]);
+      const tampered = { claim: { ...signed.claim, values: [54321n, 0n, 0n] } };
       await expect(
         sim.call('verifyAttestation', ps({ ...signed, ...tampered, holderSecret: holder })),
       ).rejects.toThrow('Insufficient valid signatures');
@@ -218,7 +309,7 @@ describe('mock attestation', () => {
         mutate: (c: A_Claim) => ({ ...c, subjectHash: flip(c.subjectHash, 31) }),
       },
     ])('rejects a replay of accepted signatures with $name mutated', async ({ mutate }) => {
-      const signed = signClaim(makeClaim(), [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
+      const signed = signClaim(makeClaim(), [notaryKeys[0], notaryKeys[1], null]);
       await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
       const replayed = { ...signed, claim: mutate(signed.claim) };
       await expect(
@@ -228,7 +319,7 @@ describe('mock attestation', () => {
 
     it('rejects an unsupported version', async () => {
       const claim = makeClaim();
-      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
+      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null]);
       const bad = { ...signed, claim: { ...signed.claim, version: 2n } };
       await expect(
         sim.call('verifyAttestation', ps({ ...bad, holderSecret: holder })),
@@ -237,7 +328,7 @@ describe('mock attestation', () => {
 
     it("rejects a claim stored in one app when replayed into another app's contract", async () => {
       const claim = makeClaim();
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const signed = signClaim(claim, notaryKeys);
       await sim.call('verifyAttestation', ps(signed));
       const otherApp = await MockAttestationSim.create(createPrivateState(holder), registryKeys, {
         appId: OTHER_APP_ID,
@@ -256,7 +347,7 @@ describe('mock attestation', () => {
 
     it('rejects a claim whose policyHash is not in the sealed set', async () => {
       const claim = makeClaim({ policyHash: UNSEALED_POLICY });
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const signed = signClaim(claim, notaryKeys);
       await expect(
         sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
       ).rejects.toThrow('Unaccepted policy');
@@ -265,9 +356,9 @@ describe('mock attestation', () => {
     it('accepts a claim under any sealed policy hash', async () => {
       for (const policyHash of ACCEPTED_POLICIES) {
         const claim = makeClaim({ policyHash });
-        const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
+        const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null]);
         await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
-        expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
+        expect(sim.ledgerView().A_claimsVault.member(idOf(claim))).toBe(true);
       }
     });
 
@@ -287,16 +378,16 @@ describe('mock attestation', () => {
       { name: 'mixed presence', values: [0n, 200n, 0n], present: [true, true, false] },
     ])('accepts valid slots with $name', async ({ values, present }) => {
       const claim = makeClaim({ values, present });
-      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
+      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null]);
       await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
-      expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
+      expect(sim.ledgerView().A_claimsVault.member(idOf(claim))).toBe(true);
     });
   });
 
   describe('observation replay', () => {
     it('rejects the same observation and salt signed for a fresh holder', async () => {
       const claim = makeClaim();
-      await sim.call('verifyAttestation', ps(signClaim(claim, notaryKeys, randomBytes(32))));
+      await sim.call('verifyAttestation', ps(signClaim(claim, notaryKeys)));
       const freshSecret = randomBytes(32);
       const replay = {
         ...claim,
@@ -306,18 +397,10 @@ describe('mock attestation', () => {
         sim.call(
           'verifyAttestation',
           ps({
-            ...signClaim(replay, notaryKeys, randomBytes(32)),
+            ...signClaim(replay, notaryKeys),
             holderSecret: freshSecret,
           }),
         ),
-      ).rejects.toThrow('Observation replay');
-    });
-
-    it('rejects the same observation with fresh vault randomness', async () => {
-      const claim = makeClaim();
-      await sim.call('verifyAttestation', ps(signClaim(claim, notaryKeys, randomBytes(32))));
-      await expect(
-        sim.call('verifyAttestation', ps(signClaim(claim, notaryKeys, randomBytes(32)))),
       ).rejects.toThrow('Observation replay');
     });
 
@@ -348,17 +431,17 @@ describe('mock attestation', () => {
       ]),
     ])('accepts a distinct observation after changing $name', async ({ mutate }) => {
       const claim = makeClaim({ values: [0n, 0n, 0n], present: [true, true, true] });
-      await sim.call('verifyAttestation', ps(signClaim(claim, notaryKeys, randomBytes(32))));
+      await sim.call('verifyAttestation', ps(signClaim(claim, notaryKeys)));
       const distinct = mutate(claim);
-      const signed = signClaim(distinct, notaryKeys, randomBytes(32));
+      const signed = signClaim(distinct, notaryKeys);
       await sim.call('verifyAttestation', ps(signed));
-      expect(sim.ledgerView().A_claimsVault.member(idOf(distinct, signed.commitRand))).toBe(true);
-      expect(sim.ledgerView().A_nullifiers.size()).toBe(2n);
+      expect(sim.ledgerView().A_claimsVault.member(idOf(distinct))).toBe(true);
+      expect(sim.ledgerView().A_claimsVault.size()).toBe(2n);
     });
 
     it('rejects a second submission of the same observation', async () => {
       const claim = makeClaim();
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const signed = signClaim(claim, notaryKeys);
       const psState = ps({ ...signed, holderSecret: holder });
       await sim.call('verifyAttestation', psState);
       await expect(sim.call('verifyAttestation', psState)).rejects.toThrow('Observation replay');
@@ -373,7 +456,7 @@ describe('mock attestation', () => {
     const MAX_WINDOW = 120n;
 
     const attWith = (claim: A_Claim) => {
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const signed = signClaim(claim, notaryKeys);
       return ps({ ...signed, holderSecret: holder });
     };
 
@@ -429,11 +512,11 @@ describe('mock attestation', () => {
     });
 
     it('rejects a replay of accepted signatures with the window shifted', async () => {
-      const signed = signClaim(
-        makeClaim({ windowStart: NOW - 10n, windowEnd: NOW }),
-        [notaryKeys[0], notaryKeys[1], null],
-        randomBytes(32),
-      );
+      const signed = signClaim(makeClaim({ windowStart: NOW - 10n, windowEnd: NOW }), [
+        notaryKeys[0],
+        notaryKeys[1],
+        null,
+      ]);
       sim.now = Number(NOW);
       await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
       const shifted = { ...signed.claim, windowStart: NOW - 5n, windowEnd: NOW + 5n };
@@ -467,11 +550,11 @@ describe('mock attestation', () => {
   });
 
   describe('claim vault content', () => {
-    it('stores holder and window under the claim id', async () => {
+    it("stores holder and window under the claim's nullifier", async () => {
       const claim = makeClaim();
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const signed = signClaim(claim, notaryKeys);
       await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
-      const entry = sim.ledgerView().A_claimsVault.lookup(idOf(claim, signed.commitRand));
+      const entry = sim.ledgerView().A_claimsVault.lookup(idOf(claim));
       expect(entry.holder).toBe(holderOf(holder));
       expect(entry.windowStart).toBe(claim.windowStart);
       expect(entry.windowEnd).toBe(claim.windowEnd);
@@ -480,7 +563,7 @@ describe('mock attestation', () => {
 
   describe('openClaim', () => {
     const store = async (claim = makeClaim()) => {
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const signed = signClaim(claim, notaryKeys);
       await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
       return signed;
     };
@@ -489,7 +572,7 @@ describe('mock attestation', () => {
       const signed = await store(
         makeClaim({ values: [111n, 222n, 333n], present: [true, true, true] }),
       );
-      const id = idOf(signed.claim, signed.commitRand);
+      const id = idOf(signed.claim);
       await sim.call('openAndRead', ps({ ...signed, holderSecret: holder }), id, 111n, 222n);
     });
 
@@ -497,7 +580,7 @@ describe('mock attestation', () => {
       const signed = await store(
         makeClaim({ values: [111n, 0n, 333n], present: [true, false, true] }),
       );
-      const id = idOf(signed.claim, signed.commitRand);
+      const id = idOf(signed.claim);
       await sim.call(
         'openAndReadPresence',
         ps({ ...signed, holderSecret: holder }),
@@ -511,7 +594,7 @@ describe('mock attestation', () => {
       const signed = await store(
         makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }),
       );
-      const id = idOf(signed.claim, signed.commitRand);
+      const id = idOf(signed.claim);
       await expect(
         sim.call('openAndReadPresence', ps({ ...signed, holderSecret: holder }), id, true, true),
       ).rejects.toThrow('present[1] mismatch');
@@ -521,7 +604,7 @@ describe('mock attestation', () => {
       const signed = await store(
         makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }),
       );
-      const id = idOf(signed.claim, signed.commitRand);
+      const id = idOf(signed.claim);
       await sim.call('openAndRequireMetric0', ps({ ...signed, holderSecret: holder }), id, 111n);
     });
 
@@ -529,7 +612,7 @@ describe('mock attestation', () => {
       const signed = await store(
         makeClaim({ values: [0n, 222n, 333n], present: [false, true, true] }),
       );
-      const id = idOf(signed.claim, signed.commitRand);
+      const id = idOf(signed.claim);
       await expect(
         sim.call('openAndRequireMetric0', ps({ ...signed, holderSecret: holder }), id, 0n),
       ).rejects.toThrow('metric 0 not present');
@@ -539,7 +622,7 @@ describe('mock attestation', () => {
       const signed = await store(
         makeClaim({ values: [111n, 0n, 0n], present: [true, false, false] }),
       );
-      const id = idOf(signed.claim, signed.commitRand);
+      const id = idOf(signed.claim);
       await expect(
         sim.call('openAndRequireMetric0', ps({ ...signed, holderSecret: holder }), id, 222n),
       ).rejects.toThrow('value[0] mismatch');
@@ -555,32 +638,58 @@ describe('mock attestation', () => {
 
     it('rejects a claim not bound to the caller', async () => {
       const signed = await store();
-      const id = idOf(signed.claim, signed.commitRand);
+      const id = idOf(signed.claim);
       const otherHolder = randomBytes(32);
       await expect(
         sim.call('openAndRead', ps({ ...signed, holderSecret: otherHolder }), id, 12345n, 0n),
       ).rejects.toThrow('Claim not bound to caller');
     });
 
-    it('rejects a claim that does not match the id', async () => {
+    it('rejects a claim that does not match the nullifier', async () => {
       const signed = await store(
         makeClaim({ values: [12345n, 0n, 0n], present: [true, false, false] }),
       );
-      const id = idOf(signed.claim, signed.commitRand);
+      const id = idOf(signed.claim);
       const tampered = {
         ...signed,
         claim: { ...signed.claim, values: [54321n, 0n, 0n] },
       };
       await expect(
         sim.call('openAndRead', ps({ ...tampered, holderSecret: holder }), id, 54321n, 0n),
-      ).rejects.toThrow('Claim does not match id');
+      ).rejects.toThrow('Claim does not match nullifier');
     });
 
-    it('is repeatable (no nullifier consumed)', async () => {
+    // The nullifier is all that binds an opened claim to the one vaulted, so
+    // every field `openClaim` returns must be one it hashes.
+    it.each([
+      { field: 'appId', mutate: (c: A_Claim) => ({ ...c, appId: flip(c.appId, 31) }) },
+      { field: 'policyHash', mutate: (c: A_Claim) => ({ ...c, policyHash: POLICY_B }) },
+      {
+        field: 'subjectHash',
+        mutate: (c: A_Claim) => ({ ...c, subjectHash: flip(c.subjectHash, 31) }),
+      },
+      { field: 'salt', mutate: (c: A_Claim) => ({ ...c, salt: flip(c.salt, 31) }) },
+      {
+        field: 'windowStart',
+        mutate: (c: A_Claim) => ({ ...c, windowStart: c.windowStart - 1n }),
+      },
+      { field: 'windowEnd', mutate: (c: A_Claim) => ({ ...c, windowEnd: c.windowEnd + 1n }) },
+      { field: 'values', mutate: (c: A_Claim) => ({ ...c, values: [12345n, 0n, 1n] }) },
+      { field: 'present', mutate: (c: A_Claim) => ({ ...c, present: [true, true, false] }) },
+    ])('rejects an opening witness with $field changed', async ({ mutate }) => {
+      const signed = await store();
+      const id = idOf(signed.claim);
+      const tampered = { ...signed, claim: mutate(signed.claim) };
+      await expect(
+        sim.call('openAndRead', ps({ ...tampered, holderSecret: holder }), id, 12345n, 0n),
+      ).rejects.toThrow('Claim does not match nullifier');
+    });
+
+    it('is repeatable (consumes nothing)', async () => {
       const signed = await store(
         makeClaim({ values: [999n, 0n, 0n], present: [true, false, false] }),
       );
-      const id = idOf(signed.claim, signed.commitRand);
+      const id = idOf(signed.claim);
       const state = ps({ ...signed, holderSecret: holder });
       await sim.call('openAndRead', state, id, 999n, 0n);
       await sim.call('openAndRead', state, id, 999n, 0n);
@@ -599,9 +708,9 @@ describe('mock attestation', () => {
 
     const storeAbout = async () => {
       const claim = makeClaim({ subjectHash: pureCircuits.subjectHash(subject) });
-      const signed = signClaim(claim, notaryKeys, randomBytes(32));
+      const signed = signClaim(claim, notaryKeys);
       await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
-      return { signed, id: idOf(signed.claim, signed.commitRand) };
+      return { signed, id: idOf(signed.claim) };
     };
 
     it('accepts the subject the claim is about under the pinned host', async () => {
