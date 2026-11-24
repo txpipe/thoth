@@ -14,5 +14,4 @@ packages/contracts/artifacts/
 .idea/
 .vscode/
 
-# verification evidence, kept in nico-agent's Bucket, never committed
-.evidence/
+.lavish

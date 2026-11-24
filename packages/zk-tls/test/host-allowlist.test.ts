@@ -10,7 +10,7 @@ import {
   zkFetchPolicyHashOf,
 } from '@txpipe/thoth-zk-tls';
 import { describe, expect, it } from 'vitest';
-import { DISCLOSURE_RULES } from './helpers/helper.js';
+import { disclosureRules } from './helpers/helper.js';
 import { testWitness } from './helpers/witness.js';
 
 const witness = testWitness(`0x${'11'.repeat(32)}`);
@@ -19,13 +19,13 @@ const policyFor = (allowedHosts: string[]): ZkFetchPolicy => ({
   allowedHosts,
   slots: [{ slot: 0, name: 'balance', parse: 'int' }],
   bodyPolicy: 'ignored',
-  ...DISCLOSURE_RULES,
+  ...disclosureRules('balance'),
 });
 
 /** Check evidence a witness signed for `url` against a policy allowing `allowedHosts`. */
 const check = async (allowedHosts: string[], url: string): Promise<string> => {
   const policy = policyFor(allowedHosts);
-  const parameters = { url, method: 'GET', body: '', ...DISCLOSURE_RULES };
+  const parameters = { url, method: 'GET', body: '', ...disclosureRules('balance') };
   const evidence = await witness.sign({
     values: { balance: '1' },
     timestampS: 1_786_000_000,

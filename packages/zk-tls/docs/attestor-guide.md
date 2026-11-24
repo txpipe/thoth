@@ -83,7 +83,8 @@ before signing:
    the claim, checks the claim identifier against its signed content, and reads
    the values the witness disclosed.
 3. `assertEvidenceMatchesPolicy(verified, policy)` refuses a signed url, body,
-   `geoLocation` or `proxySessionId` that carries a `{{param}}` template (see
+   `geoLocation` or `proxySessionId` that carries a `{{param}}` template, and a
+   signed URL that contains `*` or whose host parses to one (see
    [Building the request](dapp-integration.md#building-the-request)), checks
    the attested URL against the host allowlist, checks the signed request body
    against the policy's required [body policy](dapp-integration.md#body-policy),

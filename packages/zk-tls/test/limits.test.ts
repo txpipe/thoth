@@ -12,7 +12,7 @@ import {
 } from '@txpipe/thoth-zk-tls';
 import { zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
 import { describe, expect, it, vi } from 'vitest';
-import { DISCLOSURE_RULES, FIXTURE } from './helpers/helper.js';
+import { disclosureRules, FIXTURE } from './helpers/helper.js';
 
 const fixture = FIXTURE;
 
@@ -20,7 +20,7 @@ const policy: ZkFetchPolicy = {
   allowedHosts: ['api.github.com'],
   slots: [{ slot: 0, name: 'data', parse: 'float', optional: true }],
   bodyPolicy: 'ignored',
-  ...DISCLOSURE_RULES,
+  ...disclosureRules('data'),
 };
 
 const claim = {

@@ -63,18 +63,18 @@ type-checked only once it is listed in the root `package.json` `workspaces`.
 
 Run them from the repo root:
 
-| Command | What it does |
-|---------|--------------|
-| `npm test` | Compiles the mock contracts and builds the packages (`pretest`), then runs vitest |
-| `npm test -- <pattern>` | The same, for the test files matching `<pattern>` |
-| `npm run types` | Type-checks every package |
-| `npm run check` | Biome format and lint, plus `compact format -c` |
-| `npm run check:fix` | Applies the Biome and Compact formatting fixes |
-| `npm run build` | Builds every package into its `dist/` |
-| `npm run compact` | Compiles the mock contracts with proving keys |
-| `npm run compact:no-zk` | Compiles the mock contracts without proving keys (faster) |
-| `npm run changeset` | Adds a changeset for your change |
-| `npm run changeset:status` | Lists the changesets on your branch and the bumps they make |
+| Command                    | What it does                                                                      |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| `npm test`                 | Compiles the mock contracts and builds the packages (`pretest`), then runs vitest |
+| `npm test -- <pattern>`    | The same, for the test files matching `<pattern>`                                 |
+| `npm run types`            | Type-checks every package                                                         |
+| `npm run check`            | Biome format and lint, plus `compact format -c`                                   |
+| `npm run check:fix`        | Applies the Biome and Compact formatting fixes                                    |
+| `npm run build`            | Builds every package into its `dist/`                                             |
+| `npm run compact`          | Compiles the mock contracts with proving keys                                     |
+| `npm run compact:no-zk`    | Compiles the mock contracts without proving keys (faster)                         |
+| `npm run changeset`        | Adds a changeset for your change                                                  |
+| `npm run changeset:status` | Lists the changesets on your branch and the bumps they make                       |
 
 For one package: `npm run <script> --workspace=packages/<name>`.
 
@@ -91,9 +91,9 @@ unless `WITNESS_URLS` names them; see the attestor guide's
 ## Adding a changeset
 
 A change that a user of `@txpipe/thoth-core`, `@txpipe/thoth-attestor`,
-`@txpipe/thoth-client` or `@txpipe/thoth-zk-tls` would notice needs a changeset,
-which becomes the package's version bump and changelog entry. Add one with your
-pull request:
+`@txpipe/thoth-client`, `@txpipe/thoth-zk-tls` or `@txpipe/thoth-contracts`
+would notice needs a changeset, which becomes the package's version bump and
+changelog entry. Add one with your pull request:
 
 ```bash
 npm run changeset
@@ -103,7 +103,7 @@ Pick the packages you changed and the bump for each, and write the entry for
 the people who use the package. While a package is below `1.0.0`, a breaking
 change is a `minor` bump. Commit the file it writes to `.changeset/`. Each
 package versions on its own; a package that depends on a bumped one gets a
-`patch` bump. `@txpipe/thoth-contracts` is private and takes no changesets.
+`patch` bump.
 A change with no user-facing effect, such as a test or a CI tweak, needs none.
 
 ## Releases

@@ -8,18 +8,19 @@ in-circuit, for dApp developers who consume Thoth claims on-chain.
 ## Install
 
 The package is not on npm. Use the modules from a checkout of this repo: point
-`COMPACT_PATH` at `packages/contracts`, or vendor `attestation.compact` and
-`attestor_registry.compact` unchanged into your project (they import each
-other as siblings). Compile with Compact `0.36.1` and pin
-`@midnight-ntwrk/compact-runtime` to `0.21.0` in the driver: the off-chain
-message encoder matches the circuit only at that version.
+`COMPACT_PATH` at `packages/contracts`. Once it is published, it installs as
+`@txpipe/thoth-contracts`, and `COMPACT_PATH` points at
+`node_modules/@txpipe/thoth-contracts`. Depend on the package instead of
+copying the modules: a copy forks the attestation semantics. Compile with
+Compact `0.36.1` and pin `@midnight-ntwrk/compact-runtime` to `0.21.0` in the
+driver: the off-chain message encoder matches the circuit only at that version.
 
 ## Usage
 
-| File | Module | Role |
-|------|--------|------|
-| `attestation.compact` | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
-| `attestor_registry.compact` | `attestor_registry<#M, #K>` | Seals the `M` pinned attestor keys at deploy and counts the signatures that verify, each against its own slot. |
+| File                        | Module                            | Role                                                                                                                                                                                      |
+| --------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `attestation.compact`       | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
+| `attestor_registry.compact` | `attestor_registry<#M, #K>`       | Seals the `M` pinned attestor keys at deploy and counts the signatures that verify, each against its own slot.                                                                            |
 
 Embed both modules in your top-level contract, seal the deploy-time values in
 the constructor, and export `verifyAttestation` as the entry point:

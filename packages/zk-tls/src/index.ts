@@ -11,7 +11,7 @@ import {
 } from '@txpipe/thoth-core/claim-context';
 import { z } from 'zod';
 import { bytesToHex, hexToBytes } from './hex.js';
-import { re2CompileError } from './regex.js';
+import { re2CompileError, re2GroupNames } from './regex.js';
 
 /** The zkFetch kind's law tag, also its kind identifier. */
 export const ZK_FETCH_LAW = 'zk-fetch@1';
@@ -301,7 +301,7 @@ export interface ZkFetchPolicy {
    * policy hash commits to it, so every attestor enforces the same rule.
    */
   bodyPolicy: ZkFetchBodyPolicy;
-  /** The claim version the attestor signs. Defaults to 1. */
+  /** The claim version the attestor signs, 0–255 (the claim's `Uint<8>`). Defaults to 1. */
   claimVersion?: bigint;
 }
 
@@ -354,7 +354,7 @@ const EMPTY_BODY_SHA256 = bytesToHex(sha256(''));
 /** The policy schema with array and string sizes capped by `limits`. */
 const policySchemaWithin = (limits: ZkFetchLimits) => {
   const ruleText = z.string().max(limits.ruleLength);
-  return z.object({
+  const schema = z.object({
     allowedHosts: z
       .array(
         z
@@ -443,7 +443,36 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
           message: "a body pin cannot be the empty body; use bodyPolicy: 'ignored'",
         }),
     ]),
-    claimVersion: z.bigint().optional(),
+    claimVersion: z.bigint().min(0n).max(255n).optional(),
+  });
+  return schema.superRefine((policy, context) => {
+    // A slot is read from a disclosed value keyed by its name, so a slot no
+    // regex group names is never certifiable.
+    const groups = new Set<string>();
+    for (const match of policy.responseMatches) {
+      if (match.type !== 'regex') {
+        continue;
+      }
+      const names = re2GroupNames(match.value);
+      if (names === undefined) {
+        // RE2 refused the regex: refineRe2 reports it, or it sits at RE2's size
+        // limit (see re2GroupNames). A slot error would blame a group the regex
+        // may declare; the attest-time slot check still covers this policy.
+        return;
+      }
+      for (const name of names) {
+        groups.add(name);
+      }
+    }
+    for (const [index, slot] of policy.slots.entries()) {
+      if (!groups.has(slot.name)) {
+        context.addIssue({
+          code: 'custom',
+          message: `slot '${slot.name}' is not a named group of any regex response match`,
+          path: ['slots', index, 'name'],
+        });
+      }
+    }
   });
 };
 
@@ -454,9 +483,12 @@ const policySchemaWithin = (limits: ZkFetchLimits) => {
  * rule texts cannot carry `{{param}}` templates. Every `regex` match and
  * redaction regex must compile under RE2, the engine the prover and the
  * witnesses run it with (the dApp guide's "Regex engine"); parsing throws if the
- * native `re2` module does not load. `bodyPolicy` is
+ * native `re2` module does not load. Every slot `name` must be declared as a
+ * named group by a `regex` match, so the slot has a disclosed value to read; a
+ * `contains` match and a redaction regex declare no groups. `bodyPolicy` is
  * required; a pin is 32 bytes and not the empty body's hash. Every
  * `allowedHosts` entry is a non-empty host with an optional port in 1–65535.
+ * `claimVersion` is 0–255, the claim's `Uint<8>` range.
  * It caps no size; an attestor parses with its own {@link ZkFetchLimits}.
  */
 export const zkFetchPolicySchema = policySchemaWithin(UNCAPPED);
@@ -1093,11 +1125,11 @@ export const deriveClaimFromEvidence = <V extends number, W extends number = 0>(
 
 /**
  * Check evidence against the policy: the signed request carries no
- * `{{param}}` template, the attested URL is HTTPS on an allowed host, the
- * signed request body carries no `*` and satisfies the policy's body mode,
- * the signed disclosure rules equal the policy's canonical form, and every
- * required slot is certifiable. `responseText` is not witness-signed and takes
- * no part.
+ * `{{param}}` template or URL `*`, the attested URL is HTTPS on an allowed
+ * host, the signed request body carries no `*` and satisfies the policy's body
+ * mode, the signed disclosure rules equal the policy's canonical form, and
+ * every required slot is certifiable. `responseText` is not witness-signed and
+ * takes no part.
  *
  * The policy is parsed with {@link zkFetchPolicySchema} first, so a missing
  * `bodyPolicy` or the empty body's pin fails here rather than later.
@@ -1112,24 +1144,30 @@ export const assertEvidenceMatchesPolicy = (
 ): string => {
   const parsedPolicy = zkFetchPolicySchema.parse(policy);
   const parameters = claimParametersOf(verified.claim);
+  // The url is normalised the way WHATWG parses it: tab, LF and CR removed.
+  const signedUrlText = parameters.url.replace(/[\t\n\r]/g, '');
   // Any `{{` is refused, not only a fillable template: Reclaim matches the signed path and body
-  // against the sent request with `{{…}…}` as a wildcard over redacted bytes. The url is normalised
-  // the way WHATWG parses it (tab, LF and CR removed, path braces encoded) and the way Reclaim
-  // decodes it back (`%7B`/`%7D` to braces) before the check.
+  // against the sent request with `{{…}…}` as a wildcard over redacted bytes. Reclaim decodes
+  // `%7B`/`%7D` back to braces, so the check runs on that decoding too.
   for (const field of ['url', 'body', 'geoLocation', 'proxySessionId'] as const) {
     const value = parameters[field];
     const text =
-      field === 'url' && typeof value === 'string'
-        ? value
-            .replace(/[\t\n\r]/g, '')
-            .replace(/%7B/gi, '{')
-            .replace(/%7D/gi, '}')
-        : value;
+      field === 'url' ? signedUrlText.replace(/%7B/gi, '{').replace(/%7D/gi, '}') : value;
     if (typeof text === 'string' && text.includes('{{')) {
       throw new Error(`the signed ${field} cannot use {{param}} templates`);
     }
   }
+  // Reclaim matches a signed `*` with the transcript's redaction markers, and the caller chooses
+  // which request bytes it redacts, so each one leaves a sent byte unbound. `%2A` stays literal.
+  if (signedUrlText.includes('*')) {
+    throw new Error('the signed request url cannot contain *');
+  }
   const url = new URL(parameters.url);
+  // Host parsing decodes `%2A` and maps a full-width `＊` to `*`, and Reclaim compares the Host
+  // header as text, so a `*` the raw check above misses still reaches the witness here.
+  if (url.host.includes('*')) {
+    throw new Error('the signed request url cannot contain *');
+  }
   if (url.protocol !== 'https:') {
     throw new Error(`attested url must be https, got ${url.protocol}//`);
   }
