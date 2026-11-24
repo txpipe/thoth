@@ -107,7 +107,6 @@ What the policy does not check, and what your app must do:
 - **A testnet address does not say which testnet it is.** Preview and preprod use the same prefix, so an address cannot tell them apart. The attestor compares the node's network magic with `network` before it signs (preview 2, preprod 1, mainnet 764824073).
 - **A devnet policy works only on an undeployed network.** Its magic is set by that network, so no public network can serve it. Don't seal a devnet hash on a public contract, and point your attestors at the network the policy names. The policy can't enforce either.
 - **The attestor trusts its own read.** `read` is operator configuration; point it at your own independent Cardano source (ADR 0003).
-- **Attestors are assumed to serve every public chain for now.** How an attestor advertises the networks it serves is deferred to the attestor work.
 - **`confirmationDepth: 0` is accepted.** An attestation at depth 0 can later be rolled back, and the claim stays on the ledger. Set a depth that covers the risk you accept, and bound the block number or slot in your predicate.
 - **The window is the block time, not the attestation time.** Set your `freshnessWindow` to cover the depth wait, the attestation round trips, proof generation and Midnight inclusion, or the claim expires before submission.
 - **The salt is public.** Anyone can recompute it from the event, so an observer who suspects an event can confirm the link to a nullifier.
