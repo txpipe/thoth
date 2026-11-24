@@ -33,8 +33,8 @@ import {
   slotIndexSchema,
 } from '../policy.js';
 
-/** The overflow bound of a claim value: lovelace is a uint64. */
-const MAX_LOVELACE = 2n ** 64n - 1n;
+/** The largest uint64, the bound of a lovelace amount and an asset quantity. */
+const MAX_UINT64 = 2n ** 64n - 1n;
 
 /** The minting policy id as lowercase hex: 28 bytes. */
 const HEX_56 = /^[0-9a-f]{56}$/;
@@ -207,8 +207,8 @@ export const cardanoOutputObservationSchema: z.ZodType<OutputObservation> = z.st
       .refine((address) => address === address.toLowerCase(), {
         message: 'address must be lowercase bech32',
       }),
-    lovelace: z.bigint().min(0n).max(MAX_LOVELACE),
-    assets: z.array(assetClassSchema.extend({ quantity: z.bigint().min(0n).max(MAX_LOVELACE) })),
+    lovelace: z.bigint().min(0n).max(MAX_UINT64),
+    assets: z.array(assetClassSchema.extend({ quantity: z.bigint().min(0n).max(MAX_UINT64) })),
   }),
 });
 
