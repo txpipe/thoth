@@ -8,11 +8,12 @@ in-circuit, for dApp developers who consume Thoth claims on-chain.
 ## Install
 
 The package is not on npm. Use the modules from a checkout of this repo: point
-`COMPACT_PATH` at `packages/contracts`, or vendor `attestation.compact` and
-`attestor_registry.compact` unchanged into your project (they import each
-other as siblings). Compile with Compact `0.36.1` and pin
-`@midnight-ntwrk/compact-runtime` to `0.21.0` in the driver: the off-chain
-message encoder matches the circuit only at that version.
+`COMPACT_PATH` at `packages/contracts`. Once it is published, it installs as
+`@txpipe/thoth-contracts`, and `COMPACT_PATH` points at
+`node_modules/@txpipe/thoth-contracts`. Depend on the package instead of
+copying the modules: a copy forks the attestation semantics. Compile with
+Compact `0.36.1` and pin `@midnight-ntwrk/compact-runtime` to `0.21.0` in the
+driver: the off-chain message encoder matches the circuit only at that version.
 
 ## Usage
 

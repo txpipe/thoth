@@ -91,9 +91,9 @@ unless `WITNESS_URLS` names them; see the attestor guide's
 ## Adding a changeset
 
 A change that a user of `@txpipe/thoth-core`, `@txpipe/thoth-attestor`,
-`@txpipe/thoth-client` or `@txpipe/thoth-zk-tls` would notice needs a changeset,
-which becomes the package's version bump and changelog entry. Add one with your
-pull request:
+`@txpipe/thoth-client`, `@txpipe/thoth-zk-tls` or `@txpipe/thoth-contracts`
+would notice needs a changeset, which becomes the package's version bump and
+changelog entry. Add one with your pull request:
 
 ```bash
 npm run changeset
@@ -103,7 +103,7 @@ Pick the packages you changed and the bump for each, and write the entry for
 the people who use the package. While a package is below `1.0.0`, a breaking
 change is a `minor` bump. Commit the file it writes to `.changeset/`. Each
 package versions on its own; a package that depends on a bumped one gets a
-`patch` bump. `@txpipe/thoth-contracts` is private and takes no changesets.
+`patch` bump.
 A change with no user-facing effect, such as a test or a CI tweak, needs none.
 
 ## Releases

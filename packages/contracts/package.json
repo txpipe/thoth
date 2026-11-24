@@ -4,7 +4,6 @@
   "description": "Thoth Compact modules: N-of-M attestation and attestor registry.",
   "type": "module",
   "license": "Apache-2.0",
-  "private": true,
   "author": "TxPipe-Shop",
   "keywords": [
     "thoth",
@@ -33,6 +32,10 @@
     "README.md",
     "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "compact": "compact compile +0.36.1 test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.36.1 test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes",
     "compact:no-zk": "compact compile +0.36.1 --skip-zk test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.36.1 --skip-zk test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes",
