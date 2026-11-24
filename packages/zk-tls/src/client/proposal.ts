@@ -166,13 +166,17 @@ export const buildClaimProposal = async <V extends number>(options: {
 };
 
 /**
- * Shallow-copy a request with its own `secretHeaders` and `context`, so a
- * prover cannot change the original's secrets or claim context digest.
+ * Copy a request with its own headers, `context` and disclosure rules, so a
+ * prover cannot change the original's headers or claim context digest, or the
+ * policy's rules, which the request's rule objects may be.
  */
 export const copyRequest = (request: ZkFetchRequest): ZkFetchRequest => ({
   ...request,
+  publicHeaders: request.publicHeaders && { ...request.publicHeaders },
   secretHeaders: { ...request.secretHeaders },
   context: request.context && { ...request.context },
+  responseMatches: request.responseMatches?.map((match) => ({ ...match })),
+  responseRedactions: request.responseRedactions?.map((redaction) => ({ ...redaction })),
 });
 
 /**
