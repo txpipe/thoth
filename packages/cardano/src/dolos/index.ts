@@ -138,7 +138,7 @@ export const lovelaceOf = (coin: cardano.BigInt | undefined): bigint =>
 /**
  * Read one output and its block from a UTxO-RPC source, as the kind's
  * observation, validated by its schema. The source is trusted to describe its
- * own chain (ADR 0003); the reader checks the response's transaction hash
+ * own chain; the reader checks the response's transaction hash
  * against the requested one, so an endpoint that answers a different query is
  * caught here.
  *

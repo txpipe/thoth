@@ -124,7 +124,7 @@ export interface CardanoClient<PK, S> {
    * attestations over that exact claim.
    *
    * The window is not an option: it is the event block's time, which the
-   * attestor derives again and refuses to change (ADR 0014).
+   * attestor derives again and refuses to change.
    *
    * @returns the claim and its attestations, sorted by registry slot.
    * @throws {@link CardanoThresholdError} if the options are invalid, the
