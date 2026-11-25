@@ -1,0 +1,12 @@
+// Test mock: a constructor that runs the registry's `initRegistry` twice, so a
+// test can reach its double-init guard (the circuit cannot be re-exported).
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+import "../../attestor_registry"<3, 20> prefix R_;
+
+constructor() {
+  R_initRegistry();
+  R_initRegistry();
+}

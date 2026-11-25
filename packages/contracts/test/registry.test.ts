@@ -1,15 +1,16 @@
 // Registry-management tests: the deploy-time `keysDistinct` check (duplicate
-// and empty-slot pinning) and claim verification against a registry with empty
-// slots. The init guards (compile-time exposure, runtime double-init) live in
-// sealed-init.test.ts.
+// and empty-slot pinning), the double-init guard, and claim verification
+// against a registry with empty slots.
 import { randomBytes } from 'node:crypto';
 import {
   CompactTypeField,
   CompactTypeVector,
+  createConstructorContext,
   jubjubSchnorrVerify,
 } from '@midnight-ntwrk/compact-runtime';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
+import { Contract as DoubleInitContract } from '../artifacts/mock_registry_double_init/contract/index.js';
 import {
   DEFAULT_HOLDER_SECRET,
   DUMMY_SIGNATURE,
@@ -58,6 +59,17 @@ describe('registry init', () => {
     await expect(
       MockAttestationSim.create(createPrivateState(holder), [a.pk, a.pk, b.pk]),
     ).rejects.toThrow('Duplicate registry keys');
+  });
+
+  it('rejects a second initRegistry call', async () => {
+    // `initRegistry` writes a sealed ledger, so only a constructor can call it;
+    // this mock's constructor calls it twice.
+    const contract = new DoubleInitContract<null>({
+      seedKeys: ({ privateState }) => [privateState, [a.pk, b.pk, c.pk]],
+    });
+    await expect(
+      contract.initialState(createConstructorContext(null, '0'.repeat(64))),
+    ).rejects.toThrow('Registry already initialized');
   });
 
   it('still deploys with empty slots', async () => {
