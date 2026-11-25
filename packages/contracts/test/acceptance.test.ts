@@ -7,10 +7,13 @@
 // fresh ledger so a rejection can only come from the signature check, never from
 // a nullifier the honest submission left behind.
 import { randomBytes } from 'node:crypto';
-import { descriptorOf } from '@txpipe/thoth-attestor';
 import { buildTrustedSet } from '@txpipe/thoth-client';
 import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
 import { type Claim, toContractClaim } from '@txpipe/thoth-core/claim';
+import { hex, padded32 } from '@txpipe/thoth-test-utils/bytes';
+import { inMemoryTransport, trustedSetOf } from '@txpipe/thoth-test-utils/harness';
+import { jubjubKeyPair } from '@txpipe/thoth-test-utils/jubjub';
+import { disclosureRules } from '@txpipe/thoth-test-utils/zk-fetch';
 import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
@@ -25,11 +28,9 @@ import {
   zkFetchClient,
 } from '@txpipe/thoth-zk-tls/client';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { disclosureRules } from '../../zk-tls/test/helpers/helper.js';
-import { testWitness } from '../../zk-tls/test/helpers/witness.js';
 import type { B_Claim } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
-import { jubjubKeyPair, type Submission, submit } from './helpers/acceptance.js';
+import { freshBytesLedger, packSignatures, zkFetchTestWitness } from './helpers/acceptance.js';
 import {
   APP_ID,
   bytesIdOf,
@@ -37,11 +38,10 @@ import {
   flip,
   makeNotaryKey,
   POLICY_B,
-  padded32,
+  type SignedClaim,
   splitHalves,
 } from './helpers/fixtures.js';
-import { createPrivateState } from './helpers/private-state.js';
-import { MockAttestationBytesSim } from './helpers/sim.js';
+import { type MockAttestationBytesSim, submitBytes } from './helpers/sim.js';
 
 const VALUE_SLOTS = 3;
 const BYTE_SLOTS = 1;
@@ -65,7 +65,7 @@ const request: ZkFetchRequest = { url: 'https://api.github.com/repos/x', method:
 
 // Each operator runs a test-key witness and the attestor that trusts it.
 const operators = ['33', '44'].map((byte, i) => {
-  const witness = testWitness(`0x${byte.repeat(32)}`);
+  const witness = zkFetchTestWitness(`0x${byte.repeat(32)}`);
   const attestor = zkFetchAttestor({
     id: `attestor-${i}`,
     keyPair: jubjubKeyPair(),
@@ -87,23 +87,9 @@ let honestClaim: Claim<number, number>;
 // The zkFetch client the app runs, pinning both operators at slots 0 and 1.
 const clientWith = (provers: Record<string, ZkFetchProver>) =>
   zkFetchClient.init({
-    trusted: buildTrustedSet({
-      registrySize: registryKeys.length,
-      attestors: attestors.map((attestor, registryIndex) => ({
-        attestor: descriptorOf(attestor),
-        registryIndex,
-      })),
-    }),
+    trusted: trustedSetOf(buildTrustedSet, attestors, { registrySize: registryKeys.length }),
     verifier: jubjubVerifier,
-    transport: {
-      request: (descriptor, input) => {
-        const attestor = attestors.find((candidate) => candidate.id === descriptor.id);
-        if (!attestor) {
-          throw new Error(`transport: unknown attestor ${descriptor.id}`);
-        }
-        return attestor.attest(input as Parameters<typeof attestor.attest>[0]);
-      },
-    },
+    transport: inMemoryTransport(attestors),
     policy,
     appId: APP_ID,
     valueSlots: VALUE_SLOTS,
@@ -122,7 +108,7 @@ const collectOptions = (secret: Uint8Array) => ({
 
 // Collect the honest threshold set through the zkFetch client and lay its
 // signatures out at their registry slots, the dummy filling the unqueried one.
-const collectSubmission = async (): Promise<Submission> => {
+const collectSubmission = async (): Promise<SignedClaim<B_Claim>> => {
   const client = clientWith(
     Object.fromEntries(
       operators.map(({ witness, attestor }) => [
@@ -149,28 +135,26 @@ const collectSubmission = async (): Promise<Submission> => {
   );
   const { claim, collected } = await client.collect(request, collectOptions(holderSecret));
   honestClaim = claim;
-  const signatures = registryKeys.map(
-    (_, slot) =>
-      collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
-      DUMMY_SIGNATURE,
-  );
-  return { claim: toContractClaim(claim), signatures, commitRand: randomBytes(32) };
+  return {
+    claim: toContractClaim(claim),
+    signatures: packSignatures(registryKeys.length, collected),
+    commitRand: randomBytes(32),
+  };
 };
 
 // A fresh ledger that seals the app id and the policy the attestors enforced,
 // with its block time at the end of the observation window.
-const freshLedger = async (appId = APP_ID): Promise<MockAttestationBytesSim> => {
-  const sim = await MockAttestationBytesSim.create(
-    createPrivateState<B_Claim>(holderSecret),
+const freshLedger = (appId = APP_ID): Promise<MockAttestationBytesSim> =>
+  freshBytesLedger({
+    holderSecret,
     registryKeys,
-    { appId, policyHashes: [zkFetchPolicyHashOf(policy), POLICY_B] },
-  );
-  sim.now = Number(WINDOW_END);
-  return sim;
-};
+    appId,
+    policyHashes: [zkFetchPolicyHashOf(policy), POLICY_B],
+    now: WINDOW_END,
+  });
 
 describe('cross-seam acceptance', () => {
-  let honest: Submission;
+  let honest: SignedClaim<B_Claim>;
 
   beforeAll(async () => {
     honest = await collectSubmission();
@@ -200,12 +184,12 @@ describe('cross-seam acceptance', () => {
       windowStart: BigInt(OBSERVED_AT),
       windowEnd: WINDOW_END,
     });
-    expect(Buffer.from(honest.claim.salt).toString('hex')).toBe(digest);
+    expect(hex(honest.claim.salt)).toBe(digest);
   });
 
   it('accepts the honest claim end to end', async () => {
     const sim = await freshLedger();
-    await submit(sim, honest, holderSecret);
+    await submitBytes(sim, honest, holderSecret);
     expect(sim.ledgerView().B_claimsVault.member(bytesIdOf(honest.claim, honest.commitRand))).toBe(
       true,
     );
@@ -278,7 +262,7 @@ describe('cross-seam acceptance', () => {
     async ({ mutate, secret, sealedAppId }) => {
       const sim = await freshLedger(sealedAppId);
       await expect(
-        submit(sim, { ...honest, claim: mutate(honest.claim) }, secret ?? holderSecret),
+        submitBytes(sim, { ...honest, claim: mutate(honest.claim) }, secret ?? holderSecret),
       ).rejects.toThrow('Insufficient valid signatures');
     },
   );

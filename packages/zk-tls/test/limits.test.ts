@@ -5,36 +5,20 @@ import type { FlatMessage } from '@txpipe/thoth-core/claim';
 import {
   ZK_FETCH_DEFAULT_LIMITS,
   type ZkFetchLimits,
-  type ZkFetchPolicy,
   zkFetchClaimSchema,
   zkFetchPolicyHashOf,
   zkFetchSchemasWithin,
 } from '@txpipe/thoth-zk-tls';
 import { zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
+import type { ZkFetchAttestationInput } from '@txpipe/thoth-zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
-import { disclosureRules, FIXTURE } from './helpers/helper.js';
+import { FIXTURE, policyWithSlots, sampleClaimInput } from './helpers/helper.js';
 
 const fixture = FIXTURE;
 
-const policy: ZkFetchPolicy = {
-  allowedHosts: ['api.github.com'],
-  slots: [{ slot: 0, name: 'data', parse: 'float', optional: true }],
-  bodyPolicy: 'ignored',
-  ...disclosureRules('data'),
-};
+const policy = policyWithSlots([{ slot: 0, name: 'data', parse: 'float', optional: true }]);
 
-const claim = {
-  version: 1,
-  appId: new Uint8Array(32).fill(0xa1),
-  holder: new Uint8Array(32).fill(0xc1),
-  salt: new Uint8Array(32).fill(0xcd),
-  policyHash: new Uint8Array(32),
-  windowStart: 1_786_122_944,
-  windowEnd: 1_786_122_944,
-  subjectHash: new Uint8Array(32),
-  present: [false],
-  values: [0],
-};
+const claim = sampleClaimInput();
 
 /** An attestor whose proof check and signer record whether they ran. */
 const watchedAttestor = (limits?: Partial<ZkFetchLimits>) => {
@@ -59,7 +43,7 @@ const expectRejectedUnverified = async (
   const { attestor, verify, sign } = watchedAttestor(limits);
   await expect(
     attestor.attest({
-      policy: (input.policy ?? policy) as ZkFetchPolicy,
+      policy: (input.policy ?? policy) as ZkFetchAttestationInput['policy'],
       evidence: (input.evidence ?? fixture) as never,
       claim: (input.claim ?? claim) as never,
     }),
@@ -262,7 +246,7 @@ describe('zkFetch attestor configured input limits', () => {
     // the extra slots; reaching it is what this test checks.
     await expect(
       attestor.attest({
-        policy,
+        policy: policy as ZkFetchAttestationInput['policy'],
         evidence: fixture as never,
         claim: { ...claim, values: repeat(count, 0), present: repeat(count, false) } as never,
       }),

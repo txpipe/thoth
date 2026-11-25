@@ -11,9 +11,8 @@ import {
   lovelaceOf,
   readOutputObservation,
 } from '../../src/dolos/index.js';
+import { BLOCK_HASH, TX_HASH } from '../output/fixtures.js';
 
-const BLOCK_HASH = 'ab'.repeat(32);
-const TX_HASH = 'cd'.repeat(32);
 const TIP_HASH = 'ef'.repeat(32);
 
 // A CIP-19 base address: type 0 (key payment + key stake), testnet network id.
@@ -45,7 +44,7 @@ const readTxResponse = (
     outputs?: cardano.TxOutput[];
     successful?: boolean;
     /** The response's transaction hash; defaults to the requested one. */
-    hash?: Uint8Array;
+    hash?: Uint8Array<ArrayBuffer>;
     blockRef?: query.ChainPoint;
     /** `null` omits the ledger tip, so the source's `readTip` is used. */
     ledgerTip?: query.ChainPoint | null;

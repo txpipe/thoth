@@ -3,28 +3,18 @@
 // (per-half byte flag duplication, adjacent 16-byte halves), and
 // `toContractClaim`'s mask guard (its parity lives in the contracts tests).
 import { type Claim, claimSchema, claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
+import { filled, fullSpan, le } from '@txpipe/thoth-test-utils/bytes';
 import { describe, expect, it } from 'vitest';
-
-const bytes32 = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
-
-// A value whose bytes differ across the 16-byte half boundary, so a swapped or
-// reversed half cannot pass the assertions below.
-const fullSpan = (): Uint8Array => Uint8Array.from({ length: 32 }, (_, i) => i);
-
-// Little-endian value of a byte vector, as Compact's `convertBytesToUint` reads
-// it (first byte least significant), computed independently of the encoder.
-const le = (bytes: Uint8Array): bigint =>
-  bytes.reduce((acc, byte, i) => acc + BigInt(byte) * 256n ** BigInt(i), 0n);
 
 // `W = 0` shape: a `V + W = 3` mask.
 const numericBase = {
-  appId: bytes32(0x11),
-  policyHash: bytes32(0x22),
+  appId: filled(0x11),
+  policyHash: filled(0x22),
   windowStart: 100n,
   windowEnd: 200n,
-  subjectHash: bytes32(0x33),
-  holder: bytes32(0x44),
-  salt: bytes32(0x55),
+  subjectHash: filled(0x33),
+  holder: filled(0x44),
+  salt: filled(0x55),
   present: [true, false, true],
   values: [7n, 0n, 9n],
 };
@@ -51,20 +41,20 @@ describe('claimSchema', () => {
 
   it('owns copies of the byte arrays, even over shared memory', () => {
     const holder = new Uint8Array(new SharedArrayBuffer(32));
-    holder.set(bytes32(0x44));
-    const input = { ...byteBase, appId: bytes32(0x11), holder, byteValues: [fullSpan()] };
+    holder.set(filled(0x44));
+    const input = { ...byteBase, appId: filled(0x11), holder, byteValues: [fullSpan()] };
     const parsed = claimSchema(3, 1).parse(input);
     for (const bytes of [input.appId, holder, ...input.byteValues]) {
       bytes.fill(0xee);
     }
-    expect(parsed.appId).toEqual(bytes32(0x11));
-    expect(parsed.holder).toEqual(bytes32(0x44));
+    expect(parsed.appId).toEqual(filled(0x11));
+    expect(parsed.holder).toEqual(filled(0x44));
     expect(parsed.byteValues).toEqual([fullSpan()]);
   });
 
   it('checks the length of the copy, not of the caller object', () => {
     // A Proxy reports 32 bytes to the check but yields 64 when copied.
-    const holder = new Proxy(bytes32(0x44), {
+    const holder = new Proxy(filled(0x44), {
       get: (target, key) =>
         key === Symbol.iterator
           ? function* () {

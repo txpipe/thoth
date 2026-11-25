@@ -8,15 +8,14 @@
 // The compiled pure circuit is the oracle.
 import { randomBytes } from 'node:crypto';
 import { holderCommitmentOf } from '@txpipe/thoth-core/claim-context';
+import { filled, hex } from '@txpipe/thoth-test-utils/bytes';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
-
-const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
 
 /** Read 32 bytes as an unsigned integer, big-endian or little-endian. */
 const asInteger = (bytes: Uint8Array, littleEndian: boolean): bigint => {
   const ordered = littleEndian ? Uint8Array.from(bytes).reverse() : bytes;
-  return BigInt(`0x${Buffer.from(ordered).toString('hex')}`);
+  return BigInt(`0x${hex(ordered)}`);
 };
 
 describe('holderCommitmentOf circuit parity', () => {

@@ -9,69 +9,33 @@ import {
   SelectedServiceSignatureType,
   SIGNATURES,
 } from '@reclaimprotocol/attestor-core';
-import type { ProviderClaimData, ZkFetchEvidence } from '@txpipe/thoth-zk-tls';
-
-const scheme = SIGNATURES[SelectedServiceSignatureType];
+import {
+  createTestWitness,
+  type TestWitness,
+  type TestWitnessObservation,
+} from '@txpipe/thoth-test-utils/zk-fetch';
 
 /** What a test witness observed; each field lands in the signed claim data. */
-export interface Observation {
-  /** Disclosed values, signed as the context's `extractedParameters`. */
-  values: Readonly<Record<string, string>>;
-  /** Observation time, Unix seconds. */
-  timestampS: number;
-  /** Provider parameters (url, method, body, …). */
-  parameters: Readonly<Record<string, unknown>>;
-  /** Extra signed context fields (e.g. an intent digest). */
-  context?: Readonly<Record<string, unknown>>;
-}
-
-/** The requester a test witness records as the claim owner. */
-const OWNER = '0x445541beb656e0f2359cae936fda3c404c409194';
+export type Observation = TestWitnessObservation;
 
 /** A witness backed by a local test key; see {@link testWitness}. */
-export interface TestWitness {
-  /** The witness address the attestor recovers (lowercase `0x` + 40 hex). */
-  address: string;
-  /** Sign an observation into canonical zkFetch evidence. */
-  sign(observation: Observation): Promise<ZkFetchEvidence>;
-}
+export type { TestWitness };
 
 /**
  * A witness backed by a local test key.
  *
  * @param privateKey — `0x`-prefixed 32-byte hex secp256k1 key.
  * @returns the witness address (lowercase `0x` + 40 hex) and a signer that
- *   turns an {@link Observation} into canonical {@link ZkFetchEvidence}.
+ *   turns an {@link Observation} into canonical `ZkFetchEvidence`.
  */
-export const testWitness = (privateKey: string): TestWitness => {
-  const address = scheme.getAddress(scheme.getPublicKey(privateKey));
-  return {
-    address,
-    sign: async (observation: Observation): Promise<ZkFetchEvidence> => {
-      const info = {
-        provider: 'http',
-        parameters: canonicalStringify(observation.parameters),
-        context: canonicalStringify({
-          ...observation.context,
-          extractedParameters: observation.values,
-        }),
-      };
-      const claim: ProviderClaimData = {
-        ...info,
-        owner: OWNER,
-        timestampS: observation.timestampS,
-        identifier: getIdentifierFromClaimInfo(info),
-        epoch: 1,
-      };
-      const signature = await scheme.sign(
-        new TextEncoder().encode(createSignDataForClaim(claim)),
-        privateKey,
-      );
-      return {
-        claim,
-        signatureHex: `0x${Buffer.from(signature).toString('hex')}`,
-        attestorAddress: address,
-      };
+export const testWitness = (privateKey: string): TestWitness =>
+  createTestWitness(
+    {
+      SIGNATURES,
+      SelectedServiceSignatureType,
+      canonicalStringify,
+      createSignDataForClaim,
+      getIdentifierFromClaimInfo,
     },
-  };
-};
+    privateKey,
+  );

@@ -4,7 +4,6 @@
 // is then mutated under the same signatures, each on a fresh ledger so the
 // rejection can only come from the signature check.
 import { randomBytes } from 'node:crypto';
-import { descriptorOf } from '@txpipe/thoth-attestor';
 import {
   type CardanoLocator,
   type CardanoObservation,
@@ -14,28 +13,32 @@ import {
   cardanoPolicyHashOf,
 } from '@txpipe/thoth-cardano';
 import { cardanoAttestor } from '@txpipe/thoth-cardano/attestor';
-import { type CardanoAttestationInput, cardanoClient } from '@txpipe/thoth-cardano/client';
+import { cardanoClient } from '@txpipe/thoth-cardano/client';
 import { buildTrustedSet } from '@txpipe/thoth-client';
 import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
 import type { Claim } from '@txpipe/thoth-core/claim';
 import { toContractClaim } from '@txpipe/thoth-core/claim';
+import { hex } from '@txpipe/thoth-test-utils/bytes';
+import {
+  CARDANO_BLOCK_HASH,
+  CARDANO_TEST_ADDRESS,
+  CARDANO_TX_HASH,
+} from '@txpipe/thoth-test-utils/cardano-fixtures';
+import { inMemoryTransport, trustedSetOf } from '@txpipe/thoth-test-utils/harness';
+import { jubjubKeyPair } from '@txpipe/thoth-test-utils/jubjub';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { type B_Claim, pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
-import { jubjubKeyPair, type Submission, submit } from './helpers/acceptance.js';
+import { freshBytesLedger, packSignatures } from './helpers/acceptance.js';
 import {
   APP_ID,
   bytesIdOf,
   DUMMY_SIGNATURE,
   flip,
   makeNotaryKey,
+  type SignedClaim,
   splitHalves,
 } from './helpers/fixtures.js';
-import { createPrivateState } from './helpers/private-state.js';
-import { MockAttestationBytesSim } from './helpers/sim.js';
-
-const TEST_ADDRESS = `addr_test1${'q'.repeat(53)}`;
-const TX_HASH = 'cd'.repeat(32);
-const BLOCK_HASH = 'ab'.repeat(32);
+import { type MockAttestationBytesSim, submitBytes } from './helpers/sim.js';
 
 // Three numeric facts and one byte fact, sized for the V=3, B=2, K=24 mock.
 const policy: CardanoPolicy = {
@@ -43,7 +46,7 @@ const policy: CardanoPolicy = {
   network: 'preview',
   networkMagic: 2,
   confirmationDepth: 3,
-  address: TEST_ADDRESS,
+  address: CARDANO_TEST_ADDRESS,
   slots: [
     { slot: 0, name: 'blockTime' },
     { slot: 1, name: 'blockNumber' },
@@ -56,17 +59,17 @@ const policy: CardanoPolicy = {
 // signature check, like the zkFetch acceptance test's POLICY_B.
 const otherPolicy: CardanoPolicy = { ...policy, confirmationDepth: 1 };
 
-const locator: CardanoLocator = { txHash: TX_HASH, outputIndex: 0 };
+const locator: CardanoLocator = { txHash: CARDANO_TX_HASH, outputIndex: 0 };
 
 /** The event both the client and every attestor read. */
 const observation: CardanoObservation = {
   networkMagic: 2,
   tipBlockNumber: 1003,
-  block: { hash: BLOCK_HASH, slot: 123_456, blockNumber: 1000, time: 1_700_000_000 },
+  block: { hash: CARDANO_BLOCK_HASH, slot: 123_456, blockNumber: 1000, time: 1_700_000_000 },
   output: {
-    txHash: TX_HASH,
+    txHash: CARDANO_TX_HASH,
     outputIndex: 0,
-    address: TEST_ADDRESS,
+    address: CARDANO_TEST_ADDRESS,
     lovelace: 5_000_000n,
     assets: [],
   },
@@ -90,23 +93,9 @@ let honestClaim: Claim<number, number>;
 
 const clientWith = () =>
   cardanoClient.init({
-    trusted: buildTrustedSet({
-      registrySize: registryKeys.length,
-      attestors: attestors.map((attestor, registryIndex) => ({
-        attestor: descriptorOf(attestor),
-        registryIndex,
-      })),
-    }),
+    trusted: trustedSetOf(buildTrustedSet, attestors, { registrySize: registryKeys.length }),
     verifier: jubjubVerifier,
-    transport: {
-      request: (descriptor, input) => {
-        const attestor = attestors.find((candidate) => candidate.id === descriptor.id);
-        if (!attestor) {
-          throw new Error(`transport: unknown attestor ${descriptor.id}`);
-        }
-        return attestor.attest(input as CardanoAttestationInput);
-      },
-    },
+    transport: inMemoryTransport(attestors),
     policy,
     appId: APP_ID,
     valueSlots: 3,
@@ -116,7 +105,7 @@ const clientWith = () =>
 
 // Collect the honest threshold set through the cardano client and lay its
 // signatures out at their registry slots, the dummy filling the unqueried one.
-const collectSubmission = async (secret = holderSecret): Promise<Submission> => {
+const collectSubmission = async (secret = holderSecret): Promise<SignedClaim<B_Claim>> => {
   const client = clientWith();
   const { claim, collected } = await client.collect(locator, {
     holder: pureCircuits.holderCommitment(secret),
@@ -125,28 +114,26 @@ const collectSubmission = async (secret = holderSecret): Promise<Submission> => 
     attestorTimeoutMs: 5_000,
   });
   honestClaim = claim;
-  const signatures = registryKeys.map(
-    (_, slot) =>
-      collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
-      DUMMY_SIGNATURE,
-  );
-  return { claim: toContractClaim(claim), signatures, commitRand: randomBytes(32) };
+  return {
+    claim: toContractClaim(claim),
+    signatures: packSignatures(registryKeys.length, collected),
+    commitRand: randomBytes(32),
+  };
 };
 
 // A fresh ledger that seals the app id and the policy the attestors enforced,
 // with its block time inside the claim's window.
-const freshLedger = async (appId = APP_ID): Promise<MockAttestationBytesSim> => {
-  const sim = await MockAttestationBytesSim.create(
-    createPrivateState<B_Claim>(holderSecret),
+const freshLedger = (appId = APP_ID): Promise<MockAttestationBytesSim> =>
+  freshBytesLedger({
+    holderSecret,
     registryKeys,
-    { appId, policyHashes: [cardanoPolicyHashOf(policy), cardanoPolicyHashOf(otherPolicy)] },
-  );
-  sim.now = Number(honestClaim.windowStart);
-  return sim;
-};
+    appId,
+    policyHashes: [cardanoPolicyHashOf(policy), cardanoPolicyHashOf(otherPolicy)],
+    now: honestClaim.windowStart,
+  });
 
 describe('cardano cross-seam acceptance', () => {
-  let honest: Submission;
+  let honest: SignedClaim<B_Claim>;
 
   beforeAll(async () => {
     honest = await collectSubmission();
@@ -158,9 +145,9 @@ describe('cardano cross-seam acceptance', () => {
       policyHash: cardanoPolicyHashOf(policy),
       subjectHash: cardanoOutputSubjectHashOf({
         networkMagic: 2,
-        txHash: TX_HASH,
+        txHash: CARDANO_TX_HASH,
         outputIndex: 0,
-        blockHash: BLOCK_HASH,
+        blockHash: CARDANO_BLOCK_HASH,
       }),
       holder: pureCircuits.holderCommitment(holderSecret),
       windowStart: 1_700_000_000n,
@@ -168,20 +155,18 @@ describe('cardano cross-seam acceptance', () => {
       present: [true, true, true],
       bytePresent: [true, true],
       values: [1_700_000_000n, 1000n, 5_000_000n],
-      byteHalves: splitHalves(Uint8Array.from(Buffer.from(TX_HASH, 'hex'))),
+      byteHalves: splitHalves(Uint8Array.from(Buffer.from(CARDANO_TX_HASH, 'hex'))),
     });
     expect(honest.signatures[2]).toBe(DUMMY_SIGNATURE);
   });
 
   it('has every attestor derive the same event salt', () => {
-    expect(Buffer.from(honest.claim.salt).toString('hex')).toBe(
-      Buffer.from(cardanoOutputSaltOf(2, TX_HASH, 0)).toString('hex'),
-    );
+    expect(hex(honest.claim.salt)).toBe(hex(cardanoOutputSaltOf(2, CARDANO_TX_HASH, 0)));
   });
 
   it('accepts the honest claim end to end', async () => {
     const sim = await freshLedger();
-    await submit(sim, honest, holderSecret);
+    await submitBytes(sim, honest, holderSecret);
     expect(sim.ledgerView().B_claimsVault.member(bytesIdOf(honest.claim, honest.commitRand))).toBe(
       true,
     );
@@ -189,9 +174,9 @@ describe('cardano cross-seam acceptance', () => {
 
   it('refuses a resubmission of the accepted claim under fresh vault randomness', async () => {
     const sim = await freshLedger();
-    await submit(sim, honest, holderSecret);
+    await submitBytes(sim, honest, holderSecret);
     await expect(
-      submit(sim, { ...honest, commitRand: randomBytes(32) }, holderSecret),
+      submitBytes(sim, { ...honest, commitRand: randomBytes(32) }, holderSecret),
     ).rejects.toThrow('Observation replay');
   });
 
@@ -202,8 +187,8 @@ describe('cardano cross-seam acceptance', () => {
     const second = await collectSubmission(secondSecret);
     expect(second.claim.holder).not.toEqual(honest.claim.holder);
     const sim = await freshLedger();
-    await submit(sim, honest, holderSecret);
-    await expect(submit(sim, second, secondSecret)).rejects.toThrow('Observation replay');
+    await submitBytes(sim, honest, holderSecret);
+    await expect(submitBytes(sim, second, secondSecret)).rejects.toThrow('Observation replay');
   });
 
   const otherSecret = randomBytes(32);
@@ -263,7 +248,7 @@ describe('cardano cross-seam acceptance', () => {
     async ({ mutate, secret, sealedAppId }) => {
       const sim = await freshLedger(sealedAppId);
       await expect(
-        submit(sim, { ...honest, claim: mutate(honest.claim) }, secret ?? holderSecret),
+        submitBytes(sim, { ...honest, claim: mutate(honest.claim) }, secret ?? holderSecret),
       ).rejects.toThrow('Insufficient valid signatures');
     },
   );

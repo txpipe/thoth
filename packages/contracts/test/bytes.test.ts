@@ -4,8 +4,8 @@
 // the halves, the unchanged W = 0 layout, and that the salted nullifier does
 // not confirm a guessed value.
 import { randomBytes } from 'node:crypto';
-import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import { claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
+import { filled, fullSpan, hex, le, padded32 } from '@txpipe/thoth-test-utils/bytes';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits as mockPureCircuits } from '../artifacts/mock_attestation/contract/index.js';
@@ -21,27 +21,19 @@ import {
   makeClaim,
   makeNotaryKey,
   mergeHalves,
-  padded32,
+  type SignedClaim,
+  signByteClaim,
   splitHalves,
 } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
-import { MockAttestationBytesSim } from './helpers/sim.js';
+import { MockAttestationBytesSim, submitBytes } from './helpers/sim.js';
 
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 const registryKeys = notaryKeys.map((key) => key.pk);
 const holder = DEFAULT_HOLDER_SECRET;
 const ZERO32 = new Uint8Array(32);
 const ZERO16 = ZERO32.slice(0, 16);
-
-// A value whose bytes differ across the 16-byte half boundary, so a swapped or
-// reversed half cannot pass the split/reassembly assertions.
-const fullSpan = (): Uint8Array => Uint8Array.from({ length: 32 }, (_, i) => i);
-
-// Little-endian value of a byte vector, as Compact's `convertBytesToUint` reads
-// it (first byte least significant), computed independently of the encoder.
-const le = (bytes: Uint8Array): bigint =>
-  bytes.reduce((acc, byte, i) => acc + BigInt(byte) * 256n ** BigInt(i), 0n);
 
 // Reinterpret the bytes mock's contract shape as the kind-facing core shape:
 // collapse each byte slot's duplicated per-half flags to one and reassemble its
@@ -52,31 +44,14 @@ const coreOf = (claim: B_Claim) => ({
   byteValues: [mergeHalves(claim.byteHalves[0], claim.byteHalves[1])],
 });
 
-type Submission = {
-  claim: B_Claim;
-  signatures: JubjubSchnorrSignature[];
-  commitRand: Uint8Array;
-};
-
 // A threshold signature set over the claim's own compiled message: the first
 // two keys sign, the third slot stays empty (never verifies).
-const signed = (claim: B_Claim): Submission => {
-  const message = pureCircuits.message(claim);
-  return {
-    claim,
-    signatures: [
-      signMessage(notaryKeys[0].sk, message).signature,
-      signMessage(notaryKeys[1].sk, message).signature,
-      DUMMY_SIGNATURE,
-    ],
-    commitRand: randomBytes(32),
-  };
-};
+const signed = (claim: B_Claim): SignedClaim<B_Claim> =>
+  signByteClaim(claim, [notaryKeys[0], notaryKeys[1], null]);
 
 let sim: MockAttestationBytesSim;
 
-const submit = (submission: Submission) =>
-  sim.call('verifyAttestation', { ...submission, holderSecret: holder });
+const submit = (submission: SignedClaim<B_Claim>) => submitBytes(sim, submission, holder);
 
 describe('bytes claim wire', () => {
   it('matches claimToMessage field-for-field, flags duplicated and halves adjacent', () => {
@@ -129,23 +104,22 @@ describe('bytes claim wire', () => {
   it('pins the numeric-only (B = 0) vault id against serialization drift', () => {
     // For B = 0 the empty byte vectors contribute no fields, so this is the
     // numeric-only module's id; a struct reorder or added field turns it red.
-    const b = (byte: number) => new Uint8Array(32).fill(byte);
     const claim: A_Claim = {
       version: 1n,
-      appId: b(0x11),
-      policyHash: b(0x22),
+      appId: filled(0x11),
+      policyHash: filled(0x22),
       windowStart: 100n,
       windowEnd: 200n,
-      subjectHash: b(0x33),
-      holder: b(0x44),
-      salt: b(0x55),
+      subjectHash: filled(0x33),
+      holder: filled(0x44),
+      salt: filled(0x55),
       present: [true, false, true],
       values: [7n, 8n, 9n],
       bytePresent: [],
       byteHalves: [],
     };
-    const rand = Uint8Array.from({ length: 32 }, (_, i) => i);
-    expect(Buffer.from(mockPureCircuits.computeId(claim, rand)).toString('hex')).toBe(
+    const rand = fullSpan();
+    expect(hex(mockPureCircuits.computeId(claim, rand))).toBe(
       'd56f26ee241f06678b4cb1e41f12346f484b41bf827d50118599fe7093fa51d3',
     );
   });
@@ -179,7 +153,7 @@ describe('layout binding', () => {
 
   it('rejects honest signatures over the competing layout', async () => {
     const message = claimToMessage(competing);
-    const submission: Submission = {
+    const submission: SignedClaim<B_Claim> = {
       claim,
       signatures: [
         signMessage(notaryKeys[0].sk, message).signature,
@@ -251,7 +225,7 @@ describe('byte-value predicates', () => {
     sim = await MockAttestationBytesSim.create(createPrivateState<B_Claim>(holder), registryKeys);
   });
 
-  const vault = async (byteValue: Uint8Array): Promise<Submission> => {
+  const vault = async (byteValue: Uint8Array): Promise<SignedClaim<B_Claim>> => {
     const submission = signed(makeByteClaim({ byteValue }));
     await submit(submission);
     return submission;

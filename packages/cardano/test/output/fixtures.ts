@@ -1,9 +1,21 @@
 // Fixed cardano@1 values shared by the kind's tests.
 
-import type { OutputLocator, OutputObservation, OutputPolicy } from '@txpipe/thoth-cardano';
+import {
+  deriveCardanoClaim,
+  type OutputLocator,
+  type OutputObservation,
+  type OutputPolicy,
+} from '@txpipe/thoth-cardano';
+import type { Claim } from '@txpipe/thoth-core/claim';
+import { filled } from '@txpipe/thoth-test-utils/bytes';
+import {
+  CARDANO_BLOCK_HASH,
+  CARDANO_TEST_ADDRESS,
+  CARDANO_TX_HASH,
+} from '@txpipe/thoth-test-utils/cardano-fixtures';
 
 /** A preview payment address at the smallest CIP-19 length; the checksum is a fixture. */
-export const TEST_ADDRESS = `addr_test1${'q'.repeat(53)}`;
+export const TEST_ADDRESS = CARDANO_TEST_ADDRESS;
 
 /** The canonical output policy: preview, depth 3, five numeric facts and one byte fact. */
 export const POLICY: OutputPolicy = {
@@ -23,10 +35,10 @@ export const POLICY: OutputPolicy = {
 };
 
 /** The event's transaction hash. */
-export const TX_HASH = 'cd'.repeat(32);
+export const TX_HASH = CARDANO_TX_HASH;
 
 /** The block hash the event landed in. */
-export const BLOCK_HASH = 'ab'.repeat(32);
+export const BLOCK_HASH = CARDANO_BLOCK_HASH;
 
 /** The client's evidence: the locator only. */
 export const LOCATOR: OutputLocator = { txHash: TX_HASH, outputIndex: 1 };
@@ -83,7 +95,21 @@ export const BYTE_FACT_POLICY: OutputPolicy = {
 };
 
 /** A fixed app id, 32 bytes. */
-export const APP_ID = new Uint8Array(32).fill(0xaa);
+export const APP_ID = filled(0xaa);
 
 /** A fixed holder commitment, 32 bytes. */
-export const HOLDER = new Uint8Array(32).fill(0xbb);
+export const HOLDER = filled(0xbb);
+
+/** Derive a claim from `observation` under the fixture defaults. */
+export const claimFor = (
+  observation: OutputObservation = OBSERVATION,
+  options: { policy?: OutputPolicy; valueSlots?: number; byteSlots?: number } = {},
+): Claim<number, number> =>
+  deriveCardanoClaim({
+    policy: options.policy ?? POLICY,
+    observation,
+    appId: APP_ID,
+    holder: HOLDER,
+    valueSlots: options.valueSlots ?? 5,
+    byteSlots: options.byteSlots ?? 1,
+  });

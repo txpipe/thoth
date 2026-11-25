@@ -1,8 +1,9 @@
 // Unit tests for the zkFetch claim context (`@txpipe/thoth-zk-tls`): the kind's
 // policy hash and its request subject.
 
-import { createHash } from 'node:crypto';
 import { policyHashOf, subjectHashOf } from '@txpipe/thoth-core/claim-context';
+import { hex, sha256 } from '@txpipe/thoth-test-utils/bytes';
+import { disclosureRules } from '@txpipe/thoth-test-utils/zk-fetch';
 import {
   type ZkFetchPolicy,
   zkFetchBodyHashOf,
@@ -11,10 +12,6 @@ import {
   zkFetchSubjectOf,
 } from '@txpipe/thoth-zk-tls';
 import { describe, expect, it } from 'vitest';
-import { disclosureRules } from './helpers/helper.js';
-
-const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
-const sha256 = (text: string): string => createHash('sha256').update(text, 'utf-8').digest('hex');
 
 const policy: ZkFetchPolicy = {
   allowedHosts: ['api.example.com'],

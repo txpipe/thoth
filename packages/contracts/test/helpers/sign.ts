@@ -8,13 +8,11 @@
 // `@txpipe/thoth-core/claim`'s `claimToMessage`) — never a hand-rolled encoding — so
 // a signature produced here must verify in-circuit.
 import {
-  CompactTypeField,
-  CompactTypeVector,
   type JubjubPoint,
   type JubjubSchnorrSignature,
-  jubjubSchnorrSign,
   jubjubSchnorrVerifyingKey,
 } from '@midnight-ntwrk/compact-runtime';
+import { signJubjubMessage } from '@txpipe/thoth-test-utils/jubjub';
 import { type A_Claim, pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
 
 /**
@@ -33,7 +31,7 @@ export const signMessage = (
   msg: readonly bigint[],
 ): { pk: JubjubPoint; signature: JubjubSchnorrSignature } => ({
   pk: jubjubSchnorrVerifyingKey(sk),
-  signature: jubjubSchnorrSign(new CompactTypeVector(msg.length, CompactTypeField), [...msg], sk),
+  signature: signJubjubMessage(sk, msg),
 });
 
 export const signClaim = (

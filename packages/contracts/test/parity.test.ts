@@ -10,6 +10,7 @@
 // off-chain encoder is byte-identical to the contract's own.
 import { randomBytes } from 'node:crypto';
 import { claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
+import { filled, fullSpan } from '@txpipe/thoth-test-utils/bytes';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import {
@@ -31,13 +32,13 @@ const holder = DEFAULT_HOLDER_SECRET;
 const claims = [
   makeClaim(),
   makeClaim({ holder: new Uint8Array(32) }),
-  makeClaim({ holder: Uint8Array.from({ length: 32 }, (_, i) => i) }),
-  makeClaim({ holder: new Uint8Array(32).fill(0xff) }),
+  makeClaim({ holder: fullSpan() }),
+  makeClaim({ holder: filled(0xff) }),
   makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] }),
   makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] }),
   makeClaim({ values: [0n, 200n, 0n], present: [false, true, false] }),
-  makeClaim({ appId: new Uint8Array(32).fill(0xa2), policyHash: POLICY_B }),
-  makeClaim({ appId: new Uint8Array(32), policyHash: new Uint8Array(32).fill(0xff) }),
+  makeClaim({ appId: filled(0xa2), policyHash: POLICY_B }),
+  makeClaim({ appId: new Uint8Array(32), policyHash: filled(0xff) }),
   makeClaim({ windowStart: 0n, windowEnd: 0n }),
   makeClaim({ windowStart: 1_800_000_000n, windowEnd: 0xffff_ffffn }),
 ];

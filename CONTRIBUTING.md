@@ -44,6 +44,7 @@ thoth/
 │   │   ├── examples/example_app.compact  # a 2-of-3 embedding
 │   │   └── test/                      # simulator tests, mock contracts, helpers
 │   ├── core/                   # @txpipe/thoth-core: keyless claim and law types
+│   ├── test-utils/             # @txpipe/thoth-test-utils (private): shared cross-package test helpers
 │   └── zk-tls/                 # @txpipe/thoth-zk-tls: the zkFetch kind (attestor, client, prover)
 ├── .changeset/                 # pending changesets and their config
 ├── .github/                    # CI and release workflows, setup-compact action
@@ -60,6 +61,23 @@ thoth/
 Every directory under `packages/` is one package. A package is built and
 type-checked only once it is listed in the root `package.json` `workspaces`.
 
+### Test helpers
+
+`packages/test-utils` (`@txpipe/thoth-test-utils`) is a private workspace
+package (`"private": true`) hoisted to root `node_modules/`. Tests in any
+workspace import its `.ts` subpath exports directly without listing it in any
+published package's `package.json` and without a `dist/` build step.
+
+- **Put in `packages/test-utils`**: cross-package byte and encoding primitives,
+  live-suite environment parsers, kind-agnostic SDK harnesses, Jubjub test
+  key-pair builders, and dependency-free fixture constants. Keep it free of
+  runtime dependencies on `@txpipe/thoth-*`, Compact artifacts, Reclaim, or
+  Cardano libraries.
+- **Keep in package-local test helpers** (`packages/<name>/test/helpers/` or
+  `test/output/fixtures.ts`): helpers tied to compiled Compact artifacts,
+  `@reclaimprotocol/attestor-core`, or typed Cardano/zkFetch policies,
+  observations, and claim builders.
+
 ## Commands
 
 Run them from the repo root:
@@ -68,7 +86,7 @@ Run them from the repo root:
 | -------------------------- | --------------------------------------------------------------------------------- |
 | `npm test`                 | Compiles the mock contracts and builds the packages (`pretest`), then runs vitest |
 | `npm test -- <pattern>`    | The same, for the test files matching `<pattern>`                                 |
-| `npm run types`            | Type-checks every package                                                         |
+| `npm run types`            | Type-checks `src/` and `test/` in every package                                   |
 | `npm run check`            | Biome format and lint, plus `compact format -c`                                   |
 | `npm run check:fix`        | Applies the Biome and Compact formatting fixes                                    |
 | `npm run build`            | Builds every package into its `dist/`                                             |

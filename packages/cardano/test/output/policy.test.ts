@@ -10,15 +10,11 @@ import {
   normalizeCardanoPolicy,
   type OutputPolicy,
 } from '@txpipe/thoth-cardano';
+import { hex } from '@txpipe/thoth-test-utils/bytes';
 import { describe, expect, it } from 'vitest';
+import { ASSET_PIN, TEST_ADDRESS } from './fixtures.js';
 
-/**
- * A preview payment address at the smallest CIP-19 length (53 characters
- * after the prefix). The checksum is not verified, so the body is a fixture.
- */
-const TEST_ADDRESS = `addr_test1${'q'.repeat(53)}`;
 const MAINNET_ADDRESS = `addr1${'q'.repeat(53)}`;
-const ASSET_PIN = { policyId: 'ab'.repeat(28), assetName: 'cd'.repeat(4) };
 
 const OUTPUT: OutputPolicy = {
   kind: 'output',
@@ -254,7 +250,7 @@ describe('cardanoPolicyHashOf', () => {
   });
 
   it('pins the canonical output policy hash to its bytes', () => {
-    expect(Buffer.from(cardanoPolicyHashOf(OUTPUT)).toString('hex')).toBe(
+    expect(hex(cardanoPolicyHashOf(OUTPUT))).toBe(
       '43a36f36210e42c8d3357821afb855b739ec22c832ecf7a5df3b79b05221d907',
     );
   });

@@ -9,11 +9,12 @@ import {
   jubjubSchnorrVerifyingKey,
   sampleJubjubSchnorrSk,
 } from '@midnight-ntwrk/compact-runtime';
+import { filled, padded32 } from '@txpipe/thoth-test-utils/bytes';
 import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
 import type { B_Claim } from '../../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits as bytesPureCircuits } from '../../artifacts/mock_attestation_bytes/contract/index.js';
-import { signClaim as signSingle } from './sign.js';
+import { signMessage, signClaim as signSingle } from './sign.js';
 
 export const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
 
@@ -25,9 +26,8 @@ export const DEFAULT_MAX_WINDOW = 300n;
 // The app id and the two policy hashes the mock seals at deploy. A second app
 // id and a third, unsealed hash stand in for another app's claim and a laxer
 // policy a requester might substitute.
-const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
 /** Fixed test secret; claim fixtures bind to this caller unless overridden. */
-export const DEFAULT_HOLDER_SECRET = new Uint8Array(32).fill(0xc1);
+export const DEFAULT_HOLDER_SECRET = filled(0xc1);
 export const APP_ID = filled(0xa1);
 export const OTHER_APP_ID = filled(0xa2);
 export const POLICY_A = filled(0xb1);
@@ -40,17 +40,6 @@ export type NotaryKey = { sk: bigint; pk: JubjubPoint };
 export const makeNotaryKey = (): NotaryKey => {
   const sk = sampleJubjubSchnorrSk();
   return { sk, pk: jubjubSchnorrVerifyingKey(sk) };
-};
-
-/** UTF-8 encode `value` and zero-pad it to 32 bytes (the `'bytes'` parse rule). */
-export const padded32 = (value: string): Uint8Array => {
-  const bytes = new TextEncoder().encode(value);
-  if (bytes.length > 32) {
-    throw new Error(`padded32: value is ${bytes.length} bytes, over the 32-byte limit`);
-  }
-  const padded = new Uint8Array(32);
-  padded.set(bytes);
-  return padded;
 };
 
 /** Default byte value fixture: `"abc"` zero-padded to 32 bytes. */
@@ -140,8 +129,8 @@ export const flip = (bytes: Uint8Array, i: number): Uint8Array => {
   return copy;
 };
 
-export type SignedClaim = {
-  claim: A_Claim;
+export type SignedClaim<C = A_Claim> = {
+  claim: C;
   signatures: JubjubSchnorrSignature[]; // valid sigs for the keys given; absent slot = dummy (never verifies)
   commitRand: Uint8Array;
 };
@@ -153,15 +142,29 @@ export const DUMMY_SIGNATURE: JubjubSchnorrSignature = {
   response: 0n,
 };
 
-// Sign a claim with the given notary keys. A `null` key yields the dummy
-// signature, which never verifies.
+// Sign a numeric-only claim with the given notary keys. A `null` key yields
+// the dummy signature, which never verifies.
 export const signClaim = (
   claim: A_Claim,
   keys: readonly (NotaryKey | null)[],
-  commitRand: Uint8Array,
-): SignedClaim => {
+  commitRand: Uint8Array = randomBytes(32),
+): SignedClaim<A_Claim> => {
   const signatures: JubjubSchnorrSignature[] = keys.map((key) =>
     key === null ? DUMMY_SIGNATURE : signSingle(key.sk, claim).signature,
+  );
+  return { claim, signatures, commitRand };
+};
+
+// Sign a byte-slot claim over its compiled message. A `null` key yields the
+// dummy signature, which never verifies.
+export const signByteClaim = (
+  claim: B_Claim,
+  keys: readonly (NotaryKey | null)[],
+  commitRand: Uint8Array = randomBytes(32),
+): SignedClaim<B_Claim> => {
+  const message = bytesPureCircuits.message(claim);
+  const signatures: JubjubSchnorrSignature[] = keys.map((key) =>
+    key === null ? DUMMY_SIGNATURE : signMessage(key.sk, message).signature,
   );
   return { claim, signatures, commitRand };
 };

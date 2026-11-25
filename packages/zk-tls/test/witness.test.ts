@@ -5,9 +5,10 @@
 
 import { buildAttestor } from '@txpipe/thoth-attestor';
 import { type Claim, claimToMessage, type FlatMessage } from '@txpipe/thoth-core/claim';
+import { filled, hex } from '@txpipe/thoth-test-utils/bytes';
+import { disclosureRules } from '@txpipe/thoth-test-utils/zk-fetch';
 import {
   assertEvidenceMatchesPolicy,
-  deriveClaimFromEvidence,
   parsedEvidenceView,
   ZK_FETCH_CLAIM_CONTEXT_KEY,
   type ZkFetchEvidence,
@@ -19,11 +20,8 @@ import {
 } from '@txpipe/thoth-zk-tls';
 import { createZkFetchDefinition, zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { disclosureRules } from './helpers/helper.js';
+import { APP_ID, deriveClaim, HOLDER } from './helpers/helper.js';
 import { type Observation, type TestWitness, testWitness } from './helpers/witness.js';
-
-/** The app id every claim in this suite is for. */
-const APP_ID = new Uint8Array(32).fill(0xa1);
 
 const alice = testWitness(`0x${'11'.repeat(32)}`);
 const bob = testWitness(`0x${'22'.repeat(32)}`);
@@ -37,9 +35,6 @@ const policy: ZkFetchPolicy = {
   bodyPolicy: 'ignored',
   ...disclosureRules('balance', 'score'),
 };
-
-/** The holder every claim in this suite is proposed with. */
-const HOLDER = new Uint8Array(32).fill(0xc1);
 
 /** The observation window every claim in this suite is proposed with. */
 const WINDOW = { windowStart: 1_786_000_000n, windowEnd: 1_786_000_010n };
@@ -109,11 +104,9 @@ const attestWith = async (
   claimOverrides: Partial<Claim<number>> = {},
   activePolicy: ZkFetchPolicy = policy,
 ) => {
-  const derived = deriveClaimFromEvidence({
+  const derived = deriveClaim({
     verified: parsedEvidenceView(evidence),
     policy: activePolicy,
-    appId: APP_ID,
-    holder: HOLDER,
     valueSlots: 3,
     ...window,
   });
@@ -136,12 +129,12 @@ describe('test-key witness', () => {
       [5, 0xa5],
     ] as const) {
       const attestation = await attestWith(aliceAttestor, evidence, WINDOW, {
-        appId: new Uint8Array(32).fill(appByte),
+        appId: filled(appByte),
         present: [true, true, ...Array<boolean>(size - 2).fill(false)],
         values: [0n, 8n, ...Array<bigint>(size - 2).fill(0n)],
       });
       expect(attestation.publicKey).toBe('attestor-alice');
-      expect(attestation.claim.appId).toEqual(new Uint8Array(32).fill(appByte));
+      expect(attestation.claim.appId).toEqual(filled(appByte));
       expect(attestation.claim.values).toHaveLength(size);
       expect(attestation.claim.values.slice(2)).toEqual(Array<bigint>(size - 2).fill(0n));
       expect(attestation.claim.present.slice(2)).toEqual(Array<boolean>(size - 2).fill(false));
@@ -249,7 +242,7 @@ describe('test-key witness', () => {
     const sign = vi.spyOn(aliceAttestor.signer, 'sign');
     await expect(
       attestWith(aliceAttestor, await observe(alice), WINDOW, {
-        holder: new Uint8Array(32).fill(0xc2),
+        holder: filled(0xc2),
       }),
     ).rejects.toThrow(/claim context digest/);
     expect(sign).not.toHaveBeenCalled();
@@ -267,14 +260,14 @@ describe('test-key witness', () => {
 
   it('signs the claim context digest the witness signed as the salt', async () => {
     const attestation = await attestWith(aliceAttestor, await observe(alice));
-    expect(Buffer.from(attestation.claim.salt).toString('hex')).toBe(digestOf());
+    expect(hex(attestation.claim.salt)).toBe(digestOf());
   });
 
   it('rejects a proposal with another salt than the witness signed', async () => {
     const sign = vi.spyOn(aliceAttestor.signer, 'sign');
     await expect(
       attestWith(aliceAttestor, await observe(alice), WINDOW, {
-        salt: new Uint8Array(32).fill(0xee),
+        salt: filled(0xee),
       }),
     ).rejects.toThrow(/salt/);
     expect(sign).not.toHaveBeenCalled();
@@ -318,11 +311,9 @@ describe('test-key witness', () => {
   it("rejects another witness's evidence in the definition's verify, before proof verification", async () => {
     const definition = createZkFetchDefinition({ witnessAddress: alice.address });
     const evidence = await observe(bob);
-    const claim = deriveClaimFromEvidence({
+    const claim = deriveClaim({
       verified: parsedEvidenceView(evidence),
       policy,
-      appId: APP_ID,
-      holder: HOLDER,
       valueSlots: 3,
       ...WINDOW,
     });
@@ -425,8 +416,8 @@ describe('test-key witness', () => {
   });
 
   it('accepts evidence whose disclosure rules are spelled differently', async () => {
-    const distance = { type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' };
-    const movingTime = { type: 'regex', value: '"moving_time":\\s*(?<movingTime>\\d+)' };
+    const distance = { type: 'regex', value: '"distance":\\s*(?<distance>[\\d.]+)' } as const;
+    const movingTime = { type: 'regex', value: '"moving_time":\\s*(?<movingTime>\\d+)' } as const;
     const activePolicy: ZkFetchPolicy = {
       allowedHosts: ['api.example.com'],
       slots: [{ slot: 0, name: 'distance', parse: 'float' }],
@@ -644,19 +635,15 @@ describe('test-key witness', () => {
   });
 
   it('derives one message whatever witness produced the observation', async () => {
-    const aliceClaim = deriveClaimFromEvidence({
+    const aliceClaim = deriveClaim({
       verified: parsedEvidenceView(await observe(alice)),
       policy,
-      appId: APP_ID,
-      holder: HOLDER,
       valueSlots: 3,
       ...WINDOW,
     });
-    const bobClaim = deriveClaimFromEvidence({
+    const bobClaim = deriveClaim({
       verified: parsedEvidenceView(await observe(bob)),
       policy,
-      appId: APP_ID,
-      holder: HOLDER,
       valueSlots: 3,
       ...WINDOW,
     });
@@ -664,18 +651,14 @@ describe('test-key witness', () => {
   });
 
   it('derives the same claim when only the signed context changes', async () => {
-    const deriveClaim = async (overrides: Partial<Observation> = {}) =>
-      deriveClaimFromEvidence({
+    const derived = async (overrides: Partial<Observation> = {}) =>
+      deriveClaim({
         verified: parsedEvidenceView(await observe(alice, overrides)),
         policy,
-        appId: APP_ID,
-        holder: HOLDER,
         valueSlots: 3,
         ...WINDOW,
       });
     const context = { intent: 'cd'.repeat(32), [ZK_FETCH_CLAIM_CONTEXT_KEY]: digestOf() };
-    expect(claimToMessage(await deriveClaim({ context }))).toEqual(
-      claimToMessage(await deriveClaim()),
-    );
+    expect(claimToMessage(await derived({ context }))).toEqual(claimToMessage(await derived()));
   });
 });

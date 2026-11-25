@@ -1,5 +1,6 @@
 // The host allowlist: which attested URLs a policy's `allowedHosts` admits, and
 // which entries the policy schema refuses.
+import { disclosureRules } from '@txpipe/thoth-test-utils/zk-fetch';
 import {
   assertEvidenceMatchesPolicy,
   normalizePolicy,
@@ -10,17 +11,13 @@ import {
   zkFetchPolicyHashOf,
 } from '@txpipe/thoth-zk-tls';
 import { describe, expect, it } from 'vitest';
-import { disclosureRules } from './helpers/helper.js';
+import { HOLDER, policyWithSlots } from './helpers/helper.js';
 import { testWitness } from './helpers/witness.js';
 
 const witness = testWitness(`0x${'11'.repeat(32)}`);
 
-const policyFor = (allowedHosts: string[]): ZkFetchPolicy => ({
-  allowedHosts,
-  slots: [{ slot: 0, name: 'balance', parse: 'int' }],
-  bodyPolicy: 'ignored',
-  ...disclosureRules('balance'),
-});
+const policyFor = (allowedHosts: string[]): ZkFetchPolicy =>
+  policyWithSlots([{ slot: 0, name: 'balance', parse: 'int' }], { allowedHosts });
 
 /** Check evidence a witness signed for `url` against a policy allowing `allowedHosts`. */
 const check = async (allowedHosts: string[], url: string): Promise<string> => {
@@ -34,7 +31,7 @@ const check = async (allowedHosts: string[], url: string): Promise<string> => {
       [ZK_FETCH_CLAIM_CONTEXT_KEY]: zkFetchClaimContextDigestOf({
         policy,
         request: { url, method: 'GET', body: '' },
-        holder: new Uint8Array(32).fill(0xc1),
+        holder: HOLDER,
         windowStart: 1_786_000_000n,
         windowEnd: 1_786_000_010n,
       }),
