@@ -12,7 +12,7 @@ import { randomBytes } from 'node:crypto';
 import { claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { claim as claimArbitrary } from '../../core/test/arbitraries.js';
+import { anyClaim } from '../../core/test/arbitraries.js';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits as bytesPureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import {
@@ -37,7 +37,7 @@ describe('claimToMessage parity', () => {
     // (B = 2 halves) for the bytes mock.
     it('matches the numeric-only mock buildMessage (V = 3, K = 20)', () => {
       fc.assert(
-        fc.property(claimArbitrary({ v: 3, w: 0 }), (claim) => {
+        fc.property(anyClaim({ v: 3, w: 0 }), (claim) => {
           expect(pureCircuits.message(toContractClaim(claim))).toEqual(claimToMessage(claim));
         }),
       );
@@ -45,7 +45,7 @@ describe('claimToMessage parity', () => {
 
     it('matches the bytes mock buildMessage (V = 3, B = 2, K = 24)', () => {
       fc.assert(
-        fc.property(claimArbitrary({ v: 3, w: 1 }), (claim) => {
+        fc.property(anyClaim({ v: 3, w: 1 }), (claim) => {
           expect(bytesPureCircuits.message(toContractClaim(claim))).toEqual(claimToMessage(claim));
         }),
       );

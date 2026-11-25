@@ -1,18 +1,18 @@
-// Unit tests for the canonical claim shape (`@txpipe/thoth-core/claim`): the schema's
-// length and numeric-bound validation, `claimToMessage`'s wire encoding
-// (per-half byte flag duplication, adjacent 16-byte halves) and injectivity,
-// the schema-to-encoder round trip, and `toContractClaim`'s mask guard (its
-// parity lives in the contracts tests).
+// Unit and property tests for `@txpipe/thoth-core/claim`: schema validation, the wire
+// encoding and its injectivity, and the schema-to-encoder round trip.
 import { isDeepStrictEqual } from 'node:util';
 import { type Claim, claimSchema, claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
-  bytes32 as anyBytes32,
-  claim as claimArbitrary,
+  anyBytes32,
+  anyClaim,
+  anySlots,
+  anyUint,
+  fitsUint,
+  HEADER_BYTE_FIELDS,
+  HEADER_UINT_BITS,
   type Slots,
-  slots,
-  uint,
 } from './arbitraries.js';
 
 const bytes32 = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
@@ -228,7 +228,14 @@ describe('claimToMessage', () => {
 });
 
 describe('claimToMessage injectivity', () => {
-  type AnyClaim = Claim<number, number>;
+  type Header = (typeof HEADER_BYTE_FIELDS)[number] | keyof typeof HEADER_UINT_BITS;
+  const CHANGEABLE: readonly (Header | 'slots')[] = [
+    ...HEADER_BYTE_FIELDS,
+    ...(Object.keys(HEADER_UINT_BITS) as (keyof typeof HEADER_UINT_BITS)[]),
+    'slots',
+  ];
+  const isUintField = (field: Header): field is keyof typeof HEADER_UINT_BITS =>
+    field in HEADER_UINT_BITS;
 
   // A field value near the original, so that two claims differ by as little
   // as one byte or one unit, or a fresh value anywhere in the field's range.
@@ -241,14 +248,14 @@ describe('claimToMessage injectivity', () => {
     );
   const nearUint = (value: bigint, bits: number) =>
     fc.oneof(
-      fc.constantFrom(value + 1n, value - 1n).filter((v) => v >= 0n && v < 1n << BigInt(bits)),
-      uint(bits),
+      fc.constantFrom(value + 1n, value - 1n).filter((v) => fitsUint(v, bits)),
+      anyUint(bits),
     );
   // Flip one slot's flag, keeping an absent slot zero, or redraw every slot at
   // any shape, so a claim can change layout as well as content.
-  const nearSlots = (claim: AnyClaim): fc.Arbitrary<Slots> => {
+  const nearSlots = (claim: Claim<number, number>): fc.Arbitrary<Slots> => {
     if (claim.present.length === 0) {
-      return slots();
+      return anySlots();
     }
     const numeric = claim.values.length;
     const flip = fc.nat({ max: claim.present.length - 1 }).map((i) => {
@@ -261,36 +268,35 @@ describe('claimToMessage injectivity', () => {
         ),
       };
     });
-    return fc.oneof(flip, slots());
+    return fc.oneof(flip, anySlots());
   };
-  const UINT_BITS = { version: 8, windowStart: 32, windowEnd: 32 } as const;
-  const BYTE_FIELDS = ['appId', 'policyHash', 'subjectHash', 'holder', 'salt'] as const;
-  const CHANGEABLE = [
-    ...(Object.keys(UINT_BITS) as (keyof typeof UINT_BITS)[]),
-    ...BYTE_FIELDS,
-    'slots' as const,
-  ];
 
   // The new value of one field, as a patch over the claim.
   const patch = (
-    claim: AnyClaim,
-    field: (typeof CHANGEABLE)[number],
-  ): fc.Arbitrary<Partial<AnyClaim>> => {
+    claim: Claim<number, number>,
+    field: Header | 'slots',
+  ): fc.Arbitrary<Partial<Claim<number, number>>> => {
     if (field === 'slots') {
       return nearSlots(claim);
     }
-    if (field === 'version' || field === 'windowStart' || field === 'windowEnd') {
-      return nearUint(claim[field], UINT_BITS[field]).map((value) => ({ [field]: value }));
+    if (isUintField(field)) {
+      return nearUint(claim[field], HEADER_UINT_BITS[field]).map((value) => ({ [field]: value }));
     }
     return nearBytes(claim[field]).map((value) => ({ [field]: value }));
   };
 
-  // A claim and a copy with a nonempty set of fields changed.
-  const changed = claimArbitrary().chain((claim) =>
+  type Pair = [Claim<number, number>, Claim<number, number>];
+
+  // A claim and a copy with some fields changed: mostly one, so that a field
+  // the encoder drops shows up, and sometimes several at once.
+  const changed = anyClaim().chain((claim) =>
     fc
-      .subarray(CHANGEABLE, { minLength: 1 })
+      .oneof(
+        fc.constantFrom(...CHANGEABLE).map((field) => [field]),
+        fc.subarray([...CHANGEABLE], { minLength: 1 }),
+      )
       .chain((fields) => fc.tuple(...fields.map((field) => patch(claim, field))))
-      .map((patches): [AnyClaim, AnyClaim] => [claim, Object.assign({ ...claim }, ...patches)]),
+      .map((patches): Pair => [claim, Object.assign({ ...claim }, ...patches)]),
   );
 
   // A claim and a copy whose slots take another shape with the same message
@@ -305,12 +311,12 @@ describe('claimToMessage injectivity', () => {
       Uint8Array.from({ length: 32 }, (_, i) => +(i === 0)),
     ),
   };
-  const relaidOut = claimArbitrary(tiny).chain((claim) => {
+  const relaidOut = anyClaim(tiny).chain((claim) => {
     const length = claim.values.length + 2 * claim.byteValues.length;
     return fc
       .nat({ max: Math.floor(length / 2) })
-      .chain((w) => slots({ ...tiny, v: length - 2 * w, w }))
-      .map((other): [AnyClaim, AnyClaim] => [claim, { ...claim, ...other }]);
+      .chain((w) => anySlots({ ...tiny, v: length - 2 * w, w }))
+      .map((other): Pair => [claim, { ...claim, ...other }]);
   });
 
   it('gives two different claims different messages, even when several fields differ', () => {
@@ -319,6 +325,30 @@ describe('claimToMessage injectivity', () => {
         fc.pre(!isDeepStrictEqual(other, claim));
         expect(claimToMessage(other)).not.toEqual(claimToMessage(claim));
       }),
+    );
+  });
+
+  // A dropped or truncated byte is one position in 32 per field, which a
+  // random one-byte change rarely hits, so every position is changed here.
+  it('changes the message when any one byte of any 32-byte field changes', () => {
+    const flipped = (bytes: Uint8Array, i: number, mask: number) =>
+      bytes.map((byte, j) => (i === j ? byte ^ mask : byte));
+    fc.assert(
+      fc.property(anyClaim({ w: 1 }), fc.integer({ min: 1, max: 255 }), (claim, mask) => {
+        const message = claimToMessage(claim);
+        for (let i = 0; i < 32; i++) {
+          for (const field of HEADER_BYTE_FIELDS) {
+            const other = { ...claim, [field]: flipped(claim[field], i, mask) };
+            expect(claimToMessage(other)).not.toEqual(message);
+          }
+          const byteValues = claim.byteValues.map((bytes) => flipped(bytes, i, mask));
+          // An absent byte slot must stay zero, so flip it only when measured.
+          if (claim.present.at(-1)) {
+            expect(claimToMessage({ ...claim, byteValues })).not.toEqual(message);
+          }
+        }
+      }),
+      { numRuns: 20 },
     );
   });
 });
@@ -331,7 +361,7 @@ describe('claimSchema to claimToMessage round trip', () => {
   const rawUint = (bits: number) => {
     const bound = 1n << BigInt(bits);
     return sometimes(
-      fc.oneof(uint(bits), uint(Math.min(bits, 53)).map(Number)),
+      fc.oneof(anyUint(bits), anyUint(Math.min(bits, 53)).map(Number)),
       fc.constantFrom(
         -1n,
         bound,
@@ -349,11 +379,11 @@ describe('claimSchema to claimToMessage round trip', () => {
   );
   const rawClaim = fc
     .record({
-      version: fc.option(rawUint(8), { nil: undefined }),
+      version: fc.option(rawUint(HEADER_UINT_BITS.version), { nil: undefined }),
       appId: rawBytes,
       policyHash: rawBytes,
-      windowStart: rawUint(32),
-      windowEnd: rawUint(32),
+      windowStart: rawUint(HEADER_UINT_BITS.windowStart),
+      windowEnd: rawUint(HEADER_UINT_BITS.windowEnd),
       subjectHash: rawBytes,
       holder: rawBytes,
       salt: rawBytes,
@@ -373,7 +403,6 @@ describe('claimSchema to claimToMessage round trip', () => {
     fc.tuple(fc.integer({ min: -1, max: 1 }), fc.integer({ min: -1, max: 1 })),
   );
 
-  const fits = (value: bigint, bits: number) => value >= 0n && value < 1n << BigInt(bits);
   const is32 = (bytes: Uint8Array) => bytes instanceof Uint8Array && bytes.length === 32;
 
   it('encodes every claim it accepts, with each field in its Compact type', () => {
@@ -391,12 +420,11 @@ describe('claimSchema to claimToMessage round trip', () => {
           return;
         }
         const claim = result.data;
-        expect(fits(claim.version, 8)).toBe(true);
-        expect(fits(claim.windowStart, 32)).toBe(true);
-        expect(fits(claim.windowEnd, 32)).toBe(true);
-        expect(claim.values.every((value) => fits(value, 64))).toBe(true);
-        const { appId, policyHash, subjectHash, holder, salt } = claim;
-        expect([appId, policyHash, subjectHash, holder, salt].every(is32)).toBe(true);
+        for (const [field, bits] of Object.entries(HEADER_UINT_BITS)) {
+          expect(fitsUint(claim[field as keyof typeof HEADER_UINT_BITS], bits)).toBe(true);
+        }
+        expect(claim.values.every((value) => fitsUint(value, 64))).toBe(true);
+        expect(HEADER_BYTE_FIELDS.every((field) => is32(claim[field]))).toBe(true);
         expect(claim.byteValues.every(is32)).toBe(true);
         expect(claim.present).toHaveLength(claim.values.length + claim.byteValues.length);
         expect(() => claimToMessage(claim)).not.toThrow();

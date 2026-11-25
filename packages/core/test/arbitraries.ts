@@ -3,12 +3,22 @@
 import type { Claim } from '@txpipe/thoth-core/claim';
 import fc from 'fast-check';
 
+/** The header's integer fields and the bit width of each one's Compact `Uint` type. */
+export const HEADER_UINT_BITS = { version: 8, windowStart: 32, windowEnd: 32 } as const;
+
+/** The header's 32-byte fields. */
+export const HEADER_BYTE_FIELDS = ['appId', 'policyHash', 'subjectHash', 'holder', 'salt'] as const;
+
+/** Whether `value` fits the Compact type `Uint<bits>`. */
+export const fitsUint = (value: bigint, bits: number): boolean =>
+  value >= 0n && value < 1n << BigInt(bits);
+
 /** A uniformly random 32-byte array. */
-export const bytes32 = (): fc.Arbitrary<Uint8Array> =>
+export const anyBytes32 = (): fc.Arbitrary<Uint8Array> =>
   fc.uint8Array({ minLength: 32, maxLength: 32 });
 
 /** An unsigned integer of the Compact type `Uint<bits>`. */
-export const uint = (bits: number): fc.Arbitrary<bigint> =>
+export const anyUint = (bits: number): fc.Arbitrary<bigint> =>
   fc.bigInt({ min: 0n, max: (1n << BigInt(bits)) - 1n });
 
 type Slot<T> = { present: boolean; value: T };
@@ -47,12 +57,12 @@ export interface Shape {
 }
 
 /** The slot section of a claim of the given shape. */
-export const slots = ({
+export const anySlots = ({
   v,
   w,
   present = fc.boolean(),
-  value = uint(64),
-  byteValue = bytes32(),
+  value = anyUint(64),
+  byteValue = anyBytes32(),
 }: Shape = {}): fc.Arbitrary<Slots> =>
   fc
     .tuple(
@@ -76,17 +86,17 @@ export const slots = ({
  * Compact type's range. Pass `v` and `w` to match a mock's shape; omit them for
  * any shape.
  */
-export const claim = (shape: Shape = {}): fc.Arbitrary<Claim<number, number>> =>
+export const anyClaim = (shape: Shape = {}): fc.Arbitrary<Claim<number, number>> =>
   fc
     .record({
-      version: uint(8),
-      appId: bytes32(),
-      policyHash: bytes32(),
-      windowStart: uint(32),
-      windowEnd: uint(32),
-      subjectHash: bytes32(),
-      holder: bytes32(),
-      salt: bytes32(),
-      slots: slots(shape),
+      version: anyUint(HEADER_UINT_BITS.version),
+      appId: anyBytes32(),
+      policyHash: anyBytes32(),
+      windowStart: anyUint(HEADER_UINT_BITS.windowStart),
+      windowEnd: anyUint(HEADER_UINT_BITS.windowEnd),
+      subjectHash: anyBytes32(),
+      holder: anyBytes32(),
+      salt: anyBytes32(),
+      slots: anySlots(shape),
     })
     .map(({ slots, ...header }) => ({ ...header, ...slots }));

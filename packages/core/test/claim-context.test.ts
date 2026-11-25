@@ -53,7 +53,7 @@ describe('policyHashOf', () => {
 });
 
 describe('policyHashOf canonical serialization', () => {
-  type Plain = { [key: string]: CanonicalValue | undefined };
+  type Plain = { readonly [key: string]: CanonicalValue | undefined };
 
   // Nested JSON data with bigint and byte leaves. Keys mix letters, an
   // integer-like key (which JavaScript always enumerates first) and characters
@@ -73,44 +73,58 @@ describe('policyHashOf canonical serialization', () => {
     ),
   }));
 
+  // Random choices a test transform consumes in turn, so fast-check replays
+  // and shrinks the transform along with the value.
+  const choices = fc.array(fc.nat(), { minLength: 1, maxLength: 32 });
+  const picker = (drawn: readonly number[]) => {
+    let k = 0;
+    return (count: number): number => (drawn[k++ % drawn.length] ?? 0) % count;
+  };
+  const isRecord = (node: CanonicalValue | undefined): node is Plain =>
+    node !== null &&
+    typeof node === 'object' &&
+    !Array.isArray(node) &&
+    !(node instanceof Uint8Array);
+
+  // A Fisher-Yates shuffle of a copy of `items`.
+  const shuffle = <T>(items: readonly T[], pick: (count: number) => number): T[] => {
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = pick(i + 1);
+      [copy[i], copy[j]] = [copy[j] as T, copy[i] as T];
+    }
+    return copy;
+  };
+
   // A copy with every object's keys in another order and some keys added with
-  // the value `undefined`, both driven by a seeded PRNG so a failure replays.
-  const reorder = (value: CanonicalValue, seed: number): CanonicalValue => {
-    let state = seed >>> 0;
-    const next = () => {
-      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-      return state / 2 ** 32;
-    };
+  // the value `undefined`.
+  const reorder = (value: CanonicalValue, drawn: readonly number[]): CanonicalValue => {
+    const pick = picker(drawn);
     const walk = (node: CanonicalValue): CanonicalValue => {
       if (Array.isArray(node)) {
         return node.map((item: CanonicalValue) => walk(item));
       }
-      if (node === null || typeof node !== 'object' || node instanceof Uint8Array) {
+      if (!isRecord(node)) {
         return node;
       }
-      const record = node as Plain;
-      const entries: [string, CanonicalValue | undefined][] = Object.keys(record).map((k) => {
-        const member = record[k];
+      const entries: [string, CanonicalValue | undefined][] = Object.keys(node).map((k) => {
+        const member = node[k];
         return [k, member === undefined ? undefined : walk(member)];
       });
       for (const extra of ['a', 'zz', '~']) {
-        if (!(extra in record) && next() < 0.5) {
+        if (!(extra in node) && pick(2) === 1) {
           entries.push([extra, undefined]);
         }
       }
-      for (let i = entries.length - 1; i > 0; i--) {
-        const j = Math.floor(next() * (i + 1));
-        [entries[i], entries[j]] = [entries[j] as never, entries[i] as never];
-      }
-      return Object.fromEntries(entries);
+      return Object.fromEntries(shuffle(entries, pick));
     };
     return walk(value);
   };
 
   it('ignores object key order and keys whose value is undefined', () => {
     fc.assert(
-      fc.property(fc.string(), anyValue, fc.integer(), (law, value, seed) => {
-        expect(policyHashOf(law, reorder(value, seed))).toEqual(policyHashOf(law, value));
+      fc.property(fc.string(), anyValue, choices, (law, value, drawn) => {
+        expect(policyHashOf(law, reorder(value, drawn))).toEqual(policyHashOf(law, value));
       }),
     );
   });
@@ -131,37 +145,37 @@ describe('policyHashOf canonical serialization', () => {
     if (Array.isArray(value)) {
       return { array: value.map((item: CanonicalValue) => model(item)) };
     }
-    if (value !== null && typeof value === 'object') {
-      const record = value as Plain;
-      const keys = Object.keys(record)
-        .filter((k) => record[k] !== undefined)
+    if (isRecord(value)) {
+      const keys = Object.keys(value)
+        .filter((k) => value[k] !== undefined)
         .sort();
-      return { object: keys.map((k) => [k, model(record[k])]) };
+      return { object: keys.map((k) => [k, model(value[k])]) };
     }
     return value;
   };
 
   // A small domain, so pairs often share structure and differ in one leaf,
   // and include values of different types that serialize alike.
+  const SMALL_LEAVES: readonly CanonicalValue[] = [
+    null,
+    true,
+    false,
+    0,
+    -0,
+    1,
+    0n,
+    1n,
+    '',
+    '0',
+    '1',
+    'ab',
+    new Uint8Array(0),
+    Uint8Array.of(0xab),
+  ];
   const { value: smallValue } = fc.letrec<{ value: CanonicalValue }>((tie) => ({
     value: fc.oneof(
       { depthSize: 'small', maxDepth: 3 },
-      fc.constantFrom<CanonicalValue>(
-        null,
-        true,
-        false,
-        0,
-        -0,
-        1,
-        0n,
-        1n,
-        '',
-        '0',
-        '1',
-        'ab',
-        new Uint8Array(0),
-        Uint8Array.of(0xab),
-      ),
+      fc.constantFrom(...SMALL_LEAVES),
       fc.array(tie('value'), { maxLength: 2 }),
       fc.dictionary(
         fc.constantFrom('a', 'b'),
@@ -171,9 +185,82 @@ describe('policyHashOf canonical serialization', () => {
     ),
   }));
 
+  // A copy with one node edited: an array reversed, shortened or extended, an
+  // object key dropped or added, or a leaf replaced.
+  const edit = (value: CanonicalValue, drawn: readonly number[]): CanonicalValue => {
+    const pick = picker(drawn);
+    const size = (node: CanonicalValue | undefined): number =>
+      node === undefined
+        ? 0
+        : 1 +
+          (Array.isArray(node)
+            ? node.reduce((sum: number, item: CanonicalValue) => sum + size(item), 0)
+            : isRecord(node)
+              ? Object.values(node).reduce((sum: number, member) => sum + size(member), 0)
+              : 0);
+    const change = (node: CanonicalValue): CanonicalValue => {
+      if (Array.isArray(node)) {
+        const items: CanonicalValue[] = [...node];
+        const kind = pick(3);
+        if (kind === 0) {
+          return items.reverse();
+        }
+        if (kind === 1 && items.length > 0) {
+          items.splice(pick(items.length), 1);
+          return items;
+        }
+        return [...items, null];
+      }
+      if (isRecord(node)) {
+        const keys = Object.keys(node).filter((k) => node[k] !== undefined);
+        if (pick(2) === 0 && keys.length > 0) {
+          const dropped = keys[pick(keys.length)] as string;
+          return Object.fromEntries(Object.entries(node).filter(([k]) => k !== dropped));
+        }
+        return { ...node, c: null };
+      }
+      return SMALL_LEAVES[pick(SMALL_LEAVES.length)] ?? null;
+    };
+    let target = pick(size(value));
+    const walk = (node: CanonicalValue): CanonicalValue => {
+      if (target-- === 0) {
+        return change(node);
+      }
+      if (Array.isArray(node)) {
+        return node.map((item: CanonicalValue) => walk(item));
+      }
+      if (isRecord(node)) {
+        return Object.fromEntries(
+          Object.entries(node).map(([k, member]) => [
+            k,
+            member === undefined ? member : walk(member),
+          ]),
+        );
+      }
+      return node;
+    };
+    return walk(value);
+  };
+
   it('gives two values the same hash exactly when they mean the same data', () => {
+    const pairs = fc.oneof(
+      fc.tuple(smallValue, smallValue),
+      fc
+        .tuple(fc.oneof(smallValue, anyValue), choices)
+        .map(([value, drawn]) => [value, edit(value, drawn)] as const),
+      // Leaves in reverse order, so an array that loses its order shows up.
+      fc
+        .array(
+          fc.oneof(
+            fc.constantFrom(...SMALL_LEAVES),
+            fc.string({ unit: fc.constantFrom('a', 'b') }),
+          ),
+          { minLength: 2, maxLength: 4 },
+        )
+        .map((items) => [items, [...items].reverse()] as const),
+    );
     fc.assert(
-      fc.property(smallValue, smallValue, (a, b) => {
+      fc.property(pairs, ([a, b]) => {
         const sameHash = isDeepStrictEqual(policyHashOf('law', a), policyHashOf('law', b));
         expect(sameHash).toBe(isDeepStrictEqual(model(a), model(b)));
       }),
