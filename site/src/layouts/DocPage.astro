@@ -1,4 +1,5 @@
 ---
+import type { MarkdownHeading } from 'astro';
 import Nav from '../components/Nav.astro';
 import type { NavGroup } from '../lib/collection';
 import { withBase } from '../lib/docs';
@@ -9,13 +10,15 @@ interface Props {
   title: string;
   groups: NavGroup[];
   currentId: string;
+  headings: MarkdownHeading[];
 }
 
-const { title, groups, currentId } = Astro.props;
+const { title, groups, currentId, headings } = Astro.props;
 const base = import.meta.env.BASE_URL;
 const home = withBase('/', base);
 const github = 'https://github.com/txpipe-shop/thoth';
 const pageTitle = title === 'Thoth' ? 'Thoth' : `${title} · Thoth`;
+const toc = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
 ---
 
 <!doctype html>
@@ -23,6 +26,8 @@ const pageTitle = title === 'Thoth' ? 'Thoth' : `${title} · Thoth`;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#141011" />
+    <link rel="icon" href={withBase('/favicon.svg', base)} type="image/svg+xml" />
     <title>{pageTitle}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -35,7 +40,10 @@ const pageTitle = title === 'Thoth' ? 'Thoth' : `${title} · Thoth`;
     <a class="skip" href="#content">Skip to content</a>
     <header class="site-header">
       <div class="site-header-inner">
-        <a class="wordmark" href={home}>Thoth</a>
+        <div class="site-brand">
+          <a class="wordmark" href={home}>Thoth</a>
+          <span class="site-tagline">private N-of-M attestation</span>
+        </div>
         <a class="repo" href={github}>
           <!-- GitHub mark from Octicons (MIT), https://github.com/primer/octicons -->
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
@@ -53,10 +61,79 @@ const pageTitle = title === 'Thoth' ? 'Thoth' : `${title} · Thoth`;
       <main id="content" class="content prose">
         <slot />
       </main>
+      <div class="doc-meta">
+        <nav aria-labelledby="toc-heading">
+          <p class="doc-toc-title" id="toc-heading">On this page</p>
+          <ul>
+            {toc.map((heading) => (
+              <li class={`depth-${heading.depth}`}>
+                <a href={`#${heading.slug}`}>{heading.text}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </div>
     </div>
     <footer class="site-footer">
       <span>Copyright 2026 TxPipe</span>
       <span>Apache-2.0 · <a href={`${github}/blob/main/LICENSE`}>License</a></span>
     </footer>
+    <script>
+      // Mermaid is imported only on pages that have a diagram; the chunk is large.
+      const blocks = document.querySelectorAll('pre[data-language="mermaid"]');
+      if (blocks.length > 0) {
+        const { default: mermaid } = await import('mermaid');
+        const root = getComputedStyle(document.documentElement);
+        const token = (name: string) => root.getPropertyValue(name).trim();
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: 'base',
+          look: 'classic',
+          // Draw the diagram from the site's tokens rather than Mermaid's palette.
+          themeVariables: {
+            fontFamily: token('--font-sans'),
+            fontSize: '15px',
+            background: 'transparent',
+            primaryColor: token('--bg-card'),
+            primaryTextColor: token('--fg-1'),
+            primaryBorderColor: token('--stroke-2'),
+            secondaryColor: token('--bg-card'),
+            tertiaryColor: token('--bg-card'),
+            mainBkg: token('--bg-card'),
+            nodeBorder: token('--stroke-2'),
+            lineColor: token('--stroke-1'),
+            textColor: token('--fg-2'),
+            edgeLabelBackground: token('--bg-card'),
+            actorBkg: token('--bg-card'),
+            actorBorder: token('--stroke-2'),
+            actorTextColor: token('--fg-1'),
+            actorLineColor: token('--stroke-2'),
+            signalColor: token('--cyan-100'),
+            signalTextColor: token('--fg-2'),
+            labelBoxBkgColor: token('--bg-card'),
+            labelBoxBorderColor: 'rgba(255, 23, 159, 0.40)',
+            labelTextColor: token('--fg-2'),
+            loopTextColor: token('--fg-2'),
+            noteBkgColor: 'rgba(255, 2, 230, 0.08)',
+            noteBorderColor: 'rgba(255, 23, 159, 0.35)',
+            noteTextColor: token('--fg-2'),
+            activationBkgColor: 'rgba(255, 23, 159, 0.18)',
+            activationBorderColor: token('--pink-400'),
+          },
+          securityLevel: 'strict',
+        });
+        const nodes = Array.from(blocks, (block) => {
+          const container = document.createElement('div');
+          container.className = 'mermaid';
+          container.textContent = block.textContent;
+          return container;
+        });
+        // Mermaid measures its text; wait for the web font before swapping in
+        // the containers, so the source stays visible until the layout is final.
+        await document.fonts.ready;
+        blocks.forEach((block, index) => block.replaceWith(nodes[index]!));
+        await mermaid.run({ nodes });
+      }
+    </script>
   </body>
 </html>
