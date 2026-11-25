@@ -8,7 +8,9 @@
 // literal alone cannot fail if the compiler's struct layout changes. Here the
 // compiled pure circuit is the oracle.
 import { subjectHashOf } from '@txpipe/thoth-core/claim-context';
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+import { bytes32 } from '../../core/test/arbitraries.js';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 
 const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
@@ -25,14 +27,17 @@ describe('subjectHashOf circuit parity', () => {
     );
   });
 
-  it('matches for arbitrary field values', () => {
-    const method = filled(0x9a);
-    const host = filled(0x00);
-    const path = filled(0xff);
-    const body = filled(0x42);
-
-    expect(subjectHashOf([method, host, path, body])).toEqual(
-      pureCircuits.subjectHash({ method, host, path, body }),
+  it('matches for every four-field subject', () => {
+    fc.assert(
+      fc.property(
+        fc.record({ method: bytes32(), host: bytes32(), path: bytes32(), body: bytes32() }),
+        (subject) => {
+          const { method, host, path, body } = subject;
+          expect(subjectHashOf([method, host, path, body])).toEqual(
+            pureCircuits.subjectHash(subject),
+          );
+        },
+      ),
     );
   });
 });

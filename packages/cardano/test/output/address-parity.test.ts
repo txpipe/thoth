@@ -4,34 +4,56 @@
 // An app pins a watched address in-circuit by baking it as an exact-length
 // literal and comparing the hash against the claim's addressHash fact. That
 // binding is only sound if the off-chain helper and the circuit agree; here
-// the compiled pure circuits are the oracle.
-import {
-  CompactTypeBytes,
-  CompactTypeVector,
-  persistentHash,
-} from '@midnight-ntwrk/compact-runtime';
+// the compiled pure circuits are the oracle. The mock bakes one length, 103
+// bytes, so the check across lengths runs off-chain against the runtime's
+// `persistentHash<Bytes<L>>`.
+import { CompactTypeBytes, persistentHash } from '@midnight-ntwrk/compact-runtime';
 import { cardanoAddressHashOf } from '@txpipe/thoth-cardano';
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../../../contracts/artifacts/mock_address_hash/contract/index.js';
 
 const ADDRESS = `addr_test1${'q'.repeat(93)}`;
 const encoder = new TextEncoder();
 
+const BECH32_CHARS = [...'qpzry9x8gf2tvdw0s3jn54khce6mua7l'];
+
+/** A lowercase testnet address of `length` bytes: the prefix, then bech32 characters. */
+const address = (length: { min: number; max: number }): fc.Arbitrary<string> =>
+  fc
+    .string({
+      unit: fc.constantFrom(...BECH32_CHARS),
+      minLength: length.min - 'addr_test1'.length,
+      maxLength: length.max - 'addr_test1'.length,
+    })
+    .map((data) => `addr_test1${data}`);
+
 describe('cardanoAddressHashOf circuit parity', () => {
   it('matches the baked exact-length literal', () => {
     expect(cardanoAddressHashOf(ADDRESS)).toEqual(pureCircuits.bakedHash());
   });
 
-  it('matches the witness path over the address bytes', () => {
-    expect(cardanoAddressHashOf(ADDRESS)).toEqual(pureCircuits.hashOf(encoder.encode(ADDRESS)));
+  it('matches the witness path over every 103-byte address', () => {
+    fc.assert(
+      fc.property(address({ min: 103, max: 103 }), (addr) => {
+        expect(cardanoAddressHashOf(addr)).toEqual(pureCircuits.hashOf(encoder.encode(addr)));
+      }),
+    );
   });
 
-  it('differs from a hash of the same bytes at another length', () => {
-    const bytes = encoder.encode(ADDRESS);
-    const padded = new Uint8Array(128);
-    padded.set(bytes);
-    const chunked = [0, 1, 2, 3].map((index) => padded.slice(index * 32, (index + 1) * 32));
-    const otherLength = persistentHash(new CompactTypeVector(4, new CompactTypeBytes(32)), chunked);
-    expect(cardanoAddressHashOf(ADDRESS)).not.toEqual(otherLength);
+  it('differs from the hash of the same address zero-padded to a longer length', () => {
+    fc.assert(
+      fc.property(
+        address({ min: 58, max: 110 }),
+        fc.integer({ min: 1, max: 64 }),
+        (addr, extra) => {
+          const bytes = encoder.encode(addr);
+          const padded = new Uint8Array(bytes.length + extra);
+          padded.set(bytes);
+          const longer = persistentHash(new CompactTypeBytes(padded.length), padded);
+          expect(cardanoAddressHashOf(addr)).not.toEqual(longer);
+        },
+      ),
+    );
   });
 });

@@ -3,22 +3,24 @@
 // `toContractClaim` is held to the same encoder: its witness shape must build
 // the message `claimToMessage` signs.
 //
-// Level 1 asserts the encoders are field-for-field identical across a spread of
-// claims. Level 2 signs over `claimToMessage`'s output and submits to the
-// simulator: the contract ignores the submitted message and re-derives
-// `buildMessage(claim)` in-circuit, so acceptance is only possible if the
-// off-chain encoder is byte-identical to the contract's own.
+// Level 1 asserts the encoders are field-for-field identical over generated
+// claims of each mock's shape. Level 2 signs over `claimToMessage`'s output and
+// submits to the simulator: the contract ignores the submitted message and
+// re-derives `buildMessage(claim)` in-circuit, so acceptance is only possible if
+// the off-chain encoder is byte-identical to the contract's own.
 import { randomBytes } from 'node:crypto';
 import { claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+import { claim as claimArbitrary } from '../../core/test/arbitraries.js';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
+import { pureCircuits as bytesPureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import {
   DEFAULT_HOLDER_SECRET,
   DUMMY_SIGNATURE,
   idOf,
   makeClaim,
   makeNotaryKey,
-  POLICY_B,
 } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
@@ -28,35 +30,25 @@ const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 const registryKeys = notaryKeys.map((k) => k.pk);
 const holder = DEFAULT_HOLDER_SECRET;
 
-const claims = [
-  makeClaim(),
-  makeClaim({ holder: new Uint8Array(32) }),
-  makeClaim({ holder: Uint8Array.from({ length: 32 }, (_, i) => i) }),
-  makeClaim({ holder: new Uint8Array(32).fill(0xff) }),
-  makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] }),
-  makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] }),
-  makeClaim({ values: [0n, 200n, 0n], present: [false, true, false] }),
-  makeClaim({ appId: new Uint8Array(32).fill(0xa2), policyHash: POLICY_B }),
-  makeClaim({ appId: new Uint8Array(32), policyHash: new Uint8Array(32).fill(0xff) }),
-  makeClaim({ windowStart: 0n, windowEnd: 0n }),
-  makeClaim({ windowStart: 1_800_000_000n, windowEnd: 0xffff_ffffn }),
-];
-
 describe('claimToMessage parity', () => {
   describe('field-for-field equality (level 1)', () => {
-    it('matches the contract buildMessage for every claim shape', () => {
-      for (const claim of claims) {
-        expect(claimToMessage({ ...claim, byteValues: [] })).toEqual(pureCircuits.message(claim));
-      }
+    // Each circuit is specialized at one size, so each property generates
+    // claims of its mock's shape: V = 3 numeric slots, plus W = 1 byte slot
+    // (B = 2 halves) for the bytes mock.
+    it('matches the numeric-only mock buildMessage (V = 3, K = 20)', () => {
+      fc.assert(
+        fc.property(claimArbitrary({ v: 3, w: 0 }), (claim) => {
+          expect(pureCircuits.message(toContractClaim(claim))).toEqual(claimToMessage(claim));
+        }),
+      );
     });
 
-    it('converts a numeric-only core claim into the contract witness shape', () => {
-      for (const claim of claims) {
-        const core = { ...claim, byteValues: [] };
-        const contractClaim = toContractClaim(core);
-        expect(contractClaim).toEqual(claim);
-        expect(pureCircuits.message(contractClaim)).toEqual(claimToMessage(core));
-      }
+    it('matches the bytes mock buildMessage (V = 3, B = 2, K = 24)', () => {
+      fc.assert(
+        fc.property(claimArbitrary({ v: 3, w: 1 }), (claim) => {
+          expect(bytesPureCircuits.message(toContractClaim(claim))).toEqual(claimToMessage(claim));
+        }),
+      );
     });
   });
 

@@ -1,9 +1,19 @@
 // Unit tests for the canonical claim shape (`@txpipe/thoth-core/claim`): the schema's
 // length and numeric-bound validation, `claimToMessage`'s wire encoding
-// (per-half byte flag duplication, adjacent 16-byte halves), and
-// `toContractClaim`'s mask guard (its parity lives in the contracts tests).
+// (per-half byte flag duplication, adjacent 16-byte halves) and injectivity,
+// the schema-to-encoder round trip, and `toContractClaim`'s mask guard (its
+// parity lives in the contracts tests).
+import { isDeepStrictEqual } from 'node:util';
 import { type Claim, claimSchema, claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+import {
+  bytes32 as anyBytes32,
+  claim as claimArbitrary,
+  type Slots,
+  slots,
+  uint,
+} from './arbitraries.js';
 
 const bytes32 = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
 
@@ -214,6 +224,185 @@ describe('claimToMessage', () => {
       le(second.slice(0, 16)),
       le(second.slice(16)),
     ]);
+  });
+});
+
+describe('claimToMessage injectivity', () => {
+  type AnyClaim = Claim<number, number>;
+
+  // A field value near the original, so that two claims differ by as little
+  // as one byte or one unit, or a fresh value anywhere in the field's range.
+  const nearBytes = (bytes: Uint8Array) =>
+    fc.oneof(
+      fc
+        .tuple(fc.nat({ max: 31 }), fc.integer({ min: 1, max: 255 }))
+        .map(([i, mask]) => bytes.map((byte, j) => (i === j ? byte ^ mask : byte))),
+      anyBytes32(),
+    );
+  const nearUint = (value: bigint, bits: number) =>
+    fc.oneof(
+      fc.constantFrom(value + 1n, value - 1n).filter((v) => v >= 0n && v < 1n << BigInt(bits)),
+      uint(bits),
+    );
+  // Flip one slot's flag, keeping an absent slot zero, or redraw every slot at
+  // any shape, so a claim can change layout as well as content.
+  const nearSlots = (claim: AnyClaim): fc.Arbitrary<Slots> => {
+    if (claim.present.length === 0) {
+      return slots();
+    }
+    const numeric = claim.values.length;
+    const flip = fc.nat({ max: claim.present.length - 1 }).map((i) => {
+      const present = claim.present.map((flag, j) => (i === j ? !flag : flag));
+      return {
+        present,
+        values: claim.values.map((value, j) => (present[j] ? value : 0n)),
+        byteValues: claim.byteValues.map((bytes, j) =>
+          present[numeric + j] ? bytes : new Uint8Array(32),
+        ),
+      };
+    });
+    return fc.oneof(flip, slots());
+  };
+  const UINT_BITS = { version: 8, windowStart: 32, windowEnd: 32 } as const;
+  const BYTE_FIELDS = ['appId', 'policyHash', 'subjectHash', 'holder', 'salt'] as const;
+  const CHANGEABLE = [
+    ...(Object.keys(UINT_BITS) as (keyof typeof UINT_BITS)[]),
+    ...BYTE_FIELDS,
+    'slots' as const,
+  ];
+
+  // The new value of one field, as a patch over the claim.
+  const patch = (
+    claim: AnyClaim,
+    field: (typeof CHANGEABLE)[number],
+  ): fc.Arbitrary<Partial<AnyClaim>> => {
+    if (field === 'slots') {
+      return nearSlots(claim);
+    }
+    if (field === 'version' || field === 'windowStart' || field === 'windowEnd') {
+      return nearUint(claim[field], UINT_BITS[field]).map((value) => ({ [field]: value }));
+    }
+    return nearBytes(claim[field]).map((value) => ({ [field]: value }));
+  };
+
+  // A claim and a copy with a nonempty set of fields changed.
+  const changed = claimArbitrary().chain((claim) =>
+    fc
+      .subarray(CHANGEABLE, { minLength: 1 })
+      .chain((fields) => fc.tuple(...fields.map((field) => patch(claim, field))))
+      .map((patches): [AnyClaim, AnyClaim] => [claim, Object.assign({ ...claim }, ...patches)]),
+  );
+
+  // A claim and a copy whose slots take another shape with the same message
+  // length (V + 2W fields of flags and of values). Slots drawn from a small,
+  // mostly-absent domain, so the two encodings often match field for field
+  // except where the layout itself is signed.
+  const tiny = {
+    present: fc.oneof({ weight: 3, arbitrary: fc.constant(false) }, fc.constant(true)),
+    value: fc.constantFrom(0n, 1n),
+    byteValue: fc.constantFrom(
+      new Uint8Array(32),
+      Uint8Array.from({ length: 32 }, (_, i) => +(i === 0)),
+    ),
+  };
+  const relaidOut = claimArbitrary(tiny).chain((claim) => {
+    const length = claim.values.length + 2 * claim.byteValues.length;
+    return fc
+      .nat({ max: Math.floor(length / 2) })
+      .chain((w) => slots({ ...tiny, v: length - 2 * w, w }))
+      .map((other): [AnyClaim, AnyClaim] => [claim, { ...claim, ...other }]);
+  });
+
+  it('gives two different claims different messages, even when several fields differ', () => {
+    fc.assert(
+      fc.property(fc.oneof(changed, relaidOut), ([claim, other]) => {
+        fc.pre(!isDeepStrictEqual(other, claim));
+        expect(claimToMessage(other)).not.toEqual(claimToMessage(claim));
+      }),
+    );
+  });
+});
+
+describe('claimSchema to claimToMessage round trip', () => {
+  // About one raw field in ten is out of its bounds or the wrong length, so
+  // the schema rejects some inputs and accepts most.
+  const sometimes = <T, U>(valid: fc.Arbitrary<T>, invalid: fc.Arbitrary<U>) =>
+    fc.oneof({ weight: 9, arbitrary: valid }, { weight: 1, arbitrary: invalid });
+  const rawUint = (bits: number) => {
+    const bound = 1n << BigInt(bits);
+    return sometimes(
+      fc.oneof(uint(bits), uint(Math.min(bits, 53)).map(Number)),
+      fc.constantFrom(
+        -1n,
+        bound,
+        -1,
+        0.5,
+        Number.MAX_SAFE_INTEGER + 1,
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+      ),
+    );
+  };
+  const rawBytes = sometimes(
+    anyBytes32(),
+    fc.uint8Array({ maxLength: 40 }).filter((bytes) => bytes.length !== 32),
+  );
+  const rawClaim = fc
+    .record({
+      version: fc.option(rawUint(8), { nil: undefined }),
+      appId: rawBytes,
+      policyHash: rawBytes,
+      windowStart: rawUint(32),
+      windowEnd: rawUint(32),
+      subjectHash: rawBytes,
+      holder: rawBytes,
+      salt: rawBytes,
+      values: fc.array(rawUint(64), { maxLength: 4 }),
+      byteValues: fc.option(fc.array(rawBytes, { maxLength: 3 }), { nil: undefined }),
+      flags: fc.array(fc.boolean(), { maxLength: 8 }),
+      fitMask: sometimes(fc.constant(true), fc.constant(false)),
+    })
+    .map(({ flags, fitMask, ...raw }) => {
+      const count = raw.values.length + (raw.byteValues?.length ?? 0);
+      const present = fitMask ? Array.from({ length: count }, (_, i) => flags[i] ?? false) : flags;
+      return { ...raw, present };
+    });
+  // The schema's sizes: none, the input's own, or one off.
+  const sizes = sometimes(
+    fc.constantFrom('any' as const, 'own' as const),
+    fc.tuple(fc.integer({ min: -1, max: 1 }), fc.integer({ min: -1, max: 1 })),
+  );
+
+  const fits = (value: bigint, bits: number) => value >= 0n && value < 1n << BigInt(bits);
+  const is32 = (bytes: Uint8Array) => bytes instanceof Uint8Array && bytes.length === 32;
+
+  it('encodes every claim it accepts, with each field in its Compact type', () => {
+    fc.assert(
+      fc.property(rawClaim, sizes, (raw, size) => {
+        const own = { v: raw.values.length, w: raw.byteValues?.length ?? 0 };
+        const schema =
+          size === 'any'
+            ? claimSchema()
+            : size === 'own'
+              ? claimSchema(own.v, own.w)
+              : claimSchema(Math.max(own.v + size[0], 0), Math.max(own.w + size[1], 0));
+        const result = schema.safeParse(raw);
+        if (!result.success) {
+          return;
+        }
+        const claim = result.data;
+        expect(fits(claim.version, 8)).toBe(true);
+        expect(fits(claim.windowStart, 32)).toBe(true);
+        expect(fits(claim.windowEnd, 32)).toBe(true);
+        expect(claim.values.every((value) => fits(value, 64))).toBe(true);
+        const { appId, policyHash, subjectHash, holder, salt } = claim;
+        expect([appId, policyHash, subjectHash, holder, salt].every(is32)).toBe(true);
+        expect(claim.byteValues.every(is32)).toBe(true);
+        expect(claim.present).toHaveLength(claim.values.length + claim.byteValues.length);
+        expect(() => claimToMessage(claim)).not.toThrow();
+        expect(() => toContractClaim(claim)).not.toThrow();
+      }),
+    );
   });
 });
 

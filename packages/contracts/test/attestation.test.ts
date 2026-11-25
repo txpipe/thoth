@@ -82,24 +82,6 @@ describe('mock attestation', () => {
       expect(pureCircuits.message(makeClaim({ salt })).slice(11, 13)).toEqual([7n, 8n]);
     });
 
-    it('distinguishes the window start from the window end', () => {
-      const claim = makeClaim({ windowStart: 100n, windowEnd: 200n });
-      const swapped = { ...claim, windowStart: 200n, windowEnd: 100n };
-      expect(pureCircuits.message(swapped)).not.toEqual(pureCircuits.message(claim));
-    });
-
-    it('distinguishes a change to every byte of every 32-byte field', () => {
-      const claim = makeClaim();
-      const msg = pureCircuits.message(claim);
-      for (const field of ['appId', 'policyHash', 'subjectHash', 'holder', 'salt'] as const) {
-        for (let i = 0; i < 32; i++) {
-          expect(pureCircuits.message({ ...claim, [field]: flip(claim[field], i) })).not.toEqual(
-            msg,
-          );
-        }
-      }
-    });
-
     it('distinguishes absent (present all false) from a genuine 0 value', () => {
       const absent = makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] });
       const presentZero = makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] });

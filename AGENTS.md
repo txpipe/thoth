@@ -184,6 +184,10 @@ READMEs don't repeat it.
 - `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
   compiled pure circuits — never hand-roll the message encoding; use
   `pureCircuits.message` or `@txpipe/thoth-core/claim`'s `claimToMessage`.
+- Parity, injectivity and canonical-serialization checks are fast-check
+  properties. The claim generators live in `packages/core/test/arbitraries.ts`;
+  a generated claim checked against a mock circuit must take that mock's shape.
+  A failure prints its `seed` and `path`: pass both to `fc.assert` to replay it.
 - After changing Compact sources, recompile before running tests:
   `npm run compact:no-zk` (the `pretest` hook does this automatically).
 - `packages/contracts/test/acceptance.test.ts` is the end-to-end check (zkFetch

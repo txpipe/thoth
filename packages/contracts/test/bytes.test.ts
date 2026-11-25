@@ -5,7 +5,7 @@
 // not confirm a guessed value.
 import { randomBytes } from 'node:crypto';
 import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
-import { claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
+import { claimToMessage } from '@txpipe/thoth-core/claim';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { A_Claim } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits as mockPureCircuits } from '../artifacts/mock_attestation/contract/index.js';
@@ -18,7 +18,6 @@ import {
   DUMMY_SIGNATURE,
   flip,
   makeByteClaim,
-  makeClaim,
   makeNotaryKey,
   mergeHalves,
   padded32,
@@ -94,13 +93,6 @@ describe('bytes claim wire', () => {
     expect(message[23]).toBe(0n);
   });
 
-  it('round-trips a core claim through the contract shape', () => {
-    const claim = makeByteClaim({ byteValue: fullSpan() });
-    const core = coreOf(claim);
-    expect(toContractClaim(core)).toEqual(claim);
-    expect(pureCircuits.message(toContractClaim(core))).toEqual(claimToMessage(core));
-  });
-
   it('encodes a full-span value as little-endian bytes 0–15 / 16–31 halves', () => {
     const value = fullSpan();
     const claim = makeByteClaim({ byteValue: value });
@@ -116,14 +108,6 @@ describe('bytes claim wire', () => {
   it('pins an absent byte flag to two zero fields even with halves present', () => {
     const claim = makeByteClaim({ bytePresent: [false, false] });
     expect(pureCircuits.message(claim).slice(17, 19)).toEqual([0n, 0n]);
-  });
-
-  it('keeps the numeric-only message, plus a zero byte-half count, for a B = 0 claim', () => {
-    const claim: A_Claim = makeClaim();
-    const message = claimToMessage({ ...claim, byteValues: [] });
-    expect(message).toHaveLength(20);
-    expect(message[13]).toBe(0n);
-    expect(message).toEqual(mockPureCircuits.message(claim));
   });
 
   it('pins the numeric-only (B = 0) vault id against serialization drift', () => {
