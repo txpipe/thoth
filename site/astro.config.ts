@@ -3,7 +3,7 @@ import { unified } from '@astrojs/markdown-remark';
 import { defineConfig } from 'astro/config';
 import { rewriteLinks } from './src/lib/rewrite-links';
 
-const site = 'https://txpipe-shop.github.io';
+const site = 'https://txpipe.github.io';
 const base = '/thoth';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 

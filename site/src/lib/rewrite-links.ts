@@ -8,7 +8,7 @@ import { toString as nodeToString } from 'mdast-util-to-string';
 import { visit } from 'unist-util-visit';
 import { isPublished, routeFor, withBase } from './docs';
 
-const GITHUB = 'https://github.com/txpipe-shop/thoth';
+const GITHUB = 'https://github.com/txpipe/thoth';
 const BLOB = `${GITHUB}/blob/main/`;
 
 export interface Options {
