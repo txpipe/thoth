@@ -105,6 +105,19 @@ describe('zkFetchPolicySchema disclosure rules', () => {
     } as never;
     expect(() => zkFetchPolicySchema.parse(policy)).toThrow(/[Uu]nrecognized key/);
   });
+
+  it('refuses a redaction that names no regex, jsonPath or xPath', () => {
+    // Reclaim reads an empty rule text as absent and refuses such a redaction on every prove.
+    for (const redaction of [{}, { regex: '' }, { regex: '', jsonPath: '', xPath: '' }]) {
+      const policy = policyWith({ responseMatches: [match], responseRedactions: [redaction] });
+      expect(() => zkFetchPolicySchema.parse(policy)).toThrow(/regex, jsonPath or xPath/);
+    }
+    const selecting = policyWith({
+      responseMatches: [match],
+      responseRedactions: [{ regex: '', jsonPath: '$.distance' }],
+    });
+    expect(() => zkFetchPolicySchema.parse(selecting)).not.toThrow();
+  });
 });
 
 describe('zkFetchPolicySchema slots', () => {

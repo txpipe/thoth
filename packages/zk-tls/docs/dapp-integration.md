@@ -172,7 +172,8 @@ The two fields with protocol meaning:
   `contains` match only guards the response.
 - `responseRedactions` is Reclaim's reveal whitelist, by `regex`, `jsonPath`
   or `xPath`. The selected slices are the only parts of the response the
-  witness, and so the evidence, ever sees.
+  witness, and so the evidence, ever sees. An empty list reveals the whole
+  response.
 
 The policy owns both. The client proves every request with the policy's rules:
 a request that omits them gets the policy's, and one that supplies its own must
@@ -265,7 +266,9 @@ both the client and the attestor reject a policy that crosses the regions.
 hash. The same rules under a different spelling hash the same: array order,
 the order of a rule's keys, empty redaction keys and an absent array are inert. The schema refuses
 Reclaim's `invert` and `hash` and any `{{param}}` template, so evidence whose
-signed rules carry them is refused too.
+signed rules carry them is refused too. It also refuses an empty redaction,
+whose `regex`, `jsonPath` and `xPath` are all absent or empty, which Reclaim
+would refuse on every prove.
 
 ### Regex engine
 
@@ -314,7 +317,7 @@ Under every mode, the client and the attestor refuse a signed body that
 contains `*`. Reclaim's comparison treats a signed `*` as equal to a `*` in the
 transcript, and the caller chooses which request bytes it redacts to `*`, so
 each one would leave a sent byte unbound. A body that needs a literal `*`
-escapes it, for example as `*` in JSON. `zkFetchBodyHashOf` refuses such
+escapes it, for example as `\u002a` in JSON. `zkFetchBodyHashOf` refuses such
 a body too.
 
 An endpoint that accepts a body but has nothing to say in it should send a

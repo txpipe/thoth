@@ -139,7 +139,7 @@ When `collect` drops an attestor, its entry in `failures` names one reason:
 | `attestation` | The attestor refused, or its answer did not verify.                                                                                                                                              | Check the attestor's logs and the trusted set's keys.                                                                                                                                                                                               |
 | `timeout`     | The attempt passed `attestorTimeoutMs` or `expiresAt`.                                                                                                                                           | Raise the limits, or check the slow witness or attestor.                                                                                                                                                                                            |
 
-A custom `ZkFetchProver` reports `transport` and `no-match` by throwing `ZkFetchProverError`. Any other error it throws becomes `evidence`.
+A custom `ZkFetchProver` reports `transport` and `no-match` by throwing `ZkFetchProverError`. Any other error it throws becomes `evidence`. `proveReq` rethrows a prover's error without its message or cause: as a `ZkFetchProverError` with the same reason, or as an `Error` that names only the attestor whose prover failed.
 
 What it does not check, and what your app must do:
 
@@ -150,7 +150,7 @@ What it does not check, and what your app must do:
 - `responseText` is the transcript as the client saw it. The witness does not sign it; the secret scan reads it, but no other check does.
 - The secret header check cannot recognize every transformation of a secret. The prover must still redact.
 - An attempt that times out keeps running in the background: Reclaim's `createClaimOnAttestor` takes no abort signal. Its late result is never counted.
-- Errors carry registry slots and reasons, never remote error text.
+- Errors from `proveReq` and `collect` carry no remote error text; a `collect` failure carries only its registry slot and reason.
 - `threshold` is yours to set; the client cannot read the contract's N.
 - The claim's values are not source-bound on-chain unless your circuit recomputes `subjectHash` from the subject fields (ADR 0001).
 - Reusing a holder secret links claims. Thoth promises no cross-claim unlinkability (ADR 0004).

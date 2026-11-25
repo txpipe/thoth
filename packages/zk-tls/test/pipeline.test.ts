@@ -582,9 +582,39 @@ describe('zkFetch attestor + client', () => {
       const result = await client.collect(collectionRequest, options());
       expect(slots(result)).toEqual([1, 2]);
       expect(result.failures).toEqual([{ registryIndex: 0, reason }]);
-      await expect(client.proveReq(collectionRequest, binding())).rejects.toBe(failing);
+      const error = await client.proveReq(collectionRequest, binding()).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ZkFetchProverError);
+      expect(error).toMatchObject({ reason });
+      expect((error as Error).cause).toBeUndefined();
     },
   );
+
+  it.each([
+    { thrown: 'a witness error', error: new Error('zkFetch witness error: remote detail') },
+    {
+      thrown: 'an unknown prover reason',
+      error: Object.defineProperty(new ZkFetchProverError('transport'), 'reason', {
+        value: 'remote detail',
+      }),
+    },
+    { thrown: 'a non-Error value', error: 'remote detail' },
+  ])('rethrows $thrown from proveReq without the remote text', async ({ error }) => {
+    const client = clientWith({
+      provers: {
+        ...provers,
+        'attestor-0': {
+          prove: async () => {
+            throw error;
+          },
+        },
+      },
+    });
+    const thrown = await client.proveReq(collectionRequest, binding()).catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown).not.toBeInstanceOf(ZkFetchProverError);
+    expect((thrown as Error).message).not.toContain('remote detail');
+    expect((thrown as Error).cause).toBeUndefined();
+  });
 
   it('keeps a prover reason only from the proving step, and only a known one', async () => {
     const unknown = new ZkFetchProverError('transport');
@@ -1403,5 +1433,50 @@ describe('zkFetch attestor + client', () => {
     for (const id of ['attestor-1', 'attestor-2']) {
       expect(requestOf(requests, id).context).toEqual({ [ZK_FETCH_CLAIM_CONTEXT_KEY]: digest });
     }
+  });
+
+  it("keeps the policy's rules and the caller's headers out of a prover's reach", async () => {
+    const withRedaction: ZkFetchPolicy = {
+      ...policy(),
+      responseRedactions: [{ jsonPath: '$.data' }],
+    };
+    const request = { ...collectionRequest, publicHeaders: { accept: 'application/json' } };
+    type Seen = Pick<ZkFetchRequest, 'responseMatches' | 'responseRedactions' | 'publicHeaders'>;
+    const received: Seen[] = [];
+    // Each prover signs the rules it received, then attestor-0 edits its request.
+    const editing = Object.fromEntries(
+      Object.entries(witnessById).map(([id, witness]) => [
+        id,
+        {
+          prove: (sent: ZkFetchRequest) => {
+            const { responseMatches, responseRedactions, publicHeaders } = sent;
+            const seen = structuredClone({ responseMatches, responseRedactions, publicHeaders });
+            received.push(seen);
+            if (id === 'attestor-0') {
+              (responseMatches?.[0] as { value: string }).value = '(?<data>tampered)';
+              (responseRedactions?.[0] as { jsonPath: string }).jsonPath = '$.tampered';
+              (publicHeaders as Record<string, string>).accept = 'text/html';
+            }
+            return witness.sign({
+              values: { data: 'HTTP/1.1 200 OK' },
+              timestampS: BASE_TIMESTAMP_S,
+              parameters: { url: sent.url, method: 'GET', body: '', ...seen },
+              context: sent.context,
+            });
+          },
+        } satisfies ZkFetchProver,
+      ]),
+    );
+    const client = clientWith({ policy: withRedaction, provers: editing });
+    await client.proveReq(request, binding());
+    await client.proveReq(request, binding());
+    const { responseMatches, responseRedactions } = withRedaction;
+    const untouched = {
+      responseMatches,
+      responseRedactions,
+      publicHeaders: { accept: 'application/json' },
+    };
+    // Two calls, one request per attestor each.
+    expect(received).toEqual(Array(2 * ids.length).fill(untouched));
   });
 });
