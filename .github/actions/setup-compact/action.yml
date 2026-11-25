@@ -28,5 +28,7 @@ runs:
         install -D -m 0755 "$tmp/$asset/compact" "$HOME/.local/bin/compact"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         echo "$HOME/.compact/bin" >> "$GITHUB_PATH"
-        "$HOME/.local/bin/compact" update "$COMPACT_COMPILER_VERSION"
+        # Hosted runners share egress IPs, so the anonymous GitHub API budget is often
+        # already spent. The token only reads public releases; contents:read is enough.
+        GITHUB_TOKEN="${{ github.token }}" "$HOME/.local/bin/compact" update "$COMPACT_COMPILER_VERSION"
         "$HOME/.local/bin/compact" compile --version
