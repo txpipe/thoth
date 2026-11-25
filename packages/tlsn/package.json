@@ -1,0 +1,89 @@
+{
+  "name": "@txpipe/thoth-tlsn",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TLSNotary (tlsn@1) attestor kind for the Thoth N-of-M attestation system.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "TxPipe-Shop",
+  "keywords": [
+    "thoth",
+    "midnight",
+    "attestation",
+    "zero-knowledge",
+    "zk",
+    "tlsnotary",
+    "zktls"
+  ],
+  "homepage": "https://github.com/txpipe-shop/thoth#readme",
+  "bugs": {
+    "url": "https://github.com/txpipe-shop/thoth/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/txpipe-shop/thoth.git",
+    "directory": "packages/tlsn"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "src",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./attestor": {
+      "types": "./dist/attestor/index.d.ts",
+      "import": "./dist/attestor/index.js",
+      "default": "./dist/attestor/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js",
+      "default": "./dist/client/index.js"
+    },
+    "./disclosure": {
+      "types": "./dist/disclosure/index.d.ts",
+      "import": "./dist/disclosure/index.js",
+      "default": "./dist/disclosure/index.js"
+    },
+    "./prover": {
+      "types": "./dist/prover/index.d.ts",
+      "import": "./dist/prover/index.js",
+      "default": "./dist/prover/index.js"
+    },
+    "./verifier": {
+      "types": "./dist/verifier/index.d.ts",
+      "import": "./dist/verifier/index.js",
+      "default": "./dist/verifier/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "types": "tsc --noEmit",
+    "build:native": "cargo build --release --manifest-path native/Cargo.toml"
+  },
+  "dependencies": {
+    "@txpipe/thoth-attestor": "^0.0.0",
+    "@txpipe/thoth-client": "^0.0.0",
+    "@txpipe/thoth-core": "^0.0.0",
+    "jsonpath-plus": "^10.4.0",
+    "re2": "1.27.1"
+  },
+  "peerDependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "zod": "^4.6.7"
+  }
+}

@@ -1,0 +1,5 @@
+Thoth
+Copyright 2026 TxPipe
+
+The thoth-tlsn tool in native/ links TLSNotary (https://github.com/tlsnotary/tlsn),
+licensed under MIT OR Apache-2.0.

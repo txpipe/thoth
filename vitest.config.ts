@@ -10,6 +10,7 @@ export default defineConfig({
       'packages/core/**/*.test.ts',
       'packages/client/**/*.test.ts',
       'packages/zk-tls/**/*.test.ts',
+      'packages/tlsn/**/*.test.ts',
     ],
     exclude: [...configDefaults.exclude],
     reporters: 'verbose',

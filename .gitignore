@@ -15,3 +15,6 @@ packages/contracts/artifacts/
 .vscode/
 
 .lavish
+
+# native builds
+packages/tlsn/native/target/
