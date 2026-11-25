@@ -103,13 +103,13 @@ export const HOLDER = filled(0xbb);
 /** Derive a claim from `observation` under the fixture defaults. */
 export const claimFor = (
   observation: OutputObservation = OBSERVATION,
-  options: { policy?: OutputPolicy; valueSlots?: number; byteSlots?: number } = {},
+  options: { policy?: OutputPolicy; byteSlots?: number } = {},
 ): Claim<number, number> =>
   deriveCardanoClaim({
     policy: options.policy ?? POLICY,
     observation,
     appId: APP_ID,
     holder: HOLDER,
-    valueSlots: options.valueSlots ?? 5,
+    valueSlots: 5,
     byteSlots: options.byteSlots ?? 1,
   });

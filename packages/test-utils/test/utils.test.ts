@@ -7,8 +7,20 @@ import {
 import { describe, expect, it } from 'vitest';
 import { filled, fullSpan, hex, le, padded32, sha256 } from '../src/bytes.js';
 import { parseEnvList, parseEnvUrl } from '../src/env.js';
-import { collectedSlots, fakeKeyPair, fakeVerifier, inMemoryTransport } from '../src/harness.js';
+import {
+  collectedSlots,
+  fakeKeyPair,
+  fakeVerifier,
+  inMemoryTransport,
+  trustedSetOf,
+} from '../src/harness.js';
 import { jubjubKeyPair, signJubjubMessage } from '../src/jubjub.js';
+import {
+  createTestWitness,
+  disclosureRules,
+  disclosureRulesOf,
+  type ReclaimSigningPrimitives,
+} from '../src/zk-fetch.js';
 
 describe('bytes', () => {
   it('fills 32 bytes by default and encodes lowercase hex', () => {
@@ -75,6 +87,75 @@ describe('harness', () => {
     expect(collectedSlots({ collected: [{ registryIndex: 2 }, { registryIndex: 0 }] })).toEqual([
       2, 0,
     ]);
+  });
+
+  it('builds a trusted set with default or explicit slots and rejects mismatched lengths', () => {
+    const attestors = [
+      { id: 'a', definition: 'def', publicKey: 'pk-a' },
+      { id: 'b', definition: 'def', publicKey: 'pk-b' },
+    ];
+    const passthrough = <T>(options: T): T => options;
+    expect(trustedSetOf(passthrough, attestors)).toEqual({
+      registrySize: 2,
+      attestors: [
+        { attestor: attestors[0], registryIndex: 0 },
+        { attestor: attestors[1], registryIndex: 1 },
+      ],
+    });
+    expect(trustedSetOf(passthrough, attestors, { registrySize: 5, slots: [4, 1] })).toEqual({
+      registrySize: 5,
+      attestors: [
+        { attestor: attestors[0], registryIndex: 4 },
+        { attestor: attestors[1], registryIndex: 1 },
+      ],
+    });
+    expect(() => trustedSetOf(passthrough, attestors, { slots: [0] })).toThrow(
+      /expected 2 slots, got 1/,
+    );
+  });
+});
+
+describe('zk-fetch', () => {
+  it('builds whole-response regex disclosure rules from names or slot lists', () => {
+    expect(disclosureRules('a', 'b')).toEqual({
+      responseMatches: [
+        { type: 'regex', value: '(?<a>.*)' },
+        { type: 'regex', value: '(?<b>.*)' },
+      ],
+      responseRedactions: [],
+    });
+    expect(disclosureRulesOf([{ name: 'a' }, { name: 'b' }])).toEqual(disclosureRules('a', 'b'));
+  });
+
+  it('signs canonical evidence through caller-supplied Reclaim primitives and checks scheme', async () => {
+    const stubReclaim: ReclaimSigningPrimitives = {
+      SIGNATURES: {
+        1: {
+          getPublicKey: () => Uint8Array.from([1, 2]),
+          getAddress: () => '0xabc',
+          sign: async () => Uint8Array.from([0xde, 0xad]),
+        },
+      },
+      SelectedServiceSignatureType: 1,
+      canonicalStringify: (value) => JSON.stringify(value),
+      createSignDataForClaim: (claim) => claim.identifier,
+      getIdentifierFromClaimInfo: () => '0xid',
+    };
+    const witness = createTestWitness(stubReclaim, '0x01');
+    expect(witness.address).toBe('0xabc');
+    const evidence = await witness.sign({
+      values: { price: '10' },
+      timestampS: 100,
+      parameters: { url: 'https://example.com' },
+      context: { tag: 'x' },
+    });
+    expect(evidence.signatureHex).toBe('0xdead');
+    expect(evidence.attestorAddress).toBe('0xabc');
+    expect(evidence.claim.identifier).toBe('0xid');
+
+    expect(() =>
+      createTestWitness({ ...stubReclaim, SelectedServiceSignatureType: 99 }, '0x01'),
+    ).toThrow(/missing signature scheme 99/);
   });
 });
 

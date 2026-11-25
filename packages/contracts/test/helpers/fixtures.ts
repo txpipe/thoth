@@ -14,7 +14,7 @@ import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js
 import { pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
 import type { B_Claim } from '../../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits as bytesPureCircuits } from '../../artifacts/mock_attestation_bytes/contract/index.js';
-import { signMessage, signClaim as signSingle } from './sign.js';
+import { signMessage } from './sign.js';
 
 export const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
 
@@ -142,32 +142,34 @@ export const DUMMY_SIGNATURE: JubjubSchnorrSignature = {
   response: 0n,
 };
 
-// Sign a numeric-only claim with the given notary keys. A `null` key yields
-// the dummy signature, which never verifies.
+/** Sign `message` with each notary key; a `null` key yields the dummy signature. */
+const signSlots = (
+  message: readonly bigint[],
+  keys: readonly (NotaryKey | null)[],
+): JubjubSchnorrSignature[] =>
+  keys.map((key) => (key === null ? DUMMY_SIGNATURE : signMessage(key.sk, message).signature));
+
+/** Sign a numeric-only claim over its compiled message; `null` keys yield dummy signatures. */
 export const signClaim = (
   claim: A_Claim,
   keys: readonly (NotaryKey | null)[],
   commitRand: Uint8Array = randomBytes(32),
-): SignedClaim<A_Claim> => {
-  const signatures: JubjubSchnorrSignature[] = keys.map((key) =>
-    key === null ? DUMMY_SIGNATURE : signSingle(key.sk, claim).signature,
-  );
-  return { claim, signatures, commitRand };
-};
+): SignedClaim<A_Claim> => ({
+  claim,
+  signatures: signSlots(pureCircuits.message(claim), keys),
+  commitRand,
+});
 
-// Sign a byte-slot claim over its compiled message. A `null` key yields the
-// dummy signature, which never verifies.
+/** Sign a byte-slot claim over its compiled message; `null` keys yield dummy signatures. */
 export const signByteClaim = (
   claim: B_Claim,
   keys: readonly (NotaryKey | null)[],
   commitRand: Uint8Array = randomBytes(32),
-): SignedClaim<B_Claim> => {
-  const message = bytesPureCircuits.message(claim);
-  const signatures: JubjubSchnorrSignature[] = keys.map((key) =>
-    key === null ? DUMMY_SIGNATURE : signMessage(key.sk, message).signature,
-  );
-  return { claim, signatures, commitRand };
-};
+): SignedClaim<B_Claim> => ({
+  claim,
+  signatures: signSlots(bytesPureCircuits.message(claim), keys),
+  commitRand,
+});
 
 export const idOf = (claim: A_Claim, rand: Uint8Array): Uint8Array =>
   pureCircuits.computeId(claim, rand);

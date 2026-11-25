@@ -7,13 +7,20 @@
 // fresh ledger so a rejection can only come from the signature check, never from
 // a nullifier the honest submission left behind.
 import { randomBytes } from 'node:crypto';
+import {
+  canonicalStringify,
+  createSignDataForClaim,
+  getIdentifierFromClaimInfo,
+  SelectedServiceSignatureType,
+  SIGNATURES,
+} from '@reclaimprotocol/attestor-core';
 import { buildTrustedSet } from '@txpipe/thoth-client';
 import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
 import { type Claim, toContractClaim } from '@txpipe/thoth-core/claim';
 import { hex, padded32 } from '@txpipe/thoth-test-utils/bytes';
 import { inMemoryTransport, trustedSetOf } from '@txpipe/thoth-test-utils/harness';
 import { jubjubKeyPair } from '@txpipe/thoth-test-utils/jubjub';
-import { disclosureRules } from '@txpipe/thoth-test-utils/zk-fetch';
+import { createTestWitness, disclosureRules } from '@txpipe/thoth-test-utils/zk-fetch';
 import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
@@ -30,7 +37,7 @@ import {
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { B_Claim } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
-import { freshBytesLedger, packSignatures, zkFetchTestWitness } from './helpers/acceptance.js';
+import { freshBytesLedger, packSignatures } from './helpers/acceptance.js';
 import {
   APP_ID,
   bytesIdOf,
@@ -63,9 +70,17 @@ const policy: ZkFetchPolicy = {
 };
 const request: ZkFetchRequest = { url: 'https://api.github.com/repos/x', method: 'GET' };
 
+const reclaimPrimitives = {
+  SIGNATURES,
+  SelectedServiceSignatureType,
+  canonicalStringify,
+  createSignDataForClaim,
+  getIdentifierFromClaimInfo,
+};
+
 // Each operator runs a test-key witness and the attestor that trusts it.
 const operators = ['33', '44'].map((byte, i) => {
-  const witness = zkFetchTestWitness(`0x${byte.repeat(32)}`);
+  const witness = createTestWitness(reclaimPrimitives, `0x${byte.repeat(32)}`);
   const attestor = zkFetchAttestor({
     id: `attestor-${i}`,
     keyPair: jubjubKeyPair(),

@@ -45,8 +45,6 @@ export const policyWithSlots = (
 export const deriveClaim = (options: {
   verified: VerifiedEvidence;
   policy: ZkFetchPolicy;
-  appId?: Uint8Array;
-  holder?: Uint8Array;
   valueSlots?: number;
   byteSlots?: number;
   windowStart?: bigint;
@@ -55,8 +53,8 @@ export const deriveClaim = (options: {
   deriveClaimFromEvidence({
     verified: options.verified,
     policy: options.policy,
-    appId: options.appId ?? APP_ID,
-    holder: options.holder ?? HOLDER,
+    appId: APP_ID,
+    holder: HOLDER,
     valueSlots: options.valueSlots ?? 1,
     byteSlots: options.byteSlots,
     windowStart: options.windowStart ?? BigInt(DEFAULT_TIMESTAMP_S),

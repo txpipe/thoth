@@ -6,7 +6,7 @@
 // that is covered via the attestor by `pipeline.test.ts` (a real witnessed
 // fixture) and `witness.test.ts` (local test-key witnesses).
 
-import { hex, padded32 } from '@txpipe/thoth-test-utils/bytes';
+import { filled, hex, padded32 } from '@txpipe/thoth-test-utils/bytes';
 import { disclosureRules } from '@txpipe/thoth-test-utils/zk-fetch';
 import {
   assertEvidenceMatchesPolicy,
@@ -516,7 +516,7 @@ describe('assertClaimMatchesContext', () => {
     bodyPolicy: 'ignored',
     ...disclosureRules('distance'),
   };
-  const window = { holder: new Uint8Array(32).fill(7), windowStart: 10n, windowEnd: 20n };
+  const window = { holder: filled(7), windowStart: 10n, windowEnd: 20n };
   const digestUnder = (signedPolicy: ZkFetchPolicy, request: typeof REQUEST = REQUEST) =>
     zkFetchClaimContextDigestOf({ policy: signedPolicy, request, ...window });
   const claim = { ...window, salt: Buffer.from(digestUnder(policy), 'hex') } as never;

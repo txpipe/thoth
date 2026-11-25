@@ -924,7 +924,7 @@ describe('zkFetch attestor + client', () => {
     const broken = {
       request: async (...args: Parameters<typeof transport.request>) => {
         const result = await transport.request(...args);
-        return { ...result, claim: { ...result.claim, holder: new Uint8Array(32).fill(0xff) } };
+        return { ...result, claim: { ...result.claim, holder: filled(0xff) } };
       },
     };
     const proof = await clientWith({ transport: broken }).proveReq(

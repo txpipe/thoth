@@ -1,14 +1,6 @@
-// Shared helpers for cross-seam acceptance suites: signature-slot packing,
-// fresh bytes-mock ledgers, and the local zkFetch test witness boundary.
+// Shared helpers for cross-seam acceptance suites: signature-slot packing and
+// fresh bytes-mock ledgers.
 import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
-import {
-  canonicalStringify,
-  createSignDataForClaim,
-  getIdentifierFromClaimInfo,
-  SelectedServiceSignatureType,
-  SIGNATURES,
-} from '@reclaimprotocol/attestor-core';
-import { createTestWitness, type TestWitness } from '@txpipe/thoth-test-utils/zk-fetch';
 import type { B_Claim } from '../../artifacts/mock_attestation_bytes/contract/index.js';
 import { APP_ID, DUMMY_SIGNATURE } from './fixtures.js';
 import { createPrivateState } from './private-state.js';
@@ -45,16 +37,3 @@ export const freshBytesLedger = async (options: {
   sim.now = Number(options.now);
   return sim;
 };
-
-/** Build a local secp256k1 zkFetch test witness backed by `@reclaimprotocol/attestor-core`. */
-export const zkFetchTestWitness = (privateKey: string): TestWitness =>
-  createTestWitness(
-    {
-      SIGNATURES,
-      SelectedServiceSignatureType,
-      canonicalStringify,
-      createSignDataForClaim,
-      getIdentifierFromClaimInfo,
-    },
-    privateKey,
-  );

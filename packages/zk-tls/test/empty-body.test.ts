@@ -223,7 +223,7 @@ describe.skipIf(WITNESS_URL === '')('live witness', () => {
 
     const evidence: ZkFetchEvidence = {
       claim: result.claim,
-      signatureHex: `0x${Buffer.from(result.signatures.claimSignature).toString('hex')}`,
+      signatureHex: `0x${hex(result.signatures.claimSignature)}`,
       attestorAddress: result.signatures.attestorAddress.toLowerCase(),
     };
     const verified = await verifyZkFetchProof(evidence);
