@@ -1,282 +1,265 @@
-// The tlsn@1 client: bind the holder and window into a claim context digest, prove the
-// request once per attestor through that attestor's notary, and collect a threshold of
-// signatures over one claim.
+// The tlsn@1 client, with zkFetch's client surface: prove a request once per attestor
+// through that attestor's notary, then collect the N-of-M attestation set.
 
-import { isDeepStrictEqual } from 'node:util';
 import type {
   AttestationVerifier,
   AttestorTransport,
   CollectedAttestation,
-  TrustedAttestor,
   TrustedSet,
 } from '@txpipe/thoth-client';
-import { attestorIdsOf, memberOf, resolveAttestation } from '@txpipe/thoth-client';
-import type { AttestationInput } from '@txpipe/thoth-core';
-import type { Claim } from '@txpipe/thoth-core/claim';
-import { bytes32Schema } from '@txpipe/thoth-core/claim';
+import { attestorIdsOf, memberOf } from '@txpipe/thoth-client';
+import type { Claim, FlatMessage } from '@txpipe/thoth-core/claim';
+import { bytes32Schema, claimToMessage } from '@txpipe/thoth-core/claim';
 import { z } from 'zod';
 import {
   assertPolicySlotsInRange,
-  deriveTlsnClaim,
-  observePresentation,
   TLSN_LIMITS,
   type TlsnDefinition,
+  type TlsnEvidence,
   type TlsnPolicy,
   type TlsnPresentationVerifier,
-  tlsnClaimContextDigestOf,
   tlsnPolicySchema,
-  tlsnSubjectRequestOf,
-  verifiedPresentationSchema,
 } from '../index.js';
-import type { TlsnProver, TlsnRequest } from '../prover/index.js';
+import {
+  TLSN_CLAIM_CONTEXT_KEY,
+  type TlsnProver,
+  type TlsnProverConfig,
+  type TlsnRequest,
+  tlsnProver,
+} from '../prover/index.js';
+import { TlsnProverError } from '../prover-error.js';
+import {
+  collectThreshold,
+  type TlsnAttestorFailure,
+  type TlsnThresholdAttestment,
+  TlsnThresholdError,
+  type TlsnThresholdOptions,
+} from './collect.js';
+import {
+  attestWith,
+  bindRequestToClaimContext,
+  bindRequestToPolicy,
+  buildClaimProposal,
+  proveOptionsShape,
+  proveWith,
+  SecretHeaderError,
+  windowInOrder,
+} from './proposal.js';
 
-export type { TlsnProver, TlsnRequest };
+export type {
+  TlsnAttestorFailure,
+  TlsnProver,
+  TlsnProverConfig,
+  TlsnRequest,
+  TlsnThresholdAttestment,
+  TlsnThresholdOptions,
+};
+export {
+  SecretHeaderError,
+  TLSN_CLAIM_CONTEXT_KEY,
+  TlsnProverError,
+  TlsnThresholdError,
+  tlsnProver,
+};
 
 /** A claim this kind signs: the standard claim, with numeric and byte slots. */
 export type TlsnClaim = Claim<number, number>;
 
-/** Why one attestor's attempt was dropped. Carries no remote error text. */
-export interface TlsnAttestorFailure {
-  /** The attestor's registry slot. */
-  readonly registryIndex: number;
-  /**
-   * The step that failed: `prove` (no prover, or proving failed), `evidence`
-   * (the presentation fails the policy), `claim` (this session showed other
-   * values than the first one), or `attestation` (the attestor refused, or its
-   * reply did not vet).
-   */
-  readonly reason: 'prove' | 'evidence' | 'claim' | 'attestation';
-}
+/** One vetted attestation over a tlsn@1 claim. */
+export type TlsnCollectedAttestation<PK, S> = CollectedAttestation<TlsnClaim, PK, S, FlatMessage>;
 
-/** An attestment that reached the threshold, plus the attestors that failed. */
-export interface TlsnAttestment<PK, S> {
-  /** The claim every collected attestor signed. */
+/** The collected attestation set for one claim. Every member signed `message`. */
+export interface Attestment<PK, S> {
   readonly claim: TlsnClaim;
-  /** The vetting results, sorted by registry slot. */
-  readonly collected: readonly CollectedAttestation<TlsnClaim, PK, S>[];
-  readonly failures: readonly TlsnAttestorFailure[];
+  /** `claimToMessage(claim)`, the message the signatures commit to. */
+  readonly message: FlatMessage;
+  /** One per attestor that answered. */
+  readonly collected: readonly TlsnCollectedAttestation<PK, S>[];
 }
 
-/** No threshold was reached. Carries no evidence, claim or remote error text. */
-export class TlsnThresholdError extends Error {
-  /** Why the collection stopped. */
-  readonly reason: 'invalid-options' | 'threshold';
-  /** Attestors that failed before `collect` stopped. */
-  readonly failures: readonly TlsnAttestorFailure[];
-
-  /** Build the error from its reason and the failures so far. */
-  constructor(reason: TlsnThresholdError['reason'], failures: readonly TlsnAttestorFailure[] = []) {
-    super(`tlsn threshold not reached: ${reason}`);
-    this.name = 'TlsnThresholdError';
-    this.reason = reason;
-    this.failures = [...failures];
-  }
-}
-
-/** The claim inputs shared by every attestor in one `collect` call. */
-export interface TlsnCollectOptions {
-  /** 32-byte holder commitment from `holderCommitmentOf(secret)`; fresh per claim. */
-  readonly holder: Uint8Array;
-  /** Inclusive start of the observation window, Unix seconds. */
-  readonly windowStart: bigint;
-  /** Inclusive end of the observation window, Unix seconds. */
-  readonly windowEnd: bigint;
-  /** Distinct registry slots that must sign the same message. */
-  readonly threshold: number;
-  /** Candidate ids in contact order; defaults to the trusted set's order. */
-  readonly attestorIds?: readonly string[];
-}
-
-/** What a tlsn@1 client needs to prove a request and vet its attestors. */
+/** The configuration a dApp fixes once, at `tlsnClient.init`. */
 export interface TlsnClientConfig<PK, S> {
-  /** The app's pinned attestors, each at its registry slot. */
+  /** The dApp's pinned attestors, from `@txpipe/thoth-client`'s `buildTrustedSet`. */
   readonly trusted: TrustedSet<TlsnDefinition, PK>;
-  /** How the client reaches a remote attestor. */
   readonly transport: AttestorTransport<TlsnDefinition, PK, S>;
-  /** Signature verification for the app's scheme. */
+  /** Verifies attestor signatures before a response counts. */
   readonly verifier: AttestationVerifier<PK, S>;
-  /** Verifies each presentation locally before an attestor sees it. */
+  /** Verifies each presentation locally, so the client proposes the claim it supports. */
   readonly presentationVerifier: TlsnPresentationVerifier;
-  /** The policy every attestor enforces. The contract seals its hash. */
+  /** The policy every attestor in the set enforces. The contract seals its hash. */
   readonly policy: TlsnPolicy;
-  /** The app the claim is for, 32 bytes. */
+  /** 32 bytes, signed into every claim. */
   readonly appId: Uint8Array;
-  /** The contract's numeric value count. */
+  /** The contract's `#V`. */
   readonly valueSlots: number;
-  /** The contract's byte value count. Defaults to `0`. */
+  /** Half the contract's `#B`: each byte value takes two halves. Defaults to `0`. */
   readonly byteSlots?: number;
-  /** One prover per attestor id, each pointing at that attestor's own notary. */
+  /** One evidence source per attestor id, each pointing at that attestor's own notary. */
   readonly provers: Readonly<Record<string, TlsnProver>>;
 }
 
-/** A tlsn@1 client bound to one trusted set, policy and app. */
+/** The holder and window one claim is for, fixed before any notary signs. */
+export interface TlsnProveOptions {
+  /**
+   * Per-claim commitment from `holderCommitmentOf(secret)`, 32 bytes. Keep the
+   * secret for the contract witness; use a fresh one per claim.
+   */
+  readonly holder: Uint8Array;
+  /** Inclusive start of the signed observation window, Unix seconds, at most 2^32 - 1. */
+  readonly windowStart: bigint;
+  /** Inclusive end of the signed observation window, Unix seconds, at most 2^32 - 1. */
+  readonly windowEnd: bigint;
+}
+
+/** The presentations and the claim they agree on, ready to send to the attestors. */
+export interface TlsnClientProof<PK, S> {
+  /** One presentation per attestor's notary, keyed by attestor id. */
+  readonly evidences: Readonly<Record<string, TlsnEvidence>>;
+  readonly claim: TlsnClaim;
+  /** `claimToMessage(claim)`. */
+  readonly message: FlatMessage;
+  /**
+   * Ask the pinned attestors to sign this claim.
+   *
+   * @param ids — the attestor ids to query; defaults to every pinned attestor.
+   * @throws `AttestorNotInTrustedSetError` if an id is not in the trusted set.
+   * @throws `AttestationMismatchError` on the first rejected attestation.
+   * @throws `Error` if a target attestor has no evidence, or whatever the transport throws.
+   */
+  attest(...ids: string[]): Promise<Attestment<PK, S>>;
+}
+
+/** The client, ready to prove a request. */
 export interface TlsnClient<PK, S> {
   /**
-   * Prove `request` through each candidate attestor's notary and collect a
-   * threshold of attestations over one claim.
+   * Prove through every attestor's notary and require the presentations to
+   * agree on one claim before any attestor is contacted.
    *
-   * Every session is a separate fetch, so the attestors converge only when the
-   * source returns the same values each time.
-   *
-   * @throws {@link TlsnThresholdError} if the options are invalid or the
-   *   candidates run out before the threshold.
-   * @throws if the request is not HTTPS on port 443.
+   * @throws `ZodError` if the holder is not 32 bytes, the window is out of range or
+   *   inverted, or a prover returns malformed evidence.
+   * @throws {@link SecretHeaderError} if a presentation reveals a secret header value.
+   * @throws {@link TlsnProverError} if a notary or the source cannot be reached, or a
+   *   response fails the policy's redaction rules.
+   * @throws `Error` if the request carries disclosure rules other than the policy's or
+   *   sets the claim context key, a presentation fails the policy, or the
+   *   presentations disagree.
    */
-  collect(request: TlsnRequest, options: TlsnCollectOptions): Promise<TlsnAttestment<PK, S>>;
+  proveReq(request: TlsnRequest, options: TlsnProveOptions): Promise<TlsnClientProof<PK, S>>;
+  /**
+   * Prove with each attestor's own notary and collect a threshold over one
+   * message, under a window and holder fixed up front.
+   *
+   * @returns the first message to reach the threshold, attestations sorted by registry slot.
+   * @throws {@link TlsnThresholdError} if the options are invalid, the request
+   *   carries disclosure rules other than the policy's or sets the claim context
+   *   key, the deadline expires, or no message reaches the threshold.
+   */
+  collect(
+    request: TlsnRequest,
+    options: TlsnThresholdOptions,
+  ): Promise<TlsnThresholdAttestment<PK, S>>;
 }
 
-const optionsSchema = z
-  .object({
-    holder: bytes32Schema,
-    windowStart: z.bigint().nonnegative(),
-    windowEnd: z.bigint().nonnegative(),
-    threshold: z.number().int().positive(),
-    attestorIds: z.array(z.string()).optional(),
-  })
-  .refine((options) => options.windowStart <= options.windowEnd);
+const proveOptionsSchema = z.object(proveOptionsShape).refine(windowInOrder, {
+  message: 'windowStart must not be after windowEnd',
+});
 
-type Options = z.output<typeof optionsSchema>;
-
-class AttemptError extends Error {
-  readonly reason: TlsnAttestorFailure['reason'];
-  constructor(reason: TlsnAttestorFailure['reason']) {
-    super(`attestor attempt failed: ${reason}`);
-    this.reason = reason;
-  }
-}
-
-/** Run `step`, mapping any failure to `reason`. */
-const step = async <T>(reason: TlsnAttestorFailure['reason'], run: () => T | Promise<T>) => {
-  try {
-    return await run();
-  } catch {
-    throw new AttemptError(reason);
-  }
-};
+const sameMessage = (a: FlatMessage, b: FlatMessage): boolean =>
+  a.length === b.length && a.every((value, index) => value === b[index]);
 
 /**
- * Build a tlsn@1 client.
+ * The tlsn@1 client: prove a request once per attestor notary, then collect the
+ * N-of-M attestation set from the dApp's trusted attestors. It takes the same
+ * configuration and calls as `zkFetchClient`, plus a `presentationVerifier`.
+ *
+ * @example
+ * ```ts
+ * import { tlsnClient, tlsnProver } from '@txpipe/thoth-tlsn/client';
+ * import { nativePresentationVerifier } from '@txpipe/thoth-tlsn/verifier';
+ *
+ * const client = tlsnClient.init({
+ *   trusted, transport, verifier, policy, appId, valueSlots: 1,
+ *   presentationVerifier: nativePresentationVerifier({ binary: 'thoth-tlsn' }),
+ *   provers: { 'tlsn-1': tlsnProver({ binary: 'thoth-tlsn', notary: 'notary-1.example:7047' }) },
+ * });
+ * const { claim, collected } = await client.collect(request, options);
+ * ```
  *
  * @throws `ZodError` if the policy, app id or slot counts fail their schemas.
  * @throws if a policy slot does not fit the claim size.
  */
 export const tlsnClient = {
-  init<PK, S>(config: TlsnClientConfig<PK, S>): TlsnClient<PK, S> {
-    const policy = tlsnPolicySchema.parse(config.policy);
-    const appId = bytes32Schema.parse(config.appId);
-    const valueSlots = z
-      .number()
-      .int()
-      .positive()
-      .max(TLSN_LIMITS.valueSlots)
-      .parse(config.valueSlots);
-    const byteSlots = z
-      .number()
+  init<PK, S>(supplied: TlsnClientConfig<PK, S>): TlsnClient<PK, S> {
+    tlsnPolicySchema.parse(supplied.policy);
+    bytes32Schema.parse(supplied.appId);
+    z.number().int().positive().max(TLSN_LIMITS.valueSlots).parse(supplied.valueSlots);
+    z.number()
       .int()
       .nonnegative()
       .max(TLSN_LIMITS.byteSlots)
-      .parse(config.byteSlots ?? 0);
-    assertPolicySlotsInRange(policy, valueSlots, byteSlots);
-    const { trusted, transport, verifier, presentationVerifier, provers } = config;
+      .parse(supplied.byteSlots ?? 0);
+    assertPolicySlotsInRange(supplied.policy, supplied.valueSlots, supplied.byteSlots ?? 0);
+    const config = { ...supplied, provers: { ...supplied.provers } };
 
     return {
-      collect: async (request, supplied) => {
-        let options: Options;
-        let candidates: TrustedAttestor<TlsnDefinition, PK>[];
-        try {
-          options = optionsSchema.parse(supplied);
-          const ids = options.attestorIds ?? attestorIdsOf(trusted);
-          candidates = [...new Set(ids)].map((id) => memberOf(trusted, id));
-          if (candidates.length < options.threshold) {
-            throw new Error('fewer candidates than the threshold');
+      proveReq: async (request, options) => {
+        const { holder, windowStart, windowEnd } = proveOptionsSchema.parse(options);
+        const snapshot = bindRequestToClaimContext(
+          bindRequestToPolicy(request, config.policy),
+          config.policy,
+          { holder, windowStart, windowEnd },
+        );
+        const ids = attestorIdsOf(config.trusted);
+        const evidences: Record<string, TlsnEvidence> = {};
+        let claim: TlsnClaim | undefined;
+        for (const id of ids) {
+          const { attestor } = memberOf(config.trusted, id);
+          const evidence = await proveWith(config.provers, attestor, snapshot);
+          const proposal = await buildClaimProposal({
+            evidence,
+            presentationVerifier: config.presentationVerifier,
+            request: snapshot,
+            policy: config.policy,
+            appId: config.appId,
+            holder,
+            valueSlots: config.valueSlots,
+            byteSlots: config.byteSlots ?? 0,
+            windowStart,
+            windowEnd,
+          });
+          if (
+            claim !== undefined &&
+            !sameMessage(claimToMessage(claim), claimToMessage(proposal))
+          ) {
+            throw new Error('the notaries saw different responses');
           }
-        } catch {
-          throw new TlsnThresholdError('invalid-options');
+          claim ??= proposal;
+          evidences[id] = evidence;
         }
-        const claimContext = tlsnClaimContextDigestOf({
-          policy,
-          request: tlsnSubjectRequestOf(request),
-          holder: options.holder,
-          windowStart: options.windowStart,
-          windowEnd: options.windowEnd,
-        });
-
-        let reference: TlsnClaim | undefined;
-        const attempt = async (member: TrustedAttestor<TlsnDefinition, PK>) => {
-          const prover = provers[member.attestor.id];
-          const evidence = await step('prove', () => {
-            if (prover === undefined) throw new Error('no prover for this attestor');
-            return prover.prove(request, claimContext);
-          });
-          const claim = await step('evidence', async () => {
-            const verified = verifiedPresentationSchema.parse(
-              await presentationVerifier.verify(evidence.presentation),
-            );
-            const observation = observePresentation(verified, policy);
-            if (!isDeepStrictEqual(observation.claimContext, claimContext)) {
-              throw new Error('the notary signed another claim context');
-            }
-            if (observation.time < options.windowStart || observation.time > options.windowEnd) {
-              throw new Error('the notary observed outside the window');
-            }
-            return deriveTlsnClaim({
-              observation,
-              policy,
-              appId,
-              holder: options.holder,
-              valueSlots,
-              byteSlots,
-              windowStart: options.windowStart,
-              windowEnd: options.windowEnd,
-            });
-          });
-          // The first session fixes the claim; a later one that read other values cannot
-          // join its threshold.
-          reference ??= claim;
-          if (!isDeepStrictEqual(claim, reference)) {
-            throw new AttemptError('claim');
-          }
-          return step('attestation', async () => {
-            const input = { policy, evidence, claim } as unknown as AttestationInput<
-              z.input<TlsnDefinition['policy']>,
-              z.input<TlsnDefinition['evidence']>,
-              z.input<TlsnDefinition['claim']>
-            >;
-            const attestation = await transport.request(member.attestor, input);
-            return resolveAttestation({
-              trusted,
-              member,
-              attestation,
-              verifier,
-              expectedClaim: claim,
-            });
-          });
-        };
-
-        const collected: CollectedAttestation<TlsnClaim, PK, S>[] = [];
-        const failures: TlsnAttestorFailure[] = [];
-        const queue = [...candidates];
-        // One worker per signature still needed; a failed attempt takes the next candidate.
-        const worker = async () => {
-          for (let member = queue.shift(); member !== undefined; member = queue.shift()) {
-            try {
-              collected.push(await attempt(member));
-              return;
-            } catch (error) {
-              failures.push({
-                registryIndex: member.registryIndex,
-                reason: error instanceof AttemptError ? error.reason : 'attestation',
-              });
-            }
-          }
-        };
-        await Promise.all(Array.from({ length: options.threshold }, worker));
-        if (collected.length < options.threshold || reference === undefined) {
-          throw new TlsnThresholdError('threshold', failures);
+        if (claim === undefined) {
+          throw new Error('the trusted set is empty');
         }
-        collected.sort((a, b) => a.registryIndex - b.registryIndex);
-        return { claim: reference, collected, failures };
+        const agreed = claim;
+        return {
+          evidences,
+          claim: agreed,
+          message: claimToMessage(agreed),
+          attest: async (...targets) => {
+            const collected: TlsnCollectedAttestation<PK, S>[] = [];
+            for (const id of targets.length > 0 ? targets : ids) {
+              const member = memberOf(config.trusted, id);
+              const evidence = Object.hasOwn(evidences, id) ? evidences[id] : undefined;
+              if (evidence === undefined) {
+                throw new Error(`no evidence for attestor ${id}`);
+              }
+              collected.push(await attestWith(config, member, evidence, agreed));
+            }
+            collected.sort((a, b) => a.registryIndex - b.registryIndex);
+            return { claim: agreed, message: claimToMessage(agreed), collected };
+          },
+        };
       },
+      collect: (request, options) => collectThreshold(config, request, options),
     };
   },
 };

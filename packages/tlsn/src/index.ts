@@ -1,5 +1,6 @@
-// The tlsn@1 law: a TLSNotary notary attests one HTTPS session, the prover presents
-// it, and the attestor reads the claim's values from the authenticated JSON response.
+// The tlsn@1 law: the zkFetch policy and claim, with TLSNotary as the evidence. The notary
+// attests one HTTPS session; the attestor plays the zkFetch witness's part on the redacted
+// response the presentation reveals, and signs the claim it derives.
 
 import { createHash } from 'node:crypto';
 import type { AttestationInput } from '@txpipe/thoth-core';
@@ -12,8 +13,10 @@ import {
   subjectHashOf,
 } from '@txpipe/thoth-core/claim-context';
 import { z } from 'zod';
-import { type RevealedRequest, type RevealedResponse, readRequest, readResponse } from './http.js';
-import { type JsonPathSegment, lookupJsonPath, parseStrictJson } from './json.js';
+import { readRequest, redactedResponseText } from './http.js';
+import { disclosedValuesOf, type TlsnResponseMatch } from './match.js';
+import type { TlsnResponseRedaction } from './redact.js';
+import { ruleCompileError, ruleGroupNames } from './regex.js';
 import {
   BYTE_VALUE_BYTES,
   isByteRule,
@@ -22,7 +25,7 @@ import {
   type TlsnParseRule,
 } from './values.js';
 
-export type { JsonPathSegment, RevealedRequest, RevealedResponse, TlsnByteRule, TlsnParseRule };
+export type { TlsnByteRule, TlsnParseRule, TlsnResponseMatch, TlsnResponseRedaction };
 export { isByteRule, parseFieldValue };
 
 /** The law's versioned tag, hashed into every policy hash. */
@@ -35,11 +38,11 @@ export const TLSN_CLAIM_CONTEXT_EXTENSION = 'thoth.claim-context';
 export const TLSN_LIMITS = Object.freeze({
   allowedHosts: 32,
   hostLength: 253,
-  hiddenHeaders: 16,
-  headerNameLength: 64,
   slots: 64,
-  pathDepth: 16,
-  pathSegmentLength: 256,
+  slotNameLength: 64,
+  responseMatches: 32,
+  responseRedactions: 32,
+  ruleLength: 4096,
   valueSlots: 256,
   byteSlots: 64,
   /** Hex characters of one presentation. */
@@ -51,37 +54,40 @@ const sha256 = (data: string | Uint8Array): Uint8Array =>
 
 const bytesToHex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 
-/** One claim-slot binding: which JSON field feeds which slot, and how it is parsed. */
+const EMPTY_BODY_SHA256 = bytesToHex(sha256(''));
+
+/** One claim-slot binding: which disclosed value feeds which slot, and how it is parsed. */
 export interface TlsnSlot {
   /** Index into the claim's value slots: numeric `0..V-1`, byte `V..V+W-1`. */
   slot: number;
-  /** Where the field sits in the JSON response body: object keys and array indices. */
-  path: readonly JsonPathSegment[];
+  /** The named regex group to read from the disclosed values. */
+  name: string;
   parse: TlsnParseRule;
   /** Exact byte length, 1–32, byte rules only. */
   length?: number;
-  /** When true, an absent or unparseable field is signed unpresent instead of rejected. */
+  /** When true, an absent or unparseable disclosure is signed unpresent instead of rejected. */
   optional?: boolean;
 }
 
 /**
- * How the policy constrains the request body, which the presentation always
- * reveals: `empty`, `any`, or one exact body by SHA-256.
+ * How the policy constrains the request body, which the attestor reads from
+ * the presentation: `ignored` requires an empty body, `non-empty` a non-empty
+ * one, and `{ sha256 }` one exact non-empty body.
  */
-export type TlsnBodyPolicy = 'empty' | 'any' | { readonly sha256: Uint8Array };
+export type TlsnBodyPolicy = 'ignored' | 'non-empty' | { readonly sha256: Uint8Array };
 
-/** The policy a tlsn@1 attestor enforces. */
+/**
+ * The policy a tlsn@1 attestor enforces. It has the zkFetch policy's shape and
+ * meaning, so one policy object serves either kind.
+ */
 export interface TlsnPolicy {
-  /** DNS names the server certificate may be for; exact match, case-insensitive. */
+  /** Hosts the request may target: exact, or any subdomain of one. No ports. */
   allowedHosts: readonly string[];
-  /**
-   * Request header names whose values the prover may hide from the attestor,
-   * such as `authorization`. Every other request byte is revealed.
-   */
-  hiddenHeaders?: readonly string[];
-  /** The response status the attestor requires. Defaults to 200. */
-  status?: number;
   slots: readonly TlsnSlot[];
+  /** The response patterns the attestor applies to the redacted response. */
+  responseMatches: readonly TlsnResponseMatch[];
+  /** The slices of the response the prover reveals. Everything else stays hidden. */
+  responseRedactions: readonly TlsnResponseRedaction[];
   bodyPolicy: TlsnBodyPolicy;
   /** The claim version the attestor signs, 0–255. Defaults to 1. */
   claimVersion?: bigint;
@@ -104,79 +110,153 @@ export interface TlsnNotaryKey {
 const canonicalHost = (host: string): string => host.toLowerCase().replace(/\.+$/, '');
 
 const DNS_NAME =
-  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+  /^(?=.{1,253}$)(?:[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?\.)*[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?$/;
 
-const slotSchema = z
-  .object({
-    slot: z.number().int().nonnegative(),
-    path: z
-      .array(
-        z.union([z.string().max(TLSN_LIMITS.pathSegmentLength), z.number().int().nonnegative()]),
-      )
-      .min(1)
-      .max(TLSN_LIMITS.pathDepth),
-    parse: z.enum(['int', 'float', 'bytes', 'hex', 'base64']),
-    length: z.number().int().min(1).max(BYTE_VALUE_BYTES).optional(),
-    optional: z.boolean().optional(),
-  })
-  .refine((slot) => slot.length === undefined || isByteRule(slot.parse), {
-    message: "'length' is only valid for byte rules",
-    path: ['length'],
+/** Whether a canonical host is an allowed entry or a subdomain of one. */
+const hostAllowed = (host: string, allowedHosts: readonly string[]): boolean =>
+  allowedHosts.some((entry) => {
+    const allowed = canonicalHost(entry);
+    return host === allowed || host.endsWith(`.${allowed}`);
   });
 
-/** Runtime validator for {@link TlsnPolicy}. */
-export const tlsnPolicySchema = z.object({
-  allowedHosts: z
-    .array(
+// A `{{name}}` template is filled from caller-chosen values in Reclaim, so it would let
+// one policy run different rules; neither kind accepts one.
+const noTemplate = (rule: string): boolean => !/\{\{[^{}]+\}\}/.test(rule);
+const TEMPLATE_ERROR = 'disclosure rules cannot use {{param}} templates';
+
+const ruleText = z.string().max(TLSN_LIMITS.ruleLength);
+
+const refineRule = (source: string, context: z.RefinementCtx, path: string[]): void => {
+  const reason = ruleCompileError(source);
+  if (reason !== undefined) {
+    context.addIssue({
+      code: 'custom',
+      message: `regex does not compile under RE2: ${reason}`,
+      path,
+    });
+  }
+};
+
+/**
+ * Runtime validator for {@link TlsnPolicy}.
+ *
+ * It accepts the zkFetch policies tlsn@1 can enforce: rule entries are strict
+ * and template-free, every regex compiles under RE2, and every slot names a
+ * group a regex match declares. It refuses `xPath` redactions and `host:port`
+ * entries, which tlsn@1 cannot honour.
+ */
+export const tlsnPolicySchema = z
+  .strictObject({
+    allowedHosts: z
+      .array(
+        z
+          .string()
+          .max(TLSN_LIMITS.hostLength)
+          .refine((host) => DNS_NAME.test(canonicalHost(host)), {
+            message: 'an allowedHosts entry must be a host without a port',
+          }),
+      )
+      .min(1)
+      .max(TLSN_LIMITS.allowedHosts),
+    slots: z
+      .array(
+        z
+          .strictObject({
+            slot: z.number().int().nonnegative(),
+            name: z.string().min(1).max(TLSN_LIMITS.slotNameLength),
+            parse: z.enum(['int', 'float', 'bytes', 'hex', 'base64']),
+            length: z.number().int().min(1).max(BYTE_VALUE_BYTES).optional(),
+            optional: z.boolean().optional(),
+          })
+          .refine((slot) => slot.length === undefined || isByteRule(slot.parse), {
+            message: "'length' is only valid for byte rules",
+            path: ['length'],
+          }),
+      )
+      .min(1)
+      .max(TLSN_LIMITS.slots)
+      .refine((slots) => new Set(slots.map(({ slot }) => slot)).size === slots.length, {
+        message: 'a claim slot is declared more than once',
+      }),
+    responseMatches: z
+      .array(
+        z
+          .strictObject({
+            type: z.enum(['regex', 'contains']),
+            value: ruleText.min(1).refine(noTemplate, TEMPLATE_ERROR),
+          })
+          .superRefine((match, context) => {
+            if (match.type === 'regex') refineRule(match.value, context, ['value']);
+          }),
+      )
+      .min(1)
+      .max(TLSN_LIMITS.responseMatches),
+    responseRedactions: z
+      .array(
+        z
+          .strictObject({
+            regex: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
+            jsonPath: ruleText.refine(noTemplate, TEMPLATE_ERROR).optional(),
+            xPath: ruleText.optional(),
+          })
+          .superRefine((redaction, context) => {
+            if (redaction.xPath !== undefined) {
+              context.addIssue({
+                code: 'custom',
+                message: 'tlsn@1 does not support xPath redactions',
+                path: ['xPath'],
+              });
+            }
+            if (redaction.regex === undefined && redaction.jsonPath === undefined) {
+              context.addIssue({
+                code: 'custom',
+                message: 'a redaction needs a jsonPath or a regex',
+              });
+            }
+            if (redaction.regex !== undefined && redaction.regex !== '') {
+              refineRule(redaction.regex, context, ['regex']);
+            }
+          }),
+      )
+      .max(TLSN_LIMITS.responseRedactions),
+    bodyPolicy: z.union([
+      z.literal('ignored'),
+      z.literal('non-empty'),
       z
-        .string()
-        .max(TLSN_LIMITS.hostLength)
-        .refine((host) => DNS_NAME.test(canonicalHost(host)), {
-          message: 'an allowedHosts entry must be a DNS name without a port',
+        .strictObject({
+          sha256: z.instanceof(Uint8Array).refine((hash) => hash.length === 32, {
+            message: 'expected 32 bytes',
+          }),
+        })
+        .refine((pin) => bytesToHex(pin.sha256) !== EMPTY_BODY_SHA256, {
+          message: "a body pin cannot be the empty body; use bodyPolicy: 'ignored'",
         }),
-    )
-    .min(1)
-    .max(TLSN_LIMITS.allowedHosts),
-  hiddenHeaders: z
-    .array(
-      z
-        .string()
-        .max(TLSN_LIMITS.headerNameLength)
-        .regex(/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/)
-        .refine(
-          (name) => !['host', 'content-length', 'transfer-encoding'].includes(name.toLowerCase()),
-          {
-            message: 'Host, Content-Length and Transfer-Encoding are always revealed',
-          },
-        ),
-    )
-    .max(TLSN_LIMITS.hiddenHeaders)
-    .optional(),
-  status: z.number().int().min(100).max(599).optional(),
-  slots: z
-    .array(slotSchema)
-    .min(1)
-    .max(TLSN_LIMITS.slots)
-    .refine((slots) => new Set(slots.map(({ slot }) => slot)).size === slots.length, {
-      message: 'a claim slot is declared more than once',
-    }),
-  bodyPolicy: z.union([
-    z.literal('empty'),
-    z.literal('any'),
-    z.object({
-      sha256: z
-        .instanceof(Uint8Array)
-        .refine((hash) => hash.length === 32, { message: 'expected 32 bytes' }),
-    }),
-  ]),
-  claimVersion: z
-    .bigint()
-    .refine((version) => version >= 0n && version < 256n)
-    .optional(),
-});
+    ]),
+    claimVersion: z.bigint().min(0n).max(255n).optional(),
+  })
+  .superRefine((policy, context) => {
+    // A slot reads the disclosed value its name keys, so a slot no regex group names
+    // is never certifiable.
+    const groups = new Set<string>();
+    for (const match of policy.responseMatches) {
+      if (match.type !== 'regex') continue;
+      const names = ruleGroupNames(match.value);
+      if (names === undefined) return;
+      for (const name of names) groups.add(name);
+    }
+    for (const [index, slot] of policy.slots.entries()) {
+      if (!groups.has(slot.name)) {
+        context.addIssue({
+          code: 'custom',
+          message: `slot '${slot.name}' is not a named group of any regex response match`,
+          path: ['slots', index, 'name'],
+        });
+      }
+    }
+  });
 
 /** Runtime validator for {@link TlsnEvidence}. */
-export const tlsnEvidenceSchema = z.object({
+export const tlsnEvidenceSchema = z.strictObject({
   presentation: z
     .string()
     .max(TLSN_LIMITS.presentationLength)
@@ -293,10 +373,14 @@ export interface TlsnDefinition {
   message(claim: Claim<number, number>): FlatMessage;
 }
 
+/** Deterministic JSON for sorting rule entries. */
+const sortKey = (value: object): string =>
+  JSON.stringify(value, Object.keys(value as Record<string, unknown>).sort());
+
 /**
  * Parse a policy into the form every hash and check reads: hosts canonical,
- * deduplicated and sorted; hidden headers lowercased, deduplicated and
- * sorted; defaults filled; slots sorted by index.
+ * deduplicated and sorted; slots sorted by index with `optional` filled; rule
+ * entries sorted; the claim version filled.
  *
  * @throws if the policy fails {@link tlsnPolicySchema}.
  */
@@ -304,13 +388,15 @@ export const normalizeTlsnPolicy = (policy: TlsnPolicy) => {
   const parsed = tlsnPolicySchema.parse(policy);
   return {
     allowedHosts: [...new Set(parsed.allowedHosts.map(canonicalHost))].sort(),
-    hiddenHeaders: [
-      ...new Set((parsed.hiddenHeaders ?? []).map((name) => name.toLowerCase())),
-    ].sort(),
-    status: parsed.status ?? 200,
     slots: parsed.slots
       .map((slot) => ({ ...slot, optional: slot.optional ?? false }))
       .sort((a, b) => a.slot - b.slot),
+    responseMatches: [...parsed.responseMatches].sort((a, b) =>
+      sortKey(a).localeCompare(sortKey(b)),
+    ),
+    responseRedactions: [...parsed.responseRedactions].sort((a, b) =>
+      sortKey(a).localeCompare(sortKey(b)),
+    ),
     bodyPolicy: parsed.bodyPolicy,
     claimVersion: parsed.claimVersion ?? CLAIM_VERSION,
   };
@@ -323,28 +409,26 @@ const hashNormalized = (normalized: NormalizedPolicy): Uint8Array =>
 
 /**
  * Hash a policy under the `tlsn@1` law. Policies that normalize the same hash
- * the same (see {@link normalizeTlsnPolicy}).
+ * the same (see {@link normalizeTlsnPolicy}). The same policy hashes
+ * differently under zkFetch, so a contract seals each kind it accepts.
  *
  * @throws if the policy fails {@link tlsnPolicySchema}.
  */
 export const tlsnPolicyHashOf = (policy: TlsnPolicy): Uint8Array =>
   hashNormalized(normalizeTlsnPolicy(policy));
 
-/** The request a tlsn@1 claim is about. */
+/** The request a tlsn@1 claim is about, in the zkFetch subject request's shape. */
 export interface TlsnSubjectRequest {
   method: string;
-  /** The server's DNS name. */
-  host: string;
-  /** The origin-form target: path and query. */
-  target: string;
-  body: Uint8Array;
+  url: string;
+  body?: string | Uint8Array;
 }
 
 /**
  * The tlsn@1 subject: one SHA-256 per request part, mirroring a Compact
  * `struct { method, host, path, body: Bytes<32> }`. It is the zkFetch kind's
- * subject for the same request on port 443, so an app can bind the source the
- * same way under either kind.
+ * subject for the same request, so an app binds the source the same way under
+ * either kind.
  */
 export interface TlsnSubject {
   method: Uint8Array;
@@ -353,49 +437,37 @@ export interface TlsnSubject {
   body: Uint8Array;
 }
 
-/** Build the subject of a request. */
-export const tlsnSubjectOf = (request: TlsnSubjectRequest): TlsnSubject => ({
-  method: sha256(request.method.toUpperCase()),
-  host: sha256(canonicalHost(request.host)),
-  path: sha256(request.target),
-  body: sha256(request.body),
-});
+/**
+ * Build the subject of a request.
+ *
+ * @throws if the URL does not parse.
+ */
+export const tlsnSubjectOf = (request: TlsnSubjectRequest): TlsnSubject => {
+  const url = new URL(request.url);
+  return {
+    method: sha256(request.method.toUpperCase()),
+    host: sha256(url.host),
+    path: sha256(`${url.pathname}${url.search}`),
+    body: sha256(request.body ?? ''),
+  };
+};
 
-/** Hash the subject of a request. */
+/**
+ * Hash the subject of a request.
+ *
+ * @throws if the URL does not parse.
+ */
 export const tlsnSubjectHashOf = (request: TlsnSubjectRequest): Uint8Array => {
   const { method, host, path, body } = tlsnSubjectOf(request);
   return subjectHashOf([method, host, path, body]);
 };
 
 /**
- * The subject request for a URL, as the prover will send it: the WHATWG path
- * and query as the target.
- *
- * @throws if the URL does not parse, is not HTTPS, or names a port other than 443.
- */
-export const tlsnSubjectRequestOf = (request: {
-  method?: string;
-  url: string;
-  body?: string;
-}): TlsnSubjectRequest => {
-  const url = new URL(request.url);
-  if (url.protocol !== 'https:' || url.port !== '') {
-    throw new Error('tlsn@1 requests are HTTPS on port 443');
-  }
-  return {
-    method: (request.method ?? 'GET').toUpperCase(),
-    host: url.hostname,
-    target: `${url.pathname}${url.search}`,
-    body: new TextEncoder().encode(request.body ?? ''),
-  };
-};
-
-/**
  * The claim context digest the notary signs: `claimContextDigestOf` over the
  * policy hash, the request's subject hash, the holder and the window.
  *
- * @throws if the policy fails {@link tlsnPolicySchema}, the holder is not 32
- *   bytes, or a window bound is negative.
+ * @throws if the policy fails {@link tlsnPolicySchema}, the URL does not parse,
+ *   the holder is not 32 bytes, or a window bound is negative.
  */
 export const tlsnClaimContextDigestOf = (options: {
   policy: TlsnPolicy;
@@ -421,12 +493,12 @@ export interface TlsnObservation {
   readonly serverName: string;
   /** When the notary saw the server's hello, Unix seconds, by the notary's clock. */
   readonly time: bigint;
-  readonly request: RevealedRequest;
-  readonly response: RevealedResponse;
+  /** The request the presentation reveals. */
+  readonly request: TlsnSubjectRequest;
   /** The claim context digest the notary signed. */
   readonly claimContext: Uint8Array;
-  /** Each policy slot's value, or `null` when absent or not certifiable. */
-  readonly slotValues: ReadonlyMap<number, bigint | Uint8Array | null>;
+  /** The values the response matches disclosed, by group name. */
+  readonly disclosedValues: Readonly<Record<string, string>>;
 }
 
 /** The claim context extension id, as the bytes the attestation carries. */
@@ -435,12 +507,25 @@ const EXTENSION_ID = new TextEncoder().encode(TLSN_CLAIM_CONTEXT_EXTENSION);
 const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
   a.length === b.length && a.every((byte, index) => byte === b[index]);
 
+/** A slot's value from the disclosed values, or `null` when absent or not certifiable. */
+const slotValueOf = (
+  slot: TlsnSlot,
+  disclosed: Readonly<Record<string, string>>,
+): bigint | Uint8Array | null => {
+  const raw = Object.hasOwn(disclosed, slot.name) ? disclosed[slot.name] : undefined;
+  return typeof raw === 'string' ? parseFieldValue(raw, slot.parse, slot.length) : null;
+};
+
 /**
- * Read a verified presentation under a policy: the server is an allowed host,
- * the request is fully revealed except allowed hidden header values and its
- * `Host` is the server, the body satisfies the body policy, the whole response
- * is revealed with the required status, the notary signed exactly one claim
- * context digest, and every required slot is certifiable.
+ * Read a verified presentation under a policy, as the zkFetch witness and
+ * attestor together would.
+ *
+ * The server is an allowed host, or a subdomain of one. The request opens with
+ * the fixed `Host` and `Connection: close` prefix, names the server without a
+ * port, and has a body the body policy accepts. The response is a 2xx, and
+ * the policy's response matches hold on its redacted text; their named groups
+ * are the disclosed values, and every required slot's is certifiable. The
+ * notary signed exactly one extension, a 32-byte claim context digest.
  *
  * It does not check the notary's key or the claim; the attestor does.
  *
@@ -452,25 +537,34 @@ export const observePresentation = (
 ): TlsnObservation => {
   const normalized = normalizeTlsnPolicy(policy);
   const serverName = canonicalHost(verified.serverName);
-  if (!normalized.allowedHosts.includes(serverName)) {
+  if (!hostAllowed(serverName, normalized.allowedHosts)) {
     throw new Error(`server ${serverName} is not in the allowlist`);
   }
-  const request = readRequest(verified.sent, new Set(normalized.hiddenHeaders));
+  const request = readRequest(verified.sent);
   // TLSNotary authenticates the server name, not the TCP port, so the request
   // must name the server without one.
   if (canonicalHost(request.host) !== serverName) {
     throw new Error(`the request Host ${request.host} is not the attested server ${serverName}`);
   }
   const { bodyPolicy } = normalized;
-  if (bodyPolicy === 'empty' && request.body.length !== 0) {
-    throw new Error("the request body must be empty under bodyPolicy: 'empty'");
+  if (bodyPolicy === 'ignored' && request.body.length !== 0) {
+    throw new Error("the request body must be empty under bodyPolicy: 'ignored'");
+  }
+  if (bodyPolicy === 'non-empty' && request.body.length === 0) {
+    throw new Error('the request body is empty but the policy requires a non-empty body');
   }
   if (typeof bodyPolicy === 'object' && !sameBytes(sha256(request.body), bodyPolicy.sha256)) {
     throw new Error('the request body does not match the policy');
   }
-  const response = readResponse(verified.received);
-  if (response.status !== normalized.status) {
-    throw new Error(`the response status is ${response.status}, not ${normalized.status}`);
+
+  const disclosedValues = disclosedValuesOf(
+    redactedResponseText(verified.received),
+    normalized.responseMatches,
+  );
+  for (const slot of normalized.slots) {
+    if (!slot.optional && slotValueOf(slot, disclosedValues) === null) {
+      throw new Error(`policy requires a certifiable value for "${slot.name}"`);
+    }
   }
 
   const contexts = verified.extensions.filter((extension) => sameBytes(extension.id, EXTENSION_ID));
@@ -482,24 +576,16 @@ export const observePresentation = (
     throw new Error('the claim context digest is not 32 bytes');
   }
 
-  const json = parseStrictJson(new TextDecoder('utf-8', { fatal: true }).decode(response.body));
-  const slotValues = new Map<number, bigint | Uint8Array | null>();
-  for (const slot of normalized.slots) {
-    const raw = lookupJsonPath(json, slot.path);
-    const value = raw === undefined ? null : parseFieldValue(raw, slot.parse, slot.length);
-    if (value === null && !slot.optional) {
-      throw new Error(`the response has no certifiable value at ${JSON.stringify(slot.path)}`);
-    }
-    slotValues.set(slot.slot, value);
-  }
-
   return {
     serverName,
     time: BigInt(verified.time),
-    request,
-    response,
+    request: {
+      method: request.method,
+      url: `https://${serverName}${request.target}`,
+      body: request.body,
+    },
     claimContext,
-    slotValues,
+    disclosedValues,
   };
 };
 
@@ -528,21 +614,14 @@ export const assertPolicySlotsInRange = (
   }
 };
 
-/** The subject request of an observation, as the attestor saw it sent. */
-export const subjectRequestOf = (observation: TlsnObservation): TlsnSubjectRequest => ({
-  method: observation.request.method,
-  host: observation.serverName,
-  target: observation.request.target,
-  body: observation.request.body,
-});
-
 /**
  * Derive the claim the attestor signs from an observation.
  *
- * Values and `present` come from the response, `subjectHash` from the
+ * Values and `present` come from the disclosed values, `subjectHash` from the
  * revealed request, `salt` from the claim context digest the notary signed,
  * `policyHash` and `version` from the policy; `appId`, `holder` and the window
- * are the caller's.
+ * are the caller's. A slot whose disclosure is absent or unparseable stays
+ * unpresent.
  *
  * @throws if a policy slot is out of range or in the wrong region.
  */
@@ -569,13 +648,14 @@ export const deriveTlsnClaim = (options: {
   const present = Array.from({ length: valueSlots + byteSlots }, () => false);
   const values = Array.from({ length: valueSlots }, () => 0n);
   const byteValues = Array.from({ length: byteSlots }, () => new Uint8Array(BYTE_VALUE_BYTES));
-  for (const [slot, value] of observation.slotValues) {
+  for (const slot of normalized.slots) {
+    const value = slotValueOf(slot, observation.disclosedValues);
     if (value === null) continue;
-    present[slot] = true;
+    present[slot.slot] = true;
     if (typeof value === 'bigint') {
-      values[slot] = value;
+      values[slot.slot] = value;
     } else {
-      byteValues[slot - valueSlots] = new Uint8Array(value);
+      byteValues[slot.slot - valueSlots] = new Uint8Array(value);
     }
   }
   return {
@@ -586,12 +666,9 @@ export const deriveTlsnClaim = (options: {
     policyHash: hashNormalized(normalized),
     windowStart,
     windowEnd,
-    subjectHash: tlsnSubjectHashOf(subjectRequestOf(observation)),
+    subjectHash: tlsnSubjectHashOf(observation.request),
     present,
     values,
     byteValues,
   };
 };
-
-/** The claim context digest as lowercase hex, for the prover's command line. */
-export const claimContextHex = (digest: Uint8Array): string => bytesToHex(digest);

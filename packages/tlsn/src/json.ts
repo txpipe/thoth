@@ -1,15 +1,24 @@
-// A strict JSON reader for response bodies. It keeps each number's source text, so a
-// large integer reaches its parse rule exactly, and refuses duplicate keys, which
-// parsers resolve differently and would let two attestors read two values.
+// A strict JSON reader that records where each value sits in the text, so a jsonPath
+// redaction reveals exactly the bytes of the property or element it selects. It
+// refuses duplicate keys, which parsers resolve differently and would let the reveal
+// and the selection disagree.
 
-/** A parsed JSON value; numbers keep their source text. */
-export type JsonNode =
-  | { readonly type: 'object'; readonly members: ReadonlyMap<string, JsonNode> }
-  | { readonly type: 'array'; readonly items: readonly JsonNode[] }
-  | { readonly type: 'string'; readonly value: string }
-  | { readonly type: 'number'; readonly raw: string }
-  | { readonly type: 'boolean'; readonly value: boolean }
-  | { readonly type: 'null' };
+/** Where a value sits: `[start, end)` in the text, and for a property, where its key starts. */
+export interface JsonSpan {
+  readonly start: number;
+  readonly end: number;
+}
+
+/** A parsed JSON value with its span; members and items keep their own. */
+export type RangedJson =
+  | {
+      readonly type: 'object';
+      readonly span: JsonSpan;
+      /** Each property's value, and the span from its key's opening quote to its value's end. */
+      readonly members: ReadonlyMap<string, { value: RangedJson; property: JsonSpan }>;
+    }
+  | { readonly type: 'array'; readonly span: JsonSpan; readonly items: readonly RangedJson[] }
+  | { readonly type: 'scalar'; readonly span: JsonSpan };
 
 /** The deepest nesting the reader accepts, so a hostile body cannot exhaust the stack. */
 export const MAX_JSON_DEPTH = 64;
@@ -17,13 +26,14 @@ export const MAX_JSON_DEPTH = 64;
 const NUMBER = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
 
 /**
- * Parse JSON text strictly (RFC 8259): no duplicate keys, nesting at most
- * {@link MAX_JSON_DEPTH}.
+ * Parse JSON text strictly (RFC 8259), recording every value's span. No
+ * duplicate keys; nesting at most {@link MAX_JSON_DEPTH}. Leading and trailing
+ * whitespace is allowed.
  *
  * @throws `SyntaxError` if the text is not valid JSON, has a duplicate key, or
  *   nests too deeply.
  */
-export const parseStrictJson = (text: string): JsonNode => {
+export const parseRangedJson = (text: string): RangedJson => {
   let position = 0;
 
   const fail = (message: string): never => {
@@ -73,79 +83,75 @@ export const parseStrictJson = (text: string): JsonNode => {
     return fail('unterminated string');
   };
 
-  const readValue = (depth: number): JsonNode => {
+  const readValue = (depth: number): RangedJson => {
     if (depth > MAX_JSON_DEPTH) {
       fail('nested too deeply');
     }
     skipWhitespace();
+    const start = position;
     const char = text[position];
     if (char === '{') {
       position += 1;
-      const members = new Map<string, JsonNode>();
+      const members = new Map<string, { value: RangedJson; property: JsonSpan }>();
       skipWhitespace();
-      if (text[position] === '}') {
-        position += 1;
-        return { type: 'object', members };
-      }
-      for (;;) {
-        skipWhitespace();
-        const key = readString();
-        if (members.has(key)) {
-          fail(`duplicate key ${JSON.stringify(key)}`);
+      if (text[position] !== '}') {
+        for (;;) {
+          skipWhitespace();
+          const keyStart = position;
+          const key = readString();
+          if (members.has(key)) {
+            fail(`duplicate key ${JSON.stringify(key)}`);
+          }
+          skipWhitespace();
+          expect(':');
+          const value = readValue(depth + 1);
+          members.set(key, { value, property: { start: keyStart, end: value.span.end } });
+          skipWhitespace();
+          if (text[position] === ',') {
+            position += 1;
+            continue;
+          }
+          break;
         }
-        skipWhitespace();
-        expect(':');
-        members.set(key, readValue(depth + 1));
-        skipWhitespace();
-        if (text[position] === ',') {
-          position += 1;
-          continue;
-        }
-        expect('}');
-        return { type: 'object', members };
       }
+      expect('}');
+      return { type: 'object', span: { start, end: position }, members };
     }
     if (char === '[') {
       position += 1;
-      const items: JsonNode[] = [];
+      const items: RangedJson[] = [];
       skipWhitespace();
-      if (text[position] === ']') {
-        position += 1;
-        return { type: 'array', items };
-      }
-      for (;;) {
-        items.push(readValue(depth + 1));
-        skipWhitespace();
-        if (text[position] === ',') {
-          position += 1;
-          continue;
+      if (text[position] !== ']') {
+        for (;;) {
+          items.push(readValue(depth + 1));
+          skipWhitespace();
+          if (text[position] === ',') {
+            position += 1;
+            continue;
+          }
+          break;
         }
-        expect(']');
-        return { type: 'array', items };
       }
+      expect(']');
+      return { type: 'array', span: { start, end: position }, items };
     }
     if (char === '"') {
-      return { type: 'string', value: readString() };
-    }
-    if (text.startsWith('true', position)) {
+      readString();
+    } else if (text.startsWith('true', position)) {
       position += 4;
-      return { type: 'boolean', value: true };
-    }
-    if (text.startsWith('false', position)) {
+    } else if (text.startsWith('false', position)) {
       position += 5;
-      return { type: 'boolean', value: false };
-    }
-    if (text.startsWith('null', position)) {
+    } else if (text.startsWith('null', position)) {
       position += 4;
-      return { type: 'null' };
+    } else {
+      NUMBER.lastIndex = position;
+      const number = NUMBER.exec(text);
+      if (number === null) {
+        return fail('unexpected token');
+      }
+      position += number[0].length;
     }
-    NUMBER.lastIndex = position;
-    const number = NUMBER.exec(text);
-    if (number === null) {
-      return fail('unexpected token');
-    }
-    position += number[0].length;
-    return { type: 'number', raw: number[0] };
+    return { type: 'scalar', span: { start, end: position } };
   };
 
   const root = readValue(0);
@@ -156,34 +162,39 @@ export const parseStrictJson = (text: string): JsonNode => {
   return root;
 };
 
-/** One step into a JSON value: an object key, or an array index. */
-export type JsonPathSegment = string | number;
-
 /**
- * The text of the string or number at `path`, or `undefined` when the path
- * does not exist or ends at an object, array, boolean or null. A number's text
- * is its source text, so `1e3` stays `1e3`.
+ * The span a JSON pointer selects, as Reclaim reveals it: a property's key and
+ * value, an array element, or the whole document for the empty pointer.
+ * `undefined` when the pointer selects nothing.
  */
-export const lookupJsonPath = (
-  root: JsonNode,
-  path: readonly JsonPathSegment[],
-): string | undefined => {
-  let node: JsonNode | undefined = root;
-  for (const segment of path) {
-    if (node === undefined) {
+export const spanAtPointer = (root: RangedJson, pointer: string): JsonSpan | undefined => {
+  if (pointer === '') {
+    return root.span;
+  }
+  if (!pointer.startsWith('/')) {
+    return undefined;
+  }
+  const tokens = pointer
+    .slice(1)
+    .split('/')
+    .map((token) => token.replace(/~1/g, '/').replace(/~0/g, '~'));
+  let node: RangedJson = root;
+  let span: JsonSpan = root.span;
+  for (const token of tokens) {
+    if (node.type === 'object') {
+      const member = node.members.get(token);
+      if (member === undefined) return undefined;
+      node = member.value;
+      span = member.property;
+    } else if (node.type === 'array') {
+      if (!/^(?:0|[1-9][0-9]*)$/.test(token)) return undefined;
+      const item = node.items[Number(token)];
+      if (item === undefined) return undefined;
+      node = item;
+      span = item.span;
+    } else {
       return undefined;
     }
-    if (typeof segment === 'number') {
-      node = node.type === 'array' ? node.items[segment] : undefined;
-    } else {
-      node = node.type === 'object' ? node.members.get(segment) : undefined;
-    }
   }
-  if (node?.type === 'string') {
-    return node.value;
-  }
-  if (node?.type === 'number') {
-    return node.raw;
-  }
-  return undefined;
+  return span;
 };

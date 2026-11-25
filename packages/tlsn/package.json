@@ -49,6 +49,11 @@
       "import": "./dist/client/index.js",
       "default": "./dist/client/index.js"
     },
+    "./disclosure": {
+      "types": "./dist/disclosure/index.d.ts",
+      "import": "./dist/disclosure/index.js",
+      "default": "./dist/disclosure/index.js"
+    },
     "./prover": {
       "types": "./dist/prover/index.d.ts",
       "import": "./dist/prover/index.js",
@@ -68,7 +73,9 @@
   "dependencies": {
     "@txpipe/thoth-attestor": "^0.0.0",
     "@txpipe/thoth-client": "^0.0.0",
-    "@txpipe/thoth-core": "^0.0.0"
+    "@txpipe/thoth-core": "^0.0.0",
+    "jsonpath-plus": "^10.4.0",
+    "re2": "1.27.1"
   },
   "peerDependencies": {
     "zod": "^4.6.7"

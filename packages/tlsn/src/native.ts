@@ -70,3 +70,107 @@ export const runNative = (options: {
     });
     child.stdin.end(options.stdin ?? '');
   });
+
+/** A running thoth-tlsn process that exchanges one JSON object per line. */
+export interface NativeSession {
+  /** Write one JSON line to the process. */
+  send(message: unknown): void;
+  /**
+   * The next JSON line the process prints.
+   *
+   * @throws {@link TlsnNativeError} if the process exits first or prints something that is not JSON.
+   */
+  next(): Promise<unknown>;
+  /**
+   * Close stdin and wait for a clean exit.
+   *
+   * @throws {@link TlsnNativeError} if the process exits non-zero or times out.
+   */
+  finish(): Promise<void>;
+  /** Stop the process without waiting. */
+  kill(): void;
+}
+
+/** Start `binary args…` for a line-by-line JSON exchange. */
+export const startNativeSession = (options: {
+  binary: string;
+  args: readonly string[];
+  timeoutMs: number;
+}): NativeSession => {
+  const command = options.args[0] ?? '';
+  const child = spawn(options.binary, options.args, {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: options.timeoutMs,
+  });
+  const stderr: Buffer[] = [];
+  let stderrSize = 0;
+  child.stderr.on('data', (chunk: Buffer) => {
+    if (stderrSize < 64 * 1024) {
+      stderr.push(chunk);
+      stderrSize += chunk.length;
+    }
+  });
+  const diagnostics = () => Buffer.concat(stderr).toString('utf-8');
+
+  const lines: string[] = [];
+  const waiters: { resolve: (line: string) => void; reject: (error: Error) => void }[] = [];
+  let buffered = '';
+  let closed: Error | undefined;
+  child.stdout.setEncoding('utf-8');
+  child.stdout.on('data', (chunk: string) => {
+    buffered += chunk;
+    if (buffered.length > MAX_OUTPUT_BYTES) {
+      child.kill();
+      return;
+    }
+    for (let newline = buffered.indexOf('\n'); newline >= 0; newline = buffered.indexOf('\n')) {
+      const line = buffered.slice(0, newline);
+      buffered = buffered.slice(newline + 1);
+      const waiter = waiters.shift();
+      if (waiter === undefined) lines.push(line);
+      else waiter.resolve(line);
+    }
+  });
+  const exited = new Promise<number | null>((resolve) => {
+    child.on('close', (code) => {
+      closed = new TlsnNativeError(command, diagnostics());
+      for (const waiter of waiters.splice(0)) waiter.reject(closed);
+      resolve(code);
+    });
+  });
+  child.on('error', (error) => {
+    closed = new TlsnNativeError(command, '', { cause: error });
+  });
+  child.stdin.on('error', () => {
+    // A process that exits before reading stdin is reported by `close`.
+  });
+
+  return {
+    send: (message) => {
+      child.stdin.write(`${JSON.stringify(message)}\n`);
+    },
+    next: async () => {
+      const line =
+        lines.shift() ??
+        (closed !== undefined
+          ? Promise.reject(closed)
+          : new Promise<string>((resolve, reject) => waiters.push({ resolve, reject })));
+      const text = await line;
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        throw new TlsnNativeError(command, diagnostics(), { cause: error });
+      }
+    },
+    finish: async () => {
+      child.stdin.end();
+      const code = await exited;
+      if (code !== 0) {
+        throw new TlsnNativeError(command, diagnostics());
+      }
+    },
+    kill: () => {
+      child.kill();
+    },
+  };
+};

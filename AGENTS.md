@@ -16,8 +16,9 @@ Thoth is a private N-of-M attestation system for Midnight. Three layers:
   evidence and sign a canonical claim. `packages/client` holds the dApp side
   (the trusted set and the attestation checks), and `packages/zk-tls` is the
   zkFetch kind. `packages/cardano` is the cardano@1 chain-event kind.
-  `packages/tlsn` is the tlsn@1 TLSNotary kind, a private prototype with a
-  Rust tool in `packages/tlsn/native`.
+  `packages/tlsn` is the tlsn@1 kind, a private prototype that mirrors the
+  zkFetch kind's policy and client with TLSNotary evidence; its Rust tool is
+  in `packages/tlsn/native`.
 
 Attestors certify facts, not decisions: a claim is a canonical statement of
 what was observed; the application defines the predicate over it.
@@ -194,6 +195,9 @@ READMEs don't repeat it.
 - `packages/zk-tls/test/live.test.ts` is an opt-in live check against two real
   witnesses; it skips unless `WITNESS_URLS` names them, so `npm test` and CI
   stay offline. See "Live check" in `packages/zk-tls/docs/attestor-guide.md`.
+- `packages/zk-tls/test/tlsn-parity.test.ts` runs Reclaim's own prover and
+  witness code against tlsn@1's disclosure on the same bytes; keep it passing
+  when either side's reveal or matching changes.
 - `packages/tlsn/test/live.test.ts` runs real TLSNotary sessions against a
   local HTTPS server; it skips unless `THOTH_TLSN_BIN` names a built
   `thoth-tlsn` binary.

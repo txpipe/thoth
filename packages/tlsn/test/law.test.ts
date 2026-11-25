@@ -1,49 +1,50 @@
-// The tlsn@1 law offline: every check rejects its own mutation, and the attestor
-// signs the claim it derived from the presentation.
+// The tlsn@1 law offline, under a zkFetch-shaped policy: the attestor reads only the
+// redacted response, every check rejects its own mutation, and the policy schema takes
+// the zkFetch policies tlsn@1 can honour.
 
 import type { Claim } from '@txpipe/thoth-core/claim';
 import { claimToMessage } from '@txpipe/thoth-core/claim';
 import { describe, expect, it } from 'vitest';
 import { tlsnAttestor } from '../src/attestor/index.js';
+import { redactedResponseText } from '../src/http.js';
 import {
   deriveTlsnClaim,
   observePresentation,
   type TlsnPolicy,
   tlsnClaimContextDigestOf,
   tlsnPolicyHashOf,
+  tlsnPolicySchema,
   tlsnSubjectHashOf,
-  tlsnSubjectRequestOf,
   verifiedPresentationSchema,
 } from '../src/index.js';
-import { parseStrictJson } from '../src/json.js';
+import { requestReveals, responseReveals } from '../src/redact.js';
 import {
   APP_ID,
   evidenceOf,
   fakeKey,
   fakeVerifier,
   HOLDER,
-  HOST,
   NOTARY_KEY,
   POLICY,
+  PRIVATE_EMAIL,
   RESPONSE_BODY,
   rangeOf,
   request,
   response,
+  SECRET,
+  URL_,
   verifiedJson,
   WINDOW,
 } from './helpers.js';
 
-const URL_ = `https://${HOST}/repos/x?y=1`;
-
 const contextFor = (
-  options: { policy?: TlsnPolicy; holder?: Uint8Array; windowEnd?: bigint } = {},
+  options: { policy?: TlsnPolicy; holder?: Uint8Array; url?: string; body?: string } = {},
 ) =>
   tlsnClaimContextDigestOf({
     policy: options.policy ?? POLICY,
-    request: tlsnSubjectRequestOf({ url: URL_ }),
+    request: { method: 'GET', url: options.url ?? URL_, body: options.body ?? '' },
     holder: options.holder ?? HOLDER,
-    windowStart: WINDOW.windowStart,
-    windowEnd: options.windowEnd ?? WINDOW.windowEnd,
+    ...WINDOW,
   });
 
 const attestor = tlsnAttestor({
@@ -70,10 +71,15 @@ const inputFor = (verified: ReturnType<typeof verifiedJson>, policy: TlsnPolicy 
 
 const honest = () => inputFor(verifiedJson({ claimContext: contextFor() }));
 
+/** Replace the evidence of the honest input; the proposal stays the honest one. */
+const withEvidence = (options: Parameters<typeof verifiedJson>[0]) => ({
+  ...honest(),
+  evidence: evidenceOf(verifiedJson(options)),
+});
+
 describe('tlsn@1 attestor', () => {
-  it('signs the claim it derives from an honest presentation', async () => {
-    const input = honest();
-    const attestation = await attestor.attest(input);
+  it('signs the claim it reads from the redacted response', async () => {
+    const attestation = await attestor.attest(honest());
     expect(attestation.claim.values).toEqual([1234n, 18446744073709551615n]);
     expect(attestation.claim.present).toEqual([true, true, true]);
     expect(
@@ -82,11 +88,19 @@ describe('tlsn@1 attestor', () => {
         .toString(),
     ).toBe('octocat');
     expect(attestation.claim.salt).toEqual(contextFor());
-    expect(attestation.claim.subjectHash).toEqual(
-      tlsnSubjectHashOf(tlsnSubjectRequestOf({ url: URL_ })),
-    );
+    expect(attestation.claim.subjectHash).toEqual(tlsnSubjectHashOf({ method: 'GET', url: URL_ }));
     expect(attestation.message).toEqual(claimToMessage(attestation.claim));
     expect(attestation.signature).toBe(`sig:${attestation.message.length}`);
+  });
+
+  it('never sees the response bytes no redaction selects, nor the secret header', () => {
+    const verified = verifiedPresentationSchema.parse(verifiedJson({ claimContext: contextFor() }));
+    const text = redactedResponseText(verified.received);
+    expect(text).toContain('"stars":1234');
+    expect(text).toContain('"login":"octocat"');
+    expect(text).not.toContain(PRIVATE_EMAIL);
+    expect(text).not.toContain('session=abc');
+    expect(Buffer.from(verified.sent.data).toString('latin1')).not.toContain('s3cret');
   });
 
   it('refuses a presentation from another notary', async () => {
@@ -99,119 +113,172 @@ describe('tlsn@1 attestor', () => {
     await expect(attestor.attest(input)).rejects.toThrow(/another notary/);
   });
 
-  it('refuses a server outside the allowlist', async () => {
-    const verified = verifiedJson({ claimContext: contextFor(), serverName: 'evil.example.com' });
-    const input = { ...honest(), evidence: evidenceOf(verified) };
-    await expect(attestor.attest(input)).rejects.toThrow(/allowlist/);
+  it('allows a subdomain of an allowed host, and refuses any other server', async () => {
+    await expect(
+      attestor.attest(withEvidence({ claimContext: contextFor(), serverName: 'evil.com' })),
+    ).rejects.toThrow(/allowlist/);
+    await expect(
+      attestor.attest(withEvidence({ claimContext: contextFor(), serverName: 'example.com.evil' })),
+    ).rejects.toThrow(/allowlist/);
   });
 
   it('refuses a Host header that is not the attested server', async () => {
     const sent = request({ host: 'other.example.com' });
-    const verified = verifiedJson({
-      claimContext: contextFor(),
-      sent,
-      hiddenSent: [rangeOf(sent, 'Bearer s3cret')],
+    await expect(
+      attestor.attest(withEvidence({ claimContext: contextFor(), sent })),
+    ).rejects.toThrow(/Host/);
+  });
+
+  it('refuses a request that does not open with Host then Connection: close', async () => {
+    const sent = request({
+      head: `GET /repos/x?y=1 HTTP/1.1\r\nConnection: close\r\nHost: ${'api.example.com'}`,
     });
-    const input = { ...honest(), evidence: evidenceOf(verified) };
-    await expect(attestor.attest(input)).rejects.toThrow(/Host/);
+    await expect(
+      attestor.attest(withEvidence({ claimContext: contextFor(), sent })),
+    ).rejects.toThrow(/first request header/);
+    const keepAlive = request({
+      head: 'GET /repos/x?y=1 HTTP/1.1\r\nHost: api.example.com\r\nConnection: keep-alive',
+    });
+    await expect(
+      attestor.attest(withEvidence({ claimContext: contextFor(), sent: keepAlive })),
+    ).rejects.toThrow(/Connection: close/);
   });
 
-  it('refuses a hidden header value the policy does not allow', async () => {
-    const input = honest();
-    const policy = { ...POLICY, hiddenHeaders: [] };
-    await expect(attestor.attest({ ...input, policy })).rejects.toThrow(/does not allow/);
-  });
-
-  it('refuses a hidden request line', async () => {
+  it('refuses a hidden request line or Host value', async () => {
     const sent = request();
-    const verified = verifiedJson({
-      claimContext: contextFor(),
-      hiddenSent: [rangeOf(sent, '/repos/x')],
-    });
-    await expect(attestor.attest({ ...honest(), evidence: evidenceOf(verified) })).rejects.toThrow(
-      /request line/,
-    );
+    const hideTarget = [
+      [0, rangeOf(sent, '/repos')[0]],
+      [rangeOf(sent, '/repos')[1], sent.length],
+    ] as const;
+    await expect(
+      attestor.attest(withEvidence({ claimContext: contextFor(), revealSent: hideTarget })),
+    ).rejects.toThrow(/request line/);
+    const host = rangeOf(sent, 'api.example.com');
+    await expect(
+      attestor.attest(
+        withEvidence({
+          claimContext: contextFor(),
+          revealSent: [
+            [0, host[0]],
+            [host[1], sent.length],
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/hides its host/);
   });
 
-  it('refuses a response with hidden bytes', async () => {
+  it('refuses a response whose status is hidden or not 2xx', async () => {
     const received = response();
-    const verified = verifiedJson({
-      claimContext: contextFor(),
-      hiddenReceived: [rangeOf(received, 'octocat')],
-    });
-    await expect(attestor.attest({ ...honest(), evidence: evidenceOf(verified) })).rejects.toThrow(
-      /hidden bytes/,
-    );
+    const all = responseReveals(Buffer.from(received), POLICY.responseRedactions);
+    await expect(
+      attestor.attest(
+        withEvidence({
+          claimContext: contextFor(),
+          revealReceived: all.filter(([start]) => start > 0),
+        }),
+      ),
+    ).rejects.toThrow(/status line/);
+    const notFound = response(RESPONSE_BODY, '404 Not Found');
+    await expect(
+      attestor.attest(
+        withEvidence({
+          claimContext: contextFor(),
+          received: notFound,
+          revealReceived: [[0, notFound.length]],
+        }),
+      ),
+    ).rejects.toThrow(/not 2xx/);
+  });
+
+  it('refuses a response whose matched field is not revealed', async () => {
+    const received = response();
+    const reveals = responseReveals(Buffer.from(received), [{ jsonPath: '$.stars' }]);
+    await expect(
+      attestor.attest(withEvidence({ claimContext: contextFor(), revealReceived: reveals })),
+    ).rejects.toThrow(/does not match/);
   });
 
   it('refuses an observation outside the window', async () => {
-    const verified = verifiedJson({
-      claimContext: contextFor(),
-      time: Number(WINDOW.windowEnd) + 1,
-    });
-    await expect(attestor.attest({ ...honest(), evidence: evidenceOf(verified) })).rejects.toThrow(
-      /outside the claim window/,
-    );
+    await expect(
+      attestor.attest(
+        withEvidence({ claimContext: contextFor(), time: Number(WINDOW.windowEnd) + 1 }),
+      ),
+    ).rejects.toThrow(/outside the claim window/);
   });
 
   it('refuses a presentation signed for another holder', async () => {
     const other = contextFor({ holder: new Uint8Array(32).fill(1) });
-    const input = honest();
-    const verified = verifiedJson({ claimContext: other });
-    await expect(attestor.attest({ ...input, evidence: evidenceOf(verified) })).rejects.toThrow(
+    await expect(attestor.attest(withEvidence({ claimContext: other }))).rejects.toThrow(
       /claim context digest/,
     );
   });
 
   it('refuses an attestation without exactly one claim context extension', async () => {
-    const verified = verifiedJson({ claimContext: contextFor(), extensions: [] });
-    await expect(attestor.attest({ ...honest(), evidence: evidenceOf(verified) })).rejects.toThrow(
-      /exactly one extension/,
-    );
+    await expect(
+      attestor.attest(withEvidence({ claimContext: contextFor(), extensions: [] })),
+    ).rejects.toThrow(/exactly one extension/);
   });
 
-  it('refuses a proposal whose value differs from the response', async () => {
+  it('refuses a proposal whose value or salt differs from what it reads', async () => {
     const input = honest();
     const claim: Claim<number, number> = { ...input.claim, values: [1235n, 18446744073709551615n] };
     await expect(attestor.attest({ ...input, claim })).rejects.toThrow(/does not say/);
-  });
-
-  it('refuses a proposal whose salt differs', async () => {
-    const input = honest();
     await expect(
       attestor.attest({ ...input, claim: { ...input.claim, salt: new Uint8Array(32) } }),
     ).rejects.toThrow(/salt/);
   });
 
-  it('refuses a response missing a required field, and signs an optional one unpresent', async () => {
-    const received = response('{"stars":1234,"big":1}');
-    const verified = verifiedJson({ claimContext: contextFor(), received });
-    await expect(attestor.attest({ ...honest(), evidence: evidenceOf(verified) })).rejects.toThrow(
-      /no certifiable value/,
-    );
-
+  it('refuses a missing required value, and signs an optional one unpresent', async () => {
+    const received = response('{"stars":1234,"big":1,"owner":{"name":"x"}}');
     const policy: TlsnPolicy = {
       ...POLICY,
-      slots: POLICY.slots.map((slot) => (slot.slot === 2 ? { ...slot, optional: true } : slot)),
+      responseMatches: POLICY.responseMatches.slice(0, 2),
+      responseRedactions: [{ jsonPath: '$.stars' }, { jsonPath: '$.big' }],
+      slots: [...POLICY.slots.slice(0, 2), { slot: 2, name: 'stars', parse: 'bytes' }],
     };
-    const optional = verifiedJson({ claimContext: contextFor({ policy }), received });
-    const attestation = await attestor.attest(inputFor(optional, policy));
+    // A required byte slot whose value is too long is not certifiable.
+    const required: TlsnPolicy = {
+      ...policy,
+      slots: [...POLICY.slots.slice(0, 2), { slot: 2, name: 'stars', parse: 'bytes', length: 3 }],
+    };
+    await expect(
+      attestor.attest({
+        ...honest(),
+        policy: required,
+        evidence: evidenceOf(
+          verifiedJson({ claimContext: contextFor({ policy: required }), received, policy }),
+        ),
+      }),
+    ).rejects.toThrow(/certifiable value/);
+    const optional: TlsnPolicy = {
+      ...policy,
+      slots: [
+        ...POLICY.slots.slice(0, 2),
+        { slot: 2, name: 'stars', parse: 'bytes', length: 3, optional: true },
+      ],
+    };
+    const attestation = await attestor.attest(
+      inputFor(
+        verifiedJson({ claimContext: contextFor({ policy: optional }), received, policy }),
+        optional,
+      ),
+    );
     expect(attestation.claim.present).toEqual([true, true, false]);
   });
 
-  it('refuses a status other than the policy one', async () => {
-    const verified = verifiedJson({
-      claimContext: contextFor(),
-      received: response(RESPONSE_BODY, '404 Not Found'),
-    });
-    await expect(attestor.attest({ ...honest(), evidence: evidenceOf(verified) })).rejects.toThrow(
-      /status/,
-    );
+  it('enforces the body policy on the revealed body', async () => {
+    const body = '{"q":1}';
+    const sent = `POST /repos/x?y=1 HTTP/1.1\r\nHost: api.example.com\r\nConnection: close\r\nContent-Length: ${body.length}\r\n\r\n${body}`;
+    await expect(
+      attestor.attest(
+        withEvidence({ claimContext: contextFor(), sent, revealSent: [[0, sent.length]] }),
+      ),
+    ).rejects.toThrow(/must be empty/);
   });
 
-  it('reads a chunked response', async () => {
+  it('reads a chunked response through its framing', async () => {
     const body = RESPONSE_BODY;
-    const received = `HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n${(10).toString(16)}\r\n${body.slice(0, 10)}\r\n${(body.length - 10).toString(16)}\r\n${body.slice(10)}\r\n0\r\n\r\n`;
+    const received = `HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n${(20).toString(16)}\r\n${body.slice(0, 20)}\r\n${(body.length - 20).toString(16)}\r\n${body.slice(20)}\r\n0\r\n\r\n`;
     const attestation = await attestor.attest(
       inputFor(verifiedJson({ claimContext: contextFor(), received })),
     );
@@ -219,32 +286,77 @@ describe('tlsn@1 attestor', () => {
   });
 });
 
-describe('strict JSON', () => {
-  it('refuses duplicate keys, which parsers resolve differently', () => {
-    expect(() => parseStrictJson('{"stars":1,"stars":2}')).toThrow(/duplicate key/);
+describe('tlsn@1 redaction', () => {
+  it('reveals the request except the secret header value', () => {
+    const sent = request();
+    const [start, end] = rangeOf(sent, SECRET);
+    expect(requestReveals(Buffer.from(sent), new Set(['authorization']))).toEqual([
+      [0, start],
+      [end, sent.length],
+    ]);
+    expect(() => requestReveals(Buffer.from(sent), new Set(['host']))).toThrow(/cannot be secret/);
   });
 
-  it('keeps number source text', () => {
-    expect(parseStrictJson('{"n":18446744073709551615}')).toEqual({
-      type: 'object',
-      members: new Map([['n', { type: 'number', raw: '18446744073709551615' }]]),
-    });
+  it('reveals the status line, framing, Date and Content-Type, and each jsonPath key and value', () => {
+    const received = response();
+    const text = (ranges: readonly (readonly [number, number])[]) =>
+      ranges.map(([start, end]) => received.slice(start, end));
+    expect(text(responseReveals(Buffer.from(received), [{ jsonPath: '$.owner.login' }]))).toEqual([
+      'HTTP/1.1 200 OK',
+      'Date: Tue, 24 Nov 2026 10:00:00 GMT',
+      'Content-Type: application/json',
+      '\r\n\r\n',
+      '"login":"octocat"',
+    ]);
+  });
+
+  it('reveals a regex redaction, or the regex match inside a jsonPath selection', () => {
+    const received = response();
+    const last = (redaction: { jsonPath?: string; regex?: string }) =>
+      responseReveals(Buffer.from(received), [redaction])
+        .map(([start, end]) => received.slice(start, end))
+        .at(-1);
+    expect(last({ regex: '"stars":\\d+' })).toBe('"stars":1234');
+    expect(last({ jsonPath: '$.owner', regex: '"login":"[^"]+"' })).toBe('"login":"octocat"');
+  });
+
+  it('refuses a redaction that selects nothing', () => {
+    expect(() => responseReveals(Buffer.from(response()), [{ jsonPath: '$.nope' }])).toThrow(
+      /selects nothing/,
+    );
   });
 });
 
-describe('tlsn@1 policy hash', () => {
-  it('is pinned for one fixed policy, and ignores order and defaults', () => {
-    expect(Buffer.from(tlsnPolicyHashOf(POLICY)).toString('hex')).toBe(
-      '15e6e7e10d7aae237d3f99de76eeeed15a2bc016062fc54ecfe816e93c8aeed3',
-    );
+describe('tlsn@1 policy', () => {
+  it('accepts a zkFetch policy it can honour', () => {
+    expect(() => tlsnPolicySchema.parse(POLICY)).not.toThrow();
+  });
+
+  it.each([
+    ['an xPath redaction', { responseRedactions: [{ xPath: '//div' }] }, /xPath/],
+    ['a host with a port', { allowedHosts: ['example.com:8443'] }, /without a port/],
+    ['a slot no group names', { slots: [{ slot: 0, name: 'nope', parse: 'int' }] }, /named group/],
+    ['a template', { responseMatches: [{ type: 'regex', value: '{{x}}' }] }, /templates/],
+    ['an unknown field', { hiddenHeaders: ['authorization'] }, /unrecognized/i],
+    ['a regex RE2 refuses', { responseMatches: [{ type: 'regex', value: '(?=x)' }] }, /RE2/],
+  ])('refuses %s', (_name, change, message) => {
+    expect(() => tlsnPolicySchema.parse({ ...POLICY, ...change })).toThrow(message);
+  });
+
+  it('hashes the same policy the same regardless of order and defaults', () => {
     const reordered: TlsnPolicy = {
       ...POLICY,
-      allowedHosts: [HOST.toUpperCase()],
-      hiddenHeaders: ['Authorization', 'authorization'],
-      status: 200,
+      allowedHosts: ['EXAMPLE.com'],
       slots: [...POLICY.slots].reverse(),
+      responseMatches: [...POLICY.responseMatches].reverse(),
+      claimVersion: 1n,
     };
     expect(tlsnPolicyHashOf(reordered)).toEqual(tlsnPolicyHashOf(POLICY));
-    expect(tlsnPolicyHashOf({ ...POLICY, status: 201 })).not.toEqual(tlsnPolicyHashOf(POLICY));
+    expect(tlsnPolicyHashOf({ ...POLICY, bodyPolicy: 'non-empty' })).not.toEqual(
+      tlsnPolicyHashOf(POLICY),
+    );
+    expect(Buffer.from(tlsnPolicyHashOf(POLICY)).toString('hex')).toBe(
+      '9ceda01340a2f243a57c844ce7f2ff5c35ad1fba8d75df23844d7f9128fd9a9b',
+    );
   });
 });

@@ -1,6 +1,8 @@
 // Cross-seam acceptance for the tlsn@1 prototype: two attestors, each pinning its own
-// notary, vet presentations and sign with real Jubjub keys, the client collects the
-// threshold set, and the unchanged contract simulator accepts it. Every signed binding
+// notary, read a redacted response and sign with real Jubjub keys, the client collects
+// the threshold set, and the unchanged contract simulator accepts it. The policy is one
+// object that zkFetch accepts too, and the contract seals both kinds' hashes of it: the
+// dApp's choice of kind is a choice of evidence, not of contract. Every signed binding
 // is then mutated under the same signatures. The presentations' cryptography is
 // stubbed; `packages/tlsn/test/live.test.ts` runs it for real.
 import { randomBytes } from 'node:crypto';
@@ -14,12 +16,19 @@ import {
   type TlsnPolicy,
   type TlsnPresentationVerifier,
   tlsnPolicyHashOf,
+  tlsnPolicySchema,
   tlsnSubjectHashOf,
-  tlsnSubjectRequestOf,
 } from '@txpipe/thoth-tlsn';
 import { tlsnAttestor } from '@txpipe/thoth-tlsn/attestor';
-import { tlsnClient } from '@txpipe/thoth-tlsn/client';
+import { TLSN_CLAIM_CONTEXT_KEY, tlsnClient } from '@txpipe/thoth-tlsn/client';
+import { requestReveals, responseReveals } from '@txpipe/thoth-tlsn/disclosure';
 import type { TlsnProver } from '@txpipe/thoth-tlsn/prover';
+import {
+  type ZkFetchPolicy,
+  zkFetchPolicyHashOf,
+  zkFetchPolicySchema,
+  zkFetchSubjectHashOf,
+} from '@txpipe/thoth-zk-tls';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { type B_Claim, pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { jubjubKeyPair, type Submission, submit } from './helpers/acceptance.js';
@@ -36,50 +45,60 @@ import { MockAttestationBytesSim } from './helpers/sim.js';
 
 const HOST = 'api.example.com';
 const URL_ = `https://${HOST}/repos/x`;
-const BODY = '{"stars":1234,"forks":56,"owner":{"login":"octocat"}}';
+const BODY = '{"stars":1234,"forks":56,"owner":{"login":"octocat","email":"private@example.com"}}';
 const TIME = 1_700_000_000;
 
-// Two numeric facts and one byte fact, sized for the V=3, B=2, K=24 mock.
-const policy: TlsnPolicy = {
-  allowedHosts: [HOST],
+// Two numeric facts and one byte fact, sized for the V=3, B=2, K=24 mock. Typed as both
+// kinds' policy: the same object is valid for zkFetch and for tlsn@1.
+const policy: TlsnPolicy & ZkFetchPolicy = {
+  allowedHosts: ['example.com'],
   slots: [
-    { slot: 0, path: ['stars'], parse: 'int' },
-    { slot: 1, path: ['forks'], parse: 'int' },
-    { slot: 3, path: ['owner', 'login'], parse: 'bytes' },
+    { slot: 0, name: 'stars', parse: 'int' },
+    { slot: 1, name: 'forks', parse: 'int' },
+    { slot: 3, name: 'login', parse: 'bytes' },
   ],
-  bodyPolicy: 'empty',
+  responseMatches: [
+    { type: 'regex', value: '"stars":(?<stars>\\d+)' },
+    { type: 'regex', value: '"forks":(?<forks>\\d+)' },
+    { type: 'regex', value: '"login":"(?<login>[^"]+)"' },
+  ],
+  responseRedactions: [
+    { jsonPath: '$.stars' },
+    { jsonPath: '$.forks' },
+    { jsonPath: '$.owner.login' },
+  ],
+  bodyPolicy: 'ignored',
 };
-
-// A second sealed policy, so a mutated policy hash can only fail the signature check.
-const otherPolicy: TlsnPolicy = { ...policy, status: 201 };
 
 const notaryKeys = [0, 1].map((index) => ({ alg: 'k256', key: `0${2 + index}${'ab'.repeat(32)}` }));
 
 /**
- * A stub of `thoth-tlsn`: a "presentation" is the verifier's JSON output itself,
- * built for one notary over one HTTPS exchange.
+ * A stub of `thoth-tlsn`: a "presentation" is the verifier's JSON output itself, for
+ * one notary over one HTTPS exchange, revealed by the real prover-side redaction.
  */
 const stubProver = (notary: number): TlsnProver => ({
-  prove: async (request, claimContext) => {
-    const sent = `GET /repos/x HTTP/1.1\r\nhost: ${HOST}\r\nconnection: close\r\n\r\n`;
-    const received = `HTTP/1.1 200 OK\r\ncontent-length: ${BODY.length}\r\n\r\n${BODY}`;
-    const whole = (text: string) => ({
-      length: text.length,
-      data: Buffer.from(text).toString('hex'),
-      revealed: [[0, text.length]],
-    });
+  prove: async (request) => {
+    const sent = `GET /repos/x HTTP/1.1\r\nHost: ${HOST}\r\nConnection: close\r\n\r\n`;
+    const received = `HTTP/1.1 200 OK\r\nContent-Length: ${BODY.length}\r\n\r\n${BODY}`;
+    const view = (text: string, revealed: readonly (readonly [number, number])[]) => {
+      const data = Buffer.from(text);
+      const shown = Buffer.alloc(data.length);
+      for (const [start, end] of revealed) data.copy(shown, start, start, end);
+      return { length: data.length, data: shown.toString('hex'), revealed };
+    };
     expect(request.url).toBe(URL_);
+    const claimContext = request.context?.[TLSN_CLAIM_CONTEXT_KEY] as string;
     const verified = {
       notaryKey: notaryKeys[notary],
       serverName: HOST,
       time: TIME,
-      sent: whole(sent),
-      received: whole(received),
+      sent: view(sent, requestReveals(Buffer.from(sent), new Set())),
+      received: view(
+        received,
+        responseReveals(Buffer.from(received), request.responseRedactions ?? []),
+      ),
       extensions: [
-        {
-          id: Buffer.from(TLSN_CLAIM_CONTEXT_EXTENSION).toString('hex'),
-          value: Buffer.from(claimContext).toString('hex'),
-        },
+        { id: Buffer.from(TLSN_CLAIM_CONTEXT_EXTENSION).toString('hex'), value: claimContext },
       ],
     };
     return { presentation: Buffer.from(JSON.stringify(verified)).toString('hex') };
@@ -136,7 +155,13 @@ const collectSubmission = async (secret = holderSecret): Promise<Submission> => 
   });
   const { claim, collected } = await client.collect(
     { url: URL_ },
-    { holder: pureCircuits.holderCommitment(secret), ...window, threshold: 2 },
+    {
+      holder: pureCircuits.holderCommitment(secret),
+      ...window,
+      threshold: 2,
+      expiresAt: Date.now() + 60_000,
+      attestorTimeoutMs: 30_000,
+    },
   );
   honestClaim = claim;
   const signatures = registryKeys.map(
@@ -147,12 +172,13 @@ const collectSubmission = async (secret = holderSecret): Promise<Submission> => 
   return { claim: toContractClaim(claim), signatures, commitRand: randomBytes(32) };
 };
 
-// A fresh ledger that seals the app id and the policies, with its block time in the window.
+// A fresh ledger that seals the app id and the policy under both kinds, so the dApp
+// accepts a claim from either, with its block time in the window.
 const freshLedger = async (appId = APP_ID): Promise<MockAttestationBytesSim> => {
   const sim = await MockAttestationBytesSim.create(
     createPrivateState<B_Claim>(holderSecret),
     registryKeys,
-    { appId, policyHashes: [tlsnPolicyHashOf(policy), tlsnPolicyHashOf(otherPolicy)] },
+    { appId, policyHashes: [tlsnPolicyHashOf(policy), zkFetchPolicyHashOf(policy)] },
   );
   sim.now = Number(honestClaim.windowStart);
   return sim;
@@ -165,11 +191,21 @@ describe('tlsn@1 cross-seam acceptance', () => {
     honest = await collectSubmission();
   });
 
+  it('takes one policy object that both kinds accept, with the same subject', () => {
+    expect(() => tlsnPolicySchema.parse(policy)).not.toThrow();
+    expect(() => zkFetchPolicySchema.parse(policy)).not.toThrow();
+    expect(tlsnSubjectHashOf({ method: 'GET', url: URL_ })).toEqual(
+      zkFetchSubjectHashOf({ method: 'GET', url: URL_ }),
+    );
+    // The law tag differs, so each kind's signatures commit to its own policy hash.
+    expect(tlsnPolicyHashOf(policy)).not.toEqual(zkFetchPolicyHashOf(policy));
+  });
+
   it('collects a claim carrying every binding the contract checks', () => {
     expect(honest.claim).toMatchObject({
       appId: APP_ID,
       policyHash: tlsnPolicyHashOf(policy),
-      subjectHash: tlsnSubjectHashOf(tlsnSubjectRequestOf({ url: URL_ })),
+      subjectHash: tlsnSubjectHashOf({ method: 'GET', url: URL_ }),
       holder: pureCircuits.holderCommitment(holderSecret),
       ...window,
       present: [true, true, false],
@@ -221,8 +257,9 @@ describe('tlsn@1 cross-seam acceptance', () => {
       }),
     },
     {
-      name: 'the policy',
-      mutate: (c: B_Claim) => ({ ...c, policyHash: tlsnPolicyHashOf(otherPolicy) }),
+      // Sealed too, so only the signatures refuse it: tlsn@1 attestors never signed it.
+      name: 'the policy, swapped for the zkFetch hash of the same policy',
+      mutate: (c: B_Claim) => ({ ...c, policyHash: zkFetchPolicyHashOf(policy) }),
     },
     {
       name: 'the app id',

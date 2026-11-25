@@ -87,7 +87,7 @@ The number of blocks a chain-event kind requires below the event's block at read
 _Avoid_: Confirmations, finality.
 
 **Disclosure rules**:
-The zkFetch policy's response patterns and reveal whitelist (`responseMatches` and `responseRedactions`): the exact extraction the witness executed and signed into the claim. The attestor requires the signed rules to equal the policy's, and the policy hash commits to them, so a claim slot cannot be pointed at a different field than the policy intends.
+The zkFetch policy's response patterns and reveal whitelist (`responseMatches` and `responseRedactions`): the exact extraction the witness executed and signed into the claim. The attestor requires the signed rules to equal the policy's, and the policy hash commits to them, so a claim slot cannot be pointed at a different field than the policy intends. Under tlsn@1 the same rules mean the same thing: the prover reveals by them, and the attestor runs the response patterns itself on the revealed bytes.
 _Avoid_: Extraction plan, reveal plan.
 
 **Body policy**:

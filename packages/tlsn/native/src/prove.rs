@@ -1,7 +1,24 @@
-// The tlsn@1 prover: fetch one HTTPS request through MPC-TLS with a notary, get its
-// attestation with the claim context digest, and build the presentation an attestor checks.
+// The tlsn@1 prover: fetch one HTTPS request through MPC-TLS with a notary, let the caller
+// choose which bytes to reveal, commit exactly those, and build the presentation.
+//
+// It talks to its caller over stdin and stdout, one JSON object per line, because
+// TLSNotary's hash commitments must be fixed before the notary signs, and the caller
+// decides the reveal from the response:
+//
+//   stdin  → {"secretHeaders": {"Name": "value", …}}
+//   stdout ← {"transcript": {"sent": "<hex>", "received": "<hex>"}}
+//   stdin  → {"reveal": {"sent": [[start, end], …], "received": [[start, end], …]}}
+//   stdout ← {"presentation": "<hex>"}
+//
+// Closing stdin instead of sending the reveal aborts without an attestation.
 
-use std::{future::IntoFuture, io::Read as _, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    future::IntoFuture,
+    io::{BufRead as _, Write as _},
+    ops::Range,
+    path::PathBuf,
+};
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args;
@@ -9,6 +26,7 @@ use futures::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use http_body_util::{BodyExt as _, Full};
 use hyper::{Request, body::Bytes};
 use hyper_util::rt::TokioIo;
+use serde::Deserialize;
 use tlsn::{
     Session,
     attestation::{
@@ -22,9 +40,9 @@ use tlsn::{
     },
     connection::{HandshakeData, ServerName},
     prover::ProverOutput,
+    rangeset::set::RangeSet,
     transcript::TranscriptCommitConfig,
 };
-use tlsn_formats::http::{DefaultHttpCommitter, HttpCommit, HttpTranscript};
 use tokio::net::TcpStream;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use url::Url;
@@ -48,14 +66,7 @@ pub struct ProveArgs {
     /// A header revealed to the attestors, as `Name: value`. Repeatable.
     #[arg(long = "header")]
     headers: Vec<String>,
-    /// A header whose value stays hidden from the attestors, as `Name: value`. Repeatable.
-    /// Prefer `--secret-headers-stdin`: arguments are visible to other local users.
-    #[arg(long = "secret-header")]
-    secret_headers: Vec<String>,
-    /// Read more hidden headers from stdin, as a JSON object of name to value.
-    #[arg(long)]
-    secret_headers_stdin: bool,
-    /// The request body, revealed to the attestors.
+    /// The request body.
     #[arg(long)]
     body: Option<String>,
     /// The 32-byte claim context digest the notary signs, as hex.
@@ -73,6 +84,54 @@ pub struct ProveArgs {
     /// Bytes the prover may receive; the MPC cost grows with it.
     #[arg(long, default_value_t = 1 << 14)]
     max_recv: usize,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Setup {
+    /// Headers sent with the request whose values the caller keeps hidden.
+    #[serde(default)]
+    secret_headers: BTreeMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct Reveal {
+    reveal: RevealRanges,
+}
+
+#[derive(Deserialize)]
+struct RevealRanges {
+    sent: Vec<[usize; 2]>,
+    received: Vec<[usize; 2]>,
+}
+
+/// The largest line the caller may send.
+const MAX_LINE_BYTES: u64 = 1 << 20;
+
+/// Read one JSON line from the caller; `None` when it closed stdin.
+fn read_line<T: for<'de> Deserialize<'de>>(input: &mut impl std::io::BufRead) -> Result<Option<T>> {
+    let mut line = String::new();
+    if std::io::Read::take(input, MAX_LINE_BYTES).read_line(&mut line)? == 0 {
+        return Ok(None);
+    }
+    Ok(Some(
+        serde_json::from_str(&line).context("the caller sent malformed JSON")?,
+    ))
+}
+
+/// Check that ranges are sorted, disjoint, non-empty and inside `len`.
+fn ranges_within(ranges: &[[usize; 2]], len: usize) -> Result<Vec<Range<usize>>> {
+    let mut previous_end = 0;
+    ranges
+        .iter()
+        .map(|&[start, end]| {
+            if start < previous_end || end <= start || end > len {
+                bail!("reveal ranges must be sorted, disjoint and inside the transcript");
+            }
+            previous_end = end;
+            Ok(start..end)
+        })
+        .collect()
 }
 
 /// Split a `Name: value` header argument.
@@ -103,22 +162,11 @@ pub async fn run(args: ProveArgs) -> Result<()> {
         .iter()
         .map(|h| parse_header(h))
         .collect::<Result<_>>()?;
-    let mut secret: Vec<_> = args
-        .secret_headers
-        .iter()
-        .map(|h| parse_header(h))
-        .collect::<Result<_>>()?;
-    if args.secret_headers_stdin {
-        let mut raw = String::new();
-        std::io::stdin().take(1 << 16).read_to_string(&mut raw)?;
-        let headers: std::collections::BTreeMap<String, String> =
-            serde_json::from_str(&raw).context("stdin is not a JSON object of headers")?;
-        secret.extend(headers);
-    }
-    let secret_names: Vec<String> = secret
-        .iter()
-        .map(|(name, _)| name.to_ascii_lowercase())
-        .collect();
+    let mut stdin = std::io::stdin().lock();
+    let Some(setup) = read_line::<Setup>(&mut stdin)? else {
+        bail!("the caller closed stdin before the setup line");
+    };
+    let secret: Vec<(String, String)> = setup.secret_headers.into_iter().collect();
 
     let notary_socket = TcpStream::connect(&args.notary)
         .await
@@ -156,8 +204,10 @@ pub async fn run(args: ProveArgs) -> Result<()> {
     )?;
     let prover_task = tokio::spawn(prover.into_future());
 
-    let (mut sender, connection) =
-        hyper::client::conn::http1::handshake(TokioIo::new(tls_connection.compat())).await?;
+    let (mut sender, connection) = hyper::client::conn::http1::Builder::new()
+        .title_case_headers(true)
+        .handshake(TokioIo::new(tls_connection.compat()))
+        .await?;
     tokio::spawn(connection);
 
     let host_header = if port == 443 {
@@ -172,10 +222,12 @@ pub async fn run(args: ProveArgs) -> Result<()> {
     let mut request = Request::builder()
         .method(args.method.as_str())
         .uri(path)
+        // Host and Connection come first, as the zkFetch witness requires: an attestor
+        // reads the request only through that fixed prefix.
         .header("Host", host_header)
-        // TLSNotary cannot read a compressed response, and the attestor parses the body.
-        .header("Accept-Encoding", "identity")
-        .header("Connection", "close");
+        .header("Connection", "close")
+        // The attestor matches on the response text, which a compressed body would hide.
+        .header("Accept-Encoding", "identity");
     for (name, value) in public.iter().chain(secret.iter()) {
         request = request.header(name.as_str(), value.as_str());
     }
@@ -185,10 +237,39 @@ pub async fn run(args: ProveArgs) -> Result<()> {
     response.into_body().collect().await?;
 
     let mut prover = prover_task.await??;
-    let transcript = HttpTranscript::parse(prover.transcript())?;
+
+    // Hand the plaintext to the caller, and commit exactly the bytes it chooses to reveal.
+    {
+        let mut stdout = std::io::stdout().lock();
+        serde_json::to_writer(
+            &mut stdout,
+            &serde_json::json!({ "transcript": {
+                "sent": hex::encode(prover.transcript().sent()),
+                "received": hex::encode(prover.transcript().received()),
+            }}),
+        )?;
+        stdout.write_all(b"\n")?;
+        stdout.flush()?;
+    }
+    let Some(Reveal { reveal }) = read_line::<Reveal>(&mut stdin)? else {
+        bail!("the caller aborted before choosing what to reveal");
+    };
+    let reveal_sent = RangeSet::from(ranges_within(
+        &reveal.sent,
+        prover.transcript().sent().len(),
+    )?);
+    let reveal_received = RangeSet::from(ranges_within(
+        &reveal.received,
+        prover.transcript().received().len(),
+    )?);
 
     let mut commit = TranscriptCommitConfig::builder(prover.transcript());
-    DefaultHttpCommitter::default().commit_transcript(&mut commit, &transcript)?;
+    if !reveal_sent.is_empty() {
+        commit.commit_sent(&reveal_sent)?;
+    }
+    if !reveal_received.is_empty() {
+        commit.commit_recv(&reveal_received)?;
+    }
     let mut request_config = RequestConfig::builder();
     request_config.transcript_commit(commit.build()?);
     request_config.extension(Extension {
@@ -245,27 +326,12 @@ pub async fn run(args: ProveArgs) -> Result<()> {
         bincode::deserialize(&attestation_bytes).context("the notary returned no attestation")?;
     attestation_request.validate(&attestation, &CryptoProvider::default())?;
 
-    // Reveal the whole request except the values of the secret headers, and the whole
-    // response: a tlsn@1 attestor parses the response itself and refuses hidden bytes in it.
-    let transcript = HttpTranscript::parse(secrets.transcript())?;
     let mut proof = secrets.transcript_proof_builder();
-    for request in &transcript.requests {
-        proof.reveal_sent(request.without_data())?;
-        proof.reveal_sent(&request.request.target)?;
-        for header in &request.headers {
-            let name = header.name.as_str().to_ascii_lowercase();
-            if secret_names.contains(&name) {
-                proof.reveal_sent(header.without_value())?;
-            } else {
-                proof.reveal_sent(header)?;
-            }
-        }
-        if let Some(body) = &request.body {
-            proof.reveal_sent(body)?;
-        }
+    if !reveal_sent.is_empty() {
+        proof.reveal_sent(&reveal_sent)?;
     }
-    for response in &transcript.responses {
-        proof.reveal_recv(response)?;
+    if !reveal_received.is_empty() {
+        proof.reveal_recv(&reveal_received)?;
     }
 
     let mut presentation = attestation.presentation_builder(&provider);

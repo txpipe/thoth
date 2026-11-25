@@ -1,5 +1,5 @@
-// The tlsn@1 attestor: check a presentation against the pinned notary and the policy,
-// then sign the claim derived from what the notary attested.
+// The tlsn@1 attestor: check a presentation against the pinned notary, play the zkFetch
+// witness's part on the redacted response, and sign the claim derived from it.
 
 import { isDeepStrictEqual } from 'node:util';
 import type { Attestor, KeyPair } from '@txpipe/thoth-attestor';
@@ -11,7 +11,6 @@ import {
   assertPolicySlotsInRange,
   deriveTlsnClaim,
   observePresentation,
-  subjectRequestOf,
   TLSN_LAW,
   type TlsnDefinition,
   type TlsnEvidence,
@@ -44,7 +43,8 @@ const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
  * 1. Every policy slot fits the proposal's slot counts.
  * 2. The presentation verifies: notary signature, certificate chain, transcript proof.
  * 3. The notary is the pinned one.
- * 4. The presentation satisfies the policy (see `observePresentation`).
+ * 4. The presentation satisfies the policy, and its redacted response discloses
+ *    every required slot (see `observePresentation`).
  * 5. The notary saw the server inside the proposed window.
  * 6. The notary signed this claim's claim context digest, and the salt is that digest.
  * 7. The proposal says exactly what the derived claim says.
@@ -79,7 +79,7 @@ export const checkTlsnInput = async (
 
   const expectedContext = tlsnClaimContextDigestOf({
     policy,
-    request: subjectRequestOf(observation),
+    request: observation.request,
     holder: claim.holder,
     windowStart: claim.windowStart,
     windowEnd: claim.windowEnd,
