@@ -8,10 +8,9 @@
 // literal alone cannot fail if the compiler's struct layout changes. Here the
 // compiled pure circuit is the oracle.
 import { subjectHashOf } from '@txpipe/thoth-core/claim-context';
+import { filled } from '@txpipe/thoth-test-utils/bytes';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
-
-const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
 
 describe('subjectHashOf circuit parity', () => {
   it('matches persistentHash<Subject> for the struct the pinned vector came from', () => {

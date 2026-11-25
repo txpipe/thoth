@@ -22,3 +22,12 @@ export const createPrivateState = <Claim = A_Claim>(
   commitRand: new Uint8Array(32),
   holderSecret,
 });
+
+/** Build a mock private state bound to `holderSecret` with optional field overrides. */
+export const privateStateWith = <Claim = A_Claim>(
+  holderSecret: Uint8Array,
+  overrides: Partial<PrivateState<Claim>> = {},
+): PrivateState<Claim> => ({
+  ...createPrivateState<Claim>(holderSecret),
+  ...overrides,
+});

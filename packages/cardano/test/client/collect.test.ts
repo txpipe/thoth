@@ -1,77 +1,37 @@
 // Unit tests for the cardano@1 client (`@txpipe/thoth-cardano/client`): one read, one
 // derived proposal, a threshold of vetted attestations, and the failure paths.
 
-import type { KeyPair } from '@txpipe/thoth-attestor';
-import { descriptorOf } from '@txpipe/thoth-attestor';
-import {
-  CARDANO_LIMITS,
-  type CardanoDefinition,
-  type CardanoPolicy,
-  deriveCardanoClaim,
-} from '@txpipe/thoth-cardano';
+import { CARDANO_LIMITS, type CardanoDefinition, type CardanoPolicy } from '@txpipe/thoth-cardano';
 import { cardanoAttestor } from '@txpipe/thoth-cardano/attestor';
 import {
-  type CardanoAttestationInput,
-  type CardanoAttestment,
   type CardanoCollectOptions,
   CardanoThresholdError,
   cardanoClient,
 } from '@txpipe/thoth-cardano/client';
-import type { AttestationVerifier, AttestorTransport, TrustedSet } from '@txpipe/thoth-client';
+import type { AttestationVerifier, AttestorTransport } from '@txpipe/thoth-client';
 import { buildTrustedSet } from '@txpipe/thoth-client';
 import type { Attestation } from '@txpipe/thoth-core';
-import type { FlatMessage } from '@txpipe/thoth-core/claim';
+import {
+  collectedSlots,
+  type FakePublicKey,
+  type FakeSignature,
+  fakeKeyPair,
+  fakeVerifier,
+  inMemoryTransport,
+  trustedSetOf,
+} from '@txpipe/thoth-test-utils/harness';
 import { describe, expect, it } from 'vitest';
-import { APP_ID, HOLDER, LOCATOR, OBSERVATION, POLICY } from '../output/fixtures.js';
+import { APP_ID, claimFor, HOLDER, LOCATOR, OBSERVATION, POLICY } from '../output/fixtures.js';
 
-type FakePublicKey = { readonly id: string };
-type FakeSignature = string;
 type FakeAttestor = ReturnType<typeof makeAttestor>;
 
-const keyPair = (id: string): KeyPair<FakePublicKey, FakeSignature, FlatMessage> => ({
-  publicKey: { id },
-  signer: { sign: (message) => `sig:${message.length}` },
-});
-
 const makeAttestor = (id: string, observation: typeof OBSERVATION = OBSERVATION) =>
-  cardanoAttestor({ id, keyPair: keyPair(id), read: () => observation });
+  cardanoAttestor({ id, keyPair: fakeKeyPair(id), read: () => observation });
 
-const trustedOf = (attestors: FakeAttestor[]): TrustedSet<CardanoDefinition, FakePublicKey> =>
-  buildTrustedSet({
-    registrySize: 3,
-    attestors: attestors.map((attestor, registryIndex) => ({
-      attestor: descriptorOf(attestor),
-      registryIndex,
-    })),
-  });
+const trustedOf = (attestors: FakeAttestor[]) =>
+  trustedSetOf(buildTrustedSet, attestors, { registrySize: 3 });
 
-const transportFor = (
-  attestors: FakeAttestor[],
-): AttestorTransport<CardanoDefinition, FakePublicKey, FakeSignature> => ({
-  request: (descriptor, input) => {
-    const attestor = attestors.find((candidate) => candidate.id === descriptor.id);
-    if (!attestor) {
-      throw new Error(`unknown attestor ${descriptor.id}`);
-    }
-    return attestor.attest(input as CardanoAttestationInput);
-  },
-});
-
-const verifier = (
-  rejected: readonly string[] = [],
-): AttestationVerifier<FakePublicKey, FakeSignature> => ({
-  verify: (key, message, signature) =>
-    !rejected.includes(key.id) && signature === `sig:${message.length}`,
-});
-
-const expectedClaim = deriveCardanoClaim({
-  policy: POLICY,
-  observation: OBSERVATION,
-  appId: APP_ID,
-  holder: HOLDER,
-  valueSlots: 5,
-  byteSlots: 1,
-});
+const expectedClaim = claimFor();
 
 const options = (overrides: Partial<CardanoCollectOptions> = {}) => ({
   holder: HOLDER,
@@ -91,17 +51,14 @@ const clientFor = (
 ) =>
   cardanoClient.init({
     trusted: trustedOf(attestors),
-    transport: parts.transport ?? transportFor(attestors),
-    verifier: parts.verifier ?? verifier(),
+    transport: parts.transport ?? inMemoryTransport(attestors),
+    verifier: parts.verifier ?? fakeVerifier(),
     policy: POLICY,
     appId: APP_ID,
     valueSlots: 5,
     byteSlots: 1,
     read: parts.read ?? (() => OBSERVATION),
   });
-
-const collectedSlots = (attestment: CardanoAttestment<FakePublicKey, FakeSignature>) =>
-  attestment.collected.map((entry) => entry.registryIndex);
 
 describe('cardanoClient', () => {
   it('collects a threshold of attestations over the derived claim', async () => {
@@ -117,7 +74,7 @@ describe('cardanoClient', () => {
 
   it('rejects the whole collection when the threshold is not met', async () => {
     const attestors = [makeAttestor('attestor-0'), makeAttestor('attestor-1')];
-    const transport = transportFor(attestors);
+    const transport = inMemoryTransport(attestors);
     const oneDown: AttestorTransport<CardanoDefinition, FakePublicKey, FakeSignature> = {
       request: (descriptor, input) => {
         if (descriptor.id === 'attestor-1') {
@@ -140,7 +97,7 @@ describe('cardanoClient', () => {
 
   it('recovers from a timed-out attestor to meet the threshold', async () => {
     const attestors = [makeAttestor('attestor-0'), makeAttestor('attestor-1')];
-    const transport = transportFor(attestors);
+    const transport = inMemoryTransport(attestors);
     const slow: AttestorTransport<CardanoDefinition, FakePublicKey, FakeSignature> = {
       request: (descriptor, input) =>
         descriptor.id === 'attestor-0'
@@ -163,7 +120,7 @@ describe('cardanoClient', () => {
       makeAttestor('attestor-1'),
       makeAttestor('attestor-2'),
     ];
-    const transport = transportFor(attestors);
+    const transport = inMemoryTransport(attestors);
     const slow: AttestorTransport<CardanoDefinition, FakePublicKey, FakeSignature> = {
       request: (descriptor, input) =>
         descriptor.id === 'attestor-2'
@@ -182,7 +139,7 @@ describe('cardanoClient', () => {
 
   it('drops an attestor that signs another claim', async () => {
     const attestors = [makeAttestor('attestor-0'), makeAttestor('attestor-1')];
-    const transport = transportFor(attestors);
+    const transport = inMemoryTransport(attestors);
     const tampered: AttestorTransport<CardanoDefinition, FakePublicKey, FakeSignature> = {
       request: async (descriptor, input) => {
         const attestation = await transport.request(descriptor, input);
@@ -232,7 +189,7 @@ describe('cardanoClient', () => {
   it('drops an attestor whose signature does not verify', async () => {
     const attestors = [makeAttestor('attestor-0'), makeAttestor('attestor-1')];
     const attestment = await clientFor(attestors, {
-      verifier: verifier(['attestor-1']),
+      verifier: fakeVerifier(['attestor-1']),
     }).collect(LOCATOR, options({ threshold: 1, attestorIds: ['attestor-1', 'attestor-0'] }));
 
     expect(collectedSlots(attestment)).toEqual([0]);
@@ -302,11 +259,12 @@ describe('cardanoClient', () => {
   });
 
   it('rejects at init a policy whose slots do not fit the claim size', () => {
+    const single = [makeAttestor('attestor-0')];
     expect(() =>
       cardanoClient.init({
-        trusted: trustedOf([makeAttestor('attestor-0')]),
-        transport: transportFor([makeAttestor('attestor-0')]),
-        verifier: verifier(),
+        trusted: trustedOf(single),
+        transport: inMemoryTransport(single),
+        verifier: fakeVerifier(),
         policy: POLICY,
         appId: APP_ID,
         valueSlots: 2,
@@ -317,11 +275,12 @@ describe('cardanoClient', () => {
   });
 
   it('rejects a byte slot count above the limit at init', () => {
+    const single = [makeAttestor('attestor-0')];
     expect(() =>
       cardanoClient.init({
-        trusted: trustedOf([makeAttestor('attestor-0')]),
-        transport: transportFor([makeAttestor('attestor-0')]),
-        verifier: verifier(),
+        trusted: trustedOf(single),
+        transport: inMemoryTransport(single),
+        verifier: fakeVerifier(),
         policy: POLICY,
         appId: APP_ID,
         valueSlots: 5,
@@ -333,11 +292,12 @@ describe('cardanoClient', () => {
 
   it('rejects a value slot count above the limit at init', () => {
     const numericOnly: CardanoPolicy = { ...POLICY, slots: [{ slot: 0, name: 'lovelace' }] };
+    const single = [makeAttestor('attestor-0')];
     expect(() =>
       cardanoClient.init({
-        trusted: trustedOf([makeAttestor('attestor-0')]),
-        transport: transportFor([makeAttestor('attestor-0')]),
-        verifier: verifier(),
+        trusted: trustedOf(single),
+        transport: inMemoryTransport(single),
+        verifier: fakeVerifier(),
         policy: numericOnly,
         appId: APP_ID,
         valueSlots: CARDANO_LIMITS.valueSlots + 1,

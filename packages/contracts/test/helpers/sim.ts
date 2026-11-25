@@ -23,6 +23,7 @@ import {
   type Ledger as BytesLedger,
   ledger as bytesLedger,
 } from '../../artifacts/mock_attestation_bytes/contract/index.js';
+import type { SignedClaim } from './fixtures.js';
 import type { PrivateState } from './private-state.js';
 import { type DeploySeals, makeWitnesses } from './witnesses.js';
 
@@ -146,3 +147,10 @@ export const MockAttestationBytesSim = makeSimClass<PrivateState<B_Claim>, Bytes
   ledgerOf: bytesLedger,
 });
 export type MockAttestationBytesSim = InstanceType<typeof MockAttestationBytesSim>;
+
+/** Submit a signed byte-slot claim to `verifyAttestation` as the holder of `holderSecret`. */
+export const submitBytes = (
+  sim: MockAttestationBytesSim,
+  signed: SignedClaim<B_Claim>,
+  holderSecret: Uint8Array,
+) => sim.call('verifyAttestation', { ...signed, holderSecret });

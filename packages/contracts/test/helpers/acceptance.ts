@@ -1,28 +1,39 @@
-// Pieces both cross-seam acceptance suites share: the attestors' Jubjub key
-// pair and the submission the bytes mock verifies.
+// Shared helpers for cross-seam acceptance suites: signature-slot packing and
+// fresh bytes-mock ledgers.
 import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
-import type { KeyPair } from '@txpipe/thoth-attestor';
 import type { B_Claim } from '../../artifacts/mock_attestation_bytes/contract/index.js';
-import { makeNotaryKey } from './fixtures.js';
-import { signMessage } from './sign.js';
-import type { MockAttestationBytesSim } from './sim.js';
+import { APP_ID, DUMMY_SIGNATURE } from './fixtures.js';
+import { createPrivateState } from './private-state.js';
+import { MockAttestationBytesSim } from './sim.js';
 
-/** A Jubjub key pair whose signer signs the flat message the registry verifies. */
-export const jubjubKeyPair = (): KeyPair<JubjubPoint, JubjubSchnorrSignature> => {
-  const { sk, pk } = makeNotaryKey();
-  return { publicKey: pk, signer: { sign: (message) => signMessage(sk, message).signature } };
+/** Lay collected signatures out at their registry slots, filling absent slots with a dummy. */
+export const packSignatures = (
+  registrySize: number,
+  collected: readonly {
+    readonly registryIndex: number;
+    readonly attestation: { readonly signature: JubjubSchnorrSignature };
+  }[],
+): JubjubSchnorrSignature[] =>
+  Array.from(
+    { length: registrySize },
+    (_, slot) =>
+      collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
+      DUMMY_SIGNATURE,
+  );
+
+/** Deploy a fresh bytes-mock ledger sealing `appId` and `policyHashes` at block time `now`. */
+export const freshBytesLedger = async (options: {
+  readonly holderSecret: Uint8Array;
+  readonly registryKeys: JubjubPoint[];
+  readonly appId?: Uint8Array;
+  readonly policyHashes: readonly Uint8Array[];
+  readonly now: bigint | number;
+}): Promise<MockAttestationBytesSim> => {
+  const sim = await MockAttestationBytesSim.create(
+    createPrivateState<B_Claim>(options.holderSecret),
+    options.registryKeys,
+    { appId: options.appId ?? APP_ID, policyHashes: options.policyHashes },
+  );
+  sim.now = Number(options.now);
+  return sim;
 };
-
-/** A claim, its signatures at their registry slots, and the vault commitment randomness. */
-export type Submission = {
-  claim: B_Claim;
-  signatures: JubjubSchnorrSignature[];
-  commitRand: Uint8Array;
-};
-
-/** Submit `submission` to `verifyAttestation` as the holder of `holderSecret`. */
-export const submit = (
-  sim: MockAttestationBytesSim,
-  submission: Submission,
-  holderSecret: Uint8Array,
-) => sim.call('verifyAttestation', { ...submission, holderSecret });

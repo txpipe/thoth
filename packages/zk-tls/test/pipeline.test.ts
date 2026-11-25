@@ -4,12 +4,21 @@
 //
 // Uses `examples/demo-attestation/fixtures/` — a genuine, offline-verifiable
 // HTTPS fetch witnessed by a Reclaim witness (no network needed).
-import type { Attestor, KeyPair } from '@txpipe/thoth-attestor';
-import { descriptorOf } from '@txpipe/thoth-attestor';
 import type { AttestorTransport } from '@txpipe/thoth-client';
 import { buildTrustedSet } from '@txpipe/thoth-client';
 import type { FlatMessage } from '@txpipe/thoth-core/claim';
 import { claimToMessage } from '@txpipe/thoth-core/claim';
+import { filled, padded32 } from '@txpipe/thoth-test-utils/bytes';
+import {
+  collectedSlots,
+  type FakePublicKey,
+  type FakeSignature,
+  fakeKeyPair,
+  fakeVerifier,
+  inMemoryTransport,
+  trustedSetOf,
+} from '@txpipe/thoth-test-utils/harness';
+import { disclosureRules } from '@txpipe/thoth-test-utils/zk-fetch';
 import {
   assertEvidenceMatchesPolicy,
   parsedEvidenceView,
@@ -39,35 +48,24 @@ import {
 } from '@txpipe/thoth-zk-tls/client';
 import { describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import { disclosureRules, disclosureRulesOf, FIXTURE } from './helpers/helper.js';
+import {
+  APP_ID,
+  countingTransport,
+  DEFAULT_TIMESTAMP_S,
+  FIXTURE,
+  HOLDER,
+  policyWithSlots,
+  sampleClaimInput,
+} from './helpers/helper.js';
 import { type TestWitness, testWitness } from './helpers/witness.js';
-
-/** The app id every claim in this suite is for. */
-const APP_ID = new Uint8Array(32).fill(0xa1);
 
 const fixture = FIXTURE;
 
 const policy = (
   slots: ZkFetchPolicy['slots'] = [{ slot: 0, name: 'data', parse: 'float', optional: true }],
-): ZkFetchPolicy => ({
-  allowedHosts: ['api.github.com'],
-  slots,
-  bodyPolicy: 'ignored',
-  ...disclosureRulesOf(slots),
-});
+): ZkFetchPolicy => policyWithSlots(slots);
 
-type FakePublicKey = { id: string };
-type FakeSignature = string;
-
-const fakeVerifier = {
-  verify: (_key: FakePublicKey, message: FlatMessage, signature: FakeSignature) =>
-    signature === `sig:${message.length}`,
-};
-
-const fakeKey = (id: string): KeyPair<FakePublicKey, FakeSignature, FlatMessage> => ({
-  publicKey: { id },
-  signer: { sign: (message: FlatMessage): FakeSignature => `sig:${message.length}` },
-});
+const verifier = fakeVerifier();
 
 describe('addressFromWitnessId', () => {
   it('decodes a plain 40-hex witness id', () => {
@@ -151,18 +149,7 @@ describe('assertEvidenceMatchesPolicy over the recorded fixture', () => {
 
 describe('zkFetch claim schema', () => {
   it('rejects an appId, policyHash subjectHash, holder or salt that is not 32 bytes', () => {
-    const claim = {
-      version: 1,
-      appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
-      salt: new Uint8Array(32).fill(0xcd),
-      policyHash: new Uint8Array(32),
-      windowStart: 1_786_122_944,
-      windowEnd: 1_786_122_944,
-      subjectHash: new Uint8Array(32),
-      present: [true],
-      values: [12],
-    };
+    const claim = sampleClaimInput({ present: [true], values: [12] });
     expect(() => zkFetchClaimSchema.parse({ ...claim, appId: new Uint8Array(31) })).toThrow(
       /expected 32 bytes/,
     );
@@ -181,18 +168,9 @@ describe('zkFetch claim schema', () => {
   });
 
   it('parses a derived claim into bigint values', () => {
-    const claim = zkFetchClaimSchema.parse({
-      version: 1,
-      appId: APP_ID,
-      holder: new Uint8Array(32).fill(0xc1),
-      salt: new Uint8Array(32).fill(0xcd),
-      policyHash: new Uint8Array(32),
-      windowStart: 1_786_122_944,
-      windowEnd: 1_786_122_944,
-      subjectHash: new Uint8Array(32),
-      present: [true, false],
-      values: [12, 0],
-    });
+    const claim = zkFetchClaimSchema.parse(
+      sampleClaimInput({ present: [true, false], values: [12, 0] }),
+    );
     expect(claim.values).toEqual([12n, 0n]);
     expect(claim.present).toEqual([true, false]);
   });
@@ -212,34 +190,18 @@ describe('zkFetch attestor + client', () => {
   const attestors = Object.entries(witnessById).map(([id, witness]) =>
     zkFetchAttestor({
       id,
-      keyPair: fakeKey(id),
+      keyPair: fakeKeyPair(id),
       witnessAddress: witness.address,
     }),
   );
-  const byId = new Map(attestors.map((a) => [a.id, a]));
   // The app assigns each attestor its registry slot; here `attestor-i` sits at slot `i`.
   const trustedWith = (slots: readonly number[], registrySize = 3) =>
-    buildTrustedSet({
-      registrySize,
-      attestors: attestors.map((attestor, i) => ({
-        attestor: descriptorOf(attestor),
-        registryIndex: slots[i] as number,
-      })),
-    });
+    trustedSetOf(buildTrustedSet, attestors, { registrySize, slots });
   const trusted = trustedWith([0, 1, 2]);
-  const transport: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> = {
-    async request(attestor, input) {
-      const instance = byId.get(attestor.id);
-      if (!instance) {
-        throw new Error(`transport: unknown attestor ${attestor.id}`);
-      }
-      return instance.attest(
-        input as Parameters<Attestor<ZkFetchDefinition, FakePublicKey, FakeSignature>['attest']>[0],
-      );
-    },
-  };
+  const transport: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> =
+    inMemoryTransport(attestors);
 
-  const BASE_TIMESTAMP_S = 1_786_122_944;
+  const BASE_TIMESTAMP_S = DEFAULT_TIMESTAMP_S;
 
   // Each witness signs the request it receives, the caller's context included;
   // values mirror the old fixture's unparseable `data`, so the `data` slot
@@ -305,7 +267,7 @@ describe('zkFetch attestor + client', () => {
   ) =>
     zkFetchClient.init({
       trusted: overrides.trusted ?? trusted,
-      verifier: fakeVerifier,
+      verifier,
       transport: overrides.transport ?? transport,
       policy: overrides.policy ?? policy(),
       appId: overrides.appId ?? APP_ID,
@@ -315,7 +277,7 @@ describe('zkFetch attestor + client', () => {
     });
 
   /** The holder and window a claim is proved for. */
-  const binding = (holder = new Uint8Array(32).fill(0xc1)) => ({
+  const binding = (holder = HOLDER) => ({
     holder,
     windowStart: BigInt(BASE_TIMESTAMP_S),
     windowEnd: BigInt(BASE_TIMESTAMP_S + 60),
@@ -327,43 +289,21 @@ describe('zkFetch attestor + client', () => {
     attestorTimeoutMs: 5_000,
   });
   const collectionRequest = { url: 'https://api.github.com/repos/x', method: 'GET' as const };
-  const slots = (result: { collected: readonly { registryIndex: number }[] }) =>
-    result.collected.map((entry) => entry.registryIndex);
   const hanging = <T>(): Promise<T> => new Promise<T>(() => {});
-  /** A transport that records whether slot 0 was ever contacted. */
-  const watchSlot0 = () => {
-    const seen = { contacted: false };
-    const watched: typeof transport = {
-      request: async (attestor, input) => {
-        seen.contacted ||= attestor.id === 'attestor-0';
-        return transport.request(attestor, input);
-      },
-    };
-    return { seen, watched };
-  };
 
   describe("the 'bytes' slot through the client", () => {
     // The shared disclosure rules expose one extracted value (`data`); the
     // byte slot consumes it. V = 3 numeric slots, then one byte value at 3.
-    const bytePolicy = (optional = false): ZkFetchPolicy => ({
-      allowedHosts: ['api.github.com'],
-      slots: [{ slot: 3, name: 'data', parse: 'bytes', optional }],
-      bodyPolicy: 'ignored',
-      ...disclosureRules('data'),
-    });
-
-    const padded = (value: string): Uint8Array => {
-      const out = new Uint8Array(32);
-      out.set(new TextEncoder().encode(value));
-      return out;
-    };
+    const bytePolicy = (optional = false): ZkFetchPolicy =>
+      policy([{ slot: 3, name: 'data', parse: 'bytes', optional }]);
 
     const withData = (value: string | undefined, optional = false) =>
       clientWith({
         policy: bytePolicy(optional),
         byteSlots: 1,
         provers: proversWith({
-          values: () => (value === undefined ? {} : { data: value }),
+          values: (): Readonly<Record<string, string>> =>
+            value === undefined ? {} : { data: value },
         }),
       });
 
@@ -371,7 +311,7 @@ describe('zkFetch attestor + client', () => {
       const { claim, collected } = await withData('abc').collect(collectionRequest, options());
       expect(collected).toHaveLength(2);
       expect(claim.present).toEqual([false, false, false, true]);
-      expect(claim.byteValues[0]).toEqual(padded('abc'));
+      expect(claim.byteValues[0]).toEqual(padded32('abc'));
     });
 
     it('derives distinct byte values for distinct identifiers', async () => {
@@ -393,15 +333,10 @@ describe('zkFetch attestor + client', () => {
     });
 
     it('derives two byte values at byteSlots = 2 and collects a threshold', async () => {
-      const twoBytePolicy: ZkFetchPolicy = {
-        allowedHosts: ['api.github.com'],
-        slots: [
-          { slot: 3, name: 'first', parse: 'bytes' },
-          { slot: 4, name: 'second', parse: 'bytes' },
-        ],
-        bodyPolicy: 'ignored',
-        ...disclosureRules('first', 'second'),
-      };
+      const twoBytePolicy = policy([
+        { slot: 3, name: 'first', parse: 'bytes' },
+        { slot: 4, name: 'second', parse: 'bytes' },
+      ]);
       const { claim, collected } = await clientWith({
         policy: twoBytePolicy,
         byteSlots: 2,
@@ -409,17 +344,12 @@ describe('zkFetch attestor + client', () => {
       }).collect(collectionRequest, options());
       expect(collected).toHaveLength(2);
       expect(claim.present).toEqual([false, false, false, true, true]);
-      expect(claim.byteValues[0]).toEqual(padded('abc'));
-      expect(claim.byteValues[1]).toEqual(padded('xyz'));
+      expect(claim.byteValues[0]).toEqual(padded32('abc'));
+      expect(claim.byteValues[1]).toEqual(padded32('xyz'));
     });
 
     it('decodes a hex slot and collects a threshold', async () => {
-      const hexPolicy: ZkFetchPolicy = {
-        allowedHosts: ['api.github.com'],
-        slots: [{ slot: 3, name: 'data', parse: 'hex', length: 2 }],
-        bodyPolicy: 'ignored',
-        ...disclosureRules('data'),
-      };
+      const hexPolicy = policy([{ slot: 3, name: 'data', parse: 'hex', length: 2 }]);
       const { claim, collected } = await clientWith({
         policy: hexPolicy,
         byteSlots: 1,
@@ -432,12 +362,7 @@ describe('zkFetch attestor + client', () => {
     });
 
     it('rejects a required slot that misses its pinned length', async () => {
-      const pinnedPolicy: ZkFetchPolicy = {
-        allowedHosts: ['api.github.com'],
-        slots: [{ slot: 3, name: 'data', parse: 'hex', length: 3 }],
-        bodyPolicy: 'ignored',
-        ...disclosureRules('data'),
-      };
+      const pinnedPolicy = policy([{ slot: 3, name: 'data', parse: 'hex', length: 3 }]);
       await expect(
         clientWith({
           policy: pinnedPolicy,
@@ -450,12 +375,7 @@ describe('zkFetch attestor + client', () => {
 
   describe("the 'int' rule through the client", () => {
     it('derives an odd-length hex integer into a numeric slot and collects a threshold', async () => {
-      const intPolicy: ZkFetchPolicy = {
-        allowedHosts: ['api.github.com'],
-        slots: [{ slot: 0, name: 'blockNumber', parse: 'int' }],
-        bodyPolicy: 'ignored',
-        ...disclosureRules('blockNumber'),
-      };
+      const intPolicy = policy([{ slot: 0, name: 'blockNumber', parse: 'int' }]);
       const { claim, collected } = await clientWith({
         policy: intPolicy,
         provers: proversWith({ values: () => ({ blockNumber: '0x1938381' }) }),
@@ -468,7 +388,7 @@ describe('zkFetch attestor + client', () => {
 
   it('collects a threshold of distinct registry slots in one call', async () => {
     const result = await clientWith().collect(collectionRequest, options());
-    expect(slots(result)).toEqual([0, 1]);
+    expect(collectedSlots(result)).toEqual([0, 1]);
     expect(
       result.collected.every((entry) =>
         entry.attestation.message.every((value, i) => value === result.message[i]),
@@ -542,7 +462,7 @@ describe('zkFetch attestor + client', () => {
       }),
     });
     const result = await client.collect(collectionRequest, options());
-    expect(slots(result)).toEqual([1, 2]);
+    expect(collectedSlots(result)).toEqual([1, 2]);
     expect(result.claim.values[0]).toBe(42n);
   });
 
@@ -560,7 +480,7 @@ describe('zkFetch attestor + client', () => {
       { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
       options(),
     );
-    expect(slots(result)).toEqual([1, 2]);
+    expect(collectedSlots(result)).toEqual([1, 2]);
     expect(result.failures).toEqual([{ registryIndex: 0, reason: 'evidence' }]);
     expect(JSON.stringify(result.failures)).not.toContain('private-token');
   });
@@ -580,7 +500,7 @@ describe('zkFetch attestor + client', () => {
         },
       });
       const result = await client.collect(collectionRequest, options());
-      expect(slots(result)).toEqual([1, 2]);
+      expect(collectedSlots(result)).toEqual([1, 2]);
       expect(result.failures).toEqual([{ registryIndex: 0, reason }]);
       await expect(client.proveReq(collectionRequest, binding())).rejects.toBe(failing);
     },
@@ -657,7 +577,7 @@ describe('zkFetch attestor + client', () => {
       encode: deeplyNestedSecret,
     },
   ])('never forwards evidence carrying a $encoding secret header value', async (leak) => {
-    const { seen, watched } = watchSlot0();
+    const counter = countingTransport(transport);
     const client = clientWith({
       provers: {
         ...provers,
@@ -670,19 +590,19 @@ describe('zkFetch attestor + client', () => {
           },
         },
       },
-      transport: watched,
+      transport: counter.transport,
     });
     const result = await client.collect(
       { ...collectionRequest, secretHeaders: { authorization: leak.secret } },
       options(),
     );
-    expect(slots(result)).toEqual([1, 2]);
+    expect(collectedSlots(result)).toEqual([1, 2]);
     expect(result.failures).toEqual([{ registryIndex: 0, reason: leak.reason }]);
-    expect(seen.contacted).toBe(false);
+    expect(counter.contacted('attestor-0')).toBe(false);
   });
 
   it('checks secret headers a prover cannot change through its own request', async () => {
-    const { seen, watched } = watchSlot0();
+    const counter = countingTransport(transport);
     const client = clientWith({
       provers: {
         ...provers,
@@ -696,14 +616,14 @@ describe('zkFetch attestor + client', () => {
           },
         },
       },
-      transport: watched,
+      transport: counter.transport,
     });
     const result = await client.collect(
       { ...collectionRequest, secretHeaders: { authorization: 'Bearer private-token' } },
       options(),
     );
     expect(result.failures).toEqual([{ registryIndex: 0, reason: 'secret' }]);
-    expect(seen.contacted).toBe(false);
+    expect(counter.contacted('attestor-0')).toBe(false);
   });
 
   it('refuses a proof handle whose evidence carries a secret header value', async () => {
@@ -773,13 +693,13 @@ describe('zkFetch attestor + client', () => {
             verify: (key: FakePublicKey, message: FlatMessage, signature: string) =>
               step === 'verifier' && key.id === 'attestor-0'
                 ? hanging<boolean>()
-                : fakeVerifier.verify(key, message, signature),
+                : verifier.verify(key, message, signature),
           },
         });
         const pending = client.collect(collectionRequest, { ...options(), attestorTimeoutMs: 100 });
         await vi.advanceTimersByTimeAsync(100);
         const result = await pending;
-        expect(slots(result)).toEqual([1, 2]);
+        expect(collectedSlots(result)).toEqual([1, 2]);
         expect(result.failures).toEqual([{ registryIndex: 0, reason: 'timeout' }]);
       } finally {
         vi.useRealTimers();
@@ -828,7 +748,7 @@ describe('zkFetch attestor + client', () => {
       },
     });
     const result = await client.collect(collectionRequest, options());
-    expect(slots(result)).toEqual([0, 1]);
+    expect(collectedSlots(result)).toEqual([0, 1]);
     expect(result.failures).toEqual([]);
   }, 500);
 
@@ -891,7 +811,7 @@ describe('zkFetch attestor + client', () => {
       },
     });
     const result = await client.collect(collectionRequest, options());
-    expect(slots(result)).toEqual([1, 2]);
+    expect(collectedSlots(result)).toEqual([1, 2]);
     expect(result.failures).toEqual([{ registryIndex: 0, reason: 'attestation' }]);
   });
 
@@ -900,7 +820,7 @@ describe('zkFetch attestor + client', () => {
       ...options(),
       attestorIds: ['attestor-2', 'attestor-2', 'attestor-0'],
     });
-    expect(slots(result)).toEqual([0, 2]);
+    expect(collectedSlots(result)).toEqual([0, 2]);
   });
 
   it('fails safely when no exact signed message reaches the threshold', async () => {
@@ -940,7 +860,7 @@ describe('zkFetch attestor + client', () => {
           const until = Date.now() + 150;
           while (Date.now() < until) {}
         }
-        return fakeVerifier.verify(key, message, signature);
+        return verifier.verify(key, message, signature);
       },
     };
     const client = zkFetchClient.init({
@@ -958,7 +878,7 @@ describe('zkFetch attestor + client', () => {
       threshold: 1,
       attestorTimeoutMs: 100,
     });
-    expect(slots(result)).toEqual([1]);
+    expect(collectedSlots(result)).toEqual([1]);
     expect(result.failures).toEqual([{ registryIndex: 0, reason: 'timeout' }]);
   });
 
@@ -969,18 +889,18 @@ describe('zkFetch attestor + client', () => {
       const late = new Promise<ZkFetchEvidence>((resolve) => {
         release = resolve;
       });
-      const { seen, watched } = watchSlot0();
+      const counter = countingTransport(transport);
       const client = clientWith({
         provers: { ...provers, 'attestor-0': { prove: () => late } },
-        transport: watched,
+        transport: counter.transport,
       });
       const pending = client.collect(collectionRequest, { ...options(), attestorTimeoutMs: 100 });
       await vi.advanceTimersByTimeAsync(100);
       const result = await pending;
       release?.(await observe(aliceWitness, collectionRequest));
       await vi.advanceTimersByTimeAsync(0);
-      expect(seen.contacted).toBe(false);
-      expect(slots(result)).toEqual([1, 2]);
+      expect(counter.contacted('attestor-0')).toBe(false);
+      expect(collectedSlots(result)).toEqual([1, 2]);
     } finally {
       vi.useRealTimers();
     }
@@ -1004,7 +924,7 @@ describe('zkFetch attestor + client', () => {
     const broken = {
       request: async (...args: Parameters<typeof transport.request>) => {
         const result = await transport.request(...args);
-        return { ...result, claim: { ...result.claim, holder: new Uint8Array(32).fill(0xff) } };
+        return { ...result, claim: { ...result.claim, holder: filled(0xff) } };
       },
     };
     const proof = await clientWith({ transport: broken }).proveReq(
@@ -1048,7 +968,7 @@ describe('zkFetch attestor + client', () => {
 
   it('lets the caller select which attestors to query', async () => {
     const attestment = await prove().then((proof) => proof.attest('attestor-0', 'attestor-2'));
-    expect(attestment.collected.map((c) => c.registryIndex)).toEqual([0, 2]);
+    expect(collectedSlots(attestment)).toEqual([0, 2]);
   });
 
   it("places slot-agnostic signatures at each app's own registry slots", async () => {
@@ -1060,8 +980,8 @@ describe('zkFetch attestor + client', () => {
           .then((proof) => proof.attest('attestor-0', 'attestor-1')),
       ),
     );
-    expect(first?.collected.map((c) => c.registryIndex)).toEqual([0, 1]);
-    expect(second?.collected.map((c) => c.registryIndex)).toEqual([4, 0]);
+    expect(first && collectedSlots(first)).toEqual([0, 1]);
+    expect(second && collectedSlots(second)).toEqual([4, 0]);
     expect(second?.collected.map((c) => c.attestation)).toEqual(
       first?.collected.map((c) => c.attestation),
     );
@@ -1072,7 +992,7 @@ describe('zkFetch attestor + client', () => {
       collectionRequest,
       { ...options(), threshold: 3 },
     );
-    expect(result.collected.map((entry) => entry.registryIndex)).toEqual([0, 2, 4]);
+    expect(collectedSlots(result)).toEqual([0, 2, 4]);
     expect(result.collected.map((entry) => entry.attestation.publicKey.id)).toEqual([
       'attestor-1',
       'attestor-2',
@@ -1148,7 +1068,7 @@ describe('zkFetch attestor + client', () => {
     expect(() =>
       zkFetchClient.init({
         trusted,
-        verifier: fakeVerifier,
+        verifier,
         transport,
         policy: policy(),
         appId: APP_ID,
@@ -1159,7 +1079,7 @@ describe('zkFetch attestor + client', () => {
     expect(() =>
       zkFetchClient.init({
         trusted,
-        verifier: fakeVerifier,
+        verifier,
         transport,
         policy: policy(),
         appId: APP_ID,
@@ -1216,7 +1136,7 @@ describe('zkFetch attestor + client', () => {
   });
 
   it('signs the per-call holder in every collected attestation', async () => {
-    const holder = new Uint8Array(32).fill(0xc2);
+    const holder = filled(0xc2);
     const proof = await clientWith().proveReq(
       { url: 'https://api.github.com/repos/x', method: 'GET' },
       binding(holder),
@@ -1253,18 +1173,12 @@ describe('zkFetch attestor + client', () => {
   });
 
   it('refuses without contacting an attestor when witnesses disagree', async () => {
-    let calls = 0;
-    const counting: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> = {
-      async request(attestor, input) {
-        calls += 1;
-        return transport.request(attestor, input);
-      },
-    };
+    const counter = countingTransport(transport);
     const diverging = proversWith({
       values: (id) => (id === 'attestor-1' ? { data: '42' } : { data: 'HTTP/1.1 200 OK' }),
     });
     await expect(
-      clientWith({ transport: counting, provers: diverging }).proveReq(
+      clientWith({ transport: counter.transport, provers: diverging }).proveReq(
         {
           url: 'https://api.github.com/repos/x',
           method: 'GET',
@@ -1272,7 +1186,7 @@ describe('zkFetch attestor + client', () => {
         binding(),
       ),
     ).rejects.toThrow(/witnesses disagree/);
-    expect(calls).toBe(0);
+    expect(counter.calls()).toBe(0);
   });
 
   it("signs the claim context digest into every witness's context beside the caller's", async () => {
@@ -1317,20 +1231,14 @@ describe('zkFetch attestor + client', () => {
 
   it('refuses evidence signed for another holder before contacting any attestor', async () => {
     const proof = await prove();
-    let calls = 0;
-    const counting: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> = {
-      async request(attestor, input) {
-        calls += 1;
-        return transport.request(attestor, input);
-      },
-    };
+    const counter = countingTransport(transport);
     const thief = clientWith({
-      transport: counting,
+      transport: counter.transport,
       provers: Object.fromEntries(
         ids.map((id) => [id, { prove: async () => evidenceOf(proof.evidences, id) }]),
       ),
     });
-    const stolen = new Uint8Array(32).fill(0xc2);
+    const stolen = filled(0xc2);
     await expect(thief.proveReq(collectionRequest, binding(stolen))).rejects.toThrow(
       /another claim context/,
     );
@@ -1342,19 +1250,13 @@ describe('zkFetch attestor + client', () => {
     expect([...failures].sort((a, b) => a.registryIndex - b.registryIndex)).toEqual(
       ids.map((_, registryIndex) => ({ registryIndex, reason: 'evidence' })),
     );
-    expect(calls).toBe(0);
+    expect(counter.calls()).toBe(0);
   });
 
   it('refuses evidence observed outside the window before contacting any attestor', async () => {
-    let calls = 0;
-    const counting: AttestorTransport<ZkFetchDefinition, FakePublicKey, FakeSignature> = {
-      async request(attestor, input) {
-        calls += 1;
-        return transport.request(attestor, input);
-      },
-    };
+    const counter = countingTransport(transport);
     const late = clientWith({
-      transport: counting,
+      transport: counter.transport,
       provers: proversWith({ timestampS: () => BASE_TIMESTAMP_S + 61 }),
     });
     await expect(late.proveReq(collectionRequest, binding())).rejects.toThrow(
@@ -1368,7 +1270,7 @@ describe('zkFetch attestor + client', () => {
     expect([...failures].sort((a, b) => a.registryIndex - b.registryIndex)).toEqual(
       ids.map((_, registryIndex) => ({ registryIndex, reason: 'evidence' })),
     );
-    expect(calls).toBe(0);
+    expect(counter.calls()).toBe(0);
   });
 
   it("keeps the claim context digest a prover deletes from its own request out of the others'", async () => {
@@ -1399,7 +1301,7 @@ describe('zkFetch attestor + client', () => {
     const attestment = await (await client.proveReq(collectionRequest, binding())).attest();
     expect(attestment.collected.length).toBe(3);
     const collected = await client.collect(collectionRequest, options());
-    expect(slots(collected)).toEqual([0, 1]);
+    expect(collectedSlots(collected)).toEqual([0, 1]);
     for (const id of ['attestor-1', 'attestor-2']) {
       expect(requestOf(requests, id).context).toEqual({ [ZK_FETCH_CLAIM_CONTEXT_KEY]: digest });
     }

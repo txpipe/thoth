@@ -5,7 +5,6 @@ import {
   CARDANO_LIMITS,
   cardanoAddressHashOf,
   cardanoClaimSchema,
-  deriveCardanoClaim,
   type OutputObservation,
   type OutputPolicy,
 } from '@txpipe/thoth-cardano';
@@ -14,12 +13,11 @@ import type { Claim } from '@txpipe/thoth-core/claim';
 import { claimToMessage } from '@txpipe/thoth-core/claim';
 import { describe, expect, it } from 'vitest';
 import {
-  APP_ID,
   ASSET_OBSERVATION,
   ASSET_POLICY,
   BLOCK_HASH,
   BYTE_FACT_POLICY,
-  HOLDER,
+  claimFor,
   LOCATOR,
   OBSERVATION,
   POLICY,
@@ -28,25 +26,8 @@ import {
 
 const definition = createCardanoDefinition();
 
-const claimFor = (observation: OutputObservation = OBSERVATION): Claim<number, number> =>
-  deriveCardanoClaim({
-    policy: POLICY,
-    observation,
-    appId: APP_ID,
-    holder: HOLDER,
-    valueSlots: 5,
-    byteSlots: 1,
-  });
-
 const assetClaimFor = (): Claim<number, number> =>
-  deriveCardanoClaim({
-    policy: ASSET_POLICY,
-    observation: ASSET_OBSERVATION,
-    appId: APP_ID,
-    holder: HOLDER,
-    valueSlots: 5,
-    byteSlots: 1,
-  });
+  claimFor(ASSET_OBSERVATION, { policy: ASSET_POLICY });
 
 const verify = (options: {
   policy?: OutputPolicy;
@@ -118,14 +99,7 @@ describe('cardano verify', () => {
   });
 
   it('fills the addressHash and blockHash byte slots', () => {
-    const claim = deriveCardanoClaim({
-      policy: BYTE_FACT_POLICY,
-      observation: OBSERVATION,
-      appId: APP_ID,
-      holder: HOLDER,
-      valueSlots: 5,
-      byteSlots: 2,
-    });
+    const claim = claimFor(OBSERVATION, { policy: BYTE_FACT_POLICY, byteSlots: 2 });
     expect(claim.byteValues).toEqual([
       cardanoAddressHashOf(TEST_ADDRESS),
       Uint8Array.from(Buffer.from(BLOCK_HASH, 'hex')),
@@ -160,14 +134,7 @@ describe('cardano verify', () => {
       ...OBSERVATION,
       tipBlockNumber: OBSERVATION.block.blockNumber,
     };
-    const claim = deriveCardanoClaim({
-      policy,
-      observation,
-      appId: APP_ID,
-      holder: HOLDER,
-      valueSlots: 5,
-      byteSlots: 1,
-    });
+    const claim = claimFor(observation, { policy });
     expect(() => verify({ policy, evidence: { ...LOCATOR, observation }, claim })).not.toThrow();
   });
 
@@ -198,15 +165,7 @@ describe('cardano verify', () => {
 
   it('rejects a negative policy slot index', () => {
     const badPolicy: OutputPolicy = { ...POLICY, slots: [{ slot: -1, name: 'lovelace' }] };
-    const derive = () =>
-      deriveCardanoClaim({
-        policy: badPolicy,
-        observation: OBSERVATION,
-        appId: APP_ID,
-        holder: HOLDER,
-        valueSlots: 5,
-        byteSlots: 1,
-      });
+    const derive = () => claimFor(OBSERVATION, { policy: badPolicy });
     expect(derive).toThrow("outside the claim's 6 slots");
     expect(() => verify({ policy: badPolicy })).toThrow("outside the claim's 6 slots");
   });
@@ -253,16 +212,7 @@ describe('cardano verify', () => {
 
   it('refuses to derive an asset quantity without the asset pin', () => {
     const handBuilt: OutputPolicy = { ...POLICY, slots: [{ slot: 3, name: 'assetQuantity' }] };
-    expect(() =>
-      deriveCardanoClaim({
-        policy: handBuilt,
-        observation: OBSERVATION,
-        appId: APP_ID,
-        holder: HOLDER,
-        valueSlots: 5,
-        byteSlots: 1,
-      }),
-    ).toThrow("requires the 'asset' pin");
+    expect(() => claimFor(OBSERVATION, { policy: handBuilt })).toThrow("requires the 'asset' pin");
   });
 
   it('rejects another subject hash', () => {
@@ -287,7 +237,7 @@ describe('cardano verify', () => {
     const base = claimFor();
     const byteValues = base.byteValues.map((value) => {
       const flipped = new Uint8Array(value);
-      flipped[0] ^= 0xff;
+      flipped[0] = (flipped[0] ?? 0) ^ 0xff;
       return flipped;
     });
     expect(() => verify({ claim: { ...base, byteValues } })).toThrow('byte values do not match');

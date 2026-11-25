@@ -3,20 +3,16 @@
 // is strict.
 
 import type { KeyPair } from '@txpipe/thoth-attestor';
-import {
-  deriveCardanoClaim,
-  type OutputLocator,
-  type OutputObservation,
-} from '@txpipe/thoth-cardano';
+import type { OutputLocator, OutputObservation } from '@txpipe/thoth-cardano';
 import { cardanoAttestor } from '@txpipe/thoth-cardano/attestor';
-import type { Claim, FlatMessage } from '@txpipe/thoth-core/claim';
+import type { FlatMessage } from '@txpipe/thoth-core/claim';
 import { claimToMessage } from '@txpipe/thoth-core/claim';
+import { filled } from '@txpipe/thoth-test-utils/bytes';
 import { describe, expect, it } from 'vitest';
 import {
-  APP_ID,
   ASSET_OBSERVATION,
   ASSET_POLICY,
-  HOLDER,
+  claimFor,
   LOCATOR,
   OBSERVATION,
   POLICY,
@@ -26,16 +22,6 @@ const keyPair: KeyPair<string, string, FlatMessage> = {
   publicKey: 'test-public-key',
   signer: { sign: (message) => `signed:${message.join(',')}` },
 };
-
-const claimFor = (observation: OutputObservation = OBSERVATION): Claim<number, number> =>
-  deriveCardanoClaim({
-    policy: POLICY,
-    observation,
-    appId: APP_ID,
-    holder: HOLDER,
-    valueSlots: 5,
-    byteSlots: 1,
-  });
 
 const attestorFor = (observation: OutputObservation = OBSERVATION) => {
   const reads: OutputLocator[] = [];
@@ -85,8 +71,8 @@ describe('cardanoAttestor', () => {
   });
 
   it('keeps appId and holder from the proposal', async () => {
-    const appId = new Uint8Array(32).fill(0x11);
-    const holder = new Uint8Array(32).fill(0x22);
+    const appId = filled(0x11);
+    const holder = filled(0x22);
     const { attestor } = attestorFor();
 
     const attestation = await attestor.attest({
@@ -102,14 +88,7 @@ describe('cardanoAttestor', () => {
 
   it('attests the pinned asset quantity from its own read', async () => {
     const { attestor } = attestorFor(ASSET_OBSERVATION);
-    const expected = deriveCardanoClaim({
-      policy: ASSET_POLICY,
-      observation: ASSET_OBSERVATION,
-      appId: APP_ID,
-      holder: HOLDER,
-      valueSlots: 5,
-      byteSlots: 1,
-    });
+    const expected = claimFor(ASSET_OBSERVATION, { policy: ASSET_POLICY });
 
     const attestation = await attestor.attest({
       policy: ASSET_POLICY,

@@ -1,0 +1,22 @@
+{
+  "name": "@txpipe/thoth-test-utils",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Private shared test helpers for Thoth workspaces.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    "./bytes": "./src/bytes.ts",
+    "./cardano-fixtures": "./src/cardano-fixtures.ts",
+    "./env": "./src/env.ts",
+    "./harness": "./src/harness.ts",
+    "./jubjub": "./src/jubjub.ts",
+    "./zk-fetch": "./src/zk-fetch.ts"
+  },
+  "scripts": {
+    "types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.21.0"
+  }
+}

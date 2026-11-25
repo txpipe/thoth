@@ -9,18 +9,14 @@
 // in the contracts suite (`packages/contracts/test/subject-parity.test.ts`,
 // `packages/contracts/test/holder-parity.test.ts`).
 
-import { createHash } from 'node:crypto';
 import {
   claimContextDigestOf,
   holderCommitmentOf,
   policyHashOf,
   subjectHashOf,
 } from '@txpipe/thoth-core/claim-context';
+import { filled, hex, sha256 } from '@txpipe/thoth-test-utils/bytes';
 import { describe, expect, it } from 'vitest';
-
-const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
-const sha256 = (text: string): string => createHash('sha256').update(text, 'utf-8').digest('hex');
-const filled = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
 
 describe('policyHashOf', () => {
   it('hashes the law tag, the wire version, and the canonical policy', () => {

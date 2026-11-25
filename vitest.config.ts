@@ -9,6 +9,7 @@ export default defineConfig({
       'packages/cardano/**/*.test.ts',
       'packages/core/**/*.test.ts',
       'packages/client/**/*.test.ts',
+      'packages/test-utils/**/*.test.ts',
       'packages/zk-tls/**/*.test.ts',
     ],
     exclude: [...configDefaults.exclude],

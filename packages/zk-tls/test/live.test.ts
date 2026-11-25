@@ -4,9 +4,9 @@
 // Opt-in through `WITNESS_URLS`, skipped otherwise (`npm test` stays offline
 // and deterministic). See the README's "Live check".
 import { claimToMessage } from '@txpipe/thoth-core/claim';
+import { hex } from '@txpipe/thoth-test-utils/bytes';
 import {
   assertEvidenceMatchesPolicy,
-  deriveClaimFromEvidence,
   parseDisclosedValue,
   ZK_FETCH_CLAIM_CONTEXT_KEY,
   type ZkFetchPolicy,
@@ -16,16 +16,9 @@ import { assertClaimMatchesContext, verifyZkFetchProof } from '@txpipe/thoth-zk-
 import type { ZkFetchRequest } from '@txpipe/thoth-zk-tls/client';
 import { zkFetchProver } from '@txpipe/thoth-zk-tls/prover';
 import { describe, expect, it } from 'vitest';
+import { deriveClaim, HOLDER, parseWitnessUrls } from './helpers/helper.js';
 
-/** The app id every claim in this suite is for. */
-const APP_ID = new Uint8Array(32).fill(0xa1);
-/** The holder every claim in this suite is for. */
-const HOLDER = new Uint8Array(32).fill(0xc1);
-
-const WITNESS_URLS = (process.env.WITNESS_URLS ?? '')
-  .split(',')
-  .map((url) => url.trim())
-  .filter((url) => url !== '');
+const WITNESS_URLS = parseWitnessUrls();
 const TARGET_URL = process.env.LIVE_URL ?? 'https://api.github.com/repos/txpipe/dolos';
 
 const RESPONSE_MATCH = { type: 'regex' as const, value: '"stargazers_count":\\s*(?<stars>\\d+)' };
@@ -102,15 +95,7 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
     expect(new Set(verified.map((view) => view.claim.identifier)).size).toBe(1);
 
     const messages = verified.map((view) => {
-      const claim = deriveClaimFromEvidence({
-        verified: view,
-        policy,
-        appId: APP_ID,
-        holder: HOLDER,
-        valueSlots: 1,
-        windowStart,
-        windowEnd,
-      });
+      const claim = deriveClaim({ verified: view, policy, windowStart, windowEnd });
       // A real witness keeps the client's context keys next to its own.
       assertClaimMatchesContext({ claim, verified: view, policy });
       return claimToMessage(claim);
@@ -140,12 +125,9 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
     expect(new Set(verified.map((view) => view.claim.identifier)).size).toBe(1);
 
     const claims = verified.map((view) => {
-      const claim = deriveClaimFromEvidence({
+      const claim = deriveClaim({
         verified: view,
         policy: mixedPolicy,
-        appId: APP_ID,
-        holder: HOLDER,
-        valueSlots: 1,
         byteSlots: 1,
         windowStart,
         windowEnd,
@@ -166,8 +148,8 @@ describe.skipIf(WITNESS_URLS.length < 2)('live witnesses', () => {
       expect(claim.present).toEqual([true, true]);
     }
     const derived = claims.map((claim) => claim.byteValues[0]);
-    expect(derived.map((value) => Buffer.from(value ?? []).toString('hex'))).toEqual(
-      names.map((name) => Buffer.from(name ?? []).toString('hex')),
+    expect(derived.map((value) => hex(value ?? new Uint8Array()))).toEqual(
+      names.map((name) => hex(name ?? new Uint8Array())),
     );
   }, 180_000);
 });

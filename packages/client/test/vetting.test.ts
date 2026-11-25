@@ -1,9 +1,4 @@
-import {
-  CompactTypeField,
-  CompactTypeVector,
-  jubjubSchnorrSign,
-  jubjubSchnorrVerifyingKey,
-} from '@midnight-ntwrk/compact-runtime';
+import { jubjubSchnorrVerifyingKey } from '@midnight-ntwrk/compact-runtime';
 import {
   attestorIdsOf,
   attestorOf,
@@ -13,6 +8,7 @@ import {
 } from '@txpipe/thoth-client';
 import { AttestorNotInTrustedSetError } from '@txpipe/thoth-client/errors';
 import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
+import { jubjubKeyPair } from '@txpipe/thoth-test-utils/jubjub';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -26,8 +22,8 @@ const definition = {
 };
 const claim = { value: 42n };
 const message = definition.message(claim);
-const publicKey = jubjubSchnorrVerifyingKey(17n);
-const signature = jubjubSchnorrSign(new CompactTypeVector(1, CompactTypeField), message, 17n);
+const { publicKey, signer } = jubjubKeyPair(17n);
+const signature = signer.sign(message);
 const attestor = { id: 'alice', definition, publicKey };
 const trusted = buildTrustedSet({ registrySize: 3, attestors: [{ attestor, registryIndex: 2 }] });
 const member = memberOf(trusted, 'alice');

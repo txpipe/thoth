@@ -16,7 +16,11 @@ import {
   signClaim,
   UNSEALED_POLICY,
 } from './helpers/fixtures.js';
-import { createPrivateState, type PrivateState } from './helpers/private-state.js';
+import {
+  createPrivateState,
+  type PrivateState,
+  privateStateWith,
+} from './helpers/private-state.js';
 import { MockAttestationSim } from './helpers/sim.js';
 
 const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
@@ -25,10 +29,8 @@ const holder = DEFAULT_HOLDER_SECRET;
 
 let sim: MockAttestationSim;
 
-const ps = (overrides: Partial<PrivateState> = {}): PrivateState => ({
-  ...createPrivateState(holder),
-  ...overrides,
-});
+const ps = (overrides: Partial<PrivateState> = {}): PrivateState =>
+  privateStateWith(holder, overrides);
 
 describe('mock attestation', () => {
   beforeEach(async () => {

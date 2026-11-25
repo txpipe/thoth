@@ -55,7 +55,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "0.21.0"

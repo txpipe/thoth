@@ -14,9 +14,9 @@ import {
 import { setCryptoImplementation } from '@reclaimprotocol/tls';
 import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto';
 import type { FlatMessage } from '@txpipe/thoth-core/claim';
+import { hex } from '@txpipe/thoth-test-utils/bytes';
 import {
   assertEvidenceMatchesPolicy,
-  deriveClaimFromEvidence,
   ZK_FETCH_CLAIM_CONTEXT_KEY,
   type ZkFetchEvidence,
   type ZkFetchPolicy,
@@ -24,12 +24,9 @@ import {
   zkFetchSubjectHashOf,
 } from '@txpipe/thoth-zk-tls';
 import { verifyZkFetchProof, zkFetchAttestor } from '@txpipe/thoth-zk-tls/attestor';
+import type { ZkFetchAttestationInput } from '@txpipe/thoth-zk-tls/client';
 import { beforeAll, describe, expect, it } from 'vitest';
-
-/** The app id every claim in this suite is for. */
-const APP_ID = new Uint8Array(32).fill(0xa1);
-/** The holder every claim in this suite is for. */
-const HOLDER = new Uint8Array(32).fill(0xc1);
+import { deriveClaim, HOLDER, parseWitnessUrls } from './helpers/helper.js';
 
 /** The body the live probe sends but does not sign. */
 const PAYLOAD = { q: 123456789 };
@@ -61,62 +58,18 @@ const GET_REQUEST = [
   '',
   OFFLINE_BODY,
 ].join('\r\n');
-const GET_RESPONSE = 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}';
 
-const receipt = [
-  { sender: 'client', message: strToUint8Array(OFFLINE_REQUEST) },
+const transcriptOf = (request: string): Transcript<Uint8Array> => [
+  { sender: 'client', message: strToUint8Array(request) },
   { sender: 'server', message: strToUint8Array(OFFLINE_RESPONSE) },
-] satisfies Transcript<Uint8Array>;
+];
 
-const getReceipt = [
-  { sender: 'client', message: strToUint8Array(GET_REQUEST) },
-  { sender: 'server', message: strToUint8Array(GET_RESPONSE) },
-] satisfies Transcript<Uint8Array>;
-
-const receiptParams = (body: string) => ({
-  url: OFFLINE_URL,
-  method: 'POST' as const,
-  body,
-  responseMatches: [{ type: 'regex' as const, value: '(?<data>.*)' }],
-  responseRedactions: [],
-});
-
-const checkReceipt = (body: string): unknown =>
-  providers.http.assertValidProviderReceipt({
-    clientVersion: CURRENT_ATTESTOR_VERSION,
-    receipt,
-    params: receiptParams(body),
-    logger,
-    ctx: PROVIDER_CTX,
-  });
-
-const checkGetReceipt = (body: string): unknown =>
-  providers.http.assertValidProviderReceipt({
-    clientVersion: CURRENT_ATTESTOR_VERSION,
-    receipt: getReceipt,
-    params: { ...receiptParams(body), url: GET_URL, method: 'GET' },
-    logger,
-    ctx: PROVIDER_CTX,
-  });
+const receipt = transcriptOf(OFFLINE_REQUEST);
+const getReceipt = transcriptOf(GET_REQUEST);
 
 /** The body the transcript carries after Reclaim redacts a secret `paramValues` span. */
 const REDACTED_BODY = '*'.repeat(Buffer.byteLength(SENT_BODY));
-const redactedReceipt = [
-  {
-    sender: 'client',
-    message: strToUint8Array(OFFLINE_REQUEST.replace(OFFLINE_BODY, REDACTED_BODY)),
-  },
-  { sender: 'server', message: strToUint8Array(OFFLINE_RESPONSE) },
-] satisfies Transcript<Uint8Array>;
-
-const checkRedactedReceipt = (body: string): unknown =>
-  providers.http.assertValidProviderReceipt({
-    clientVersion: CURRENT_ATTESTOR_VERSION,
-    receipt: redactedReceipt,
-    params: receiptParams(body),
-    logger,
-    ctx: PROVIDER_CTX,
-  });
+const redactedReceipt = transcriptOf(OFFLINE_REQUEST.replace(OFFLINE_BODY, REDACTED_BODY));
 
 /** A URL whose path carries the caller's redaction markers, standing for the bytes it sent. */
 const STARRED_URL = 'https://httpbin.org/users/****/stats';
@@ -127,19 +80,23 @@ const STARRED_REQUEST = [
   'Accept-Encoding: identity',
   '',
 ].join('\r\n');
-const starredReceipt = [
-  { sender: 'client', message: strToUint8Array(STARRED_REQUEST) },
-  { sender: 'server', message: strToUint8Array(OFFLINE_RESPONSE) },
-] satisfies Transcript<Uint8Array>;
+const starredReceipt = transcriptOf(STARRED_REQUEST);
 
-const checkStarredReceipt = (): unknown =>
+const checkReceipt = (
+  body: string,
+  overrides: {
+    receipt?: Transcript<Uint8Array>;
+    url?: string;
+    method?: 'GET' | 'POST';
+  } = {},
+): unknown =>
   providers.http.assertValidProviderReceipt({
     clientVersion: CURRENT_ATTESTOR_VERSION,
-    receipt: starredReceipt,
+    receipt: overrides.receipt ?? receipt,
     params: {
-      url: STARRED_URL,
-      method: 'GET' as const,
-      body: '',
+      url: overrides.url ?? OFFLINE_URL,
+      method: overrides.method ?? 'POST',
+      body,
       responseMatches: [{ type: 'regex' as const, value: '(?<data>.*)' }],
       responseRedactions: [],
     },
@@ -153,7 +110,9 @@ describe('Reclaim receipt check', () => {
   });
 
   it('accepts a signed empty body when a GET carries a body', () => {
-    expect(() => checkGetReceipt('')).not.toThrow();
+    expect(() =>
+      checkReceipt('', { receipt: getReceipt, url: GET_URL, method: 'GET' }),
+    ).not.toThrow();
   });
 
   it('rejects a non-empty signed body that differs from the sent body', () => {
@@ -163,20 +122,19 @@ describe('Reclaim receipt check', () => {
   // The caller chooses which request bytes it redacts to `*`, so a signed body of
   // `*`s matches any hidden bytes; this is why the attestor refuses `*` in a signed body.
   it('accepts a signed body of redaction markers for a redacted transcript', () => {
-    expect(() => checkRedactedReceipt(REDACTED_BODY)).not.toThrow();
+    expect(() => checkReceipt(REDACTED_BODY, { receipt: redactedReceipt })).not.toThrow();
   });
 
   // The same holds for the URL path: the signed `*`s match the markers the caller
   // redacted the sent path to, so the client and attestor refuse `*` in a signed URL.
   it('accepts a signed path of redaction markers for a redacted transcript', () => {
-    expect(() => checkStarredReceipt()).not.toThrow();
+    expect(() =>
+      checkReceipt('', { receipt: starredReceipt, url: STARRED_URL, method: 'GET' }),
+    ).not.toThrow();
   });
 });
 
-const WITNESS_URLS = (process.env.WITNESS_URLS ?? '')
-  .split(',')
-  .map((url) => url.trim())
-  .filter((url) => url !== '');
+const WITNESS_URLS = parseWitnessUrls();
 const WITNESS_URL = WITNESS_URLS[0] ?? '';
 const PROBE_URL = process.env.PROBE_URL ?? 'https://httpbin.org/post';
 
@@ -196,8 +154,6 @@ const witnessAddressOf = async (witnessUrl: string): Promise<string> => {
   }
   return body.address;
 };
-
-const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 
 describe.skipIf(WITNESS_URL === '')('live witness', () => {
   beforeAll(() => {
@@ -267,19 +223,11 @@ describe.skipIf(WITNESS_URL === '')('live witness', () => {
 
     const evidence: ZkFetchEvidence = {
       claim: result.claim,
-      signatureHex: `0x${Buffer.from(result.signatures.claimSignature).toString('hex')}`,
+      signatureHex: `0x${hex(result.signatures.claimSignature)}`,
       attestorAddress: result.signatures.attestorAddress.toLowerCase(),
     };
     const verified = await verifyZkFetchProof(evidence);
-    const derived = deriveClaimFromEvidence({
-      verified,
-      policy,
-      appId: APP_ID,
-      holder: HOLDER,
-      valueSlots: 1,
-      windowStart,
-      windowEnd,
-    });
+    const derived = deriveClaim({ verified, policy, windowStart, windowEnd });
     expect(derived.present).toEqual([true]);
     expect(derived.values).toEqual([BigInt(PAYLOAD.q)]);
 
@@ -299,6 +247,12 @@ describe.skipIf(WITNESS_URL === '')('live witness', () => {
       },
       witnessAddress,
     });
-    await expect(attestor.attest({ policy, evidence, claim: derived })).rejects.toThrow(/body/i);
+    await expect(
+      attestor.attest({
+        policy: policy as ZkFetchAttestationInput['policy'],
+        evidence,
+        claim: derived,
+      }),
+    ).rejects.toThrow(/body/i);
   }, 180_000);
 });
