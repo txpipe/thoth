@@ -46,5 +46,10 @@
     "husky": "^9.1.7",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
+  },
+  "overrides": {
+    "@connectrpc/connect-node": {
+      "undici": "^8.13.1"
+    }
   }
 }
