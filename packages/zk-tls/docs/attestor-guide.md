@@ -26,7 +26,7 @@ Serve `attestor.attest(input)` to dApps over the transport you choose;
 `@txpipe/thoth-attestor` with the dApps that pin you.
 
 The instance takes no registry slot and no slot counts, so one instance
-serves any dApp ([why](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor#design-decisions)).
+serves any dApp ([why](https://github.com/txpipe/thoth/tree/main/packages/attestor#design-decisions)).
 Each claim proposal carries the slot counts of the contract it is for, up to
 your [input limits](#input-limits).
 

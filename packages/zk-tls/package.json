@@ -4,7 +4,7 @@
   "description": "zkFetch attestor kind for the Thoth N-of-M attestation system.",
   "type": "module",
   "license": "AGPL-3.0-only",
-  "author": "TxPipe-Shop",
+  "author": "TxPipe",
   "keywords": [
     "thoth",
     "midnight",
@@ -14,13 +14,13 @@
     "zkfetch",
     "reclaim"
   ],
-  "homepage": "https://github.com/txpipe-shop/thoth#readme",
+  "homepage": "https://github.com/txpipe/thoth#readme",
   "bugs": {
-    "url": "https://github.com/txpipe-shop/thoth/issues"
+    "url": "https://github.com/txpipe/thoth/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/txpipe-shop/thoth.git",
+    "url": "https://github.com/txpipe/thoth.git",
     "directory": "packages/zk-tls"
   },
   "engines": {

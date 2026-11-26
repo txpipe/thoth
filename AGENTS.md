@@ -144,7 +144,7 @@ would be empty):
 1. `# @txpipe/thoth-<name>`, then one sentence saying what it is and who it's
    for.
 2. The status line, identical in every README and the root:
-   > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
+   > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 3. `## Install`: how to install or use it today. A package with an npm name
    gives it (`@txpipe/thoth-<name>`), plus one line saying whether it is
    published yet; a private package skips both.
@@ -201,7 +201,7 @@ READMEs don't repeat it.
 
 ### Issue tracker
 
-Issues live in GitHub Issues (txpipe-shop/thoth), via the `gh` CLI. See
+Issues live in GitHub Issues (txpipe/thoth), via the `gh` CLI. See
 `docs/agents/issue-tracker.md`.
 
 ### Triage labels

@@ -2,14 +2,14 @@
 
 The dApp side of Thoth, for kind authors writing a kind's client and for apps that use one: the attestors an app pins, the interface to reach them, and the check every returned attestation passes before it is collected.
 
-> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
+> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
 ## Install
 
 The package is not on npm. Build it from a checkout of this repo and install it by path:
 
 ```bash
-git clone https://github.com/txpipe-shop/thoth && cd thoth
+git clone https://github.com/txpipe/thoth && cd thoth
 npm install && npm run build
 cd /path/to/your-app && npm install /path/to/thoth/packages/client
 ```
@@ -83,10 +83,10 @@ const collected = await resolveAttestation({
 
 ## Concepts
 
-- [Attestor](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles): an entity that verifies evidence under a policy and signs a claim. Its descriptor (`id`, keyless `definition`, `publicKey`) comes from [`@txpipe/thoth-core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core).
-- [Trusted set](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the app's pinned attestors, each with its registry slot. `TrustedSet` in code; each member is a `TrustedAttestor`.
-- [Registry slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the position of an attestor's key in the app's [registry](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain). `registryIndex` in code, bounded by `registrySize`, the contract's `#M`.
-- [Attestation](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the signed artifact one attestor returns, with the claim, the message, its public key and its signature. `CollectedAttestation` pairs one with the slot it answered from.
+- [Attestor](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#roles): an entity that verifies evidence under a policy and signs a claim. Its descriptor (`id`, keyless `definition`, `publicKey`) comes from [`@txpipe/thoth-core`](https://github.com/txpipe/thoth/tree/main/packages/core).
+- [Trusted set](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#signing-and-collection): the app's pinned attestors, each with its registry slot. `TrustedSet` in code; each member is a `TrustedAttestor`.
+- [Registry slot](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#signing-and-collection): the position of an attestor's key in the app's [registry](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#on-chain). `registryIndex` in code, bounded by `registrySize`, the contract's `#M`.
+- [Attestation](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#signing-and-collection): the signed artifact one attestor returns, with the claim, the message, its public key and its signature. `CollectedAttestation` pairs one with the slot it answered from.
 
 ## Guarantees and limits
 
@@ -102,15 +102,15 @@ const collected = await resolveAttestation({
 - **Registry slots belong to the trusted set, not to the attestor.** One attestor serves many apps at different slots, so each app records the slot its own registry assigned. `resolveAttestation` takes the trusted member itself, so a result only carries a slot the set assigned, and transports see only the descriptor.
 - **Signatures are verified before collection.** A broken or malicious transport could otherwise return a forged signature with the right key and message, and the transaction would fail after submission and cost fees.
 - **The verifier is pluggable, and the main entry point imports no crypto library.** `@txpipe/thoth-client/jubjub` ships the contracts' Jubjub Schnorr scheme on Compact runtime `0.21.0`, the version the contracts pin.
-- **The response carries no kind label.** The pinned definition is the kind; for zkFetch the signed policy hash commits to the law tag, policy and wire version ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
+- **The response carries no kind label.** The pinned definition is the kind; for zkFetch the signed policy hash commits to the law tag, policy and wire version ([ADR 0002](https://github.com/txpipe/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
 
 ## Links
 
-- [Thoth (repo root)](https://github.com/txpipe-shop/thoth): overall architecture and docs
-- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md): architecture overview and flow
-- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md): how to add an attestor kind on top of this package
-- [ADR 0003](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0003-colluding-attestors-out-of-scope.md): colluding attestors are out of scope
-- [`@txpipe/thoth-core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): `AttestorDescriptor`, `Attestation`, `AttestationInput`
-- [`@txpipe/thoth-attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor): the attestor-side `Attestor.attest` that `AttestorTransport` mirrors
-- [`@txpipe/thoth-zk-tls`](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls): the zkFetch kind, a client built on this package
-- [`@txpipe/thoth-contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies the signatures positionally
+- [Thoth (repo root)](https://github.com/txpipe/thoth): overall architecture and docs
+- [docs/DESIGN.md](https://github.com/txpipe/thoth/blob/main/docs/DESIGN.md): architecture overview and flow
+- [docs/kind-author-guide.md](https://github.com/txpipe/thoth/blob/main/docs/kind-author-guide.md): how to add an attestor kind on top of this package
+- [ADR 0003](https://github.com/txpipe/thoth/blob/main/docs/adr/0003-colluding-attestors-out-of-scope.md): colluding attestors are out of scope
+- [`@txpipe/thoth-core`](https://github.com/txpipe/thoth/tree/main/packages/core): `AttestorDescriptor`, `Attestation`, `AttestationInput`
+- [`@txpipe/thoth-attestor`](https://github.com/txpipe/thoth/tree/main/packages/attestor): the attestor-side `Attestor.attest` that `AttestorTransport` mirrors
+- [`@txpipe/thoth-zk-tls`](https://github.com/txpipe/thoth/tree/main/packages/zk-tls): the zkFetch kind, a client built on this package
+- [`@txpipe/thoth-contracts`](https://github.com/txpipe/thoth/tree/main/packages/contracts): the on-chain registry that verifies the signatures positionally
