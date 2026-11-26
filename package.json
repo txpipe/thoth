@@ -49,7 +49,7 @@
   },
   "overrides": {
     "@connectrpc/connect-node": {
-      "undici": "^8.12.3"
+      "undici": "^8.13.1"
     }
   }
 }
