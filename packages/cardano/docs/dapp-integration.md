@@ -227,9 +227,8 @@ check.
   constructor's `policyHashes` set with `disclose`. A claim under another
   policy is rejected before the signature count.
 - **Size the module to the slot map.** `#V` is your numeric slot count and
-  `#B` is `2W`. `#K` follows from the wire layout in the
-  [attestation header](../../contracts/attestation.compact). For the policy
-  above, `#V` is 3, `#B` is 2 and `#K` is 24. The client's
+  `#B` is `2W` ([attestation header](../../contracts/attestation.compact)).
+  For the policy above, `#V` is 3 and `#B` is 2. The client's
   `valueSlots` must equal `#V`, and `byteSlots` must equal `#B / 2`. `init`
   checks that the slot map fits, not that it matches the deployed contract.
 - **Bind the holder in the predicate.** `verifyAttestation` checks

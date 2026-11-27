@@ -1,6 +1,6 @@
 # The nullifier hashes a secret salt the attestors derive from the evidence
 
-Status: accepted; for chain-event kinds, amended by [ADR 0014](0014-chain-event-kinds.md): the salt is public, because the values are public chain data.
+Status: accepted; for chain-event kinds, amended by [ADR 0014](0014-chain-event-kinds.md): the salt is public, because the values are public chain data. Also amended by [ADR 0015](0015-attestors-sign-the-nullifier.md): the signed message no longer carries the salt's halves. The salt reaches it through the nullifier, and the message is seven fields.
 
 The nullifier (ADR 0006) was a public hash of fields that are all public or guessable except the values, so anyone could confirm a guessed value by recomputing it and looking it up in the ledger (issue #155). Identifiers, country codes, ages and small balances are easy to enumerate. The claim now carries a signed 32-byte `salt`, the contract hashes it into the observation identity, and the salt never appears on-chain, so the public fields no longer determine the nullifier.
 

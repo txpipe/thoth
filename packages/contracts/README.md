@@ -17,10 +17,10 @@ driver: the off-chain message encoder matches the circuit only at that version.
 
 ## Usage
 
-| File                        | Module                            | Role                                                                                                                                                                                      |
-| --------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `attestation.compact`       | `attestation<#K, #V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
-| `attestor_registry.compact` | `attestor_registry<#M, #K>`       | Seals the `M` pinned attestor keys at deploy and counts the signatures that verify, each against its own slot.                                                                            |
+| File                        | Module                        | Role                                                                                                                                                                                      |
+| --------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `attestation.compact`       | `attestation<#V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
+| `attestor_registry.compact` | `attestor_registry<#M>`       | Seals the `M` pinned attestor keys at deploy and counts the signatures over the seven-field message that verify, each against its own slot.                                               |
 
 Embed both modules in your top-level contract, seal the deploy-time values in
 the constructor, and export `verifyAttestation` as the entry point:
@@ -30,10 +30,10 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=24 msg fields  V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
-import "attestation"<24, 3, 2, 2, 3> prefix A_;
+//           V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
+import "attestation"<3, 2, 2, 3> prefix A_;
 
-import "attestor_registry"<3, 24> prefix R_;
+import "attestor_registry"<3> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
@@ -57,7 +57,7 @@ export circuit verifyAttestation(): [] {
 }
 
 // The signed message, so the attestor side and tests can reproduce it.
-export pure circuit message(a: A_Claim): Vector<24, Field> {
+export pure circuit message(a: A_Claim): Vector<7, Field> {
   return A_buildMessage(a);
 }
 
@@ -77,14 +77,14 @@ The module parameters, fixed when you embed:
 
 - `#V` numeric value slots and `#B` byte halves, two per 32-byte byte value,
   so `#B` is even (`B = 0` is the numeric-only layout).
-- `#K`, the signed-message length; the `attestation.compact` header gives the formula.
 - `#N` of `#M` signatures must verify; `#M` is also the registry's key count.
 
 The header of
 [`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact)
-documents each parameter and the wire layout `buildMessage` produces;
+documents each parameter and the wire layout: the seven fields `buildMessage`
+produces and the nullifier's preimage;
 [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#wire-order)
-has the same layout as a table. Attestors sign that exact field vector.
+has the same layout as tables. Attestors sign those seven fields.
 
 ### Proving cost
 
@@ -92,24 +92,24 @@ What each circuit of the two test mocks costs to prove, measured with
 `npm run bench` on an AMD Ryzen 7 5700G (8 cores, 16 threads, 31 GiB) and the
 proof server `midnightntwrk/proof-server:9.0.0`, three warm proofs per
 circuit. Both mocks are 2-of-3 with `V = 3`: `mock_attestation` has no byte
-value (`K = 20`, `B = 0`) and `mock_attestation_bytes` has one (`K = 24`,
-`B = 2`). The proof server verified every proof against its verifier key.
+value (`B = 0`) and `mock_attestation_bytes` has one (`B = 2`). The proof
+server verified every proof against its verifier key.
 
 | Mock                   | Circuit               | k   | Rows   | Proving key (MB) | Proof (B) | First proof (s) | Warm proof (s) | CPU per warm proof (s) | Peak memory (MB) |
 | ---------------------- | --------------------- | --- | ------ | ---------------- | --------- | --------------- | -------------- | ---------------------- | ---------------- |
-| mock_attestation       | verifyAttestation     | 17  | 90,590 | 197.2            | 5,772     | 12.20           | 9.27           | 74.9                   | 3,162            |
-| mock_attestation       | openAndRead           | 14  | 8,610  | 24.6             | 5,772     | 1.53            | 1.15           | 10.3                   | 422              |
-| mock_attestation       | openAndReadPresence   | 14  | 8,580  | 24.6             | 5,772     | 1.55            | 1.15           | 10.4                   | 437              |
-| mock_attestation       | openAndRequireMetric0 | 14  | 8,570  | 24.6             | 5,772     | 1.56            | 1.15           | 10.5                   | 446              |
-| mock_attestation       | openAndBindHost       | 14  | 14,633 | 24.6             | 5,772     | 1.61            | 1.22           | 10.8                   | 446              |
-| mock_attestation_bytes | verifyAttestation     | 17  | 94,609 | 197.2            | 5,772     | 12.43           | 9.34           | 75.1                   | 3,166            |
-| mock_attestation_bytes | openAndReadBytes      | 15  | 19,188 | 49.3             | 5,772     | 2.94            | 2.23           | 19.4                   | 758              |
+| mock_attestation       | verifyAttestation     | 15  | 23,107 | 49.3             | 5,772     | 3.26            | 2.54           | 20.6                   | 749              |
+| mock_attestation       | openAndRead           | 14  | 8,610  | 24.6             | 5,772     | 1.58            | 1.16           | 10.4                   | 433              |
+| mock_attestation       | openAndReadPresence   | 14  | 8,580  | 24.6             | 5,772     | 1.54            | 1.15           | 10.4                   | 446              |
+| mock_attestation       | openAndRequireMetric0 | 14  | 8,570  | 24.6             | 5,772     | 1.54            | 1.16           | 10.4                   | 434              |
+| mock_attestation       | openAndBindHost       | 14  | 14,633 | 24.6             | 5,772     | 1.60            | 1.22           | 10.8                   | 447              |
+| mock_attestation_bytes | verifyAttestation     | 15  | 26,930 | 49.3             | 5,772     | 3.30            | 2.58           | 20.9                   | 754              |
+| mock_attestation_bytes | openAndReadBytes      | 15  | 19,188 | 49.3             | 5,772     | 2.96            | 2.25           | 19.3                   | 756              |
 
 How to read it:
 
 - A circuit of `k` is proved as `2^k` rows, so each step in `k` roughly
-  doubles the time and the proving key: a `verifyAttestation` proof takes
-  about 8 times as long as opening a claim.
+  doubles the time and the proving key: a `verifyAttestation` proof (`k = 15`)
+  takes about twice as long as opening a numeric claim (`k = 14`).
 - The first proof of a circuit parses its proving key, so it takes about a
   third longer. The server keeps the last five keys it parsed; a later proof
   of a cached circuit takes the warm time.
@@ -117,7 +117,7 @@ How to read it:
 - CPU time is the server's, summed over its threads. Peak memory is the
   server container's high-water mark, page cache included, while it proves
   that circuit alone. A server that proves `verifyAttestation` needs about
-  3.2 GB; one that only opens claims needs under 0.8 GB.
+  0.8 GB; one that only opens numeric claims needs under 0.5 GB.
 
 `CONTRIBUTING.md` explains how to
 [run the benchmark](https://github.com/txpipe-shop/thoth/blob/main/CONTRIBUTING.md#proving-benchmark).
@@ -137,7 +137,8 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
 - [Threshold](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
   the `N` in N-of-M.
 - [Nullifier](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
-  the hash of the observation identity that blocks replay.
+  the SHA-256 of the observation identity. Attestors sign it, and it blocks
+  replay.
 - [Claims vault](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
   the accepted claims, keyed by `persistentCommit(claim, rand)`.
 
@@ -219,9 +220,12 @@ What the module does not check, and what your app does itself:
 
 ## Design decisions
 
-- **The claim is the entire message.** Everything the contract inspects is a
-  field of the signed vector, so a kind cannot pass the contract data through
-  an unsigned side channel.
+- **Attestors sign the nullifier.** The message is the claim's `version`, the
+  layout, the nullifier and `holder`; every other field reaches the signature
+  through the nullifier. Everything the contract inspects is a field of the
+  claim, so a kind cannot pass the contract data through an unsigned side
+  channel. A change to the observation identity changes what attestors sign
+  ([ADR 0015](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0015-attestors-sign-the-nullifier.md)).
 - **Replay protection keys on the observation identity.** The nullifier hashes
   `appId`, `policyHash`, `subjectHash`, `salt`, the window, the values and the
   flags. It does not hash `holder` or `version`. In zkFetch the holder can
@@ -257,8 +261,9 @@ What the module does not check, and what your app does itself:
 - **The window is when the attestor observed.** The contract checks it against
   block time; a fact's own time is a claim value ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
 - **A byte value is two adjacent 16-byte halves.** Reassemble it in-circuit
-  with `Bytes[...c.byteHalves[2 * i], ...c.byteHalves[2 * i + 1]]`; the header
-  signs `B` so a claim signed for another layout of the same `K` is rejected
+  with `Bytes[...c.byteHalves[2 * i], ...c.byteHalves[2 * i + 1]]`. The
+  message signs `V` and `B`, so a claim signed for another layout is rejected
+  even when the two serialize to the same bytes
   ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
   How a source string becomes those 32 bytes is the kind's parse rule, not the
   contract's ([ADR 0010](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0010-encoded-byte-rules.md)).

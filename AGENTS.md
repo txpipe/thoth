@@ -8,8 +8,8 @@ Agent-facing guide for the Thoth monorepo. Human-oriented docs live in
 Thoth is a private N-of-M attestation system for Midnight. Three layers:
 
 - **Contract layer** — `packages/contracts` (`@txpipe/thoth-contracts`):
-  embeddable Compact modules that verify N-of-M signatures over a flat signed
-  message (`attestation.compact`), count valid signatures against a pinned key
+  embeddable Compact modules that verify N-of-M signatures over a seven-field
+  signed message (`attestation.compact`), count valid signatures against a pinned key
   vector (`attestor_registry.compact`) with the stdlib `jubjubSchnorrVerify`.
 - **Attestor SDK** — `packages/attestor` + `packages/core`: the types and
   interfaces attestor kinds implement to provide attestation. Kinds verify
@@ -80,7 +80,7 @@ file.
   - `noUnusedImports`, `noUnusedVariables`, `useErrorMessage` are errors.
   - 100-column line width, single quotes, semicolons.
 - **Compact**: `pragma language_version >= 0.22`; follow the style in
-  `packages/contracts/*.compact`; module params are uppercase (`<#K, #V, #N, #M>`).
+  `packages/contracts/*.compact`; module params are uppercase (`<#V, #B, #N, #M>`).
   A module header (`attestation.compact`, `attestor_registry.compact`) covers
   purpose, the wire layout (`attestation.compact` only) and the module
   parameters, and skips prose that restates the asserts below it. A top-level
@@ -89,9 +89,11 @@ file.
   change the wire layout freely and keep `version = 1`.
 - **The wire layout is written out in exactly two places**: the
   `attestation.compact` header (canonical, next to `buildMessage`) and the
-  table in `docs/DESIGN.md` (the reader's view). `claimToMessage`, the `#K`
-  doc, `buildMessage`'s doc and `CONTEXT.md` link to them instead of restating
-  it. A layout change edits both places in the same PR.
+  tables in `docs/DESIGN.md` (the reader's view). It covers the message and the
+  nullifier's preimage, the observation identity. `claimToMessage`,
+  `nullifierOf`, `buildMessage`'s doc and `CONTEXT.md` link to them instead of
+  restating it. A layout change edits both places in the same PR. A change to
+  the observation identity is a layout change: it changes what attestors sign.
 - **JSDoc is the API reference** (there is no generated site): it is what
   callers see on hover and in the shipped `.d.ts`. Every export gets a summary
   sentence; interface fields and simple types can stop there. `@throws` on
@@ -176,11 +178,16 @@ READMEs don't repeat it.
 
 - Contract logic is tested with the simulator via vitest in
   `packages/contracts/test/`. The mock top-level shells
-  (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, K=20, M=3,
-  N=2 — and `MockAttestationBytes.compact` — V=3, B=2, K=24) specialize the
-  modules so tests run against real artifacts. `MockAddressHash.compact` is the
+  (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, B=0, M=3,
+  N=2 — and `MockAttestationBytes.compact` — V=3, B=2) specialize the
+  modules so tests run against real artifacts. `MockAttestationLayout.compact`
+  (V=0, B=18) is a layout whose claims can share identity bytes with a V=34,
+  B=0 layout, for the cross-layout test. `MockAddressHash.compact` is the
   compiled oracle for the cardano address hash. `MockRegistryDoubleInit.compact`
   calls `initRegistry` twice in its constructor to reach the double-init guard.
+- The parity tests draw seeded random claims from
+  `packages/contracts/test/helpers/random-claims.ts`. A failing test names its
+  seed; rerun with `THOTH_SEED=<seed>` to replay it.
 - `packages/contracts/test/helpers/fixtures.ts` builds signed claims with the
   compiled pure circuits — never hand-roll the message encoding; use
   `pureCircuits.message` or `@txpipe/thoth-core/claim`'s `claimToMessage`.

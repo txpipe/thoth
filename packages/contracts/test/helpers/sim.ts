@@ -22,6 +22,12 @@ import {
   type Ledger as BytesLedger,
   ledger as bytesLedger,
 } from '../../artifacts/mock_attestation_bytes/contract/index.js';
+import {
+  type L_Claim,
+  Contract as LayoutContract,
+  type Ledger as LayoutLedger,
+  ledger as layoutLedger,
+} from '../../artifacts/mock_attestation_layout/contract/index.js';
 import type { PrivateState } from './private-state.js';
 import { type DeploySeals, makeWitnesses } from './witnesses.js';
 
@@ -145,3 +151,11 @@ export const MockAttestationBytesSim = makeSimClass<PrivateState<B_Claim>, Bytes
   ledgerOf: bytesLedger,
 });
 export type MockAttestationBytesSim = InstanceType<typeof MockAttestationBytesSim>;
+
+/** Simulator for the layout mock (`MockAttestationLayout.compact`). */
+export const MockAttestationLayoutSim = makeSimClass<PrivateState<L_Claim>, LayoutLedger>({
+  newContract: (registryKeys, seals) =>
+    new LayoutContract<PrivateState<L_Claim>>(makeWitnesses<L_Claim>(registryKeys, seals)),
+  ledgerOf: layoutLedger,
+});
+export type MockAttestationLayoutSim = InstanceType<typeof MockAttestationLayoutSim>;

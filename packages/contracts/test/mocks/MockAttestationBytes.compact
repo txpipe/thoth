@@ -1,13 +1,13 @@
-// Test mock: the modules at V=3, B=2 (one byte value), K=24, 2-of-3, with the
-// pure circuits and byte-value predicates the simulator tests read.
+// Test mock: the modules at V=3, B=2 (one byte value), 2-of-3, with the pure
+// circuits and byte-value predicates the simulator tests read.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           K=24 msg fields  V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
-import "../../attestation"<24, 3, 2, 2, 3> prefix B_;
+//           V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
+import "../../attestation"<3, 2, 2, 3> prefix B_;
 
-import "../../attestor_registry"<3, 24> prefix R_;
+import "../../attestor_registry"<3> prefix R_;
 
 export { B_Claim, B_ClaimEntry };
 
@@ -17,7 +17,7 @@ export circuit verifyAttestation(): [] {
   B_verifyAttestation();
 }
 
-export pure circuit message(a: B_Claim): Vector<24, Field> {
+export pure circuit message(a: B_Claim): Vector<7, Field> {
   return B_buildMessage(a);
 }
 

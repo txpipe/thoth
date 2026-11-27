@@ -4,7 +4,7 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-import "../../attestor_registry"<3, 20> prefix R_;
+import "../../attestor_registry"<3> prefix R_;
 
 constructor() {
   R_initRegistry();

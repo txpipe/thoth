@@ -1,0 +1,48 @@
+// Test mock: the modules at V=0, B=18 (nine byte values), 2-of-3, whose claims
+// can serialize to the same identity bytes as a V=34, B=0 layout's.
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+//           V=0 values  B=18 byte halves  N=2 threshold  M=3 signatures
+import "../../attestation"<0, 18, 2, 3> prefix L_;
+
+import "../../attestor_registry"<3> prefix R_;
+
+export { L_Claim, L_ClaimEntry };
+
+export { L_nullifiers };
+
+export circuit verifyAttestation(): [] {
+  L_verifyAttestation();
+}
+
+export pure circuit message(a: L_Claim): Vector<7, Field> {
+  return L_buildMessage(a);
+}
+
+export pure circuit nullifierOf(a: L_Claim): Bytes<32> {
+  return L_nullifierOf(a);
+}
+
+export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
+  return L_holderCommitment(secret);
+}
+
+witness seedAppId(): Bytes<32>;
+
+witness freshWindow(): Uint<64>;
+
+witness maxWin(): Uint<64>;
+
+witness seedPolicies(): Vector<2, Bytes<32>>;
+
+constructor() {
+  L_appId = disclose(seedAppId());
+  L_freshnessWindow = disclose(freshWindow());
+  L_maxWindow = disclose(maxWin());
+  for (const h of seedPolicies()) {
+    L_policyHashes.insert(disclose(h));
+  }
+  R_initRegistry();
+}

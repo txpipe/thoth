@@ -61,8 +61,9 @@ and pins only the fields it needs, such as the host ([ADR 0001](adr/0001-source-
 
 ## The claim
 
-The claim is the same object everywhere (client, attestors, contract) and it
-is the whole signed message: anything the contract checks is a field of it.
+The claim is the same object everywhere (client, attestors, contract), and the
+signed message commits to all of it: anything the contract checks is a field of
+it.
 The terms are defined in [`CONTEXT.md`](../CONTEXT.md#the-claim).
 
 | Field                      | What it is                                                                                                                                                                                                                         |
@@ -84,36 +85,50 @@ identity ([ADR 0006](adr/0006-nullifier-keys-on-the-observation-identity.md)).
 
 ### Wire order
 
-Attestors sign, and the contract rebuilds, a flat vector of
-`K = 2*V + 2*B + 14` fields (`B = 2*W` is the number of byte halves).
-`buildMessage` in
+Attestors sign, and the contract rebuilds, a message of seven fields: the
+claim's version, the layout, and the nullifier and the holder
+([ADR 0015](adr/0015-attestors-sign-the-nullifier.md)). `buildMessage` in
 [`attestation.compact`](../packages/contracts/attestation.compact) defines it;
-`claimToMessage` in `@txpipe/thoth-core/claim` mirrors it, and a parity test keeps the
-two equal. Each 32-byte field is split into two 16-byte halves, each read as a
-`Uint<128>` little-endian (byte 0 least significant, the runtime's
-`convertBytesToUint` convention), so every byte is signed.
+`claimToMessage` and `nullifierOf` in `@txpipe/thoth-core/claim` mirror it, and
+a parity test keeps them equal. A 32-byte value is two fields: byte 31, then
+bytes 0–30 read little-endian (byte 0 least significant, the runtime's
+`convertBytesToUint` convention).
 
-| Index                 | Field                                 | Encoding                                                      |
-| --------------------- | ------------------------------------- | ------------------------------------------------------------- |
-| 0                     | `version`                             | `1`                                                           |
-| 1, 2                  | `appId`                               | bytes 0–15, then bytes 16–31                                  |
-| 3, 4                  | `policyHash`                          | two halves                                                    |
-| 5                     | `windowStart`                         | Unix seconds                                                  |
-| 6                     | `windowEnd`                           | Unix seconds                                                  |
-| 7, 8                  | `subjectHash`                         | two halves                                                    |
-| 9, 10                 | `holder`                              | two halves                                                    |
-| 11, 12                | `salt`                                | two halves                                                    |
-| 13                    | `B`                                   | the byte-half count `2W`; the contract writes its own `#B`    |
-| 14 … 13+V             | `present[0]` … `present[V-1]`         | `1` measured, `0` absent                                      |
-| 14+V … 13+V+B         | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
-| 14+V+B … 13+V+B+V     | `values[0]` … `values[V-1]`           | the value; `0` when absent                                    |
-| 14+V+B+V … 13+V+B+V+B | `byteHalves[0]` … `byteHalves[B-1]`   | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]`           |
+| Index | Field              | Encoding                                                   |
+| ----- | ------------------ | ---------------------------------------------------------- |
+| 0     | `version`          | `1`                                                        |
+| 1     | `V`                | the numeric slot count; the contract writes its own `#V`   |
+| 2     | `B`                | the byte-half count `2W`; the contract writes its own `#B` |
+| 3     | `nullifier[31]`    | byte 31 of the nullifier                                   |
+| 4     | `nullifier[0..31]` | bytes 0–30 of the nullifier, little-endian                 |
+| 5     | `holder[31]`       | byte 31 of `holder`                                        |
+| 6     | `holder[0..31]`    | bytes 0–30 of `holder`, little-endian                      |
 
-`K` alone fixes only `2*V + 2*B`, so two layouts can share a length (`V = 3,
-W = 2` and `V = 1, W = 3` both give `K = 28`). Index 13 signs the layout: the
-contract rebuilds it from its own `#B`, so a message signed under another
-layout fails verification. With `W = 0` every byte row disappears and index 13
-is `0`. The contract does not check that a byte value's two flags agree.
+The nullifier is the SHA-256 (`persistentHash`) of the observation identity:
+every claim field but `version` and `holder`, 136 + 9V + 17B bytes in this
+order. Integers are little-endian at their width; a flag is one byte, `0` or
+`1`.
+
+| Bytes   | Field                                 | Encoding                                                      |
+| ------- | ------------------------------------- | ------------------------------------------------------------- |
+| 32      | `appId`                               | as is                                                         |
+| 32      | `policyHash`                          | as is                                                         |
+| 32      | `subjectHash`                         | as is                                                         |
+| 32      | `salt`                                | as is                                                         |
+| 4       | `windowStart`                         | Unix seconds, `Uint<32>`                                      |
+| 4       | `windowEnd`                           | Unix seconds, `Uint<32>`                                      |
+| 8 each  | `values[0]` … `values[V-1]`           | `Uint<64>`; `0` when absent                                   |
+| 16 each | `byteHalves[0]` … `byteHalves[B-1]`   | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]`           |
+| 1 each  | `present[0]` … `present[V-1]`         | `1` measured, `0` absent                                      |
+| 1 each  | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
+
+The identity's length fixes only `9V + 17B`, so two layouts can serialize two
+claims to the same bytes and the same nullifier (`V = 34, B = 0` and
+`V = 0, B = 18`). Indexes 1 and 2 sign the layout: the contract rebuilds them
+from its own `#V` and `#B`, so a message signed under another layout fails
+verification. The sealed app id does not separate them, because every contract
+of one app seals the same one. The contract does not check that a byte value's
+two flags agree.
 
 ## Flow
 

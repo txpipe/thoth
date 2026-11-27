@@ -37,7 +37,7 @@ const TEST_ADDRESS = `addr_test1${'q'.repeat(53)}`;
 const TX_HASH = 'cd'.repeat(32);
 const BLOCK_HASH = 'ab'.repeat(32);
 
-// Three numeric facts and one byte fact, sized for the V=3, B=2, K=24 mock.
+// Three numeric facts and one byte fact, sized for the V=3, B=2 mock.
 const policy: CardanoPolicy = {
   kind: 'output',
   network: 'preview',

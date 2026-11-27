@@ -225,8 +225,8 @@ proposal.
   byte slot. If your model parses strings, the policy's byte rule canonicalizes
   the disclosed string into the 32-byte slot, zero-padding shorter values; a
   value that does not fit is not certifiable and its slot stays unpresent. Your
-  claim carries one flag per byte slot (`present[V + i]`); the message and the
-  contract use the split shape in the [wire order](DESIGN.md#wire-order). So a
+  claim carries one flag per byte slot (`present[V + i]`); the contract's `Claim`
+  and the nullifier use the split shape in the [wire order](DESIGN.md#wire-order). So a
   dApp returns `toContractClaim(claim)` (from `@txpipe/thoth-core/claim`) from
   `getAttestationWitness`, never your claim itself, even with `W = 0`, whose
   empty `bytePresent`/`byteHalves` the contract still requires.
@@ -262,7 +262,9 @@ private source that the instance reads needs its own answer for binding and for
 salt secrecy; this guide does not cover that case.
 
 The claim does not commit to the evidence (ADR 0007). Everything the contract
-or app must rely on has to be a field of the signed message.
+or app must rely on has to be a field of the claim, which the signed message
+commits to: `version` and `holder` directly, every other field through the
+nullifier (ADR 0015).
 
 ## 6. The definition
 
@@ -292,8 +294,12 @@ an operator who pairs the definition with `buildAttestor` keeps them. A kind
 whose instance reads the fact has no key or root to check: its instance's `read`
 is the assumption, and the app's trusted set is what makes it acceptable.
 
-`message` is `claimToMessage(claim)`. A kind that needs a different message
-shape can return another type, but then it needs its own contract module.
+`message` is `claimToMessage(claim)`: seven fields, the claim's version, its
+layout, its nullifier (`nullifierOf(claim)`) and its holder
+([wire order](DESIGN.md#wire-order)). Both functions come from
+`@txpipe/thoth-core/claim` and need no key. A kind that needs a different
+message shape can return another type, but then it needs its own contract
+module.
 
 ## 7. The instance
 
@@ -303,7 +309,7 @@ In your `attest`:
 - parse every input with the definition's schemas, capped to the instance's
   input limits. The attestor serves untrusted callers, so cap every array and
   string before any element is parsed, or a request with millions of slots
-  costs you a message with millions of fields. zkFetch takes the operator's
+  costs you a hash over millions of fields. zkFetch takes the operator's
   `limits` and parses with `zkFetchSchemasWithin(limits)`;
 - run `definition.verify`;
 - derive the claim yourself from the verified evidence and sign that, not the

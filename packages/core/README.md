@@ -71,7 +71,7 @@ attestor: its definition and public key, without key material.
 The three entry points:
 
 - **`@txpipe/thoth-core`**: `AttestorDefinition`, `AttestationInput`, `Attestation`, `AttestorDescriptor`, `MessageOf`.
-- **`@txpipe/thoth-core/claim`**: `Claim`, `ClaimInput`, `claimSchema`, `bytes32Schema`, `claimToMessage`, `toContractClaim`, `ContractClaim`, `FlatMessage`, `CLAIM_VERSION`.
+- **`@txpipe/thoth-core/claim`**: `Claim`, `ClaimInput`, `claimSchema`, `bytes32Schema`, `claimToMessage`, `nullifierOf`, `toContractClaim`, `ContractClaim`, `FlatMessage`, `CLAIM_VERSION`.
 - **`@txpipe/thoth-core/claim-context`**: `policyHashOf`, `subjectHashOf`, `holderCommitmentOf`, `claimContextDigestOf`, `ClaimContext`, `CanonicalValue`.
 
 ## Concepts
@@ -84,14 +84,15 @@ The three entry points:
 - [Salt](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): 32 bytes the nullifier hashes, derived by your kind from the evidence.
 - [Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): when the observation happened, in Unix seconds.
 - [Claim context](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim): policy hash, subject hash, holder and window, the part every attestor derives the same claim from.
-- [Message and wire layout](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the flat field vector the attestors sign and the contract rebuilds; the layout is in the [`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact) header and the [design doc](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#the-claim).
+- [Message and wire layout](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the seven fields the attestors sign and the contract rebuilds, the claim's version, its layout, its nullifier and its holder; the layout is in the [`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact) header and the [design doc](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#wire-order).
+- [Nullifier](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain): the SHA-256 of the claim's observation identity, every field but `version` and `holder`; `nullifierOf` computes it.
 
 ## Guarantees and limits
 
 What the package checks:
 
 - `claimSchema(v, w)` validates the claim shape and lengths, checks each numeric field fits its contract type (`values` are `Uint<64>`, `windowStart` and `windowEnd` are `Uint<32>`, `version` is `Uint<8>`), coerces numeric fields to `bigint`, and defaults an omitted `byteValues` to `[]`. Without `v` it skips the exact-length checks but still requires one `present` flag per value.
-- `claimToMessage` produces the exact message the contract's `buildMessage` rebuilds; the contracts suite checks the parity.
+- `claimToMessage` produces the exact message the contract's `buildMessage` rebuilds, and `nullifierOf` the contract's nullifier; the contracts suite checks both over random claims. `nullifierOf` throws on a value, window bound or byte field outside its contract type rather than hash a wrapped value.
 - `toContractClaim` produces the contract's `Claim` struct from a `Claim`. A dApp always converts, even with `W = 0`.
 - `policyHashOf` and `claimContextDigestOf` are SHA-256 over a canonical JSON serialization: sorted keys, no whitespace, a `bigint` as a quoted decimal string, bytes as lowercase hex. Another implementation reproduces them from those rules alone.
 - `subjectHashOf` and `holderCommitmentOf` are circuit hashes, equal to the circuit's `persistentHash` of the subject struct and its `holderCommitment`, so an app can recompute them in-circuit.
@@ -107,11 +108,12 @@ What your app must do:
 
 - Use a fresh high-entropy secret per claim. Reusing a secret links claims; the layer promises no cross-claim identity or unlinkability.
 - Read the window as the time the observation happened; what that means for the fact is the kind's decision.
-- Give a byte slot's two halves the same flag. `toContractClaim` and `claimToMessage` do this from one `present` flag; the contract does not check the pairing.
+- Give a byte slot's two halves the same flag. `toContractClaim` and `nullifierOf` do this from one `present` flag; the contract does not check the pairing.
 
 ## Design decisions
 
 - **Claim types are keyless.** `@txpipe/thoth-core` carries no signing key; anything that commits to a message calls the kind's `message()`. Key-holding instances live in `@txpipe/thoth-attestor`.
+- **Attestors sign the nullifier.** `claimToMessage` signs the claim's version, its layout, its nullifier and its holder, and every other field reaches the signature through the nullifier. A change to the observation identity changes what your attestors sign ([ADR 0015](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0015-attestors-sign-the-nullifier.md)).
 - **The claim carries no kind.** The policy hash, tagged with the law and wire version, is what the contract checks, so a second kind is a new policy hash served by the same module ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
 - **The holder is a per-claim commitment, not an identity.** Only the owner of that claim's secret can vault it; per-user state is yours to build ([ADR 0004](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
 - **The kind owns the observation rules.** The window, the salt and evidence binding belong to the kind; `@txpipe/thoth-core` only hashes and encodes them ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#5-the-claim)).
