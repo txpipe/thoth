@@ -32,7 +32,7 @@ export interface ZkFetchAttestorFailure {
   /**
    * What failed: the prover's own reason (`transport` or `no-match`), or the
    * step that failed. The README's
-   * [Guarantees and limits](https://github.com/txpipe-shop/thoth/blob/main/packages/zk-tls/README.md#guarantees-and-limits)
+   * [Guarantees and limits](https://github.com/txpipe/thoth/blob/main/packages/zk-tls/README.md#guarantees-and-limits)
    * says what each reason means and what to do about it.
    */
   readonly reason: ZkFetchProverError['reason'] | 'evidence' | 'secret' | 'attestation' | 'timeout';

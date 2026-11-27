@@ -3,7 +3,7 @@
 The Compact modules a Midnight contract embeds to verify N-of-M attestations
 in-circuit, for dApp developers who consume Thoth claims on-chain.
 
-> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
+> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
 ## Install
 
@@ -69,7 +69,7 @@ export circuit requireStars(id: Bytes<32>, min: Uint<64>): [] {
 }
 ```
 
-[`examples/example_app.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/examples/example_app.compact)
+[`examples/example_app.compact`](https://github.com/txpipe/thoth/blob/main/packages/contracts/examples/example_app.compact)
 is this contract without the predicate; the mocks in `test/mocks/` show more predicates,
 including source binding and reading a byte value.
 
@@ -81,28 +81,28 @@ The module parameters, fixed when you embed:
 - `#N` of `#M` signatures must verify; `#M` is also the registry's key count.
 
 The header of
-[`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact)
+[`attestation.compact`](https://github.com/txpipe/thoth/blob/main/packages/contracts/attestation.compact)
 documents each parameter and the wire layout `buildMessage` produces;
-[docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#wire-order)
+[docs/DESIGN.md](https://github.com/txpipe/thoth/blob/main/docs/DESIGN.md#wire-order)
 has the same layout as a table. Attestors sign that exact field vector.
 
 ## Concepts
 
-From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
+From the [glossary](https://github.com/txpipe/thoth/blob/main/CONTEXT.md):
 
-- [Claim](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim):
+- [Claim](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#the-claim):
   the signed statement, with its `policyHash`, `subjectHash`, `holder`,
-  [salt](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim),
+  [salt](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#the-claim),
   window, `present` mask, numeric values and byte slots.
-- [Registry](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain)
-  and [registry slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection):
+- [Registry](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#on-chain)
+  and [registry slot](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#signing-and-collection):
   the pinned keys, checked positionally; `signatures[i]` is verified against
   `keys[i]`.
-- [Threshold](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
+- [Threshold](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#on-chain):
   the `N` in N-of-M.
-- [Nullifier](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
+- [Nullifier](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#on-chain):
   the hash of the observation identity that blocks replay.
-- [Claims vault](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
+- [Claims vault](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#on-chain):
   the accepted claims, keyed by `persistentCommit(claim, rand)`.
 
 ## Guarantees and limits
@@ -146,14 +146,14 @@ What the module does not check, and what your app does itself:
   of scope (ADR 0003).
 - The kind decides the window. Read it as the time the kind's observation
   happened, not as a universal fact timestamp
-  ([Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim)
+  ([Window](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#the-claim)
   explains why).
 - The module does not check where the `salt` came from. The kind decides it:
   secret when the values are secret or guessable, so the nullifier cannot
   confirm a guess
-  ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md));
+  ([ADR 0012](https://github.com/txpipe/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md));
   public when they are public chain data, so the nullifier reveals the event
-  ([ADR 0014](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0014-chain-event-kinds.md)).
+  ([ADR 0014](https://github.com/txpipe/thoth/blob/main/docs/adr/0014-chain-event-kinds.md)).
   Your attestors must derive it from the evidence and refuse another, so a
   client cannot vary it to replay one observation. Never disclose
   `claim.holder` in your own circuits; where the salt follows the holder, keep
@@ -164,7 +164,7 @@ What the module does not check, and what your app does itself:
   same window. If your app needs one claim per fact (one per account per day,
   say), keep your own set keyed on that fact. That set is public, so it
   confirms guesses at whatever it keys on
-  ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
+  ([ADR 0012](https://github.com/txpipe/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
   The ledger stores each claim's nullifier, commitment, vault pseudonym
   (derived from the holder secret) and window in public, and the transaction
   discloses which accepted policy it used.
@@ -193,39 +193,39 @@ What the module does not check, and what your app does itself:
   nullifier; what stops a fresh holder from re-claiming an observation is the
   kind's evidence binding: a new holder needs new evidence, which gets a new
   nullifier when the salt follows the holder ([Guarantees and limits](#guarantees-and-limits))
-  ([ADR 0006](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0006-nullifier-keys-on-the-observation-identity.md),
-  [ADR 0011](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
+  ([ADR 0006](https://github.com/txpipe/thoth/blob/main/docs/adr/0006-nullifier-keys-on-the-observation-identity.md),
+  [ADR 0011](https://github.com/txpipe/thoth/blob/main/docs/adr/0011-evidence-binds-the-claim-context.md)).
 - **In zkFetch the nullifier hashes a secret salt.** The salt never reaches the
   ledger, so only those who hold the evidence, such as the witnesses and
   attestors, can confirm a guessed value by recomputing the nullifier; they
   already see the values. The
   attestors derive it from the evidence, so a client cannot vary it to replay
-  one observation ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
+  one observation ([ADR 0012](https://github.com/txpipe/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
 - **No kind on-chain; the policy hash is the commitment.** A requester cannot
   substitute a laxer policy, and a new kind needs no change here: you accept
-  it by sealing its policy hash ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
+  it by sealing its policy hash ([ADR 0002](https://github.com/txpipe/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
 - **A contract seals its app id.** You pass it to the constructor, and the
   contract accepts only claims signed for it. Each contract keeps its own
   replay set, so the nullifier alone would not stop a claim stored in one app
   from being stored again in another
-  ([ADR 0013](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0013-contract-seals-its-app-id.md)).
+  ([ADR 0013](https://github.com/txpipe/thoth/blob/main/docs/adr/0013-contract-seals-its-app-id.md)).
 - **A contract seals a set of policy hashes.** One contract serves several
-  policies, and so several kinds ([ADR 0008](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0008-contract-accepts-a-set-of-policy-hashes.md)).
+  policies, and so several kinds ([ADR 0008](https://github.com/txpipe/thoth/blob/main/docs/adr/0008-contract-accepts-a-set-of-policy-hashes.md)).
 - **Source binding is your in-circuit check.** `subjectHash` is a circuit hash
   so your predicate can recompute it from private subject fields
-  ([ADR 0001](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0001-source-binding-by-in-circuit-subject-hash.md)).
+  ([ADR 0001](https://github.com/txpipe/thoth/blob/main/docs/adr/0001-source-binding-by-in-circuit-subject-hash.md)).
 - **The holder is a per-claim commitment, not an identity.** The pure
   `holderCommitment(secret)` circuit derives it, and `holderCommitmentOf` in
   `@txpipe/thoth-core/claim-context` matches it off-chain. Cross-claim or per-user
-  state is your app's ([ADR 0004](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
+  state is your app's ([ADR 0004](https://github.com/txpipe/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
 - **The window is when the attestor observed.** The contract checks it against
-  block time; a fact's own time is a claim value ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
+  block time; a fact's own time is a claim value ([ADR 0005](https://github.com/txpipe/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
 - **A byte value is two adjacent 16-byte halves.** Reassemble it in-circuit
   with `Bytes[...c.byteHalves[2 * i], ...c.byteHalves[2 * i + 1]]`; the header
   signs `B` so a claim signed for another layout of the same `K` is rejected
-  ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
+  ([ADR 0009](https://github.com/txpipe/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
   How a source string becomes those 32 bytes is the kind's parse rule, not the
-  contract's ([ADR 0010](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0010-encoded-byte-rules.md)).
+  contract's ([ADR 0010](https://github.com/txpipe/thoth/blob/main/docs/adr/0010-encoded-byte-rules.md)).
 - **Registry slots are positional and the keys are sealed.** You assign each
   attestor its slot and place its signature there; the module never reorders.
   `keys` is unexported and only `initRegistry` writes it, so the distinctness
@@ -233,8 +233,8 @@ What the module does not check, and what your app does itself:
 
 ## Links
 
-- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md): the claim, its wire order and the flow
-- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md): adding an attestor kind
-- [docs/adr/](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/): the decisions behind the modules
-- [CONTEXT.md](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md): the glossary
-- [CONTRIBUTING.md](https://github.com/txpipe-shop/thoth/blob/main/CONTRIBUTING.md): dev setup and commands
+- [docs/DESIGN.md](https://github.com/txpipe/thoth/blob/main/docs/DESIGN.md): the claim, its wire order and the flow
+- [docs/kind-author-guide.md](https://github.com/txpipe/thoth/blob/main/docs/kind-author-guide.md): adding an attestor kind
+- [docs/adr/](https://github.com/txpipe/thoth/blob/main/docs/adr/): the decisions behind the modules
+- [CONTEXT.md](https://github.com/txpipe/thoth/blob/main/CONTEXT.md): the glossary
+- [CONTRIBUTING.md](https://github.com/txpipe/thoth/blob/main/CONTRIBUTING.md): dev setup and commands

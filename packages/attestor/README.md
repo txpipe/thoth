@@ -3,14 +3,14 @@
 The attestor side of Thoth: the interfaces a kind author implements to hold a
 signing key and turn verified evidence into a signed claim.
 
-> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
+> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
 ## Install
 
 The package is not on npm. Build it from a checkout of this repo and install it by path:
 
 ```bash
-git clone https://github.com/txpipe-shop/thoth && cd thoth
+git clone https://github.com/txpipe/thoth && cd thoth
 npm install && npm run build
 cd /path/to/your-app && npm install /path/to/thoth/packages/attestor
 ```
@@ -60,27 +60,27 @@ const descriptor = descriptorOf(attestor);
 ```
 
 `attest` is yours to write: parse, `verify`, then sign `message(claim)`. Throw
-to reject. [`@txpipe/thoth-zk-tls`](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls)
+to reject. [`@txpipe/thoth-zk-tls`](https://github.com/txpipe/thoth/tree/main/packages/zk-tls)
 is the reference kind.
 
 ## Concepts
 
-- [**Attestor**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles):
+- [**Attestor**](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#roles):
   an entity that verifies evidence under a policy and signs a claim if
   satisfied. `Attestor` is one deployable instance.
-- [**Kind** and **law**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#kinds):
+- [**Kind** and **law**](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#kinds):
   a family of attestors sharing one law. The law is the keyless
-  `AttestorDefinition` from [`@txpipe/thoth-core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core);
+  `AttestorDefinition` from [`@txpipe/thoth-core`](https://github.com/txpipe/thoth/tree/main/packages/core);
   many instances run it.
-- [**Claim** and **message**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim):
+- [**Claim** and **message**](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#the-claim):
   the claim is what the attestor signs; the message is its flat encoding,
   produced by the law's `message(claim)`.
-- [**Attestation**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection):
+- [**Attestation**](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#signing-and-collection):
   what `attest` returns: the claim, the message, the public key and the
   signature.
-- [**Registry slot**](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection):
+- [**Registry slot**](https://github.com/txpipe/thoth/blob/main/CONTEXT.md#signing-and-collection):
   the position of an attestor's key in an app's registry. The app assigns it
-  in its trusted set ([`@txpipe/thoth-client`](https://github.com/txpipe-shop/thoth/tree/main/packages/client));
+  in its trusted set ([`@txpipe/thoth-client`](https://github.com/txpipe/thoth/tree/main/packages/client));
   the attestor never knows it.
 
 ## Guarantees and limits
@@ -96,7 +96,7 @@ is the reference kind.
   package, not to this one.
 - An attestor is trusted individually. If N or more attestors in an app's
   trusted set collude, nothing on-chain stops them
-  ([ADR 0003](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0003-colluding-attestors-out-of-scope.md)).
+  ([ADR 0003](https://github.com/txpipe/thoth/blob/main/docs/adr/0003-colluding-attestors-out-of-scope.md)).
   The app pins honest, independent operators.
 
 ## Design decisions
@@ -116,9 +116,9 @@ is the reference kind.
 
 ## Links
 
-- [Thoth (repo root)](https://github.com/txpipe-shop/thoth)
-- [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md): architecture, the claim and its wire order
-- [docs/kind-author-guide.md](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md): how to add an attestor kind
-- [`@txpipe/thoth-core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): the keyless law this package instantiates with a key
-- [`@txpipe/thoth-client`](https://github.com/txpipe-shop/thoth/tree/main/packages/client): the dApp side that collects attestations
-- [`@txpipe/thoth-contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies signatures by slot
+- [Thoth (repo root)](https://github.com/txpipe/thoth)
+- [docs/DESIGN.md](https://github.com/txpipe/thoth/blob/main/docs/DESIGN.md): architecture, the claim and its wire order
+- [docs/kind-author-guide.md](https://github.com/txpipe/thoth/blob/main/docs/kind-author-guide.md): how to add an attestor kind
+- [`@txpipe/thoth-core`](https://github.com/txpipe/thoth/tree/main/packages/core): the keyless law this package instantiates with a key
+- [`@txpipe/thoth-client`](https://github.com/txpipe/thoth/tree/main/packages/client): the dApp side that collects attestations
+- [`@txpipe/thoth-contracts`](https://github.com/txpipe/thoth/tree/main/packages/contracts): the on-chain registry that verifies signatures by slot

@@ -2,7 +2,7 @@
 
 Private N-of-M attestation for Midnight: your contract accepts an off-chain fact only when N of the M attestors it pinned have signed it, and the fact reaches the contract as private input.
 
-> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
+> **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
 ## What it is
 
@@ -129,16 +129,16 @@ full.
 ## Midnight City demo
 
 Midnight City is a proof of concept built on Thoth, preserved on the
-[`midnight-city-demo`](https://github.com/txpipe-shop/thoth/tree/midnight-city-demo)
+[`midnight-city-demo`](https://github.com/txpipe/thoth/tree/midnight-city-demo)
 branch. It is a demo, not supported code. It is pinned to an older Thoth that
 parses identifiers with a temporary `bytes8` rule, which the byte value slots
 replace.
 
 ## Roadmap
 
-- [`v0`](https://github.com/txpipe-shop/thoth/milestone/1): the work before the first tag.
-- [`Next`](https://github.com/txpipe-shop/thoth/milestone/2): what comes after.
-- [`frozen`](https://github.com/txpipe-shop/thoth/issues?q=is%3Aissue+label%3Afrozen): ideas for later.
+- [`v0`](https://github.com/txpipe/thoth/milestone/1): the work before the first tag.
+- [`Next`](https://github.com/txpipe/thoth/milestone/2): what comes after.
+- [`frozen`](https://github.com/txpipe/thoth/issues?q=is%3Aissue+label%3Afrozen): ideas for later.
 
 ## Links
 

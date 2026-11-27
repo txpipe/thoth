@@ -27,7 +27,7 @@ contract. The [package README](../README.md) explains the terms; the
   contract seals the same bytes at deploy and rejects a claim for any other.
 - **`valueSlots`.** Your contract's `#V`, the numeric slot count. Each
   attestor caps the slot counts it accepts; check its
-  [limits](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls#guarantees-and-limits)
+  [limits](https://github.com/txpipe/thoth/tree/main/packages/zk-tls#guarantees-and-limits)
   with its operator.
 - **`byteSlots`.** Optional: half your contract's `#B`, since the contract
   stores each 32-byte value as two 16-byte halves. Defaults to `0`.
