@@ -189,6 +189,13 @@ describe('claimToMessage', () => {
     expect(claimToMessage(claim).slice(0, 3)).toEqual([1n, 2n, 4n]);
   });
 
+  it.each([256n, -1n])('rejects version %s, outside Uint<8>', (version) => {
+    const claim = claimSchema(3).parse(numericBase);
+    expect(() => claimToMessage({ ...claim, version })).toThrow(
+      `version must be in [0, 2^8), got ${version}`,
+    );
+  });
+
   it('rejects a holder that is not 32 bytes', () => {
     const claim = claimSchema(3).parse(numericBase);
     expect(() => claimToMessage({ ...claim, holder: new Uint8Array(31) })).toThrow(

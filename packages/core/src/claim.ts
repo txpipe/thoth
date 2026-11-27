@@ -163,6 +163,8 @@ export function claimSchema<V extends number = number, W extends number = 0>(
 // type in `attestation.compact`: `Uint<32>` windows, `Uint<64>` values.
 const WINDOW_BYTES = 4;
 const VALUE_BYTES = 8;
+// `version` is a `Uint<8>`.
+const VERSION_BITS = 8;
 
 function assertBytes32(name: string, bytes: Uint8Array): void {
   if (bytes.length !== 32) {
@@ -170,13 +172,18 @@ function assertBytes32(name: string, bytes: Uint8Array): void {
   }
 }
 
-// `value` little-endian in `width` bytes, as `persistentHash` writes a
-// `Uint<8 * width>`. An out-of-range value throws: wrapping it would give two
-// claims one nullifier.
-function uintBytes(name: string, value: bigint, width: number): Uint8Array {
-  if (value < 0n || value >= 1n << BigInt(8 * width)) {
-    throw new Error(`${name} must be in [0, 2^${8 * width}), got ${value}`);
+// An out-of-range value throws: the contract's `Uint<bits>` cannot hold it, and
+// wrapping it would give two claims one encoding.
+function assertUint(name: string, value: bigint, bits: number): void {
+  if (value < 0n || value >= 1n << BigInt(bits)) {
+    throw new Error(`${name} must be in [0, 2^${bits}), got ${value}`);
   }
+}
+
+// `value` little-endian in `width` bytes, as `persistentHash` writes a
+// `Uint<8 * width>`.
+function uintBytes(name: string, value: bigint, width: number): Uint8Array {
+  assertUint(name, value, 8 * width);
   const bytes = new Uint8Array(width);
   let rest = value;
   for (let i = 0; i < width; i++) {
@@ -244,13 +251,15 @@ function limbs(name: string, bytes: Uint8Array): [bigint, bigint] {
  * A kind whose claim is exactly the standard shape implements `message()` with
  * this; a kind that extends the claim keeps its own encoder.
  *
- * @throws if `appId`, `policyHash`, `subjectHash`, `holder`, `salt` or a byte
- *   value is not 32 bytes, a window bound is not below 2^32, a value is not
- *   below 2^64, or `present` does not have one flag per value.
+ * @throws if `version` is not below 2^8, `appId`, `policyHash`, `subjectHash`,
+ *   `holder`, `salt` or a byte value is not 32 bytes, a window bound is not
+ *   below 2^32, a value is not below 2^64, or `present` does not have one flag
+ *   per value.
  */
 export function claimToMessage<V extends number, W extends number = 0>(
   claim: Claim<V, W>,
 ): FlatMessage {
+  assertUint('version', claim.version, VERSION_BITS);
   const nullifier = nullifierOf(claim);
   return [
     claim.version,
