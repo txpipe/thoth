@@ -19,7 +19,7 @@ driver: the off-chain message encoder matches the circuit only at that version.
 
 | File                        | Module                        | Role                                                                                                                                                                                      |
 | --------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `attestation.compact`       | `attestation<#V, #B, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
+| `attestation.compact`       | `attestation<#V, #W, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
 | `attestor_registry.compact` | `attestor_registry<#M>`       | Seals the `M` pinned attestor keys at deploy and counts the signatures over the seven-field message that verify, each against its own slot.                                               |
 
 Embed both modules in your top-level contract, seal the deploy-time values in
@@ -30,8 +30,8 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
-import "attestation"<3, 2, 2, 3> prefix A_;
+//           V=3 values  W=1 byte slot  N=2 threshold  M=3 signatures
+import "attestation"<3, 1, 2, 3> prefix A_;
 
 import "attestor_registry"<3> prefix R_;
 
@@ -75,8 +75,8 @@ including source binding and reading a byte value.
 
 The module parameters, fixed when you embed:
 
-- `#V` numeric value slots and `#B` byte halves, two per 32-byte byte value,
-  so `#B` is even (`B = 0` is the numeric-only layout).
+- `#V` numeric value slots and `#W` byte slots, each one 32-byte value
+  (`W = 0` is the numeric-only layout).
 - `#N` of `#M` signatures must verify; `#M` is also the registry's key count.
 
 The header of
@@ -92,18 +92,18 @@ What each circuit of the two test mocks costs to prove, measured with
 `npm run bench` on an AMD Ryzen 7 5700G (8 cores, 16 threads, 31 GiB) and the
 proof server `midnightntwrk/proof-server:9.0.0`, three warm proofs per
 circuit. Both mocks are 2-of-3 with `V = 3`: `mock_attestation` has no byte
-value (`B = 0`) and `mock_attestation_bytes` has one (`B = 2`). The proof
+slot (`W = 0`) and `mock_attestation_bytes` has one (`W = 1`). The proof
 server verified every proof against its verifier key.
 
 | Mock                   | Circuit               | k   | Rows   | Proving key (MB) | Proof (B) | First proof (s) | Warm proof (s) | CPU per warm proof (s) | Peak memory (MB) |
 | ---------------------- | --------------------- | --- | ------ | ---------------- | --------- | --------------- | -------------- | ---------------------- | ---------------- |
-| mock_attestation       | verifyAttestation     | 14  | 13,646 | 24.7             | 5,772     | 1.87            | 1.48           | 11.4                   | 454              |
-| mock_attestation       | openAndRead           | 13  | 6,657  | 12.3             | 5,772     | 0.84            | 0.67           | 6.0                    | 255              |
-| mock_attestation       | openAndReadPresence   | 13  | 6,627  | 12.3             | 5,772     | 0.85            | 0.70           | 6.1                    | 244              |
-| mock_attestation       | openAndRequireMetric0 | 13  | 6,617  | 12.3             | 5,772     | 0.85            | 0.66           | 6.0                    | 213              |
-| mock_attestation       | openAndBindHost       | 14  | 12,680 | 24.6             | 5,772     | 1.59            | 1.21           | 10.7                   | 434              |
-| mock_attestation_bytes | verifyAttestation     | 14  | 15,599 | 24.7             | 5,772     | 1.88            | 1.51           | 11.6                   | 455              |
-| mock_attestation_bytes | openAndReadBytes      | 15  | 17,236 | 49.3             | 5,772     | 2.93            | 2.19           | 19.2                   | 757              |
+| mock_attestation       | verifyAttestation     | 14  | 13,646 | 24.7             | 5,772     | 1.85            | 1.46           | 11.4                   | 430              |
+| mock_attestation       | openAndRead           | 13  | 6,657  | 12.3             | 5,772     | 0.84            | 0.65           | 6.0                    | 251              |
+| mock_attestation       | openAndReadPresence   | 13  | 6,627  | 12.3             | 5,772     | 0.85            | 0.66           | 6.0                    | 237              |
+| mock_attestation       | openAndRequireMetric0 | 13  | 6,617  | 12.3             | 5,772     | 0.85            | 0.66           | 6.0                    | 249              |
+| mock_attestation       | openAndBindHost       | 14  | 12,680 | 24.6             | 5,772     | 1.58            | 1.22           | 10.8                   | 448              |
+| mock_attestation_bytes | verifyAttestation     | 14  | 15,593 | 24.7             | 5,772     | 1.94            | 1.53           | 11.6                   | 465              |
+| mock_attestation_bytes | openAndReadBytes      | 14  | 8,626  | 24.6             | 5,772     | 1.58            | 1.15           | 10.4                   | 454              |
 
 How to read it:
 
@@ -116,9 +116,9 @@ How to read it:
 - Your dApp ships each circuit's proving key and uploads it with every proof.
 - CPU time is the server's, summed over its threads. Peak memory is the
   server container's high-water mark, page cache included, while it proves
-  that circuit alone. A server that proves `verifyAttestation` needs about
-  0.5 GB, and one that only opens numeric claims about 0.25 GB. Opening a
-  byte value (`k = 15`) needs about 0.8 GB.
+  that circuit alone. A server that proves `verifyAttestation` or opens a
+  byte value (`k = 14`) needs about 0.5 GB, and one that only opens numeric
+  claims about 0.25 GB.
 
 `CONTRIBUTING.md` explains how to
 [run the benchmark](https://github.com/txpipe-shop/thoth/blob/main/CONTRIBUTING.md#proving-benchmark).
@@ -158,10 +158,9 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
   registry cannot see `N`: pin at least `N` distinct keys or no claim is ever
   accepted. `initRegistry` rejects duplicate keys (`"Duplicate registry keys"`)
   and a second call (`"Registry already initialized"`).
-- Every slot whose flag is false carries zero, numeric slots and byte halves
-  alike (`"Absent slot has nonzero value"`). A measured zero is valid with its
-  flag true, including a short byte value whose padding leaves a half all
-  zeros.
+- Every slot whose flag is false carries zero, numeric slots and byte slots
+  alike: an absent byte slot is 32 zero bytes (`"Absent slot has nonzero
+  value"`). A measured zero is valid with its flag true.
 - The window is not inverted (`"Window inverted"`), is at most `maxWindow`
   long (`"Window too long"`), and the block time is at or after `windowStart`
   (`"Window in the future"`) and before `windowEnd + freshnessWindow`
@@ -184,10 +183,6 @@ What the module does not check, and what your app does itself:
   claim's `subjectHash`, pinning only the fields you need (the mock's
   `openAndBindHost` pins the host and keeps the path private). The claim does
   not commit to the evidence behind it (ADR 0007).
-- The two halves of a byte value are checked against zero one by one, not for
-  a matching flag. Honest attestors give both halves the slot's flag; a claim
-  with unpaired flags carries at least `N` dishonest signatures, which are out
-  of scope (ADR 0003).
 - The kind decides the window. Read it as the time the kind's observation
   happened, not as a universal fact timestamp
   ([Window](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#the-claim)
@@ -282,9 +277,9 @@ What the module does not check, and what your app does itself:
   state is your app's ([ADR 0004](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
 - **The window is when the attestor observed.** The contract checks it against
   block time; a fact's own time is a claim value ([ADR 0005](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0005-window-is-when-the-attestor-observed.md)).
-- **A byte value is two adjacent 16-byte halves.** Reassemble it in-circuit
-  with `Bytes[...c.byteHalves[2 * i], ...c.byteHalves[2 * i + 1]]`. The
-  message signs `V` and `B`, so a claim signed for another layout is rejected
+- **A byte value is one `Bytes<32>`.** Compare `c.byteValues[i]` to a
+  `Bytes<32>` in-circuit directly; `c.bytePresent[i]` is its flag. The
+  message signs `V` and `W`, so a claim signed for another layout is rejected
   even when the two serialize to the same bytes
   ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
   How a source string becomes those 32 bytes is the kind's parse rule, not the
