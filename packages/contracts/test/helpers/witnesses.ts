@@ -46,14 +46,11 @@ export const makeWitnesses = <Claim>(
 ) => ({
   getAttestationWitness: ({
     privateState,
-  }: WitnessBase<Claim>): [
-    PrivateState<Claim>,
-    [Claim, PrivateState<Claim>['signatures'], Uint8Array],
-  ] => {
+  }: WitnessBase<Claim>): [PrivateState<Claim>, [Claim, PrivateState<Claim>['signatures']]] => {
     if (!privateState.claim) {
       throw new Error('getAttestationWitness: no claim in private state');
     }
-    return [privateState, [privateState.claim, privateState.signatures, privateState.commitRand]];
+    return [privateState, [privateState.claim, privateState.signatures]];
   },
 
   getHolderSecret: ({ privateState }: WitnessBase<Claim>): [PrivateState<Claim>, Uint8Array] => [

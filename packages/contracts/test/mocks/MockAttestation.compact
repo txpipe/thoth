@@ -9,9 +9,9 @@ import "../../attestation"<3, 0, 2, 3> prefix A_;
 
 import "../../attestor_registry"<3> prefix R_;
 
-export { A_Claim, A_ClaimEntry };
+export { A_Claim, A_ClaimEntry, A_Observation };
 
-export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
+export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault };
 
 // A four-field subject, so a test can check `persistentHash<Subject>` against
 // the off-chain subject hash in `@txpipe/thoth-core/claim-context`.
@@ -34,10 +34,6 @@ export pure circuit message(a: A_Claim): Vector<7, Field> {
   return A_buildMessage(a);
 }
 
-export pure circuit computeId(a: A_Claim, rand: Bytes<32>): Bytes<32> {
-  return A_computeId(a, rand);
-}
-
 export pure circuit nullifierOf(a: A_Claim): Bytes<32> {
   return A_nullifierOf(a);
 }
@@ -56,31 +52,31 @@ export pure circuit keysDistinct(ks: Vector<3, JubjubPoint>): Boolean {
 
 // App-predicate demo: open a vaulted claim and read two value slots.
 // `openClaim` is not re-exported: its tainted return would force a disclose.
-export circuit openAndRead(id: Bytes<32>, e0: Uint<64>, e1: Uint<64>): [] {
-  const c = A_openClaim(id);
+export circuit openAndRead(nullifier: Bytes<32>, e0: Uint<64>, e1: Uint<64>): [] {
+  const c = A_openClaim(nullifier);
   assert(c.values[0] == e0, "value[0] mismatch");
   assert(c.values[1] == e1, "value[1] mismatch");
 }
 
 // App-predicate demo: read per-slot presence off a vaulted claim.
-export circuit openAndReadPresence(id: Bytes<32>, p0: Boolean, p1: Boolean): [] {
-  const c = A_openClaim(id);
+export circuit openAndReadPresence(nullifier: Bytes<32>, p0: Boolean, p1: Boolean): [] {
+  const c = A_openClaim(nullifier);
   assert(c.present[0] == p0, "present[0] mismatch");
   assert(c.present[1] == p1, "present[1] mismatch");
 }
 
 // App-predicate demo: require slot 0 to be present before reading it. The
 // index is fixed because Compact requires constant vector subscripts.
-export circuit openAndRequireMetric0(id: Bytes<32>, expected: Uint<64>): [] {
-  const c = A_openClaim(id);
+export circuit openAndRequireMetric0(nullifier: Bytes<32>, expected: Uint<64>): [] {
+  const c = A_openClaim(nullifier);
   assert(c.present[0], "metric 0 not present");
   assert(c.values[0] == expected, "value[0] mismatch");
 }
 
 // App-predicate demo: source binding (ADR 0001). The subject is private
 // input; the circuit recomputes its hash and pins only the host.
-export circuit openAndBindHost(id: Bytes<32>, s: Subject, host: Bytes<32>): [] {
-  const c = A_openClaim(id);
+export circuit openAndBindHost(nullifier: Bytes<32>, s: Subject, host: Bytes<32>): [] {
+  const c = A_openClaim(nullifier);
   assert(persistentHash<Subject>(s) == c.subjectHash, "Subject mismatch");
   assert(s.host == host, "Host not accepted");
 }

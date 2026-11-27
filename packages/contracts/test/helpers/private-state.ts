@@ -10,7 +10,6 @@ import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js
 export type PrivateState<Claim = A_Claim> = {
   readonly claim: Claim | null;
   readonly signatures: JubjubSchnorrSignature[];
-  readonly commitRand: Uint8Array;
   readonly holderSecret: Uint8Array;
 };
 
@@ -19,6 +18,5 @@ export const createPrivateState = <Claim = A_Claim>(
 ): PrivateState<Claim> => ({
   claim: null,
   signatures: [],
-  commitRand: new Uint8Array(32),
   holderSecret,
 });

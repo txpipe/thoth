@@ -11,7 +11,7 @@ import "../../attestor_registry"<3> prefix R_;
 
 export { B_Claim, B_ClaimEntry };
 
-export { B_appId, B_freshnessWindow, B_maxWindow, B_policyHashes, B_claimsVault, B_nullifiers };
+export { B_appId, B_freshnessWindow, B_maxWindow, B_policyHashes, B_claimsVault };
 
 export circuit verifyAttestation(): [] {
   B_verifyAttestation();
@@ -19,10 +19,6 @@ export circuit verifyAttestation(): [] {
 
 export pure circuit message(a: B_Claim): Vector<7, Field> {
   return B_buildMessage(a);
-}
-
-export pure circuit computeId(a: B_Claim, rand: Bytes<32>): Bytes<32> {
-  return B_computeId(a, rand);
 }
 
 export pure circuit nullifierOf(a: B_Claim): Bytes<32> {
@@ -43,8 +39,8 @@ export pure circuit keysDistinct(ks: Vector<3, JubjubPoint>): Boolean {
 
 // App-predicate demo: reassemble byte value 0 from its two halves and compare
 // it to a caller-supplied Bytes<32>.
-export circuit openAndReadBytes(id: Bytes<32>, expected: Bytes<32>): [] {
-  const c = B_openClaim(id);
+export circuit openAndReadBytes(nullifier: Bytes<32>, expected: Bytes<32>): [] {
+  const c = B_openClaim(nullifier);
   assert(Bytes[...c.byteHalves[0], ...c.byteHalves[1]] == expected, "byteValue[0] mismatch");
 }
 

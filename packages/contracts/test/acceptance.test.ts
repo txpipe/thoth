@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { descriptorOf } from '@txpipe/thoth-attestor';
 import { buildTrustedSet } from '@txpipe/thoth-client';
 import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
-import { type Claim, toContractClaim } from '@txpipe/thoth-core/claim';
+import { type Claim, nullifierOf, toContractClaim } from '@txpipe/thoth-core/claim';
 import {
   type ZkFetchEvidence,
   type ZkFetchPolicy,
@@ -32,10 +32,10 @@ import { pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index
 import { jubjubKeyPair, type Submission, submit } from './helpers/acceptance.js';
 import {
   APP_ID,
-  bytesIdOf,
   DUMMY_SIGNATURE,
   flip,
   makeNotaryKey,
+  nullifierOfByteClaim,
   POLICY_B,
   padded32,
   splitHalves,
@@ -154,7 +154,7 @@ const collectSubmission = async (): Promise<Submission> => {
       collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
       DUMMY_SIGNATURE,
   );
-  return { claim: toContractClaim(claim), signatures, commitRand: randomBytes(32) };
+  return { claim: toContractClaim(claim), signatures };
 };
 
 // A fresh ledger that seals the app id and the policy the attestors enforced,
@@ -206,8 +206,17 @@ describe('cross-seam acceptance', () => {
   it('accepts the honest claim end to end', async () => {
     const sim = await freshLedger();
     await submit(sim, honest, holderSecret);
-    expect(sim.ledgerView().B_claimsVault.member(bytesIdOf(honest.claim, honest.commitRand))).toBe(
-      true,
+    expect(sim.ledgerView().B_claimsVault.member(nullifierOfByteClaim(honest.claim))).toBe(true);
+  });
+
+  it('lets the holder open the accepted claim by its off-chain nullifier', async () => {
+    const sim = await freshLedger();
+    await submit(sim, honest, holderSecret);
+    await sim.call(
+      'openAndReadBytes',
+      { ...honest, holderSecret },
+      nullifierOf(honestClaim),
+      padded32(OWNER),
     );
   });
 

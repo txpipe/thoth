@@ -143,7 +143,6 @@ export const flip = (bytes: Uint8Array, i: number): Uint8Array => {
 export type SignedClaim = {
   claim: A_Claim;
   signatures: JubjubSchnorrSignature[]; // valid sigs for the keys given; absent slot = dummy (never verifies)
-  commitRand: Uint8Array;
 };
 
 // Dummy signature for an empty slot: identity announcement, zero response —
@@ -155,21 +154,18 @@ export const DUMMY_SIGNATURE: JubjubSchnorrSignature = {
 
 // Sign a claim with the given notary keys. A `null` key yields the dummy
 // signature, which never verifies.
-export const signClaim = (
-  claim: A_Claim,
-  keys: readonly (NotaryKey | null)[],
-  commitRand: Uint8Array,
-): SignedClaim => {
+export const signClaim = (claim: A_Claim, keys: readonly (NotaryKey | null)[]): SignedClaim => {
   const signatures: JubjubSchnorrSignature[] = keys.map((key) =>
     key === null ? DUMMY_SIGNATURE : signSingle(key.sk, claim).signature,
   );
-  return { claim, signatures, commitRand };
+  return { claim, signatures };
 };
 
-export const idOf = (claim: A_Claim, rand: Uint8Array): Uint8Array =>
-  pureCircuits.computeId(claim, rand);
+/** The nullifier the numeric mock vaults `claim` under. */
+export const nullifierOfClaim = (claim: A_Claim): Uint8Array => pureCircuits.nullifierOf(claim);
 
-export const bytesIdOf = (claim: B_Claim, rand: Uint8Array): Uint8Array =>
-  bytesPureCircuits.computeId(claim, rand);
+/** The nullifier the bytes mock vaults `claim` under. */
+export const nullifierOfByteClaim = (claim: B_Claim): Uint8Array =>
+  bytesPureCircuits.nullifierOf(claim);
 
 export const holderOf = (secret: Uint8Array): bigint => pureCircuits.holderOf(secret);

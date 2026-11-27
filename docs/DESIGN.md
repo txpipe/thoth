@@ -169,9 +169,11 @@ sequenceDiagram
    slot, which the app assigned in its trusted set.
 3. The contract verifies, in-circuit, the version, the policy hash, at least N
    valid signatures each against its own registry slot, the absent slots, the
-   holder secret, the window and replay. The
+   holder secret, the window and replay, then vaults the claim under its
+   nullifier ([ADR 0016](adr/0016-claims-vault-keyed-by-the-nullifier.md)). The
    [`@txpipe/thoth-contracts` README](../packages/contracts/README.md#guarantees-and-limits)
-   lists every check. Only then does the app's predicate run.
+   lists every check. Only then does the app's predicate run; it opens the
+   claim with the nullifier and the holder secret.
 
 ## Out of scope
 

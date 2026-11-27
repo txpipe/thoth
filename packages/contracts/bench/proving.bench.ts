@@ -2,7 +2,6 @@
 // reports k, rows, key and proof size, time, CPU time and peak memory. Run `npm run bench`.
 
 import { spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { cpus, homedir, totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -12,14 +11,14 @@ import { expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits as bytesPureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import {
-  bytesIdOf,
   DEFAULT_BYTE_VALUE,
   DEFAULT_HOLDER_SECRET,
   DUMMY_SIGNATURE,
-  idOf,
   makeByteClaim,
   makeClaim,
   makeNotaryKey,
+  nullifierOfByteClaim,
+  nullifierOfClaim,
   signClaim,
 } from '../test/helpers/fixtures.js';
 import { createPrivateState } from '../test/helpers/private-state.js';
@@ -66,17 +65,17 @@ const capture = async (): Promise<Captured[]> => {
     present: [true, true, false],
     subjectHash: pureCircuits.subjectHash(subject),
   });
-  const signed = { ...signClaim(claim, signers, randomBytes(32)), holderSecret };
-  const id = idOf(claim, signed.commitRand);
+  const signed = { ...signClaim(claim, signers), holderSecret };
+  const nullifier = nullifierOfClaim(claim);
   const onNumeric = async (circuit: string, ...args: unknown[]) => {
     const proofData = await numeric.callForProof(circuit, signed, ...args);
     captured.push({ mock: 'mock_attestation', circuit, proofData });
   };
   await onNumeric('verifyAttestation');
-  await onNumeric('openAndRead', id, 100n, 200n);
-  await onNumeric('openAndReadPresence', id, true, true);
-  await onNumeric('openAndRequireMetric0', id, 100n);
-  await onNumeric('openAndBindHost', id, subject, subject.host);
+  await onNumeric('openAndRead', nullifier, 100n, 200n);
+  await onNumeric('openAndReadPresence', nullifier, true, true);
+  await onNumeric('openAndRequireMetric0', nullifier, 100n);
+  await onNumeric('openAndBindHost', nullifier, subject, subject.host);
 
   const bytes = await MockAttestationBytesSim.create(
     createPrivateState(holderSecret),
@@ -90,18 +89,13 @@ const capture = async (): Promise<Captured[]> => {
     signatures: signers.map((key) =>
       key === null ? DUMMY_SIGNATURE : signMessage(key.sk, message).signature,
     ),
-    commitRand: randomBytes(32),
   };
   const onBytes = async (circuit: string, ...args: unknown[]) => {
     const proofData = await bytes.callForProof(circuit, byteSigned, ...args);
     captured.push({ mock: 'mock_attestation_bytes', circuit, proofData });
   };
   await onBytes('verifyAttestation');
-  await onBytes(
-    'openAndReadBytes',
-    bytesIdOf(byteClaim, byteSigned.commitRand),
-    DEFAULT_BYTE_VALUE,
-  );
+  await onBytes('openAndReadBytes', nullifierOfByteClaim(byteClaim), DEFAULT_BYTE_VALUE);
   return captured;
 };
 

@@ -11,7 +11,7 @@ import "../attestor_registry"<3> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
-export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
+export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault };
 
 export circuit verifyAttestation(): [] {
   A_verifyAttestation();

@@ -206,20 +206,25 @@ unchanged; those are your provider's errors, not threshold failures.
 from.
 
 ```ts
-import { toContractClaim } from '@txpipe/thoth-core/claim';
+import { nullifierOf, toContractClaim } from '@txpipe/thoth-core/claim';
 
 // In your contract's getAttestationWitness:
-return [toContractClaim(attestment.claim), signatures, commitRand];
+return [toContractClaim(attestment.claim), signatures];
+
+// Off-chain, the vault key your predicate opens the claim with:
+const nullifier = nullifierOf(attestment.claim);
 ```
 
-`getAttestationWitness` returns the claim in the contract's shape, one
-signature per registry slot, and 32 random bytes for the vault commitment.
+`getAttestationWitness` returns the claim in the contract's shape and one
+signature per registry slot.
 Place each `attestment.collected[i].attestation.signature` at that entry's
 `registryIndex` in the signature vector; slots you did not collect need a
 placeholder signature that never verifies, as the acceptance test does.
 `verifyAttestation` rebuilds the signed message with `buildMessage`, counts the
 signatures that verify against the sealed registry, and checks the policy hash,
-holder, window and nullifier before it vaults the claim. The
+holder, window and nullifier before it vaults the claim under its nullifier.
+Pass `nullifier` to your predicate circuit, which opens the claim with
+`openClaim(nullifier)` and the holder secret. The
 [contracts README](../../contracts/README.md#guarantees-and-limits) lists every
 check.
 

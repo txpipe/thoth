@@ -242,7 +242,8 @@ proposal.
   payload can carry one because the signer binds it, while a kind whose instance
   reads the fact must derive one from the read, and if the values are guessable
   that needs a secret the attestor set shares, which this repo does not yet
-  design for that case. A public salt reveals the fact through the nullifier.
+  design for that case. A public salt reveals the fact through the nullifier,
+  and so through the claims vault, which the nullifier keys (ADR 0016).
 
 ### Binding the claim context
 
@@ -383,8 +384,9 @@ the attestor checks it again and refuses a different one.
 - **Acceptance.** Run the path end to end against the simulator, as
   `packages/contracts/test/acceptance.test.ts` does for a signed payload
   and `packages/contracts/test/acceptance-cardano.test.ts` for a kind that
-  reads its own source: honest claim accepted, each signed field mutated and
-  rejected, and a replay refused by the nullifier (the generic suite is
+  reads its own source: honest claim accepted and opened by its
+  `nullifierOf(claim)`, each signed field mutated and rejected, and a replay
+  refused by the nullifier (the generic suite is
   `packages/contracts/test/attestation.test.ts`). Where the evidence binds the
   holder, also check that the attestors refuse the replay, as
   `acceptance.test.ts` does.
