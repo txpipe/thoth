@@ -21,8 +21,9 @@
 //   bytePresent[0], ..., bytePresent[B-1] (1 each)
 // Integers are little-endian at their width; a Boolean is one byte, 0 or 1.
 // `version` and `holder` reach the message directly, every other claim field
-// through the nullifier (ADR 0015). `claimToMessage` and `nullifierOf` in
-// `@txpipe/thoth-core/claim` mirror this.
+// through the nullifier. So a change to the observation identity changes what
+// attestors sign, and a new identity ships under a new version. `claimToMessage`
+// and `nullifierOf` in `@txpipe/thoth-core/claim` mirror this.
 // The message carries V and B because the identity's length fixes only
 // 9*V + 17*B: two layouts (V=34, B=0 and V=0, B=18) can serialize to the same
 // bytes, and a message signed under one must fail verification under the
@@ -71,7 +72,7 @@ module attestation<#V, #B, #N, #M> {
   // the holder reaches it only through the kind's salt.
   // The secret salt keeps the public nullifier from confirming guessed values (ADR 0012).
   // The attestors sign its hash, so reordering, adding or retyping a field
-  // changes what they sign (ADR 0015).
+  // changes what they sign.
   struct Observation {
     appId: Bytes<32>;
     policyHash: Bytes<32>;
@@ -110,8 +111,8 @@ module attestation<#V, #B, #N, #M> {
   }
 
   /// A 32-byte value as two message fields: byte 31, then bytes 0-30 read
-  /// little-endian. This is how a circuit already holds 32 bytes, so nothing
-  /// is sliced at a byte boundary.
+  /// little-endian. A circuit already holds 32 bytes this way, so the split
+  /// needs no byte-by-byte decomposition, unlike a cut at byte 16.
   circuit limbs(b: Bytes<32>): Vector<2, Field> {
     return [slice<1>(b, 31) as Field, degradeToTransient(b)];
   }
@@ -148,8 +149,10 @@ module attestation<#V, #B, #N, #M> {
     return persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:holder-commitment:v1"), secret]);
   }
 
-  /// The nullifier `verifyAttestation` records: the hash of the claim's
-  /// observation identity. Exported pure so tests can reproduce it.
+  /// The nullifier the attestors sign and `verifyAttestation` records: the
+  /// SHA-256 of the claim's observation identity, whose preimage the file
+  /// header gives. Exported pure so `nullifierOf` in `@txpipe/thoth-core/claim`
+  /// can match it.
   export pure circuit nullifierOf(claim: Claim): Bytes<32> {
     return persistentHash<Observation>(
              Observation { appId: claim.appId,
