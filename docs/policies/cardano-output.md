@@ -8,7 +8,7 @@ attested by the `cardano@1` chain-event kind.
 The attestor reads the event from its own Cardano data node, a Dolos service.
 `createDolosSource` from `@thoth/cardano/dolos` reads a UTxO-RPC endpoint, and
 `readRawEvent` reads the transaction, its block and the node's tip in one call
-([package README](https://github.com/txpipe-shop/thoth/blob/main/packages/cardano/README.md)).
+([package README](https://github.com/txpipe/thoth/blob/main/packages/cardano/README.md)).
 The client reads the event once to check its own read against the locator and
 the policy before it contacts an attestor.
 
@@ -68,7 +68,7 @@ a script or key address; the app decides which it accepts.
 - The claim certifies an observation, not finality. A reorg can roll the block
   back; set `confirmationDepth` to the risk you accept and bound `blockNumber`
   or `slot` in your predicate
-  ([ADR 0014](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0014-chain-event-kinds.md)).
+  ([ADR 0014](https://github.com/txpipe/thoth/blob/main/docs/adr/0014-chain-event-kinds.md)).
 - The claim certifies the event, not ownership. The locator is public, so any
   observer can request the same event. Bind the claimant in your predicate if
   you grant something per event.
@@ -88,5 +88,5 @@ a script or key address; the app decides which it accepts.
   `confirmationDepth: 0` is accepted and carries the most rollback risk.
 
 The package README's
-[Guarantees and limits](https://github.com/txpipe-shop/thoth/blob/main/packages/cardano/README.md#guarantees-and-limits)
+[Guarantees and limits](https://github.com/txpipe/thoth/blob/main/packages/cardano/README.md#guarantees-and-limits)
 lists the full set.
