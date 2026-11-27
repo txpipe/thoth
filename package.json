@@ -22,7 +22,6 @@
     "types": "npm run build && tsc --noEmit && npm run types --workspaces --if-present",
     "check": "npm run check:biome && npm run check:compact",
     "check:fix": "npm run check:fix:biome && npm run check:fix:compact",
-    "check:ci": "npm run check:biome && npm run check:compact",
     "check:biome": "biome check .",
     "check:fix:biome": "biome check . --write",
     "check:compact": "compact format -c packages/contracts",
