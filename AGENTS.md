@@ -194,6 +194,11 @@ READMEs don't repeat it.
 - `packages/cardano/test/live.test.ts` is the same kind of check for one real
   UTxO-RPC endpoint; it skips unless `DOLOS_URL` names it. See "Live check" in
   `packages/cardano/docs/dapp-integration.md`.
+- `npm run bench` is the only check that proves: a circuit can pass every
+  simulator test and still fail in the prover. Run it after a circuit change
+  and update the "Proving cost" table in `packages/contracts/README.md` from
+  its output. It needs Docker and stays out of `npm test` and CI; its options
+  are in [`CONTRIBUTING.md`](CONTRIBUTING.md#proving-benchmark).
 - Never skip the `present` mask semantics: `present[i] = true` means slot `i`
   was measured (value may still be `0`).
 
