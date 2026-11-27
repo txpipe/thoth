@@ -171,6 +171,12 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
   not in the claims vault (`"Observation replay"`). The claim is then vaulted
   under that nullifier.
 
+`openClaim(nullifier)` rejects an unknown nullifier (`"Unknown claim"`), a
+caller whose secret does not own the entry (`"Claim not bound to caller"`) and
+a witness claim that does not hash to the nullifier (`"Claim does not match
+nullifier"`). The holder computes the nullifier off-chain with
+`nullifierOf(claim)` from `@txpipe/thoth-core/claim`.
+
 What the module does not check, and what your app does itself:
 
 - `subjectHash` is signed but not compared. To accept only one source, take the
@@ -211,15 +217,15 @@ What the module does not check, and what your app does itself:
   holder, a guessable secret makes the salt guessable too, and the nullifier
   can then confirm guessed values. Reusing a secret links its holder
   commitments and vault entries.
-- `openClaim(nullifier)` rejects an unknown nullifier (`"Unknown claim"`),
-  a caller whose secret does not own the entry (`"Claim not bound to caller"`)
-  and a witness claim that does not hash to the nullifier (`"Claim does not
-  match nullifier"`). The holder computes the nullifier off-chain with
-  `nullifierOf(claim)` from `@txpipe/thoth-core/claim`.
 - `openClaim` returns the observation identity, not `holder` or `version`:
   the nullifier does not bind them, so it does not check them, and a predicate
   that reads either one does not compile. Key holder state on the vault
   pseudonym instead.
+- The module does not stop your own circuits from writing the claims vault.
+  Never insert into or remove from `claimsVault`: an inserted entry is a claim
+  no attestor signed, and a removed entry lets the same observation be
+  accepted again, because the vault is the replay check. "Use once" rules
+  never delete the entry.
 - `openClaim` consumes nothing, so opening is repeatable. "Use once"
   rules are your own state, keyed on the vault pseudonym. Never re-export
   `openClaim` as a top-level entry point: its return value is tainted and

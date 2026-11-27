@@ -9,7 +9,7 @@ import "../../attestation"<3, 2, 2, 3> prefix B_;
 
 import "../../attestor_registry"<3> prefix R_;
 
-export { B_Claim, B_ClaimEntry, B_Observation };
+export { B_Claim, B_ClaimEntry };
 
 export { B_appId, B_freshnessWindow, B_maxWindow, B_policyHashes, B_claimsVault };
 
