@@ -7,6 +7,7 @@ import {
   createConstructorContext,
   dummyContractAddress,
   type JubjubPoint,
+  type ProofData,
   type StateValue,
 } from '@midnight-ntwrk/compact-runtime';
 import {
@@ -76,6 +77,26 @@ const makeSimClass = <PS, L>(options: {
     }
 
     async call(name: string, ps: PS, ...args: unknown[]): Promise<unknown> {
+      return (await this.run(name, ps, args)).result;
+    }
+
+    /**
+     * Run a circuit like `call` and return the proof inputs a proof server needs for it.
+     *
+     * @throws {Error} when the circuit fails or the runtime recorded no proof data for it.
+     */
+    async callForProof(name: string, ps: PS, ...args: unknown[]): Promise<ProofData> {
+      const res = await this.run(name, ps, args);
+      // The trace is in completion order, so the root circuit's call is the last one.
+      const proofData = res.context.callProofDataTrace.at(-1);
+      if (!proofData) {
+        throw new Error(`${name}: the runtime recorded no proof data`);
+      }
+      return proofData;
+    }
+
+    /** Run a circuit, advance the ledger state, and return the runtime's full results. */
+    async run(name: string, ps: PS, args: unknown[]): Promise<CircuitResults<PS, unknown>> {
       const ctx = createCircuitContext({
         circuitId: name,
         contractAddress: ADDR,
@@ -95,7 +116,7 @@ const makeSimClass = <PS, L>(options: {
       }
       const res = await circuit(ctx, ...args);
       this.state = res.context.callContext.currentQueryContext.state;
-      return res.result;
+      return res;
     }
 
     ledgerView(): L {
