@@ -107,6 +107,7 @@ export function summaryOf(markdown: string | undefined): string {
       continue;
     }
     if (
+      text.startsWith('<') ||
       text.startsWith('#') ||
       text.startsWith('>') ||
       text.startsWith('```') ||

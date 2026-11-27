@@ -1,6 +1,17 @@
-# Thoth
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/thoth-logo-white.svg">
+    <img src="docs/assets/thoth-logo-black.svg" alt="Thoth" width="360">
+  </picture>
+  <p><strong>Private N-of-M attestation for Midnight</strong></p>
+  <a href="https://github.com/txpipe/thoth/blob/main/LICENSE"><img src="https://img.shields.io/github/license/txpipe/thoth?style=for-the-badge&color=blue" alt="License: Apache-2.0"></a>
+  <a href="https://github.com/txpipe/thoth/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/txpipe/thoth/test.yml?branch=main&style=for-the-badge&label=tests" alt="Test status"></a>
+  <a href="https://txpipe.github.io/thoth/"><img src="https://img.shields.io/badge/docs-txpipe.github.io%2Fthoth-blue?style=for-the-badge" alt="Documentation"></a>
+  <br>
+  <br>
+</div>
 
-Private N-of-M attestation for Midnight: your contract accepts an off-chain fact only when N of the M attestors it pinned have signed it, and the fact reaches the contract as private input.
+Your contract accepts an off-chain fact only when N of the M attestors it pinned have signed it, and the fact reaches the contract as private input.
 
 > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
