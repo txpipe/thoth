@@ -4,6 +4,36 @@ Private N-of-M attestation for Midnight: your contract accepts an off-chain fact
 
 > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
+## Start here
+
+Pick your path below, or jump to the [quickstart](#quickstart) to run a 2-of-3
+flow locally.
+
+- **dApp developer**: Embed verification in your contract with
+  [`@txpipe/thoth-contracts`](packages/contracts/README.md), then integrate a
+  client for your source. For web APIs, follow the
+  [zkFetch dApp guide](packages/zk-tls/docs/dapp-integration.md) for
+  [`@txpipe/thoth-zk-tls`](packages/zk-tls/README.md), or start from the
+  [GitHub stars](docs/policies/github-stars.md) and
+  [Strava](docs/policies/strava-latest-activity.md)
+  [policy](CONTEXT.md#the-claim) examples. For Cardano events, follow the
+  [Cardano dApp guide](packages/cardano/docs/dapp-integration.md) for
+  [`@txpipe/thoth-cardano`](packages/cardano/README.md) and the
+  [Cardano output](docs/policies/cardano-output.md) policy example.
+- **Attestor operator**: Run an [attestor](CONTEXT.md#roles) against your own
+  source and share its [descriptor](CONTEXT.md#roles) with dApps. For zkFetch,
+  follow the [zkFetch attestor guide](packages/zk-tls/docs/attestor-guide.md)
+  for [`@txpipe/thoth-zk-tls`](packages/zk-tls/README.md). For Cardano,
+  configure `cardanoAttestor` in
+  [`@txpipe/thoth-cardano`](packages/cardano/README.md#usage).
+- **Kind author**: Follow the
+  [kind author guide](docs/kind-author-guide.md) to add a
+  [kind](CONTEXT.md#kinds) for another source of [evidence](CONTEXT.md#roles).
+  You define its [law](CONTEXT.md#kinds) with
+  [`@txpipe/thoth-core`](packages/core/README.md), pair it with a signing key in
+  [`@txpipe/thoth-attestor`](packages/attestor/README.md), and build its client
+  on [`@txpipe/thoth-client`](packages/client/README.md).
+
 ## What it is
 
 Thoth is a set of Compact modules and TypeScript packages. Your Midnight
@@ -59,11 +89,6 @@ kind's salt is public instead, since its values already sit on the chain
 | [`@txpipe/thoth-client`](packages/client/README.md)       | Write a kind's client: the trusted set and the attestation checks            |
 | [`@txpipe/thoth-attestor`](packages/attestor/README.md)   | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
 | [`@txpipe/thoth-core`](packages/core/README.md)           | Write a kind's law against the shared claim types                            |
-
-If you are building a dApp on web data, start with `@txpipe/thoth-contracts` and
-`@txpipe/thoth-zk-tls`; on chain data, start with `@txpipe/thoth-contracts` and
-`@txpipe/thoth-cardano`. To add a new kind of attestor, follow
-[docs/kind-author-guide.md](docs/kind-author-guide.md).
 
 ## Quickstart
 
