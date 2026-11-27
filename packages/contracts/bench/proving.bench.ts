@@ -340,7 +340,7 @@ it('proves and verifies every mock circuit', { timeout: 3_600_000 }, async () =>
   console.log(
     [
       '',
-      `${machine}; ${server}; ${WARM_RUNS} warm proofs per circuit.`,
+      `${machine}; ${server}; ${WARM_RUNS} warm proof${WARM_RUNS === 1 ? '' : 's'} per circuit.`,
       controlRefused
         ? 'The proof server verified every proof against its verifier key, and refused a proof under the wrong verifier key.'
         : 'The proof server did not refuse a proof under the wrong verifier key, so no proof here counts as verified.',
