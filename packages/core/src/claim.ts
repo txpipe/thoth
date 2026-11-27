@@ -14,9 +14,9 @@ export type FlatMessage = readonly bigint[];
  * (`V` numeric slots, then `W` byte slots), `V` numeric `values` and `W` 32-byte
  * `byteValues`.
  *
- * It carries no kind: the policy hash binds it (ADR 0002). The contract keeps
- * numeric and byte flags apart, so a dApp hands it {@link toContractClaim}'s
- * output, never this shape.
+ * It carries no kind: the policy hash binds it. The contract keeps numeric and
+ * byte flags apart, so a dApp hands it {@link toContractClaim}'s output, never
+ * this shape.
  */
 // biome-ignore lint/correctness/noUnusedVariables: phantom type param — carries the claim's numeric value count `V`.
 export interface Claim<V extends number, W extends number = 0> {
