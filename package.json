@@ -3,12 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "workspaces": [
-    "packages/attestor",
-    "packages/cardano",
-    "packages/client",
-    "packages/contracts",
     "packages/core",
-    "packages/zk-tls"
+    "packages/attestor",
+    "packages/client",
+    "packages/cardano",
+    "packages/zk-tls",
+    "packages/contracts"
   ],
   "description": "Private N-of-M attestation for Midnight — a TypeScript monorepo.",
   "type": "module",
@@ -18,8 +18,8 @@
     "compact:no-zk": "compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAttestation.compact packages/contracts/artifacts/mock_attestation && compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAttestationBytes.compact packages/contracts/artifacts/mock_attestation_bytes && compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockAddressHash.compact packages/contracts/artifacts/mock_address_hash && compact compile +0.36.1 --skip-zk packages/contracts/test/mocks/MockRegistryDoubleInit.compact packages/contracts/artifacts/mock_registry_double_init",
     "pretest": "npm run compact && npm run build",
     "test": "vitest run",
-    "build": "npm run build --workspace=packages/core && npm run build --workspace=packages/attestor && npm run build --workspace=packages/client && npm run build --workspace=packages/cardano && npm run build --workspaces --if-present",
-    "types": "npm run build --workspace=packages/core && npm run build --workspace=packages/attestor && npm run build --workspace=packages/client && npm run build --workspace=packages/cardano && npm run build --workspace=packages/zk-tls && tsc --noEmit && npm run types --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "types": "npm run build && tsc --noEmit && npm run types --workspaces --if-present",
     "check": "npm run check:biome && npm run check:compact",
     "check:fix": "npm run check:fix:biome && npm run check:fix:compact",
     "check:ci": "npm run check:biome && npm run check:compact",

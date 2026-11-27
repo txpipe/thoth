@@ -386,7 +386,6 @@ the attestor checks it again and refuses a different one.
 ## Packaging
 
 A new kind is a new package under `packages/<kind>`. Add it to the root
-`package.json` `workspaces`, and to the build-first chain of the root `types`
-script if another workspace imports it (see
-[CONTRIBUTING.md](../CONTRIBUTING.md#commands)). Pin
+`package.json` `workspaces`, after the packages it imports and before any
+package that imports it (see [CONTRIBUTING.md](../CONTRIBUTING.md#commands)). Pin
 `@midnight-ntwrk/compact-runtime` to the same version as the other packages.

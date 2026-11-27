@@ -32,8 +32,8 @@ and CI are listed in [`CONTRIBUTING.md`](CONTRIBUTING.md#commands).
 ## Gotchas
 
 - **Stale `dist/`**: workspaces import each other through their built
-  `dist/`, so a new workspace dependency joins the root build-first chain. See
-  [`CONTRIBUTING.md`](CONTRIBUTING.md#commands) for the chain and the errors a
+  `dist/`, and the root `workspaces` array order is the build order. See
+  [`CONTRIBUTING.md`](CONTRIBUTING.md#commands) for the rule and the errors a
   stale `dist/` causes.
 
 ## Repository layout
