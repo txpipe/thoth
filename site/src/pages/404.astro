@@ -1,0 +1,22 @@
+---
+// GitHub Pages serves this for any path under the site that has no page.
+import DocPage from '../layouts/DocPage.astro';
+import { getDocs, navGroups } from '../lib/collection';
+import { REPO_URL, routeFor, withBase } from '../lib/docs';
+
+const docs = await getDocs();
+const base = import.meta.env.BASE_URL;
+---
+
+<DocPage title="Page not found" groups={navGroups(docs)} currentId="" headings={[]}>
+  <h1>Page not found</h1>
+  <p>
+    This address isn't a page on the Thoth docs site. The doc may have moved, or the link points at
+    a file the site doesn't publish.
+  </p>
+  <ul>
+    <li><a href={withBase('/', base)}>Start from the introduction</a></li>
+    <li><a href={withBase(routeFor('CONTEXT.md'), base)}>Look a term up in the glossary</a></li>
+    <li><a href={REPO_URL}>Browse the repository on GitHub</a></li>
+  </ul>
+</DocPage>

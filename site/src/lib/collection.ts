@@ -1,7 +1,15 @@
 // Content collection queries shared by the pages, the nav and llms.txt.
 
 import { type CollectionEntry, getCollection } from 'astro:content';
-import { DOC_FILES, GROUP_ORDER, navGroup, routeFor, titleFor } from './docs';
+import {
+  DOC_FILES,
+  GROUP_ORDER,
+  isPackageGuide,
+  navGroup,
+  navLabel,
+  routeFor,
+  titleFor,
+} from './docs';
 
 export type DocEntry = CollectionEntry<'docs'>;
 
@@ -9,6 +17,8 @@ export interface NavItem {
   id: string;
   route: string;
   title: string;
+  /** A package guide, shown under its package's README. */
+  nested: boolean;
 }
 
 export interface NavGroup {
@@ -48,9 +58,15 @@ export function navGroups(docs: DocEntry[]): NavGroup[] {
     const label = seen.has(title) ? `${title} (${stem})` : title;
     seen.add(title);
 
-    const group = navGroup(`${entry.id}.md`);
+    const repoPath = `${entry.id}.md`;
+    const group = navGroup(repoPath);
     const items = groups.get(group) ?? [];
-    items.push({ id: entry.id, route: routeFor(`${entry.id}.md`), title: label });
+    items.push({
+      id: entry.id,
+      route: routeFor(repoPath),
+      title: navLabel(repoPath, label),
+      nested: isPackageGuide(repoPath),
+    });
     groups.set(group, items);
   }
 

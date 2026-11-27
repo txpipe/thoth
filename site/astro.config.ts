@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { unified } from '@astrojs/markdown-remark';
 import { defineConfig } from 'astro/config';
+import { retitle } from './src/lib/retitle';
 import { rewriteLinks } from './src/lib/rewrite-links';
 
 const site = 'https://txpipe.github.io';
@@ -14,7 +15,10 @@ export default defineConfig({
   markdown: {
     shikiConfig: { theme: 'synthwave-84' },
     processor: unified({
-      remarkPlugins: [[rewriteLinks, { repoRoot, base }]],
+      remarkPlugins: [
+        [rewriteLinks, { repoRoot, base }],
+        [retitle, { repoRoot }],
+      ],
     }),
   },
 });

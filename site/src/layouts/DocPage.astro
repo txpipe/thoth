@@ -2,7 +2,7 @@
 import type { MarkdownHeading } from 'astro';
 import Nav from '../components/Nav.astro';
 import type { NavGroup } from '../lib/collection';
-import { withBase } from '../lib/docs';
+import { REPO_URL, withBase } from '../lib/docs';
 import '../styles/tokens.css';
 import '../styles/site.css';
 
@@ -11,12 +11,13 @@ interface Props {
   groups: NavGroup[];
   currentId: string;
   headings: MarkdownHeading[];
+  /** Short docs, such as policy examples: sections open on a tick, not a full rule. */
+  compact?: boolean;
 }
 
-const { title, groups, currentId, headings } = Astro.props;
+const { title, groups, currentId, headings, compact = false } = Astro.props;
 const base = import.meta.env.BASE_URL;
 const home = withBase('/', base);
-const github = 'https://github.com/txpipe/thoth';
 const pageTitle = title === 'Thoth' ? 'Thoth' : `${title} · Thoth`;
 const toc = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
 ---
@@ -27,6 +28,7 @@ const toc = headings.filter((heading) => heading.depth === 2 || heading.depth ==
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#141011" />
+    <meta name="color-scheme" content="dark" />
     <link rel="icon" href={withBase('/favicon.svg', base)} type="image/svg+xml" />
     <title>{pageTitle}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -44,7 +46,7 @@ const toc = headings.filter((heading) => heading.depth === 2 || heading.depth ==
           <a class="wordmark" href={home}>Thoth</a>
           <span class="site-tagline">private N-of-M attestation</span>
         </div>
-        <a class="repo" href={github}>
+        <a class="repo" href={REPO_URL}>
           <!-- GitHub mark from Octicons (MIT), https://github.com/primer/octicons -->
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
             <path
@@ -58,27 +60,140 @@ const toc = headings.filter((heading) => heading.depth === 2 || heading.depth ==
     </header>
     <div class="site-body">
       <Nav groups={groups} currentId={currentId} />
-      <main id="content" class="content prose">
+      <main id="content" class="content prose" data-compact={compact ? '' : undefined}>
         <slot />
       </main>
-      <div class="doc-meta">
-        <nav aria-labelledby="toc-heading">
-          <p class="doc-toc-title" id="toc-heading">On this page</p>
-          <ul>
-            {toc.map((heading) => (
-              <li class={`depth-${heading.depth}`}>
-                <a href={`#${heading.slug}`}>{heading.text}</a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      </div>
+      {
+        toc.length > 0 && (
+          <details class="doc-meta" data-menu open>
+            <summary class="menu-toggle">On this page</summary>
+            <nav aria-label="On this page">
+              <p class="doc-toc-title" aria-hidden="true">
+                On this page
+              </p>
+              <ul>
+                {toc.map((heading) => (
+                  <li class={`depth-${heading.depth}`}>
+                    <a href={`#${heading.slug}`}>{heading.text}</a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </details>
+        )
+      }
     </div>
+    <p class="visually-hidden" role="status" id="copy-status"></p>
     <footer class="site-footer">
       <span>Copyright 2026 TxPipe</span>
-      <span>Apache-2.0 · <a href={`${github}/blob/main/LICENSE`}>License</a></span>
+      <span>Apache-2.0 · <a href={`${REPO_URL}/blob/main/LICENSE`}>License</a></span>
     </footer>
     <script>
+      import { watchOverflow } from '../lib/overflow';
+
+      // On narrow screens the nav and the table of contents collapse behind a
+      // toggle; wide screens keep them open. The breakpoint stays in CSS: a
+      // menu is collapsible exactly when its toggle is displayed.
+      const menus = Array.from(document.querySelectorAll<HTMLDetailsElement>('details[data-menu]'));
+      const isCollapsible = (menu: HTMLDetailsElement) => {
+        const toggle = menu.querySelector(':scope > summary');
+        return toggle !== null && getComputedStyle(toggle).display !== 'none';
+      };
+      for (const menu of menus) menu.open = !isCollapsible(menu);
+      window.addEventListener('resize', () => {
+        for (const menu of menus) if (!isCollapsible(menu)) menu.open = true;
+      });
+
+      // Mark the section being read: the last heading scrolled past the header.
+      const tocLinks = Array.from(
+        document.querySelectorAll<HTMLAnchorElement>('.doc-meta a[href^="#"]'),
+      );
+      const sections = tocLinks.map((link) =>
+        document.getElementById(decodeURIComponent(link.hash.slice(1))),
+      );
+      const header = document.querySelector<HTMLElement>('.site-header');
+      let frame = 0;
+      const markSection = () => {
+        frame = 0;
+        const line = (header?.offsetHeight ?? 0) + 32;
+        let current = -1;
+        sections.forEach((section, index) => {
+          if (section && section.getBoundingClientRect().top <= line) current = index;
+        });
+        tocLinks.forEach((link, index) => {
+          if (index === current) link.setAttribute('aria-current', 'location');
+          else link.removeAttribute('aria-current');
+        });
+      };
+      if (tocLinks.length > 0) {
+        window.addEventListener(
+          'scroll',
+          () => {
+            if (!frame) frame = requestAnimationFrame(markSection);
+          },
+          { passive: true },
+        );
+        markSection();
+      }
+
+      // Code blocks get a bar with their language and a copy button, and fade
+      // the edge that hides code, so a clipped line reads as scrollable.
+      const status = document.getElementById('copy-status');
+      const announce = (message: string) => {
+        if (status) status.textContent = message;
+      };
+      const plain = new Set(['plaintext', 'text', 'txt']);
+      for (const pre of document.querySelectorAll<HTMLPreElement>('.prose pre.astro-code')) {
+        if (pre.dataset.language === 'mermaid') continue;
+        const block = document.createElement('div');
+        block.className = 'code-block';
+        const bar = document.createElement('div');
+        bar.className = 'code-block-bar';
+        const language = document.createElement('span');
+        language.className = 'code-block-lang';
+        const name = pre.dataset.language ?? '';
+        language.textContent = plain.has(name) ? '' : name;
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.className = 'code-block-copy';
+        copy.textContent = 'Copy';
+        let reset: ReturnType<typeof setTimeout> | undefined;
+        const flash = (label: string) => {
+          copy.textContent = label;
+          clearTimeout(reset);
+          reset = setTimeout(() => {
+            copy.textContent = 'Copy';
+          }, 2000);
+        };
+        copy.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(pre.textContent ?? '');
+            flash('Copied');
+            announce('Copied the code to the clipboard.');
+          } catch {
+            // No clipboard access (an insecure context or a denied permission):
+            // select the code so the reader's own copy shortcut works.
+            const range = document.createRange();
+            range.selectNodeContents(pre);
+            const selection = window.getSelection();
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+            flash('Selected');
+            announce('The clipboard is unavailable. The code is selected; copy it with your keyboard.');
+          }
+        });
+        bar.append(language, copy);
+        pre.before(block);
+        block.append(bar, pre);
+        watchOverflow(pre, block);
+      }
+      for (const table of document.querySelectorAll<HTMLElement>('.prose table')) {
+        watchOverflow(table);
+      }
+    </script>
+    <script>
+      import { watchOverflow } from '../lib/overflow';
+
       // Mermaid is imported only on pages that have a diagram; the chunk is large.
       const blocks = document.querySelectorAll('pre[data-language="mermaid"]');
       if (blocks.length > 0) {
@@ -133,6 +248,7 @@ const toc = headings.filter((heading) => heading.depth === 2 || heading.depth ==
         await document.fonts.ready;
         blocks.forEach((block, index) => block.replaceWith(nodes[index]!));
         await mermaid.run({ nodes });
+        for (const node of nodes) watchOverflow(node);
       }
     </script>
   </body>

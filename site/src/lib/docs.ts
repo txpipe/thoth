@@ -2,14 +2,20 @@
 
 export const POLICY_DIR = 'docs/policies';
 
+export const REPO_URL = 'https://github.com/txpipe/thoth';
+
 // Adding a reader-facing doc is one entry here; a new file under POLICY_DIR is
-// published by the loader's glob with no entry. Keep this list in nav order.
+// published by the loader's glob with no entry. Keep this list in nav order: a
+// package's guides follow its README, so the nav nests them under it.
 export const DOC_FILES = [
   'README.md',
   'CONTEXT.md',
   'docs/DESIGN.md',
   'docs/kind-author-guide.md',
   'packages/attestor/README.md',
+  'packages/cardano/README.md',
+  'packages/cardano/docs/dapp-integration.md',
+  'packages/cardano/docs/adding-a-variant.md',
   'packages/client/README.md',
   'packages/contracts/README.md',
   'packages/core/README.md',
@@ -18,15 +24,15 @@ export const DOC_FILES = [
   'packages/zk-tls/docs/dapp-integration.md',
 ];
 
+const PACKAGE_GUIDE = /^packages\/[^/]+\/docs\//;
+
 const GROUP_RULES: ReadonlyArray<{ test: (repoPath: string) => boolean; label: string }> = [
   { test: (repoPath) => repoPath === 'README.md' || repoPath === 'CONTEXT.md', label: 'Overview' },
   { test: (repoPath) => repoPath.startsWith(`${POLICY_DIR}/`), label: 'Policy examples' },
-  { test: (repoPath) => /^packages\/[^/]+\/README\.md$/.test(repoPath), label: 'Packages' },
-  { test: (repoPath) => repoPath.startsWith('packages/zk-tls/docs/'), label: 'zkFetch guides' },
-  { test: () => true, label: 'Guides' },
+  { test: (repoPath) => repoPath.startsWith('packages/'), label: 'Packages' },
 ];
 
-export const GROUP_ORDER = ['Overview', 'Guides', 'Policy examples', 'Packages', 'zkFetch guides'];
+export const GROUP_ORDER = ['Overview', 'Guides', 'Policy examples', 'Packages'];
 
 function isPolicy(repoPath: string): boolean {
   const name = repoPath.slice(POLICY_DIR.length + 1);
@@ -65,6 +71,32 @@ export function titleFor(id: string, markdown: string | undefined): string {
   return TITLES[id] ?? titleOf(markdown);
 }
 
+/**
+ * The H1 the site renders in place of a doc's own, if any. The home page keeps
+ * the README's H1, the project name; the glossary's H1 names the context, which
+ * reads as a second home page.
+ */
+export function headingFor(id: string): string | undefined {
+  return id === 'README' ? undefined : TITLES[id];
+}
+
+/** Whether a repo path is a guide that the nav nests under its package. */
+export function isPackageGuide(repoPath: string): boolean {
+  return PACKAGE_GUIDE.test(repoPath);
+}
+
+/**
+ * The nav label for a doc. The Packages group already says what its items are,
+ * so the npm scope drops: `@txpipe/thoth-zk-tls` reads `zk-tls`, and a nested
+ * `@txpipe/thoth-zk-tls dApp integration` reads `dApp integration`.
+ */
+export function navLabel(repoPath: string, title: string): string {
+  if (!repoPath.startsWith('packages/')) return title;
+  return title.replace(/^@txpipe\/thoth-(\S+)(\s+(.+))?$/, (_, name: string, _rest, guide) =>
+    isPackageGuide(repoPath) && guide ? guide : name,
+  );
+}
+
 /** The first paragraph of a doc, used as its one-line note in llms.txt. */
 export function summaryOf(markdown: string | undefined): string {
   const paragraph: string[] = [];
@@ -92,7 +124,7 @@ export function summaryOf(markdown: string | undefined): string {
     .replace(/[`*_]/g, '');
 }
 
-/** The nav group for a repo path. */
+/** The nav group for a repo path; anything no rule claims is a guide. */
 export function navGroup(repoPath: string): string {
   return GROUP_RULES.find((rule) => rule.test(repoPath))?.label ?? 'Guides';
 }

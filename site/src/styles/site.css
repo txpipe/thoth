@@ -213,6 +213,8 @@ a:hover {
     var(--margin-width);
   column-gap: var(--column-gap);
   align-items: start;
+  /* At least one screen tall, so a short page's footer clears the fixed nav. */
+  min-height: calc(100vh - var(--header-height));
   padding-top: var(--body-top-gap);
   padding-bottom: var(--space-20);
 }
@@ -224,12 +226,12 @@ a:hover {
     var(--container-pad-lg),
     calc(50% - var(--page-width) / 2 + var(--container-pad-lg))
   );
-  display: flex;
-  flex-direction: column;
-  justify-content: safe center;
   width: var(--nav-width);
   height: calc(100vh - var(--header-height));
   overflow-y: auto;
+  /* Start level with the title, the way the margin column does. */
+  padding-top: var(--body-top-gap);
+  padding-bottom: var(--space-8);
 }
 
 .sidebar-groups details + details {
@@ -264,8 +266,17 @@ a:hover {
   transform: rotate(-45deg);
 }
 
-.sidebar-nav-toggle {
+.menu-toggle {
   display: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .sidebar-group-label {
@@ -307,6 +318,18 @@ a:hover {
   text-decoration: none;
 }
 
+/* A package's guides hang off its README on a hairline, like sub-entries. */
+.sidebar li.nested {
+  margin-left: var(--space-3);
+  border-left: 1px solid var(--stroke-4);
+}
+
+.sidebar li.nested a {
+  margin-left: var(--space-2);
+  color: var(--fg-3);
+  font-size: 0.8125rem;
+}
+
 /* The live page is the one place the neon is allowed to sit still. */
 .sidebar a[aria-current="page"] {
   border-color: color-mix(in srgb, var(--pink-400) 45%, transparent);
@@ -346,6 +369,7 @@ a:hover {
 
 .doc-toc-title {
   margin: 0 0 var(--space-3);
+  padding-left: var(--space-3);
   color: var(--fg-5);
   font-size: 0.6875rem;
   font-weight: var(--fw-semibold);
@@ -363,7 +387,9 @@ a:hover {
 }
 
 .doc-meta a {
+  position: relative;
   display: block;
+  padding-left: var(--space-3);
   color: var(--fg-4);
   overflow-wrap: anywhere;
   transition: color 120ms ease;
@@ -374,8 +400,23 @@ a:hover {
 }
 
 .doc-meta .depth-3 a {
-  padding-left: var(--space-3);
+  padding-left: var(--space-6);
   color: var(--fg-5);
+}
+
+/* The section being read carries the same ink tick as the section rules. */
+.doc-meta a[aria-current="location"] {
+  color: #fff;
+}
+
+.doc-meta a[aria-current="location"]::before {
+  content: "";
+  position: absolute;
+  top: calc(0.75em - 1px);
+  left: 0;
+  width: 0.375rem;
+  height: 2px;
+  background: var(--gradient-primary);
 }
 
 /* ---------- reading column ---------- */
@@ -444,6 +485,12 @@ a:hover {
 
 .prose h2:first-of-type::before {
   content: none;
+}
+
+/* Short docs: sections open on the tick alone; a full rule every few lines is noise. */
+.prose[data-compact] h2 {
+  margin-top: var(--space-12);
+  border-top-color: transparent;
 }
 
 .prose h3 {
@@ -518,10 +565,11 @@ a:hover {
 }
 
 .prose code {
-  padding: 0.1em 0.28em;
-  /* pull the chip's padding back out of the surrounding word gaps */
-  margin-inline: -0.28em;
+  padding: 0.1em 0.3em;
   border: 1px solid var(--stroke-4);
+  /* A chip that wraps keeps its border and padding on both lines. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
   border-radius: var(--radius-sm);
   color: var(--fg-1);
   background: color-mix(in srgb, var(--pink-100) 7%, var(--bg-card));
@@ -533,6 +581,7 @@ a:hover {
 }
 
 .prose pre {
+  --code-bg: color-mix(in srgb, var(--pink-100) 4%, var(--bg-card));
   padding: var(--space-4);
   border: 1px solid var(--stroke-3);
   border-radius: var(--radius-md);
@@ -540,8 +589,94 @@ a:hover {
   font-size: 0.8125rem;
   line-height: 1.65;
   /* Shiki writes the theme background inline on <pre>; match the page palette */
-  background: color-mix(in srgb, var(--pink-100) 4%, var(--bg-card)) !important;
+  background: var(--code-bg) !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* The script wraps each code block: a bar on top, the code below. The box
+   moves to the wrapper so the scroller inside it can fade its hidden edge. */
+.code-block {
+  --code-bg: color-mix(in srgb, var(--pink-100) 4%, var(--bg-card));
+  --code-bar: 2.25rem;
+  position: relative;
+  margin: var(--space-6) 0;
+  border: 1px solid var(--stroke-3);
+  border-radius: var(--radius-md);
+  background: var(--code-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.code-block .astro-code {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.code-block-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  height: var(--code-bar);
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-bottom: 1px solid var(--stroke-4);
+}
+
+.code-block-lang {
+  color: var(--fg-5);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.code-block-copy {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.code-block-copy:hover {
+  border-color: var(--stroke-3);
+  color: #fff;
+}
+
+.code-block::before,
+.code-block::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--code-bar) + 1px);
+  bottom: 0;
+  z-index: 1;
+  width: var(--space-10);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.code-block::before {
+  left: 0;
+  background: linear-gradient(to left, transparent, var(--code-bg));
+}
+
+.code-block::after {
+  right: 0;
+  background: linear-gradient(to right, transparent, var(--code-bg));
+}
+
+.code-block[data-overflow~="start"]::before,
+.code-block[data-overflow~="end"]::after {
+  opacity: 1;
 }
 
 .prose pre code {
@@ -562,6 +697,33 @@ a:hover {
 .mermaid svg {
   max-width: 100%;
   height: auto;
+}
+
+/* Diagrams and tables scroll sideways on narrow screens; fade the hidden edge. */
+:is(.mermaid, .prose table)[data-overflow="end"] {
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - var(--space-10)),
+    transparent
+  );
+}
+
+:is(.mermaid, .prose table)[data-overflow="start"] {
+  mask-image: linear-gradient(
+    to left,
+    #000 calc(100% - var(--space-10)),
+    transparent
+  );
+}
+
+:is(.mermaid, .prose table)[data-overflow="start end"] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--space-10),
+    #000 calc(100% - var(--space-10)),
+    transparent
+  );
 }
 
 /* Data tables, set like a printed table: rules top and bottom, not a grid. */
@@ -629,24 +791,38 @@ a:hover {
   .site-body {
     grid-template-columns: minmax(0, 1fr);
     column-gap: 0;
-    row-gap: var(--space-8);
+    row-gap: var(--space-3);
+    min-height: 0;
   }
 
   .sidebar {
+    order: -2;
     position: static;
     display: block;
     width: auto;
     height: auto;
     max-height: none;
+    padding: 0;
     overflow: visible;
   }
 
-  /* The margin rail needs the width a three-column grid gives it. */
+  /* The margin rail needs the width a three-column grid gives it; here the
+     table of contents collapses under the nav toggle instead. */
   .doc-meta {
+    order: -1;
+    grid-column: 1;
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-top: 0;
+    font-size: var(--fs-sm);
+  }
+
+  .doc-toc-title {
     display: none;
   }
 
-  .sidebar-nav-toggle {
+  .menu-toggle {
     display: flex;
     width: fit-content;
     align-items: center;
@@ -662,7 +838,7 @@ a:hover {
     list-style: none;
   }
 
-  .sidebar-nav-toggle::before {
+  .menu-toggle::before {
     content: "";
     flex: none;
     width: 0.35em;
@@ -672,16 +848,16 @@ a:hover {
     transform: rotate(-45deg);
   }
 
-  .sidebar-nav-toggle:hover {
+  .menu-toggle:hover {
     border-color: var(--stroke-2);
     color: #fff;
   }
 
-  .sidebar-nav[open] .sidebar-nav-toggle {
+  details[open] > .menu-toggle {
     margin-bottom: var(--space-4);
   }
 
-  .sidebar-nav[open] .sidebar-nav-toggle::before {
+  details[open] > .menu-toggle::before {
     transform: rotate(45deg);
   }
 
@@ -698,6 +874,7 @@ a:hover {
   .content {
     grid-column: 1;
     justify-self: stretch;
+    margin-top: var(--space-5);
   }
 
   /* The binding rule belongs to the three-column sheet. */
@@ -729,5 +906,22 @@ a:hover {
   /* Keep the diagram's text legible; the container scrolls sideways. */
   .mermaid svg {
     min-width: 44rem;
+  }
+}
+
+/* Touch: give every nav and contents link a 44px target. */
+@media (pointer: coarse) {
+  .sidebar a,
+  .doc-meta a {
+    padding-top: 0.6875rem;
+    padding-bottom: 0.6875rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
   }
 }

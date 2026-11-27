@@ -6,10 +6,9 @@ import GithubSlugger from 'github-slugger';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toString as nodeToString } from 'mdast-util-to-string';
 import { visit } from 'unist-util-visit';
-import { isPublished, routeFor, withBase } from './docs';
+import { isPublished, REPO_URL, routeFor, withBase } from './docs';
 
-const GITHUB = 'https://github.com/txpipe/thoth';
-const BLOB = `${GITHUB}/blob/main/`;
+const BLOB = `${REPO_URL}/blob/main/`;
 
 export interface Options {
   repoRoot: string;
@@ -100,7 +99,7 @@ export function rewriteLinks(options: Options) {
         node.url = withBase(routeFor(target), options.base) + (fragment ? `#${fragment}` : '');
         return;
       }
-      node.url = `${GITHUB}/${isDirectory ? 'tree' : 'blob'}/main/${target}${
+      node.url = `${REPO_URL}/${isDirectory ? 'tree' : 'blob'}/main/${target}${
         fragment ? `#${fragment}` : ''
       }`;
     }
