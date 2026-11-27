@@ -58,8 +58,8 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "types": "tsc --noEmit",
+    "build": "tsc -b",
+    "types": "tsc -b",
     "witnesses": "bash scripts/start-witnesses.sh"
   },
   "dependencies": {

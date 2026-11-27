@@ -54,11 +54,13 @@ thoth/
 ├── examples/demo-attestation/  # recorded zkFetch evidence fixture
 ├── CONTEXT.md                  # glossary
 ├── tsconfig.base.json          # shared TypeScript options
+├── tsconfig.build.json         # TypeScript project-references build graph
 └── package.json                # workspace root and shared scripts
 ```
 
 Every directory under `packages/` is one package. A package is built and
-type-checked only once it is listed in the root `package.json` `workspaces`.
+type-checked once it is listed in the root `package.json` `workspaces` and
+referenced from `tsconfig.build.json`.
 
 ## Commands
 
@@ -79,12 +81,13 @@ Run them from the repo root:
 
 For one package: `npm run <script> --workspace=packages/<name>`.
 
-Workspaces import each other through their built `dist/`. npm runs a
-`--workspaces` script in the order of the root `workspaces` array, so that
-array lists each package after the packages it imports; `build` and `types`
-rely on it. When you add a package, put it after its dependencies and before
-the packages that import it. A stale `dist/` shows up as confusing type errors
-such as "Generic type requires N type argument(s)".
+Workspaces import each other through their built `dist/`. TypeScript project
+references (`tsc -b`) resolve the build order and rebuild only packages whose
+inputs changed. When you add a buildable package, enable `composite` in its
+`tsconfig.json`, add a `references` entry for each workspace package it
+imports, and add the package to `tsconfig.build.json` and the root
+`workspaces` array (after its dependencies). A stale `dist/` shows up as
+confusing type errors such as "Generic type requires N type argument(s)".
 
 `packages/zk-tls/test/live.test.ts` runs against two real witnesses and skips
 unless `WITNESS_URLS` names them; see the attestor guide's

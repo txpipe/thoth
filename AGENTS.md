@@ -32,9 +32,10 @@ and CI are listed in [`CONTRIBUTING.md`](CONTRIBUTING.md#commands).
 ## Gotchas
 
 - **Stale `dist/`**: workspaces import each other through their built
-  `dist/`, and the root `workspaces` array order is the build order. See
-  [`CONTRIBUTING.md`](CONTRIBUTING.md#commands) for the rule and the errors a
-  stale `dist/` causes.
+  `dist/`, built incrementally via TypeScript project references (`tsc -b`).
+  See [`CONTRIBUTING.md`](CONTRIBUTING.md#commands) for what a new package
+  needs in `tsconfig.json` and `tsconfig.build.json`, and the errors a stale
+  `dist/` causes.
 
 ## Repository layout
 
@@ -45,8 +46,8 @@ file.
 ## Package invariants
 
 - **One package per directory** under `packages/`. A new package you want
-  built goes into the root `workspaces` array; a directory left out of it is a
-  placeholder and is not compiled
+  built goes into the root `workspaces` array and `tsconfig.build.json`; a
+  directory left out of them is a placeholder and is not compiled
   ([`CONTRIBUTING.md`](CONTRIBUTING.md#repository-layout)).
 - **`@midnight-ntwrk/compact-runtime` stays pinned to `0.21.0`** in every
   workspace, with Compact compiler `0.36.1`. Never bump one workspace alone;

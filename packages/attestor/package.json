@@ -44,8 +44,8 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "types": "tsc --noEmit"
+    "build": "tsc -b",
+    "types": "tsc -b"
   },
   "dependencies": {
     "@txpipe/thoth-core": "^0.0.0"
