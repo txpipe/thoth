@@ -1,8 +1,11 @@
 ---
+import interLatinWoff2 from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
 import type { MarkdownHeading } from 'astro';
+import Mermaid from '../components/Mermaid.astro';
 import Nav from '../components/Nav.astro';
 import { type NavGroup, neighborsOf } from '../lib/collection';
 import { REPO_URL, withBase } from '../lib/docs';
+import '../styles/fonts.css';
 import '../styles/tokens.css';
 import '../styles/site.css';
 
@@ -21,6 +24,8 @@ const home = withBase('/', base);
 const pageTitle = title === 'Thoth' ? 'Thoth' : `${title} · Thoth`;
 const toc = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
 const { prev, next } = neighborsOf(groups, currentId);
+const contentHtml = await Astro.slots.render('default');
+const hasMermaid = contentHtml.includes('data-language="mermaid"');
 ---
 
 <!doctype html>
@@ -32,12 +37,7 @@ const { prev, next } = neighborsOf(groups, currentId);
     <meta name="color-scheme" content="dark" />
     <link rel="icon" href={withBase('/favicon.svg', base)} type="image/svg+xml" />
     <title>{pageTitle}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-    />
+    <link rel="preload" href={interLatinWoff2} as="font" type="font/woff2" crossorigin />
   </head>
   <body>
     <a class="skip" href="#content">Skip to content</a>
@@ -94,7 +94,7 @@ const { prev, next } = neighborsOf(groups, currentId);
       </div>
       <div class="menu-backdrop" hidden></div>
       <main id="content" class="content prose" data-compact={compact ? '' : undefined}>
-        <slot />
+        <Fragment set:html={contentHtml} />
         {
           (prev || next) && (
             <nav class="doc-pager" aria-label="Pagination">
@@ -149,9 +149,9 @@ const { prev, next } = neighborsOf(groups, currentId);
             </nav>
           )
         }
+        <p class="visually-hidden" role="status" id="copy-status"></p>
       </main>
     </div>
-    <p class="visually-hidden" role="status" id="copy-status"></p>
     <footer class="site-footer">
       <span>Copyright 2026 TxPipe</span>
       <span>Apache-2.0 · <a href={`${REPO_URL}/blob/main/LICENSE`}>License</a></span>
@@ -257,11 +257,13 @@ const { prev, next } = neighborsOf(groups, currentId);
         const language = document.createElement('span');
         language.className = 'code-block-lang';
         const name = pre.dataset.language ?? '';
-        language.textContent = plain.has(name) ? '' : name;
+        const visibleLang = plain.has(name) ? '' : name;
+        language.textContent = visibleLang;
         const copy = document.createElement('button');
         copy.type = 'button';
         copy.className = 'code-block-copy';
         copy.textContent = 'Copy';
+        copy.setAttribute('aria-label', visibleLang ? `Copy ${visibleLang} code` : 'Copy code');
         let reset: ReturnType<typeof setTimeout> | undefined;
         const flash = (label: string, state: string) => {
           copy.textContent = label;
@@ -292,71 +294,12 @@ const { prev, next } = neighborsOf(groups, currentId);
         bar.append(language, copy);
         pre.before(block);
         block.append(bar, pre);
-        watchOverflow(pre, block);
+        watchOverflow(pre, block, visibleLang ? `Scrollable ${visibleLang} code` : 'Scrollable code');
       }
-      for (const table of document.querySelectorAll<HTMLElement>('.prose table')) {
-        watchOverflow(table);
-      }
-    </script>
-    <script>
-      import { watchOverflow } from '../lib/overflow';
-
-      // Mermaid is imported only on pages that have a diagram; the chunk is large.
-      const blocks = document.querySelectorAll('pre[data-language="mermaid"]');
-      if (blocks.length > 0) {
-        const { default: mermaid } = await import('mermaid');
-        const root = getComputedStyle(document.documentElement);
-        const token = (name: string) => root.getPropertyValue(name).trim();
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: 'base',
-          look: 'classic',
-          // Draw the diagram from the site's tokens rather than Mermaid's palette.
-          themeVariables: {
-            fontFamily: token('--font-sans'),
-            fontSize: '15px',
-            background: 'transparent',
-            primaryColor: token('--bg-card'),
-            primaryTextColor: token('--fg-1'),
-            primaryBorderColor: token('--stroke-2'),
-            secondaryColor: token('--bg-card'),
-            tertiaryColor: token('--bg-card'),
-            mainBkg: token('--bg-card'),
-            nodeBorder: token('--stroke-2'),
-            lineColor: token('--stroke-1'),
-            textColor: token('--fg-2'),
-            edgeLabelBackground: token('--bg-card'),
-            actorBkg: token('--bg-card'),
-            actorBorder: token('--stroke-2'),
-            actorTextColor: token('--fg-1'),
-            actorLineColor: token('--stroke-2'),
-            signalColor: token('--cyan-100'),
-            signalTextColor: token('--fg-2'),
-            labelBoxBkgColor: token('--bg-card'),
-            labelBoxBorderColor: 'rgba(255, 23, 159, 0.40)',
-            labelTextColor: token('--fg-2'),
-            loopTextColor: token('--fg-2'),
-            noteBkgColor: 'rgba(255, 2, 230, 0.08)',
-            noteBorderColor: 'rgba(255, 23, 159, 0.35)',
-            noteTextColor: token('--fg-2'),
-            activationBkgColor: 'rgba(255, 23, 159, 0.18)',
-            activationBorderColor: token('--pink-400'),
-          },
-          securityLevel: 'strict',
-        });
-        const nodes = Array.from(blocks, (block) => {
-          const container = document.createElement('div');
-          container.className = 'mermaid';
-          container.textContent = block.textContent;
-          return container;
-        });
-        // Mermaid measures its text; wait for the web font before swapping in
-        // the containers, so the source stays visible until the layout is final.
-        await document.fonts.ready;
-        blocks.forEach((block, index) => block.replaceWith(nodes[index]!));
-        await mermaid.run({ nodes });
-        for (const node of nodes) watchOverflow(node);
+      for (const wrap of document.querySelectorAll<HTMLElement>('.prose .table-wrap')) {
+        watchOverflow(wrap, wrap, 'Scrollable table');
       }
     </script>
+    {hasMermaid && <Mermaid />}
   </body>
 </html>

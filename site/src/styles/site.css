@@ -143,7 +143,7 @@ a:hover {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  height: var(--header-height);
+  min-height: var(--header-height);
   max-width: var(--page-width);
   margin: 0 auto;
   padding: 0 var(--container-pad-lg);
@@ -206,11 +206,11 @@ a:hover {
 
 .site-body {
   display: grid;
-  /* nav | reading column | margin; the margin carries the document's source */
+  /* nav | reading column | margin; capped rails keep 200% text scaling inside the viewport */
   grid-template-columns:
-    var(--nav-width)
-    var(--content-width)
-    var(--margin-width);
+    minmax(0, min(var(--nav-width), 20vw))
+    minmax(0, var(--content-width))
+    minmax(0, min(var(--margin-width), 16vw));
   column-gap: var(--column-gap);
   align-items: start;
   /* At least one screen tall, so a short page's footer clears the fixed nav. */
@@ -226,7 +226,7 @@ a:hover {
     var(--container-pad-lg),
     calc(50% - var(--page-width) / 2 + var(--container-pad-lg))
   );
-  width: var(--nav-width);
+  width: min(var(--nav-width), 20vw);
   height: calc(100vh - var(--header-height));
   overflow-y: auto;
   scrollbar-width: thin;
@@ -243,7 +243,9 @@ a:hover {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-3);
+  min-height: 1.5rem;
+  margin-bottom: var(--space-2);
+  padding: var(--space-1) 0;
   color: var(--fg-4);
   cursor: pointer;
   list-style: none;
@@ -416,7 +418,7 @@ a:hover {
 .doc-meta a {
   position: relative;
   display: block;
-  padding-left: var(--space-3);
+  padding: 3px 0 3px var(--space-3);
   color: var(--fg-4);
   overflow-wrap: anywhere;
   transition: color 120ms ease;
@@ -439,7 +441,7 @@ a:hover {
 .doc-meta a[aria-current="location"]::before {
   content: "";
   position: absolute;
-  top: calc(0.75em - 1px);
+  top: calc(3px + 0.75em - 1px);
   left: 0;
   width: 0.375rem;
   height: 2px;
@@ -802,9 +804,13 @@ a:hover {
   border-color: color-mix(in srgb, var(--pink-200) 45%, transparent);
 }
 
-/* Mermaid replaces its <pre> with this element at runtime. */
-.mermaid {
+/* Mermaid replaces its <pre> with a <figure> holding the SVG and a collapsible text source. */
+.mermaid-figure {
   margin: var(--space-6) 0;
+}
+
+.mermaid {
+  margin: 0;
   overflow-x: auto;
 }
 
@@ -813,8 +819,52 @@ a:hover {
   height: auto;
 }
 
+.diagram-source {
+  margin-top: var(--space-2);
+}
+
+.diagram-source summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 1.5rem;
+  padding: var(--space-1) 0;
+  color: var(--fg-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  list-style: none;
+}
+
+.diagram-source summary::-webkit-details-marker {
+  display: none;
+}
+
+.diagram-source summary::before {
+  content: "";
+  flex: none;
+  width: 0.35em;
+  height: 0.35em;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.diagram-source[open] summary::before {
+  transform: rotate(45deg);
+}
+
+.diagram-source summary:hover {
+  color: var(--fg-1);
+}
+
+.diagram-source pre {
+  margin-top: var(--space-2);
+}
+
 /* Diagrams and tables scroll sideways on narrow screens; fade the hidden edge. */
-:is(.mermaid, .prose table)[data-overflow="end"] {
+:is(.mermaid, .prose .table-wrap)[data-overflow="end"] {
   mask-image: linear-gradient(
     to right,
     #000 calc(100% - var(--space-10)),
@@ -822,7 +872,7 @@ a:hover {
   );
 }
 
-:is(.mermaid, .prose table)[data-overflow="start"] {
+:is(.mermaid, .prose .table-wrap)[data-overflow="start"] {
   mask-image: linear-gradient(
     to left,
     #000 calc(100% - var(--space-10)),
@@ -830,7 +880,7 @@ a:hover {
   );
 }
 
-:is(.mermaid, .prose table)[data-overflow="start end"] {
+:is(.mermaid, .prose .table-wrap)[data-overflow="start end"] {
   mask-image: linear-gradient(
     to right,
     transparent,
@@ -840,14 +890,19 @@ a:hover {
   );
 }
 
-/* Data tables, set like a printed table: rules top and bottom, not a grid. */
-.prose table {
-  display: block;
+/* Data tables, set like a printed table: rules top and bottom, not a grid.
+   The build-time .table-wrap owns sideways scrolling so <table> keeps native semantics. */
+.prose .table-wrap {
   margin: var(--space-8) 0;
+  overflow-x: auto;
+}
+
+.prose table {
+  width: 100%;
+  margin: 0;
   border-top: 1px solid var(--stroke-2);
   border-bottom: 1px solid var(--stroke-2);
   border-collapse: collapse;
-  overflow-x: auto;
   font-size: var(--fs-sm);
 }
 
@@ -1149,21 +1204,49 @@ a:hover {
   }
 }
 
-/* Touch: give every nav, contents, and heading control a comfortable target. */
+/* Touch: give every interactive control at least a 44px hit target. */
 @media (pointer: coarse) {
+  .wordmark,
+  .repo,
+  .sidebar-groups summary,
+  .sidebar a,
+  .doc-meta a,
+  .diagram-source summary,
+  .site-footer a {
+    min-height: 2.75rem;
+  }
+
+  .wordmark,
+  .site-footer a {
+    display: inline-flex;
+    align-items: center;
+  }
+
   .sidebar a,
   .doc-meta a {
-    padding-top: 0.6875rem;
-    padding-bottom: 0.6875rem;
+    display: flex;
+    align-items: center;
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-2);
+  }
+
+  .doc-meta a[aria-current="location"]::before {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .code-block {
+    --code-bar: 2.75rem;
+  }
+
+  .code-block-copy {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
   }
 
   .menu-button {
     width: 2.75rem;
     height: 2.75rem;
-  }
-
-  .code-block-copy {
-    min-height: 2.25rem;
   }
 
   .prose :is(h2, h3) .heading-anchor {
@@ -1172,9 +1255,35 @@ a:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition-duration: 0s !important;
+  html {
+    scroll-behavior: auto;
+  }
+
+  .wordmark,
+  .repo,
+  .sidebar a,
+  .doc-meta a,
+  .prose a,
+  .prose a code,
+  .prose
+    a[href^="http://"]:not([href^="https://txpipe.github.io/thoth"])::after,
+  .prose
+    a[href^="https://"]:not([href^="https://txpipe.github.io/thoth"])::after,
+  .prose :is(h2, h3) .heading-anchor,
+  .prose .doc-pager-link,
+  .doc-pager-label,
+  .sidebar-groups summary,
+  .sidebar-groups summary::before,
+  .sidebar-group-label,
+  .code-block-copy,
+  .code-block::before,
+  .code-block::after,
+  .menu-button,
+  .menu-button-bars,
+  .menu-button-bars::before,
+  .menu-button-bars::after,
+  .site-menu,
+  :root[data-menu-open] .site-menu {
+    transition: none;
   }
 }
