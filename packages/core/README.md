@@ -95,7 +95,7 @@ What the package checks:
 - `claimToMessage` produces the exact message the contract's `buildMessage` rebuilds, and `nullifierOf` the contract's nullifier; the contracts suite checks both over random claims. `nullifierOf` throws on a value, window bound or byte field outside its contract type rather than hash a wrapped value.
 - `toContractClaim` produces the contract's `Claim` struct from a `Claim`. A dApp always converts, even with `W = 0`.
 - `policyHashOf` and `claimContextDigestOf` are SHA-256 over a canonical JSON serialization: sorted keys, no whitespace, a `bigint` as a quoted decimal string, bytes as lowercase hex. Another implementation reproduces them from those rules alone.
-- `subjectHashOf` and `holderCommitmentOf` are circuit hashes, equal to the circuit's `persistentHash` of the subject struct and its `holderCommitment`, so an app can recompute them in-circuit.
+- `subjectHashOf` and `holderCommitmentOf` are circuit hashes, so an app can recompute them in-circuit. `subjectHashOf` equals the circuit's `persistentHash` of the subject struct. `holderCommitmentOf` equals the circuit's `holderCommitment`: SHA-256 of the 22-byte tag `thoth:holder-commit:v1`, then the 32-byte secret, one SHA-256 block.
 
 What it does not do:
 

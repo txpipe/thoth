@@ -97,13 +97,13 @@ server verified every proof against its verifier key.
 
 | Mock                   | Circuit               | k   | Rows   | Proving key (MB) | Proof (B) | First proof (s) | Warm proof (s) | CPU per warm proof (s) | Peak memory (MB) |
 | ---------------------- | --------------------- | --- | ------ | ---------------- | --------- | --------------- | -------------- | ---------------------- | ---------------- |
-| mock_attestation       | verifyAttestation     | 15  | 23,107 | 49.3             | 5,772     | 3.26            | 2.54           | 20.6                   | 749              |
-| mock_attestation       | openAndRead           | 14  | 8,610  | 24.6             | 5,772     | 1.58            | 1.16           | 10.4                   | 433              |
-| mock_attestation       | openAndReadPresence   | 14  | 8,580  | 24.6             | 5,772     | 1.54            | 1.15           | 10.4                   | 446              |
-| mock_attestation       | openAndRequireMetric0 | 14  | 8,570  | 24.6             | 5,772     | 1.54            | 1.16           | 10.4                   | 434              |
-| mock_attestation       | openAndBindHost       | 14  | 14,633 | 24.6             | 5,772     | 1.60            | 1.22           | 10.8                   | 447              |
-| mock_attestation_bytes | verifyAttestation     | 15  | 26,930 | 49.3             | 5,772     | 3.30            | 2.58           | 20.9                   | 754              |
-| mock_attestation_bytes | openAndReadBytes      | 15  | 19,188 | 49.3             | 5,772     | 2.96            | 2.25           | 19.3                   | 756              |
+| mock_attestation       | verifyAttestation     | 15  | 21,253 | 49.3             | 5,772     | 3.24            | 2.50           | 20.4                   | 765              |
+| mock_attestation       | openAndRead           | 14  | 8,610  | 24.6             | 5,772     | 1.54            | 1.15           | 10.4                   | 450              |
+| mock_attestation       | openAndReadPresence   | 14  | 8,580  | 24.6             | 5,772     | 1.56            | 1.17           | 10.4                   | 457              |
+| mock_attestation       | openAndRequireMetric0 | 14  | 8,570  | 24.6             | 5,772     | 1.54            | 1.15           | 10.4                   | 469              |
+| mock_attestation       | openAndBindHost       | 14  | 14,633 | 24.6             | 5,772     | 1.59            | 1.22           | 10.8                   | 458              |
+| mock_attestation_bytes | verifyAttestation     | 15  | 25,076 | 49.3             | 5,772     | 3.27            | 2.55           | 20.7                   | 759              |
+| mock_attestation_bytes | openAndReadBytes      | 15  | 19,188 | 49.3             | 5,772     | 2.95            | 2.22           | 19.3                   | 759              |
 
 How to read it:
 

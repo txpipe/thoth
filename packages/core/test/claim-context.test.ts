@@ -88,7 +88,7 @@ describe('holderCommitmentOf', () => {
     // holderCommitment(secret) of the compiled attestation module, for a
     // secret filled with 1.
     expect(hex(holderCommitmentOf(filled(1)))).toBe(
-      '9276ed0a85553eebda01f7dc401428f107b97ec6ccd4806f89f222d4b636e914',
+      '3f8daf2963ef0ff52fb62b033e2e566c2b32e02ba43a77066246ae46f7168747',
     );
   });
 
