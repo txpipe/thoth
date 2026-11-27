@@ -201,27 +201,32 @@ unchanged; those are your provider's errors, not threshold failures.
 ## Handing it to the contract
 
 `attestment.claim` is the claim every collected attestor signed, and
-`attestment.collected[i]` pairs a signature with the registry slot it answered
-from.
+`attestment.collected` holds exactly `threshold` attestations, sorted by the
+registry slot each answered from.
 
 ```ts
+import { slotSignaturesOf } from '@txpipe/thoth-client';
 import { nullifierOf, toContractClaim } from '@txpipe/thoth-core/claim';
 
 // In your contract's getAttestationWitness:
-return [toContractClaim(attestment.claim), signatures];
+return [privateState, toContractClaim(attestment.claim)];
+
+// In your contract's getSignatures:
+return [privateState, slotSignaturesOf(attestment.collected)];
 
 // Off-chain, the vault key your predicate opens the claim with:
 const nullifier = nullifierOf(attestment.claim);
 ```
 
-`getAttestationWitness` returns the claim in the contract's shape and one
-signature per registry slot.
-Place each `attestment.collected[i].attestation.signature` at that entry's
-`registryIndex` in the signature vector; slots you did not collect need a
-placeholder signature that never verifies, as the acceptance test does.
-`verifyAttestation` rebuilds the signed message with `buildMessage`, counts the
-signatures that verify against the sealed registry, and checks the policy hash,
-holder, window and nullifier before it vaults the claim under its nullifier.
+`getAttestationWitness` returns the claim in the contract's shape, and
+`getSignatures` returns exactly N signatures, each named by its registry slot,
+in slot order. Send no placeholder for a slot you did not collect: the
+contract takes N signatures, so set `threshold` to its N.
+
+`verifyAttestation` rebuilds the signed message with `buildMessage`, verifies
+each signature against the key of the slot it names, without revealing which
+slots signed, and checks the policy hash, holder, window and nullifier before
+it vaults the claim under its nullifier.
 Pass `nullifier` to your predicate circuit, which opens the claim with
 `openClaim(nullifier)` and the holder secret. The
 [contracts README](../../contracts/README.md#guarantees-and-limits) lists every
@@ -229,7 +234,7 @@ check.
 
 - **Seal the policy hash.** Insert `cardanoPolicyHashOf(policy)` into the
   constructor's `policyHashes` set with `disclose`. A claim under another
-  policy is rejected before the signature count.
+  policy is rejected before the signatures are checked.
 - **Size the module to the slot map.** `#V` is your numeric slot count and
   `#W` your byte slot count ([attestation header](../../contracts/attestation.compact)).
   For the policy above, `#V` is 3 and `#W` is 1. The client's

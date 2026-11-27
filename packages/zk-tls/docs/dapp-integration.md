@@ -348,19 +348,27 @@ separately if you need to.
 ## Handing it to the contract
 
 `attestment.claim` is the claim every attestor signed and `attestment.message`
-is its flat encoding; each `attestment.collected[i]` carries the
-`registryIndex` your trusted set assigned to the attestor that signed it. Place
-each signature at its slot in the contract's fixed signature vector and call
-`verifyAttestation` with the claim in the contract's shape,
-`toContractClaim(attestment.claim)`, for numeric-only claims too; the
-[wire order](../../../docs/DESIGN.md#wire-order) shows that shape.
+is its flat encoding; `attestment.collected` holds exactly `threshold`
+attestations, sorted by the `registryIndex` your trusted set assigned to the
+attestor that signed each. The contract takes the claim in its own shape,
+`toContractClaim(attestment.claim)`, for numeric-only claims too (the
+[wire order](../../../docs/DESIGN.md#wire-order) shows that shape), and exactly
+N signatures, each named by its slot, in slot order. `slotSignaturesOf` builds
+them; send no dummy for a slot that did not sign.
 
 ```ts
+import { slotSignaturesOf } from '@txpipe/thoth-client';
 import { toContractClaim } from '@txpipe/thoth-core/claim';
 
 // In getAttestationWitness:
 const claim = toContractClaim(attestment.claim);
+// In getSignatures:
+const signatures = slotSignaturesOf(attestment.collected);
 ```
+
+Set `threshold` to the contract's N: the contract rejects more or fewer
+signatures, and one that does not verify fails the proof instead of being
+skipped. Which slots signed stays private.
 
 See `@txpipe/thoth-contracts` for the circuit and the registry wiring.
 

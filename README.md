@@ -91,7 +91,7 @@ const attestors = [
 //    (seedKeys) and it seals your appId and zkFetchPolicyHashOf(policy)
 //    (policyHashes).
 
-// 3. Your dApp collects 2 signatures and places each at its registry slot.
+// 3. Your dApp collects 2 signatures, each tagged with its registry slot.
 const client = zkFetchClient.init({
   trusted: buildTrustedSet({
     registrySize: 3,
@@ -114,9 +114,10 @@ const { claim, collected } = await client.collect(request, {
   attestorTimeoutMs: 5_000,
 });
 
-// 4. Your contract's getAttestationWitness returns toContractClaim(claim) and
-//    the signatures by slot; getHolderSecret returns holderSecret. Then you call
-//    verifyAttestation, and open the claim later by nullifierOf(claim).
+// 4. Your contract's getAttestationWitness returns toContractClaim(claim),
+//    getSignatures returns slotSignaturesOf(collected) and getHolderSecret
+//    returns holderSecret. Then you call verifyAttestation, and open the claim
+//    later by nullifierOf(claim).
 ```
 
 [`examples/example_app.compact`](packages/contracts/examples/example_app.compact)
