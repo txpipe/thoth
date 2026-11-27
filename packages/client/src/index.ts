@@ -187,6 +187,43 @@ export interface CollectedAttestation<C, PK, S, Msg = FlatMessage> {
   readonly attestation: Attestation<C, PK, S, Msg>;
 }
 
+/**
+ * One signature and the registry slot whose key the contract checks it
+ * against: an entry of the attestation module's `getSignatures` witness.
+ */
+export interface SlotSignature<S> {
+  /** The registry slot, as the contract's `Uint<16>`. */
+  readonly registryIndex: bigint;
+  /** The signature collected from that slot. */
+  readonly signature: S;
+}
+
+/**
+ * Name each collected signature by its registry slot, in slot order: the
+ * value a dApp's `getSignatures` witness returns.
+ *
+ * Pass exactly the threshold's attestations, as a kind's `collect` returns
+ * them. The contract checks `entries[j].signature` against the key in slot
+ * `entries[j].registryIndex` and requires the slots to increase, so the slot
+ * comes from the trusted set, never from the order the replies arrived in.
+ *
+ * @throws {RangeError} if two attestations name the same slot.
+ */
+export function slotSignaturesOf<S>(
+  collected: readonly CollectedAttestation<unknown, unknown, S, unknown>[],
+): SlotSignature<S>[] {
+  const sorted = [...collected].sort((a, b) => a.registryIndex - b.registryIndex);
+  sorted.forEach((entry, i) => {
+    if (i > 0 && sorted[i - 1]?.registryIndex === entry.registryIndex) {
+      throw new RangeError(`two signatures name registry slot ${entry.registryIndex}`);
+    }
+  });
+  return sorted.map(({ registryIndex, attestation }) => ({
+    registryIndex: BigInt(registryIndex),
+    signature: attestation.signature,
+  }));
+}
+
 /** Signature verification for the app's signature scheme. */
 export interface AttestationVerifier<PK, S, Msg = FlatMessage> {
   /** Check a signature against the pinned key and message; return `false` or throw to reject. */
