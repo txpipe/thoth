@@ -1,6 +1,6 @@
 # Attestors sign the nullifier
 
-Status: accepted
+Status: accepted, amended by [ADR 0009](0009-byte-value-slots-in-the-claim.md)'s shape note: a byte slot is one `Bytes<32>` with one flag, so the message signs `V` and `W` (the byte-slot count, not the half count `B`), the identity is 136 + 9V + 33W bytes, and two layouts that share its length are `V = 11, W = 0` and `V = 0, W = 3`.
 
 Attestors used to sign the claim as a flat list of fields, with each 32-byte field cut into two 16-byte halves. A circuit holds 32 bytes as bytes 0-30 in one field plus byte 31, so every cut at byte 16 decomposes the value byte by byte: about 13,700 rows per field, five fields, three quarters of `verifyAttestation` (90,610 rows, `k = 17`). The circuit then hashed nearly the same fields again for the nullifier.
 

@@ -80,7 +80,7 @@ file.
   - `noUnusedImports`, `noUnusedVariables`, `useErrorMessage` are errors.
   - 100-column line width, single quotes, semicolons.
 - **Compact**: `pragma language_version >= 0.22`; follow the style in
-  `packages/contracts/*.compact`; module params are uppercase (`<#V, #B, #N, #M>`).
+  `packages/contracts/*.compact`; module params are uppercase (`<#V, #W, #N, #M>`).
   A module header (`attestation.compact`, `attestor_registry.compact`) covers
   purpose, the wire layout (`attestation.compact` only) and the module
   parameters, and skips prose that restates the asserts below it. A top-level
@@ -178,11 +178,11 @@ READMEs don't repeat it.
 
 - Contract logic is tested with the simulator via vitest in
   `packages/contracts/test/`. The mock top-level shells
-  (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, B=0, M=3,
-  N=2 — and `MockAttestationBytes.compact` — V=3, B=2) specialize the
+  (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, W=0, M=3,
+  N=2 — and `MockAttestationBytes.compact` — V=3, W=1) specialize the
   modules so tests run against real artifacts. `MockAttestationLayout.compact`
-  (V=0, B=18) is a layout whose claims can share identity bytes with a V=34,
-  B=0 layout, for the cross-layout test. `MockAddressHash.compact` is the
+  (V=0, W=3) is a layout whose claims can share identity bytes with a V=11,
+  W=0 layout, for the cross-layout test. `MockAddressHash.compact` is the
   compiled oracle for the cardano address hash. `MockRegistryDoubleInit.compact`
   calls `initRegistry` twice in its constructor to reach the double-init guard.
 - The parity tests draw seeded random claims from

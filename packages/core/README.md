@@ -108,7 +108,6 @@ What your app must do:
 
 - Use a fresh high-entropy secret per claim. Reusing a secret links claims; the layer promises no cross-claim identity or unlinkability.
 - Read the window as the time the observation happened; what that means for the fact is the kind's decision.
-- Give a byte slot's two halves the same flag. `toContractClaim` and `nullifierOf` do this from one `present` flag; the contract does not check the pairing.
 
 ## Design decisions
 
@@ -117,7 +116,7 @@ What your app must do:
 - **The claim carries no kind.** The policy hash, tagged with the law and wire version, is what the contract checks, so a second kind is a new policy hash served by the same module ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
 - **The holder is a per-claim commitment, not an identity.** Only the owner of that claim's secret can vault it; per-user state is yours to build ([ADR 0004](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0004-holder-is-per-claim-not-an-identity.md)).
 - **The kind owns the observation rules.** The window, the salt and evidence binding belong to the kind; `@txpipe/thoth-core` only hashes and encodes them ([kind author guide](https://github.com/txpipe-shop/thoth/blob/main/docs/kind-author-guide.md#5-the-claim)).
-- **A `Claim` is not the contract's struct.** A `Claim` has one `present` mask over `V + W` slots; the contract carries each byte value as two 16-byte halves with a flag per half, so you convert with `toContractClaim` before handing it to a contract witness ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
+- **A `Claim` is not the contract's struct.** A `Claim` has one `present` mask over `V + W` slots; the contract keeps the numeric flags (`present`) apart from the byte flags (`bytePresent`), one per byte value, so you convert with `toContractClaim` before handing it to a contract witness ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
 - **`FlatMessage` is the default message type.** A kind that needs another shape gives `message()` another return type; `MessageOf<D>` carries it through the signer, key pair and attestation.
 
 ## Links

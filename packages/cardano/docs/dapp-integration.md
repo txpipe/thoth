@@ -29,9 +29,8 @@ walkthrough.
   contract must seal it.
 - **`appId`.** The 32 bytes naming your app, signed into every claim.
 - **`valueSlots`.** Your contract's `#V`, the numeric slot count, up to 64.
-- **`byteSlots`.** Optional: the number of 32-byte byte values you measure,
-  W, up to 64. The contract's `#B` is `2W`, since each value is two 16-byte
-  halves. Defaults to `0`.
+- **`byteSlots`.** Optional: your contract's `#W`, the number of 32-byte byte
+  values you measure, up to 64. Defaults to `0`.
 - **`read`.** Your own read of the event, in the observation shape the client
   and the attestors share. `collect` stops waiting for it at `expiresAt` and
   throws `expired`; a read it abandons keeps running until your provider
@@ -60,7 +59,7 @@ const client = cardanoClient.init({
   policy, // see The policy below
   appId, // 32 bytes
   valueSlots: 3, // the contract's #V
-  byteSlots: 1, // one byte value; the contract's #B is 2
+  byteSlots: 1, // the contract's #W, one byte value
   read: (locator) => readOutputObservation({ source, ...locator }),
 });
 ```
@@ -232,9 +231,9 @@ check.
   constructor's `policyHashes` set with `disclose`. A claim under another
   policy is rejected before the signature count.
 - **Size the module to the slot map.** `#V` is your numeric slot count and
-  `#B` is `2W` ([attestation header](../../contracts/attestation.compact)).
-  For the policy above, `#V` is 3 and `#B` is 2. The client's
-  `valueSlots` must equal `#V`, and `byteSlots` must equal `#B / 2`. `init`
+  `#W` your byte slot count ([attestation header](../../contracts/attestation.compact)).
+  For the policy above, `#V` is 3 and `#W` is 1. The client's
+  `valueSlots` must equal `#V`, and `byteSlots` must equal `#W`. `init`
   checks that the slot map fits, not that it matches the deployed contract.
 - **Bind the holder in the predicate.** `verifyAttestation` checks
   `claim.holder == holderCommitment(getHolderSecret())` and vaults the claim

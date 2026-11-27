@@ -226,10 +226,11 @@ proposal.
   the disclosed string into the 32-byte slot, zero-padding shorter values; a
   value that does not fit is not certifiable and its slot stays unpresent. Your
   claim carries one flag per byte slot (`present[V + i]`); the contract's `Claim`
-  and the nullifier use the split shape in the [wire order](DESIGN.md#wire-order). So a
-  dApp returns `toContractClaim(claim)` (from `@txpipe/thoth-core/claim`) from
+  keeps those flags in their own `bytePresent` vector, beside `byteValues`, as the
+  [wire order](DESIGN.md#wire-order) shows. So a dApp returns
+  `toContractClaim(claim)` (from `@txpipe/thoth-core/claim`) from
   `getAttestationWitness`, never your claim itself, even with `W = 0`, whose
-  empty `bytePresent`/`byteHalves` the contract still requires.
+  empty `bytePresent`/`byteValues` the contract still requires.
 - `appId` and `holder` come from the claim proposal. The holder is a per-claim
   commitment, not an identity; the contract checks it against the caller's
   secret and checks `appId` against the app id it seals.
@@ -327,7 +328,7 @@ parsed proposal to stay short; a real kind signs the claim it derived, as
 The instance has no registry slot
 ([why](../packages/attestor/README.md#design-decisions)) and no fixed slot
 counts, so one instance and signing key can serve apps with different claim
-layouts. Each consuming contract enforces its own fixed `#V` and `#B`.
+layouts. Each consuming contract enforces its own fixed `#V` and `#W`.
 
 Infer the requested counts from `claim.values.length` and
 `claim.byteValues.length`, as `zkFetchAttestor` does. Derive the authoritative
