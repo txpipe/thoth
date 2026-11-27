@@ -23,4 +23,16 @@ describe('slotSignaturesOf', () => {
   it('rejects two attestations from one slot', () => {
     expect(() => slotSignaturesOf([collectedAt(1, 'a'), collectedAt(1, 'b')])).toThrow(RangeError);
   });
+
+  it.each([-1, 65_536, 1.5, Number.NaN])('rejects the slot %s, which no registry has', (slot) => {
+    expect(() => slotSignaturesOf([collectedAt(slot, 'a')])).toThrow(
+      `registry slot ${slot} is not an integer in [0, 65535]`,
+    );
+  });
+
+  it('accepts the highest slot a registry can have', () => {
+    expect(slotSignaturesOf([collectedAt(65_535, 'a')])).toEqual([
+      { registryIndex: 65_535n, signature: 'a' },
+    ]);
+  });
 });

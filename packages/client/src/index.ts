@@ -199,6 +199,9 @@ export interface SlotSignature<S> {
   readonly signature: S;
 }
 
+/** The highest slot the contract's `Uint<16>` registry slot can hold. */
+const MAX_SLOT = 65_535;
+
 /**
  * Name each collected signature by its registry slot, in slot order: the
  * value a dApp's `getSignatures` witness returns.
@@ -208,11 +211,18 @@ export interface SlotSignature<S> {
  * `entries[j].registryIndex` and requires the slots to increase, so the slot
  * comes from the trusted set, never from the order the replies arrived in.
  *
- * @throws {RangeError} if two attestations name the same slot.
+ * @throws {RangeError} if a slot is not an integer in `[0, 65535]`, the
+ *   range of the contract's `Uint<16>` slot, or two attestations name the same
+ *   slot.
  */
 export function slotSignaturesOf<S>(
   collected: readonly CollectedAttestation<unknown, unknown, S, unknown>[],
 ): SlotSignature<S>[] {
+  for (const { registryIndex } of collected) {
+    if (!Number.isInteger(registryIndex) || registryIndex < 0 || registryIndex > MAX_SLOT) {
+      throw new RangeError(`registry slot ${registryIndex} is not an integer in [0, ${MAX_SLOT}]`);
+    }
+  }
   const sorted = [...collected].sort((a, b) => a.registryIndex - b.registryIndex);
   sorted.forEach((entry, i) => {
     if (i > 0 && sorted[i - 1]?.registryIndex === entry.registryIndex) {
