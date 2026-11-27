@@ -42,6 +42,7 @@ thoth/
 │   ├── contracts/              # @txpipe/thoth-contracts: Compact modules
 │   │   ├── attestation.compact        # N-of-M verification, replay and window checks, claims vault
 │   │   ├── attestor_registry.compact  # pinned attestor keys, signature counting
+│   │   ├── bench/                     # proving benchmark (npm run bench)
 │   │   ├── examples/example_app.compact  # a 2-of-3 embedding
 │   │   └── test/                      # simulator tests, mock contracts, helpers
 │   ├── core/                   # @txpipe/thoth-core: keyless claim and law types
@@ -103,14 +104,15 @@ README table from its output.
 
 The benchmark starts a fresh server container for each circuit, so it can
 read that circuit's CPU time and peak memory from the container's cgroup
-(Linux, cgroup v2). These variables change how it runs:
+(Linux, cgroup v2). An interrupted run removes its containers. These variables
+change how it runs:
 
 | Variable           | Default                     | What it does                                                                                     |
 | ------------------ | --------------------------- | ------------------------------------------------------------------------------------------------ |
 | `BENCH_DOCKER`     | `docker`                    | The Docker command, such as `sudo -n docker`                                                     |
 | `BENCH_PARAMS`     | `thoth-bench-zk-params`     | The volume or host directory that caches the server's public parameters                          |
-| `BENCH_RUNS`       | `3`                         | Warm proofs per circuit, after the first                                                         |
-| `BENCH_OUT`        | `bench/results/latest.json` | Where the JSON report goes                                                                       |
+| `BENCH_RUNS`       | `3`                         | Warm proofs per circuit after the first, an integer of at least 1                                |
+| `BENCH_OUT`        | `bench/results/latest.json` | Where the JSON report goes; a relative path is from where you run npm                            |
 | `PROOF_SERVER_URL` | unset                       | Prove on this running server instead; CPU time and peak memory are then reported as not measured |
 | `ZKIR_BIN`         | found under `~/.compact`    | The `zkir-v3` binary that reports k and rows                                                     |
 
