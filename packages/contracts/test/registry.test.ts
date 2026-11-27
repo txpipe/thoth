@@ -1,7 +1,6 @@
 // Registry-management tests: the deploy-time `keysDistinct` check (duplicate
 // and empty-slot pinning), the double-init guard, and claim verification
 // against a registry with empty slots.
-import { randomBytes } from 'node:crypto';
 import {
   CompactTypeField,
   CompactTypeVector,
@@ -14,9 +13,9 @@ import { Contract as DoubleInitContract } from '../artifacts/mock_registry_doubl
 import {
   DEFAULT_HOLDER_SECRET,
   DUMMY_SIGNATURE,
-  idOf,
   makeClaim,
   makeNotaryKey,
+  nullifierOfClaim,
   signClaim,
 } from './helpers/fixtures.js';
 import { createPrivateState, type PrivateState } from './helpers/private-state.js';
@@ -79,9 +78,9 @@ describe('registry init', () => {
   it('accepts a threshold claim with an empty slot', async () => {
     const sim = await MockAttestationSim.create(createPrivateState(holder), [a.pk, b.pk, empty]);
     const claim = makeClaim();
-    const signed = signClaim(claim, [a, b, null], randomBytes(32));
+    const signed = signClaim(claim, [a, b, null]);
     await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
-    expect(sim.ledgerView().A_claimsVault.member(idOf(claim, signed.commitRand))).toBe(true);
+    expect(sim.ledgerView().A_claimsVault.member(nullifierOfClaim(claim))).toBe(true);
   });
 
   it('does not count a signature forged for the empty slot', async () => {
@@ -100,7 +99,7 @@ describe('registry init', () => {
         DUMMY_SIGNATURE,
       ),
     ).toBe(true);
-    const signed = signClaim(claim, [a, null, null], randomBytes(32));
+    const signed = signClaim(claim, [a, null, null]);
     await expect(
       sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder })),
     ).rejects.toThrow('Insufficient valid signatures');

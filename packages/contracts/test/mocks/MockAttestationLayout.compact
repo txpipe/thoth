@@ -11,7 +11,7 @@ import "../../attestor_registry"<3> prefix R_;
 
 export { L_Claim, L_ClaimEntry };
 
-export { L_nullifiers };
+export { L_claimsVault };
 
 export circuit verifyAttestation(): [] {
   L_verifyAttestation();

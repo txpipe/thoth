@@ -1,7 +1,7 @@
 // Thoth attestation module: verifies an N-of-M attested `Claim`, rejects
 // claims for another app, replays and out-of-window claims, and vaults it under
-// `persistentCommit(claim, rand)`. The registry counts the signatures that
-// verify; this module applies the threshold #N and defines the signed message.
+// its nullifier. The registry counts the signatures that verify; this module
+// applies the threshold #N and defines the signed message.
 //
 // Wire layout (buildMessage): attestors sign seven fields,
 //   [ version, V as Field, B as Field,
@@ -68,12 +68,12 @@ module attestation<#V, #B, #N, #M> {
     byteHalves: Vector<B, Bytes<16>>; // [b0[0..16], b0[16..32], b1[0..16], ...]
   }
 
-  // Observation identity (ADR 0006). Holder and version are not hashed directly;
-  // the holder reaches it only through the kind's salt.
-  // The secret salt keeps the public nullifier from confirming guessed values (ADR 0012).
-  // The attestors sign its hash, so reordering, adding or retyping a field
-  // changes what they sign.
-  struct Observation {
+  /// The observation identity: what the nullifier hashes and what `openClaim`
+  /// returns. Holder and version are not hashed directly; the holder reaches
+  /// it only through the kind's salt. A secret salt keeps the public nullifier
+  /// from confirming guessed values. The attestors sign its hash, so
+  /// reordering, adding or retyping a field changes what they sign.
+  export struct Observation {
     appId: Bytes<32>;
     policyHash: Bytes<32>;
     subjectHash: Bytes<32>;
@@ -106,10 +106,11 @@ module attestation<#V, #B, #N, #M> {
   export sealed ledger maxWindow: Uint<64>;
   /// Accepted policy hashes, sealed by the top-level constructor (ADR 0008).
   export sealed ledger policyHashes: Set<Bytes<32>>;
+  /// Accepted claims, keyed by their nullifier. A key present here is an
+  /// observation already accepted, so membership is the replay check.
   export ledger claimsVault: Map<Bytes<32>, ClaimEntry>;
-  export ledger nullifiers: Set<Bytes<32>>;
 
-  witness getAttestationWitness(): [Claim, Vector<M, JubjubSchnorrSignature>, Bytes<32>];
+  witness getAttestationWitness(): [Claim, Vector<M, JubjubSchnorrSignature>];
   witness getHolderSecret(): Bytes<32>;
 
   /// The vault pseudonym of a holder secret: hashToCurve over the
@@ -137,12 +138,6 @@ module attestation<#V, #B, #N, #M> {
     return messageOf(c.version, nullifierOf(c), c.holder);
   }
 
-  /// The claim id `verifyAttestation` stores under. Exported pure so tests
-  /// can reproduce it.
-  export pure circuit computeId(claim: Claim, rand: Bytes<32>): Bytes<32> {
-    return persistentCommit<Claim>(claim, rand);
-  }
-
   /// The vault pseudonym of a holder secret. Exported pure so tests can
   /// reproduce it.
   export pure circuit holderOf(secret: Bytes<32>): Field {
@@ -160,33 +155,36 @@ module attestation<#V, #B, #N, #M> {
              );
   }
 
-  /// The nullifier the attestors sign and `verifyAttestation` records: the
+  circuit observationOf(claim: Claim): Observation {
+    return Observation { appId: claim.appId,
+                         policyHash: claim.policyHash,
+                         subjectHash: claim.subjectHash,
+                         salt: claim.salt,
+                         windowStart: claim.windowStart,
+                         windowEnd: claim.windowEnd,
+                         values: claim.values,
+                         byteHalves: claim.byteHalves,
+                         present: claim.present,
+                         bytePresent: claim.bytePresent };
+  }
+
+  /// The nullifier the attestors sign and the claims vault is keyed by: the
   /// SHA-256 of the claim's observation identity, whose preimage the file
   /// header gives. Exported pure so `nullifierOf` in `@txpipe/thoth-core/claim`
   /// can match it.
   export pure circuit nullifierOf(claim: Claim): Bytes<32> {
-    return persistentHash<Observation>(
-             Observation { appId: claim.appId,
-                           policyHash: claim.policyHash,
-                           subjectHash: claim.subjectHash,
-                           salt: claim.salt,
-                           windowStart: claim.windowStart,
-                           windowEnd: claim.windowEnd,
-                           values: claim.values,
-                           byteHalves: claim.byteHalves,
-                           present: claim.present,
-                           bytePresent: claim.bytePresent }
-             );
+    return persistentHash<Observation>(observationOf(claim));
   }
 
   /// Verify an attested claim and store it in the claims vault.
   export circuit verifyAttestation(): [] {
-    const [claim, sigs, rand] = getAttestationWitness();
+    const [claim, sigs] = getAttestationWitness();
     assert(claim.version == 1, "Unsupported claim version");
     assert(claim.appId == appId, "App id mismatch");
     assert(policyHashes.member(disclose(claim.policyHash)), "Unaccepted policy");
 
-    // One hash of the claim serves the signatures and the replay check.
+    // One hash of the claim serves the signatures, the replay check and the
+    // vault key.
     const nullifier = nullifierOf(claim);
     const msg = messageOf(claim.version, nullifier, claim.holder);
     assert(Registry_countValidSignatures(msg, sigs) >= (N as Uint<64>),
@@ -218,34 +216,32 @@ module attestation<#V, #B, #N, #M> {
     const secret = getHolderSecret();
     assert(claim.holder == holderCommitment(secret), "Holder mismatch");
 
-    assert(!nullifiers.member(disclose(nullifier)), "Observation replay");
-    nullifiers.insert(disclose(nullifier));
-
-    // No vault membership check: an equal id commits to the same claim, whose
-    // nullifier the replay check above has already rejected.
-    const id = persistentCommit<Claim>(claim, rand);
+    assert(!claimsVault.member(disclose(nullifier)), "Observation replay");
     claimsVault.insert(
-      id,
+      disclose(nullifier),
       ClaimEntry { holder: disclose(deriveHolder(secret)),
                    windowStart: disclose(claim.windowStart),
                    windowEnd: disclose(claim.windowEnd) }
       );
   }
 
-  /// Prove the caller owns a vaulted claim and return it for in-circuit
-  /// predicates (a byte value is
-  /// `Bytes[...c.byteHalves[2 * i], ...c.byteHalves[2 * i + 1]]`).
-  /// Consumes no nullifier, so opening is repeatable: "use once" is the app's
-  /// own state. Never re-export it as a top-level entry point: its return
-  /// value is tainted and would force a disclose that reveals every value.
-  export circuit openClaim(id: Bytes<32>): Claim {
-    const [claim,, commitRand] = getAttestationWitness();
-    const key = disclose(id);
+  /// Prove the caller owns the claim vaulted under `nullifier` and return its
+  /// observation identity for in-circuit predicates (a byte value is
+  /// `Bytes[...o.byteHalves[2 * i], ...o.byteHalves[2 * i + 1]]`). It returns
+  /// only the fields the nullifier binds, not `holder` or `version`, which the
+  /// nullifier does not cover and this circuit does not check.
+  /// Consumes nothing, so opening is repeatable: "use once" is the app's own
+  /// state. Never re-export it as a top-level entry point: its return value is
+  /// tainted and would force a disclose that reveals every value.
+  export circuit openClaim(nullifier: Bytes<32>): Observation {
+    const [claim,] = getAttestationWitness();
+    const key = disclose(nullifier);
     assert(claimsVault.member(key), "Unknown claim");
     assert(claimsVault.lookup(key).holder == disclose(deriveHolder(getHolderSecret())),
            "Claim not bound to caller"
            );
-    assert(persistentCommit<Claim>(claim, commitRand) == key, "Claim does not match id");
-    return claim;
+    const observation = observationOf(claim);
+    assert(persistentHash<Observation>(observation) == key, "Claim does not match nullifier");
+    return observation;
   }
 }

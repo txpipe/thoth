@@ -70,7 +70,6 @@ const submit = (signatures: ReturnType<typeof signedBy>) =>
   sim.call('verifyAttestation', {
     claim: toContractClaim(deployed),
     signatures,
-    commitRand: randomBytes(32),
     holderSecret: holder,
   });
 
@@ -95,7 +94,7 @@ describe('layout binding', () => {
 
   it('accepts signatures over its own layout', async () => {
     await submit(signedBy(claimToMessage(deployed)));
-    expect(sim.ledgerView().L_nullifiers.size()).toBe(1n);
+    expect(sim.ledgerView().L_claimsVault.size()).toBe(1n);
   });
 
   it('rejects signatures made for the other layout', async () => {

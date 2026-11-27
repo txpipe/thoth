@@ -7,7 +7,6 @@
 // The end-to-end check signs `claimToMessage`'s output and submits it to the
 // simulator: the contract re-derives the message in-circuit, so it accepts only
 // if the off-chain encoder matches the contract's own.
-import { randomBytes } from 'node:crypto';
 import {
   type ContractClaim,
   claimToMessage,
@@ -20,7 +19,6 @@ import { pureCircuits as bytesPureCircuits } from '../artifacts/mock_attestation
 import {
   DEFAULT_HOLDER_SECRET,
   DUMMY_SIGNATURE,
-  idOf,
   makeClaim,
   makeNotaryKey,
 } from './helpers/fixtures.js';
@@ -70,7 +68,6 @@ describe.each(mocks)(`off-chain parity over random claims, $name (seed ${SEED})`
 
 describe('claimToMessage end to end', () => {
   it('accepts signatures made over claimToMessage output', async () => {
-    const commitRand = randomBytes(32);
     const claim = makeClaim({ values: [111n, 222n, 333n], present: [true, true, true] });
     const msg = claimToMessage({ ...claim, byteValues: [] });
 
@@ -85,10 +82,12 @@ describe('claimToMessage end to end', () => {
     await sim.call('verifyAttestation', {
       claim,
       signatures,
-      commitRand,
       holderSecret: holder,
     });
 
-    expect(sim.ledgerView().A_claimsVault.member(idOf(claim, commitRand))).toBe(true);
+    // The vault key is the off-chain nullifier, so a holder can find its entry.
+    expect(sim.ledgerView().A_claimsVault.member(nullifierOf({ ...claim, byteValues: [] }))).toBe(
+      true,
+    );
   });
 });

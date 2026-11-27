@@ -13,11 +13,10 @@ export const jubjubKeyPair = (): KeyPair<JubjubPoint, JubjubSchnorrSignature> =>
   return { publicKey: pk, signer: { sign: (message) => signMessage(sk, message).signature } };
 };
 
-/** A claim, its signatures at their registry slots, and the vault commitment randomness. */
+/** A claim and its signatures at their registry slots. */
 export type Submission = {
   claim: B_Claim;
   signatures: JubjubSchnorrSignature[];
-  commitRand: Uint8Array;
 };
 
 /** Submit `submission` to `verifyAttestation` as the holder of `holderSecret`. */

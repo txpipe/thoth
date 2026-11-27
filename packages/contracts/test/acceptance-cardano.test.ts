@@ -18,16 +18,16 @@ import { type CardanoAttestationInput, cardanoClient } from '@txpipe/thoth-carda
 import { buildTrustedSet } from '@txpipe/thoth-client';
 import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
 import type { Claim } from '@txpipe/thoth-core/claim';
-import { toContractClaim } from '@txpipe/thoth-core/claim';
+import { nullifierOf, toContractClaim } from '@txpipe/thoth-core/claim';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { type B_Claim, pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { jubjubKeyPair, type Submission, submit } from './helpers/acceptance.js';
 import {
   APP_ID,
-  bytesIdOf,
   DUMMY_SIGNATURE,
   flip,
   makeNotaryKey,
+  nullifierOfByteClaim,
   splitHalves,
 } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
@@ -130,7 +130,7 @@ const collectSubmission = async (secret = holderSecret): Promise<Submission> => 
       collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
       DUMMY_SIGNATURE,
   );
-  return { claim: toContractClaim(claim), signatures, commitRand: randomBytes(32) };
+  return { claim: toContractClaim(claim), signatures };
 };
 
 // A fresh ledger that seals the app id and the policy the attestors enforced,
@@ -182,17 +182,24 @@ describe('cardano cross-seam acceptance', () => {
   it('accepts the honest claim end to end', async () => {
     const sim = await freshLedger();
     await submit(sim, honest, holderSecret);
-    expect(sim.ledgerView().B_claimsVault.member(bytesIdOf(honest.claim, honest.commitRand))).toBe(
-      true,
+    expect(sim.ledgerView().B_claimsVault.member(nullifierOfByteClaim(honest.claim))).toBe(true);
+  });
+
+  it('lets the holder open the accepted claim by its off-chain nullifier', async () => {
+    const sim = await freshLedger();
+    await submit(sim, honest, holderSecret);
+    await sim.call(
+      'openAndReadBytes',
+      { ...honest, holderSecret },
+      nullifierOf(honestClaim),
+      Uint8Array.from(Buffer.from(TX_HASH, 'hex')),
     );
   });
 
-  it('refuses a resubmission of the accepted claim under fresh vault randomness', async () => {
+  it('refuses a resubmission of the accepted claim', async () => {
     const sim = await freshLedger();
     await submit(sim, honest, holderSecret);
-    await expect(
-      submit(sim, { ...honest, commitRand: randomBytes(32) }, holderSecret),
-    ).rejects.toThrow('Observation replay');
+    await expect(submit(sim, honest, holderSecret)).rejects.toThrow('Observation replay');
   });
 
   // The salt follows the event, not the holder, so a second holder's claim for
