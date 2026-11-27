@@ -29,8 +29,8 @@ contract. The [package README](../README.md) explains the terms; the
   attestor caps the slot counts it accepts; check its
   [limits](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls#guarantees-and-limits)
   with its operator.
-- **`byteSlots`.** Optional: half your contract's `#B`, since the contract
-  stores each 32-byte value as two 16-byte halves. Defaults to `0`.
+- **`byteSlots`.** Optional: your contract's `#W`, the number of 32-byte byte
+  values. Defaults to `0`.
 - **`provers`.** Where evidence comes from, keyed by attestor id. Each entry
   points at that attestor's own witness: `zkFetchProver({ witnessUrl })`, or any
   object with a `prove(request)` method. Every attestor in `trusted` needs an

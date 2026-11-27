@@ -119,7 +119,7 @@ The measured values of a claim, one per value slot: numbers in the numeric slots
 _Avoid_: Data, payload.
 
 **Byte slot**:
-A value slot carrying a 32-byte string, for facts that are not numbers, such as identifiers (ADR 0009). A parse rule canonicalizes a source's string into the slot, zero-padded: `bytes` keeps its UTF-8 bytes, `hex` and `base64` decode it, and an optional `length` pins the exact byte count. Decoding folds only representations that carry no data, such as hex case; separators and whitespace are data (ADR 0010). The slot is exactly its bytes, and equality is byte equality. In the contract's `Claim` and the nullifier's preimage it occupies two 16-byte byte halves (`byteHalves`), which a predicate reassembles in-circuit; the wire layout places them.
+A value slot carrying a 32-byte string, for facts that are not numbers, such as identifiers (ADR 0009). A parse rule canonicalizes a source's string into the slot, zero-padded: `bytes` keeps its UTF-8 bytes, `hex` and `base64` decode it, and an optional `length` pins the exact byte count. Decoding folds only representations that carry no data, such as hex case; separators and whitespace are data (ADR 0010). The slot is exactly its bytes, and equality is byte equality. In the contract's `Claim` and the nullifier's preimage it is one `Bytes<32>` (`byteValues[i]`) with one presence flag (`bytePresent[i]`), so a predicate compares it to a `Bytes<32>` directly; the wire layout places them. An absent byte slot is all zero bytes.
 _Avoid_: Blob, string slot.
 
 **Claim proposal**:

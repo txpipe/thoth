@@ -108,7 +108,7 @@ export interface CardanoClientConfig<PK, S> {
   readonly appId: Uint8Array;
   /** The contract's numeric value count. */
   readonly valueSlots: number;
-  /** The contract's byte value count. Defaults to `0`. */
+  /** The contract's `#W`, its byte-slot count. Defaults to `0`. */
   readonly byteSlots?: number;
   /**
    * The app's own read of the event; the attestors read it again themselves.

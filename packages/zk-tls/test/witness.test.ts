@@ -146,7 +146,7 @@ describe('test-key witness', () => {
       expect(attestation.claim.values.slice(2)).toEqual(Array<bigint>(size - 2).fill(0n));
       expect(attestation.claim.present.slice(2)).toEqual(Array<boolean>(size - 2).fill(false));
       expect(attestation.signature).toBe(`sig:${attestation.message.join(',')}`);
-      // The message signs the layout: `size` value slots, no byte halves.
+      // The message signs the layout: `size` value slots, no byte slots.
       expect(attestation.message.slice(0, 3)).toEqual([1n, BigInt(size), 0n]);
       expect(attestation.message).toEqual(claimToMessage(attestation.claim));
     }

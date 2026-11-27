@@ -14,9 +14,9 @@ export type FlatMessage = readonly bigint[];
  * (`V` numeric slots, then `W` byte slots), `V` numeric `values` and `W` 32-byte
  * `byteValues`.
  *
- * It carries no kind: the policy hash binds it (ADR 0002). The contract stores
- * byte values as 16-byte halves, so a dApp hands it {@link toContractClaim}'s
- * output, never this shape.
+ * It carries no kind: the policy hash binds it. The contract keeps numeric and
+ * byte flags apart, so a dApp hands it {@link toContractClaim}'s output, never
+ * this shape.
  */
 // biome-ignore lint/correctness/noUnusedVariables: phantom type param — carries the claim's numeric value count `V`.
 export interface Claim<V extends number, W extends number = 0> {
@@ -223,8 +223,8 @@ export function nullifierOf<V extends number, W extends number = 0>(
   c.values.forEach((value, i) => {
     hash.update(uintBytes(`values[${i}]`, value, VALUE_BYTES));
   });
-  for (const half of c.byteHalves) {
-    hash.update(half);
+  for (const value of c.byteValues) {
+    hash.update(value);
   }
   hash.update(Uint8Array.from([...c.present, ...c.bytePresent], (present) => (present ? 1 : 0)));
   return new Uint8Array(hash.digest());
@@ -264,7 +264,7 @@ export function claimToMessage<V extends number, W extends number = 0>(
   return [
     claim.version,
     BigInt(claim.values.length),
-    BigInt(2 * claim.byteValues.length),
+    BigInt(claim.byteValues.length),
     ...limbs('nullifier', nullifier),
     ...limbs('holder', claim.holder),
   ];
@@ -272,8 +272,8 @@ export function claimToMessage<V extends number, W extends number = 0>(
 
 /**
  * The `Claim` struct of `attestation.compact`, field for field: the shape a
- * dApp's `getAttestationWitness` returns. Its byte fields are split as the wire
- * layout in the `attestation.compact` header shows (ADR 0009).
+ * dApp's `getAttestationWitness` returns. It splits the claim's `present` into
+ * one flag per numeric slot and one per byte slot.
  */
 export interface ContractClaim {
   version: bigint;
@@ -293,12 +293,12 @@ export interface ContractClaim {
   salt: Uint8Array;
   /** Exactly `V`. */
   present: boolean[];
-  /** Exactly `B`: each byte slot's flag twice. */
+  /** Exactly `W`, one flag per byte slot. */
   bytePresent: boolean[];
   /** Exactly `V`. */
   values: bigint[];
-  /** Exactly `B`: bytes 0–15, then bytes 16–31, per byte value. */
-  byteHalves: Uint8Array[];
+  /** Exactly `W`, 32 bytes each. */
+  byteValues: Uint8Array[];
 }
 
 /**
@@ -327,13 +327,11 @@ export function toContractClaim<V extends number, W extends number = 0>(
     holder: claim.holder,
     salt: claim.salt,
     present: claim.present.slice(0, numericCount),
-    bytePresent: claim.present.slice(numericCount).flatMap((present) => [present, present]),
+    bytePresent: claim.present.slice(numericCount),
     values: [...claim.values],
-    byteHalves: claim.byteValues.flatMap((bytes) => {
-      if (bytes.length !== 32) {
-        throw new Error(`expected 32 bytes, got ${bytes.length}`);
-      }
-      return [bytes.slice(0, 16), bytes.slice(16, 32)];
+    byteValues: claim.byteValues.map((bytes, i) => {
+      assertBytes32(`byteValues[${i}]`, bytes);
+      return bytes;
     }),
   };
 }

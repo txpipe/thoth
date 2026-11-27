@@ -1,6 +1,6 @@
 // The signed message carries the layout. The observation identity is hashed as
-// a plain concatenation, 136 + 9*V + 17*B bytes, so the layout mock (V = 0,
-// B = 18) and a V = 34, B = 0 layout can serialize two claims to the same
+// a plain concatenation, 136 + 9*V + 33*W bytes, so the layout mock (V = 0,
+// W = 3) and a V = 11, W = 0 layout can serialize two claims to the same
 // bytes and the same nullifier. Only the layout fields of the message tell
 // them apart, and this test shows that is enough.
 import { randomBytes } from 'node:crypto';
@@ -24,9 +24,10 @@ const notaryKeys = [makeNotaryKey(), makeNotaryKey(), makeNotaryKey()] as const;
 const registryKeys = notaryKeys.map((key) => key.pk);
 const holder = DEFAULT_HOLDER_SECRET;
 
-// The layout mock's claim as a core claim: nine byte slots, all measured. After
-// the common fields its identity is 18 halves (288 bytes), then 18 flags of 1.
-// The last half is sixteen bytes of 1, so the final 34 bytes are all 1.
+// The layout mock's claim as a core claim: three byte slots, all measured.
+// After the common fields its identity is three values (96 bytes), then three
+// flags of 1. The last value ends in eight bytes of 1, so the final 11 bytes
+// are all 1.
 const header = {
   version: 1n,
   appId: APP_ID,
@@ -38,23 +39,24 @@ const header = {
   salt: randomBytes(32),
 };
 const lastValue = new Uint8Array(32);
-lastValue.set(randomBytes(16));
-lastValue.fill(1, 16);
-const byteValues = [...Array.from({ length: 8 }, () => randomBytes(32)), lastValue];
-const deployed: Claim<0, 9> = {
+lastValue.set(randomBytes(24));
+lastValue.fill(1, 24);
+const byteValues = [randomBytes(32), randomBytes(32), lastValue];
+const deployed: Claim<0, 3> = {
   ...header,
-  present: Array<boolean>(9).fill(true),
+  present: Array<boolean>(3).fill(true),
   values: [],
   byteValues,
 };
 
-// The V = 34, B = 0 claim with the same identity bytes: the first 272 bytes of
-// halves read as 34 little-endian `Uint<64>` values, then 34 flags of 1.
-const halfBytes = Buffer.concat(byteValues).subarray(0, 272);
-const competing: Claim<34, 0> = {
+// The V = 11, W = 0 claim with the same identity bytes: the first 88 bytes of
+// the byte values read as 11 little-endian `Uint<64>` values, then 11 flags
+// of 1.
+const valueBytes = Buffer.concat(byteValues).subarray(0, 88);
+const competing: Claim<11, 0> = {
   ...header,
-  present: Array<boolean>(34).fill(true),
-  values: Array.from({ length: 34 }, (_, i) => halfBytes.readBigUInt64LE(8 * i)),
+  present: Array<boolean>(11).fill(true),
+  values: Array.from({ length: 11 }, (_, i) => valueBytes.readBigUInt64LE(8 * i)),
   byteValues: [],
 };
 
@@ -87,8 +89,8 @@ describe('layout binding', () => {
   it('signs a message that differs only in the layout fields', () => {
     const own = pureCircuits.message(toContractClaim(deployed));
     const other = claimToMessage(competing);
-    expect(own.slice(0, 3)).toEqual([1n, 0n, 18n]);
-    expect(other.slice(0, 3)).toEqual([1n, 34n, 0n]);
+    expect(own.slice(0, 3)).toEqual([1n, 0n, 3n]);
+    expect(other.slice(0, 3)).toEqual([1n, 11n, 0n]);
     expect(other.slice(3)).toEqual(own.slice(3));
   });
 

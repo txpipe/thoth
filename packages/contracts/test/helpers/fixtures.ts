@@ -1,7 +1,7 @@
 // Test fixtures: claims, notary keys, and seeded valid signatures over the
 // FROZEN message shape (see sign.ts). Zero-filled absent slots are the
 // canonical "not present" encoding; `present[i] = true` marks numeric slot i
-// populated and `bytePresent[j] = true` marks byte half j populated.
+// populated and `bytePresent[j] = true` marks byte slot j populated.
 import { randomBytes } from 'node:crypto';
 import {
   type JubjubPoint,
@@ -56,20 +56,12 @@ export const padded32 = (value: string): Uint8Array => {
 /** Default byte value fixture: `"abc"` zero-padded to 32 bytes. */
 export const DEFAULT_BYTE_VALUE = padded32('abc');
 
-/** Split a 32-byte value into its two `Bytes<16>` halves, in order. */
-export const splitHalves = (value: Uint8Array): [Uint8Array, Uint8Array] => {
-  if (value.length !== 32) {
-    throw new Error(`splitHalves: expected 32 bytes, got ${value.length}`);
-  }
-  return [value.slice(0, 16), value.slice(16, 32)];
-};
-
 // Build a valid numeric-only `Claim` fixture (length 3 for this embedding);
 // `present` marks populated slots (present[i] = true means slot i was
 // measured). If any value is `0` it must still be marked present via
 // `present[i] = true`.
 export const makeClaim = (
-  overrides: Partial<Omit<A_Claim, 'values' | 'present' | 'bytePresent' | 'byteHalves'>> & {
+  overrides: Partial<Omit<A_Claim, 'values' | 'present' | 'bytePresent' | 'byteValues'>> & {
     values?: bigint[];
     present?: boolean[];
   } = {},
@@ -88,45 +80,31 @@ export const makeClaim = (
     values,
     present,
     bytePresent: [],
-    byteHalves: [],
+    byteValues: [],
     ...overrides,
   };
 };
 
 // Build a valid one-byte-value `Claim` fixture for the bytes mock (V = 3,
-// B = 2). The byte flag covers both halves, matching the attestor law.
+// W = 1), with the byte slot measured.
 export const makeByteClaim = ({
   byteValue = DEFAULT_BYTE_VALUE,
   ...overrides
-}: Partial<B_Claim> & { byteValue?: Uint8Array } = {}): B_Claim => {
-  const [low, high] = splitHalves(byteValue);
-  return {
-    version: 1n,
-    appId: APP_ID,
-    policyHash: POLICY_A,
-    windowStart: nowSeconds() - 10n,
-    windowEnd: nowSeconds(),
-    subjectHash: randomBytes(32),
-    holder: bytesPureCircuits.holderCommitment(DEFAULT_HOLDER_SECRET),
-    salt: randomBytes(32),
-    present: [true, false, false],
-    bytePresent: [true, true],
-    values: [12345n, 0n, 0n],
-    byteHalves: [low, high],
-    ...overrides,
-  };
-};
-
-/** Reassemble a `Bytes<32>` value from two `Bytes<16>` halves. */
-export const mergeHalves = (low: Uint8Array | undefined, high: Uint8Array | undefined) => {
-  if (!low || !high) {
-    throw new Error('mergeHalves: missing a half');
-  }
-  const value = new Uint8Array(low.length + high.length);
-  value.set(low, 0);
-  value.set(high, low.length);
-  return value;
-};
+}: Partial<B_Claim> & { byteValue?: Uint8Array } = {}): B_Claim => ({
+  version: 1n,
+  appId: APP_ID,
+  policyHash: POLICY_A,
+  windowStart: nowSeconds() - 10n,
+  windowEnd: nowSeconds(),
+  subjectHash: randomBytes(32),
+  holder: bytesPureCircuits.holderCommitment(DEFAULT_HOLDER_SECRET),
+  salt: randomBytes(32),
+  present: [true, false, false],
+  bytePresent: [true],
+  values: [12345n, 0n, 0n],
+  byteValues: [byteValue],
+  ...overrides,
+});
 
 // A copy of `bytes` with byte `i` inverted. Throws on an out-of-range index,
 // which a typed array would otherwise ignore, leaving the copy unchanged.

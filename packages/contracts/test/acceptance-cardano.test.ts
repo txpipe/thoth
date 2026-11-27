@@ -28,7 +28,6 @@ import {
   flip,
   makeNotaryKey,
   nullifierOfByteClaim,
-  splitHalves,
 } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { MockAttestationBytesSim } from './helpers/sim.js';
@@ -37,7 +36,7 @@ const TEST_ADDRESS = `addr_test1${'q'.repeat(53)}`;
 const TX_HASH = 'cd'.repeat(32);
 const BLOCK_HASH = 'ab'.repeat(32);
 
-// Three numeric facts and one byte fact, sized for the V=3, B=2 mock.
+// Three numeric facts and one byte fact, sized for the V=3, W=1 mock.
 const policy: CardanoPolicy = {
   kind: 'output',
   network: 'preview',
@@ -166,9 +165,9 @@ describe('cardano cross-seam acceptance', () => {
       windowStart: 1_700_000_000n,
       windowEnd: 1_700_000_000n,
       present: [true, true, true],
-      bytePresent: [true, true],
+      bytePresent: [true],
       values: [1_700_000_000n, 1000n, 5_000_000n],
-      byteHalves: splitHalves(Uint8Array.from(Buffer.from(TX_HASH, 'hex'))),
+      byteValues: [Uint8Array.from(Buffer.from(TX_HASH, 'hex'))],
     });
     expect(honest.signatures[2]).toBe(DUMMY_SIGNATURE);
   });
@@ -226,16 +225,13 @@ describe('cardano cross-seam acceptance', () => {
     },
     {
       name: 'the byte presence mask',
-      mutate: (c: B_Claim) => ({ ...c, bytePresent: [true, false] }),
+      mutate: (c: B_Claim) => ({ ...c, bytePresent: [false] }),
     },
     {
       name: 'the byte value',
       mutate: (c: B_Claim) => ({
         ...c,
-        byteHalves: [
-          flip(c.byteHalves[0] ?? new Uint8Array(16), 0),
-          c.byteHalves[1] ?? new Uint8Array(16),
-        ],
+        byteValues: [flip(c.byteValues[0] ?? new Uint8Array(32), 0)],
       }),
     },
     // The other policy is sealed too, so only the signatures can reject it.

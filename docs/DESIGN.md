@@ -94,41 +94,40 @@ a parity test keeps them equal. A 32-byte value is two fields: byte 31, then
 bytes 0–30 read little-endian (byte 0 least significant, the runtime's
 `convertBytesToUint` convention).
 
-| Index | Field              | Encoding                                                   |
-| ----- | ------------------ | ---------------------------------------------------------- |
-| 0     | `version`          | `1`                                                        |
-| 1     | `V`                | the numeric slot count; the contract writes its own `#V`   |
-| 2     | `B`                | the byte-half count `2W`; the contract writes its own `#B` |
-| 3     | `nullifier[31]`    | byte 31 of the nullifier                                   |
-| 4     | `nullifier[0..31]` | bytes 0–30 of the nullifier, little-endian                 |
-| 5     | `holder[31]`       | byte 31 of `holder`                                        |
-| 6     | `holder[0..31]`    | bytes 0–30 of `holder`, little-endian                      |
+| Index | Field              | Encoding                                                 |
+| ----- | ------------------ | -------------------------------------------------------- |
+| 0     | `version`          | `1`                                                      |
+| 1     | `V`                | the numeric slot count; the contract writes its own `#V` |
+| 2     | `W`                | the byte slot count; the contract writes its own `#W`    |
+| 3     | `nullifier[31]`    | byte 31 of the nullifier                                 |
+| 4     | `nullifier[0..31]` | bytes 0–30 of the nullifier, little-endian               |
+| 5     | `holder[31]`       | byte 31 of `holder`                                      |
+| 6     | `holder[0..31]`    | bytes 0–30 of `holder`, little-endian                    |
 
 The nullifier is the SHA-256 (`persistentHash`) of the observation identity:
-every claim field but `version` and `holder`, 136 + 9V + 17B bytes in this
+every claim field but `version` and `holder`, 136 + 9V + 33W bytes in this
 order. Integers are little-endian at their width; a flag is one byte, `0` or
 `1`.
 
-| Bytes   | Field                                 | Encoding                                                      |
-| ------- | ------------------------------------- | ------------------------------------------------------------- |
-| 32      | `appId`                               | as is                                                         |
-| 32      | `policyHash`                          | as is                                                         |
-| 32      | `subjectHash`                         | as is                                                         |
-| 32      | `salt`                                | as is                                                         |
-| 4       | `windowStart`                         | Unix seconds, `Uint<32>`                                      |
-| 4       | `windowEnd`                           | Unix seconds, `Uint<32>`                                      |
-| 8 each  | `values[0]` … `values[V-1]`           | `Uint<64>`; `0` when absent                                   |
-| 16 each | `byteHalves[0]` … `byteHalves[B-1]`   | `[b0 bytes 0–15, b0 bytes 16–31, b1 bytes 0–15, …]`           |
-| 1 each  | `present[0]` … `present[V-1]`         | `1` measured, `0` absent                                      |
-| 1 each  | `bytePresent[0]` … `bytePresent[B-1]` | one flag per half; both halves of a byte value share the flag |
+| Bytes   | Field                                 | Encoding                                 |
+| ------- | ------------------------------------- | ---------------------------------------- |
+| 32      | `appId`                               | as is                                    |
+| 32      | `policyHash`                          | as is                                    |
+| 32      | `subjectHash`                         | as is                                    |
+| 32      | `salt`                                | as is                                    |
+| 4       | `windowStart`                         | Unix seconds, `Uint<32>`                 |
+| 4       | `windowEnd`                           | Unix seconds, `Uint<32>`                 |
+| 8 each  | `values[0]` … `values[V-1]`           | `Uint<64>`; `0` when absent              |
+| 32 each | `byteValues[0]` … `byteValues[W-1]`   | as is, zero-padded; all zero when absent |
+| 1 each  | `present[0]` … `present[V-1]`         | `1` measured, `0` absent                 |
+| 1 each  | `bytePresent[0]` … `bytePresent[W-1]` | `1` measured, `0` absent                 |
 
-The identity's length fixes only `9V + 17B`, so two layouts can serialize two
-claims to the same bytes and the same nullifier (`V = 34, B = 0` and
-`V = 0, B = 18`). Indexes 1 and 2 sign the layout: the contract rebuilds them
-from its own `#V` and `#B`, so a message signed under another layout fails
+The identity's length fixes only `9V + 33W`, so two layouts can serialize two
+claims to the same bytes and the same nullifier (`V = 11, W = 0` and
+`V = 0, W = 3`). Indexes 1 and 2 sign the layout: the contract rebuilds them
+from its own `#V` and `#W`, so a message signed under another layout fails
 verification. The sealed app id does not separate them, because every contract
-of one app seals the same one. The contract does not check that a byte value's
-two flags agree.
+of one app seals the same one.
 
 ## Flow
 

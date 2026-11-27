@@ -1,11 +1,11 @@
 // Example top-level contract embedding the attestation module: V=3 value slots,
-// B=2 byte halves (one byte value), 2-of-3, no predicate.
+// W=1 byte slot, 2-of-3, no predicate.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
-import "../attestation"<3, 2, 2, 3> prefix A_;
+//           V=3 values  W=1 byte slot  N=2 threshold  M=3 signatures
+import "../attestation"<3, 1, 2, 3> prefix A_;
 
 import "../attestor_registry"<3> prefix R_;
 

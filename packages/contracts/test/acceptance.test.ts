@@ -38,7 +38,6 @@ import {
   nullifierOfByteClaim,
   POLICY_B,
   padded32,
-  splitHalves,
 } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { MockAttestationBytesSim } from './helpers/sim.js';
@@ -185,9 +184,9 @@ describe('cross-seam acceptance', () => {
       windowStart: BigInt(OBSERVED_AT),
       windowEnd: WINDOW_END,
       present: [true, false, false],
-      bytePresent: [true, true],
+      bytePresent: [true],
       values: [42n, 0n, 0n],
-      byteHalves: splitHalves(padded32(OWNER)),
+      byteValues: [padded32(OWNER)],
     });
     expect(honest.signatures[2]).toBe(DUMMY_SIGNATURE);
   });
@@ -246,16 +245,13 @@ describe('cross-seam acceptance', () => {
     },
     {
       name: 'the byte presence mask',
-      mutate: (c: B_Claim) => ({ ...c, bytePresent: [true, false] }),
+      mutate: (c: B_Claim) => ({ ...c, bytePresent: [false] }),
     },
     {
       name: 'the byte value',
       mutate: (c: B_Claim) => ({
         ...c,
-        byteHalves: [
-          flip(c.byteHalves[0] ?? new Uint8Array(16), 0),
-          c.byteHalves[1] ?? new Uint8Array(16),
-        ],
+        byteValues: [flip(c.byteValues[0] ?? new Uint8Array(32), 0)],
       }),
     },
     // POLICY_B is sealed too, so only the signatures can reject it.
