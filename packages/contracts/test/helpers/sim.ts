@@ -95,7 +95,12 @@ const makeSimClass = <PS, L>(options: {
       return proofData;
     }
 
-    /** Run a circuit, advance the ledger state, and return the runtime's full results. */
+    /**
+     * Run a circuit, advance the ledger state, and return the runtime's full results. It stays
+     * public because a generated class cannot have private members in its exported type.
+     *
+     * @throws {Error} when the mock has no circuit of that name, or the circuit fails.
+     */
     async run(name: string, ps: PS, args: unknown[]): Promise<CircuitResults<PS, unknown>> {
       const ctx = createCircuitContext({
         circuitId: name,
