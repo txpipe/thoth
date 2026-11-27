@@ -51,7 +51,7 @@ describe('mock attestation', () => {
       expect(pureCircuits.message(claim)).toEqual([
         1n,
         3n, // V
-        0n, // B
+        0n, // W
         BigInt(nullifier[31] ?? -1),
         le(nullifier.slice(0, 31)),
         6n,

@@ -243,6 +243,11 @@ describe('nullifierOf', () => {
     { name: 'a value of 2^64', change: { values: [1n << 64n, 0n, 9n] }, error: /values\[0\]/ },
     { name: 'a negative value', change: { values: [-1n, 0n, 9n] }, error: /values\[0\]/ },
     { name: 'a short salt', change: { salt: new Uint8Array(31) }, error: /salt must be 32 bytes/ },
+    {
+      name: 'a short byte value',
+      change: { byteValues: [new Uint8Array(31)] },
+      error: /byteValues\[0\] must be 32 bytes/,
+    },
     { name: 'a mask without one flag per slot', change: { present: [true] }, error: /present/ },
   ])('rejects $name', ({ change, error }) => {
     const claim = claimSchema(3, 1).parse(byteBase);
