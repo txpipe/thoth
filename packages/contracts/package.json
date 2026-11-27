@@ -41,7 +41,7 @@
     "compact:no-zk": "compact compile +0.36.1 --skip-zk test/mocks/MockAttestation.compact artifacts/mock_attestation && compact compile +0.36.1 --skip-zk test/mocks/MockAttestationBytes.compact artifacts/mock_attestation_bytes && compact compile +0.36.1 --skip-zk test/mocks/MockAddressHash.compact artifacts/mock_address_hash && compact compile +0.36.1 --skip-zk test/mocks/MockRegistryDoubleInit.compact artifacts/mock_registry_double_init",
     "pretest": "npm run compact:no-zk",
     "test": "vitest run",
-    "types": "tsc --noEmit",
+    "types": "tsc -b",
     "check": "npm run check:biome && npm run check:compact",
     "check:fix": "npm run check:fix:biome && npm run check:fix:compact",
     "check:biome": "biome check .",

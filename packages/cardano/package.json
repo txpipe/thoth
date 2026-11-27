@@ -58,8 +58,8 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "types": "tsc --noEmit"
+    "build": "tsc -b",
+    "types": "tsc -b"
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "0.21.0",
