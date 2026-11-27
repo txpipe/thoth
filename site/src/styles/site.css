@@ -266,7 +266,19 @@ a:hover {
   transform: rotate(-45deg);
 }
 
-.menu-toggle {
+.site-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Wide screens: the drawer dissolves and its nav and contents are columns. */
+.site-menu {
+  display: contents;
+}
+
+.menu-button,
+.menu-backdrop {
   display: none;
 }
 
@@ -341,6 +353,7 @@ a:hover {
 .content {
   position: relative;
   grid-column: 2;
+  grid-row: 1;
   min-width: 0;
   max-width: var(--content-width);
 }
@@ -357,6 +370,7 @@ a:hover {
 
 .doc-meta {
   grid-column: 3;
+  grid-row: 1;
   align-self: start;
   position: sticky;
   top: calc(var(--header-height) + var(--space-8));
@@ -780,8 +794,8 @@ a:hover {
 }
 
 @media (max-width: 78rem) {
-  /* One column: the frame narrows to the reading measure so the nav toggle,
-     the column and the footer share one left edge. */
+  /* One column: the frame narrows to the reading measure so the header, the
+     column and the footer share one left edge. */
   .site-body,
   .site-footer,
   .site-header-inner {
@@ -791,90 +805,137 @@ a:hover {
   .site-body {
     grid-template-columns: minmax(0, 1fr);
     column-gap: 0;
-    row-gap: var(--space-3);
     min-height: 0;
   }
 
-  .sidebar {
-    order: -2;
-    position: static;
-    display: block;
-    width: auto;
-    height: auto;
-    max-height: none;
+  .menu-button {
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
     padding: 0;
-    overflow: visible;
-  }
-
-  /* The margin rail needs the width a three-column grid gives it; here the
-     table of contents collapses under the nav toggle instead. */
-  .doc-meta {
-    order: -1;
-    grid-column: 1;
-    position: static;
-    max-height: none;
-    overflow: visible;
-    padding-top: 0;
-    font-size: var(--fs-sm);
-  }
-
-  .doc-toc-title {
-    display: none;
-  }
-
-  .menu-toggle {
-    display: flex;
-    width: fit-content;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    padding: var(--space-2) var(--space-3);
     border: 1px solid var(--stroke-4);
     border-radius: var(--radius-md);
     background: var(--bg-card);
     color: var(--fg-1);
-    font-size: var(--fs-sm);
     cursor: pointer;
-    list-style: none;
+    transition:
+      border-color 150ms ease,
+      color 150ms ease;
   }
 
-  .menu-toggle::before {
-    content: "";
-    flex: none;
-    width: 0.35em;
-    height: 0.35em;
-    border-right: 1.5px solid currentColor;
-    border-bottom: 1.5px solid currentColor;
-    transform: rotate(-45deg);
-  }
-
-  .menu-toggle:hover {
+  .menu-button:hover {
     border-color: var(--stroke-2);
     color: #fff;
   }
 
-  details[open] > .menu-toggle {
-    margin-bottom: var(--space-4);
+  /* Three bars that fold into a cross while the drawer is open. */
+  .menu-button-bars,
+  .menu-button-bars::before,
+  .menu-button-bars::after {
+    display: block;
+    width: 1.125rem;
+    height: 1.5px;
+    border-radius: 1px;
+    background: currentColor;
+    transition:
+      transform 200ms ease,
+      background-color 200ms ease;
   }
 
-  details[open] > .menu-toggle::before {
-    transform: rotate(45deg);
+  .menu-button-bars {
+    position: relative;
   }
 
-  .sidebar-groups {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-    gap: var(--space-6);
+  .menu-button-bars::before,
+  .menu-button-bars::after {
+    content: "";
+    position: absolute;
+    left: 0;
   }
 
-  .sidebar-groups details + details {
-    margin-top: 0;
+  .menu-button-bars::before {
+    top: -6px;
+  }
+
+  .menu-button-bars::after {
+    top: 6px;
+  }
+
+  .menu-button[aria-expanded="true"] .menu-button-bars {
+    background-color: transparent;
+  }
+
+  .menu-button[aria-expanded="true"] .menu-button-bars::before {
+    transform: translateY(6px) rotate(45deg);
+  }
+
+  .menu-button[aria-expanded="true"] .menu-button-bars::after {
+    transform: translateY(-6px) rotate(-45deg);
+  }
+
+  /* The drawer: the nav, then the page's contents, under the header.
+     Closed, it is hidden, so its links leave the tab order. */
+  .site-menu {
+    position: fixed;
+    z-index: 20;
+    top: var(--header-height);
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    width: min(22rem, 100%);
+    padding: var(--space-6) var(--container-pad-md) var(--space-12);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-left: 1px solid var(--stroke-4);
+    background: var(--page-bg);
+    transform: translateX(100%);
+    visibility: hidden;
+    transition:
+      transform 200ms ease,
+      visibility 0s linear 200ms;
+  }
+
+  :root[data-menu-open] {
+    overflow: hidden;
+  }
+
+  :root[data-menu-open] .site-menu {
+    transform: none;
+    visibility: visible;
+    transition: transform 200ms ease;
+  }
+
+  .menu-backdrop:not([hidden]) {
+    position: fixed;
+    z-index: 15;
+    inset: var(--header-height) 0 0;
+    display: block;
+    background: rgb(0 0 0 / 0.55);
+  }
+
+  .sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .doc-meta {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-top: var(--space-6);
+    border-top: 1px solid var(--stroke-4);
+    font-size: var(--fs-sm);
   }
 
   .content {
     grid-column: 1;
     justify-self: stretch;
-    margin-top: var(--space-5);
   }
 
   /* The binding rule belongs to the three-column sheet. */
@@ -915,6 +976,11 @@ a:hover {
   .doc-meta a {
     padding-top: 0.6875rem;
     padding-bottom: 0.6875rem;
+  }
+
+  .menu-button {
+    width: 2.75rem;
+    height: 2.75rem;
   }
 }
 

@@ -12,30 +12,27 @@ const base = import.meta.env.BASE_URL;
 ---
 
 <nav class="sidebar" aria-label="Documentation">
-  <details class="sidebar-nav" data-menu open>
-    <summary class="menu-toggle">Documentation</summary>
-    <div class="sidebar-groups">
-      {
-        groups.map((group) => (
-          <details open>
-            <summary>
-              <span class="sidebar-group-label">{group.label}</span>
-            </summary>
-            <ul>
-              {group.items.map((item) => (
-                <li class:list={{ nested: item.nested }}>
-                  <a
-                    href={withBase(item.route, base)}
-                    aria-current={item.id === currentId ? 'page' : undefined}
-                  >
-                    {item.title}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ))
-      }
-    </div>
-  </details>
+  <div class="sidebar-groups">
+    {
+      groups.map((group) => (
+        <details open>
+          <summary>
+            <span class="sidebar-group-label">{group.label}</span>
+          </summary>
+          <ul>
+            {group.items.map((item) => (
+              <li class:list={{ nested: item.nested }}>
+                <a
+                  href={withBase(item.route, base)}
+                  aria-current={item.id === currentId ? 'page' : undefined}
+                >
+                  {item.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))
+    }
+  </div>
 </nav>
