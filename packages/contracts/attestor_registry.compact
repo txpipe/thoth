@@ -1,14 +1,14 @@
 // Thoth attestor registry module: the app's M pinned attestor public keys and
-// `countValidSignatures` over a `Vector<K, Field>` message. It counts the
-// signatures that verify; the attestation module that embeds it defines the
-// message and applies the threshold.
+// `countValidSignatures` over the attestation module's seven-field signed
+// message. It counts the signatures that verify; the attestation module that
+// embeds it defines the message and applies the threshold.
 //
 // The keys are a sealed, unexported ledger that only `initRegistry` writes,
 // once, at deploy. Do not re-export `initRegistry`: a sealed field cannot be
 // written from an exported circuit, so that is a compile error.
 pragma language_version >= 0.22;
 
-module attestor_registry<#M, #K> {
+module attestor_registry<#M> {
   import CompactStandardLibrary;
 
   /// The M pinned attestor public keys.
@@ -32,7 +32,7 @@ module attestor_registry<#M, #K> {
 
   /// Whether one signature verifies against its registry slot.
   circuit slotValid(
-            msg: Vector<K, Field>,
+            msg: Vector<7, Field>,
             sig: JubjubSchnorrSignature,
             pk: JubjubPoint,
             slotEmpty: Boolean
@@ -40,13 +40,13 @@ module attestor_registry<#M, #K> {
     if (slotEmpty) {
       return false;
     }
-    return jubjubSchnorrVerify<K>(msg, sig, pk);
+    return jubjubSchnorrVerify<7>(msg, sig, pk);
   }
 
   /// Number of the M signatures that verify against their own slot:
   /// `sigs[i]` against `keys[i]`.
   export circuit countValidSignatures(
-                   msg: Vector<K, Field>,
+                   msg: Vector<7, Field>,
                    sigs: Vector<M, JubjubSchnorrSignature>
                    ): Uint<64> {
     const verdicts: Vector<M, Boolean> =

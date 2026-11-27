@@ -1,8 +1,7 @@
-// Byte-value slot tests for the bytes mock (V = 3, B = 2, K = 24): wire parity
-// between `claimToMessage` and the compiled `buildMessage`, the absent-slot law
-// in the simulator, byte-value predicates (reassembly), signature coverage over
-// the halves, the unchanged W = 0 layout, and that the salted nullifier does
-// not confirm a guessed value.
+// Byte-value slot tests for the bytes mock (V = 3, B = 2): the byte halves in
+// the message and the nullifier, the absent-slot law in the simulator,
+// byte-value predicates (reassembly), signature coverage over the halves, and
+// that the salted nullifier does not confirm a guessed value.
 import { randomBytes } from 'node:crypto';
 import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import { claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
@@ -37,11 +36,6 @@ const ZERO16 = ZERO32.slice(0, 16);
 // A value whose bytes differ across the 16-byte half boundary, so a swapped or
 // reversed half cannot pass the split/reassembly assertions.
 const fullSpan = (): Uint8Array => Uint8Array.from({ length: 32 }, (_, i) => i);
-
-// Little-endian value of a byte vector, as Compact's `convertBytesToUint` reads
-// it (first byte least significant), computed independently of the encoder.
-const le = (bytes: Uint8Array): bigint =>
-  bytes.reduce((acc, byte, i) => acc + BigInt(byte) * 256n ** BigInt(i), 0n);
 
 // Reinterpret the bytes mock's contract shape as the kind-facing core shape:
 // collapse each byte slot's duplicated per-half flags to one and reassemble its
@@ -79,19 +73,10 @@ const submit = (submission: Submission) =>
   sim.call('verifyAttestation', { ...submission, holderSecret: holder });
 
 describe('bytes claim wire', () => {
-  it('matches claimToMessage field-for-field, flags duplicated and halves adjacent', () => {
+  it('signs the byte-half count in the layout fields', () => {
     const claim = makeByteClaim();
-    const message = pureCircuits.message(claim);
-    expect(claimToMessage(coreOf(claim))).toEqual(message);
-    expect(message).toHaveLength(24);
-    // [B: 2][present(3): 1,0,0][bytePresent(2): 1,1][values(3)][low half][high half]
-    expect(message[13]).toBe(2n);
-    expect(message.slice(14, 19)).toEqual([1n, 0n, 0n, 1n, 1n]);
-    expect(message.slice(19, 22)).toEqual([12345n, 0n, 0n]);
-    // "abc" occupies the low half (non-zero); the trailing half is zero padding,
-    // so the low field must come first.
-    expect(message[22]).not.toBe(0n);
-    expect(message[23]).toBe(0n);
+    expect(pureCircuits.message(claim).slice(0, 3)).toEqual([1n, 3n, 2n]);
+    expect(mockPureCircuits.message(makeClaim()).slice(0, 3)).toEqual([1n, 3n, 0n]);
   });
 
   it('round-trips a core claim through the contract shape', () => {
@@ -101,29 +86,19 @@ describe('bytes claim wire', () => {
     expect(pureCircuits.message(toContractClaim(core))).toEqual(claimToMessage(core));
   });
 
-  it('encodes a full-span value as little-endian bytes 0–15 / 16–31 halves', () => {
+  it('keeps both halves of a byte value in the nullifier, in order', () => {
     const value = fullSpan();
     const claim = makeByteClaim({ byteValue: value });
     const [low, high] = splitHalves(value);
-    const lowField = le(low);
-    const highField = le(high);
-    // Distinct, non-zero halves — a swap or reversal fails both encoders.
-    expect(lowField).not.toBe(highField);
-    expect(claimToMessage(coreOf(claim)).slice(22, 24)).toEqual([lowField, highField]);
-    expect(pureCircuits.message(claim).slice(22, 24)).toEqual([lowField, highField]);
+    const swapped = { ...claim, byteHalves: [high, low] };
+    expect(pureCircuits.nullifierOf(swapped)).not.toEqual(pureCircuits.nullifierOf(claim));
   });
 
-  it('pins an absent byte flag to two zero fields even with halves present', () => {
-    const claim = makeByteClaim({ bytePresent: [false, false] });
-    expect(pureCircuits.message(claim).slice(17, 19)).toEqual([0n, 0n]);
-  });
-
-  it('keeps the numeric-only message, plus a zero byte-half count, for a B = 0 claim', () => {
-    const claim: A_Claim = makeClaim();
-    const message = claimToMessage({ ...claim, byteValues: [] });
-    expect(message).toHaveLength(20);
-    expect(message[13]).toBe(0n);
-    expect(message).toEqual(mockPureCircuits.message(claim));
+  it('hashes an absent byte flag even with halves present', () => {
+    const claim = makeByteClaim();
+    expect(pureCircuits.nullifierOf({ ...claim, bytePresent: [false, false] })).not.toEqual(
+      pureCircuits.nullifierOf(claim),
+    );
   });
 
   it('pins the numeric-only (B = 0) vault id against serialization drift', () => {
@@ -148,47 +123,6 @@ describe('bytes claim wire', () => {
     expect(Buffer.from(mockPureCircuits.computeId(claim, rand)).toString('hex')).toBe(
       'd56f26ee241f06678b4cb1e41f12346f484b41bf827d50118599fe7093fa51d3',
     );
-  });
-});
-
-describe('layout binding', () => {
-  beforeEach(async () => {
-    sim = await MockAttestationBytesSim.create(createPrivateState<B_Claim>(holder), registryKeys);
-  });
-
-  // The mock is V = 3, W = 1 (K = 24); a V = 1, W = 2 claim also encodes to 24
-  // fields. With its byte slot 0 absent, it lines up with `claim` field for field
-  // except the signed byte-half count, so without that field honest signatures
-  // over the competing layout would verify against the deployed one.
-  const claim = makeByteClaim();
-  const competing = {
-    ...coreOf(claim),
-    present: [true, false, true],
-    values: [12345n],
-    byteValues: [ZERO32, DEFAULT_BYTE_VALUE],
-  };
-
-  it('differs from a same-length competing layout only in the byte-half count', () => {
-    const message = claimToMessage(competing);
-    const deployed = pureCircuits.message(claim);
-    expect(message).toHaveLength(deployed.length);
-    const withoutCount = (fields: readonly bigint[]) => fields.filter((_, i) => i !== 13);
-    expect(withoutCount(message)).toEqual(withoutCount(deployed));
-    expect([message[13], deployed[13]]).toEqual([4n, 2n]);
-  });
-
-  it('rejects honest signatures over the competing layout', async () => {
-    const message = claimToMessage(competing);
-    const submission: Submission = {
-      claim,
-      signatures: [
-        signMessage(notaryKeys[0].sk, message).signature,
-        signMessage(notaryKeys[1].sk, message).signature,
-        DUMMY_SIGNATURE,
-      ],
-      commitRand: randomBytes(32),
-    };
-    await expect(submit(submission)).rejects.toThrow('Insufficient valid signatures');
   });
 });
 

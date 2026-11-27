@@ -146,7 +146,9 @@ describe('test-key witness', () => {
       expect(attestation.claim.values.slice(2)).toEqual(Array<bigint>(size - 2).fill(0n));
       expect(attestation.claim.present.slice(2)).toEqual(Array<boolean>(size - 2).fill(false));
       expect(attestation.signature).toBe(`sig:${attestation.message.join(',')}`);
-      expect(attestation.message).toHaveLength(14 + 2 * size);
+      // The message signs the layout: `size` value slots, no byte halves.
+      expect(attestation.message.slice(0, 3)).toEqual([1n, BigInt(size), 0n]);
+      expect(attestation.message).toEqual(claimToMessage(attestation.claim));
     }
   });
 
@@ -180,7 +182,7 @@ describe('test-key witness', () => {
     });
     expect(attestation.claim.present).toEqual([true, true, false]);
     expect(attestation.claim.values).toEqual([0n, 8n, 0n]);
-    expect(attestation.message.slice(13)).toEqual([0n, 1n, 1n, 0n, 0n, 8n, 0n]);
+    expect(attestation.message).toEqual(claimToMessage(attestation.claim));
     expect(attestation.signature).toBe(`sig:${attestation.message.join(',')}`);
   });
 

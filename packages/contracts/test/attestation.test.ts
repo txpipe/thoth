@@ -35,63 +35,47 @@ describe('mock attestation', () => {
     sim = await MockAttestationSim.create(createPrivateState(holder), registryKeys);
   });
 
-  describe('buildMessage (frozen wire shape)', () => {
-    it('returns exactly K=20 fields in the frozen order', () => {
-      const claim = makeClaim({ values: [100n, 200n, 300n], present: [true, true, true] });
-      const msg = pureCircuits.message(claim);
-      expect(msg).toHaveLength(20);
-      // [version, appId0, appId1, policyHash0, policyHash1, windowStart, windowEnd,
-      //  subjectHash0, subjectHash1, holder0, holder1, salt0, salt1, B, p0, p1, p2, v0, v1, v2]
-      // APP_ID is 32 × 0xa1 and POLICY_A 32 × 0xb1, so each half repeats the byte.
-      const half = (byte: string): bigint => BigInt(`0x${byte.repeat(16)}`);
-      expect(msg.slice(0, 7)).toEqual([
-        1n,
-        half('a1'),
-        half('a1'),
-        half('b1'),
-        half('b1'),
-        claim.windowStart,
-        claim.windowEnd,
-      ]);
-      // B = 0: the numeric-only layout signs a zero byte-half count.
-      expect(msg.slice(13)).toEqual([0n, 1n, 1n, 1n, 100n, 200n, 300n]);
-    });
+  describe('buildMessage (wire layout)', () => {
+    // Little-endian value of a byte vector (first byte least significant),
+    // computed independently of the encoders.
+    const le = (bytes: Uint8Array): bigint =>
+      bytes.reduce((acc, byte, i) => acc + BigInt(byte) * 256n ** BigInt(i), 0n);
 
-    it('pins each 16-byte half to its slot (little-endian)', () => {
-      const subjectHash = new Uint8Array(32);
-      subjectHash[0] = 1;
-      subjectHash[16] = 2;
-      const msg = pureCircuits.message(makeClaim({ subjectHash }));
-      expect(msg.slice(7, 9)).toEqual([1n, 2n]);
-    });
-
-    it('pins every holder byte to its two signed header slots', () => {
+    it('signs the version, the layout, the nullifier and the holder as seven fields', () => {
       const holder = new Uint8Array(32);
       holder[0] = 3;
-      holder[15] = 4;
-      holder[16] = 5;
+      holder[30] = 4;
       holder[31] = 6;
-      const msg = pureCircuits.message(makeClaim({ holder }));
-      expect(msg.slice(9, 11)).toEqual([3n + (4n << 120n), 5n + (6n << 120n)]);
+      const claim = makeClaim({ holder });
+      const nullifier = pureCircuits.nullifierOf(claim);
+      expect(pureCircuits.message(claim)).toEqual([
+        1n,
+        3n, // V
+        0n, // B
+        BigInt(nullifier[31] ?? -1),
+        le(nullifier.slice(0, 31)),
+        6n,
+        3n + (4n << 240n),
+      ]);
     });
 
-    it('signs the salt in the two header slots after the holder', () => {
-      const salt = new Uint8Array(32);
-      salt[0] = 7;
-      salt[16] = 8;
-      expect(pureCircuits.message(makeClaim({ salt })).slice(11, 13)).toEqual([7n, 8n]);
-    });
-
-    it('distinguishes the window start from the window end', () => {
-      const claim = makeClaim({ windowStart: 100n, windowEnd: 200n });
-      const swapped = { ...claim, windowStart: 200n, windowEnd: 100n };
-      expect(pureCircuits.message(swapped)).not.toEqual(pureCircuits.message(claim));
-    });
-
-    it('distinguishes a change to every byte of every 32-byte field', () => {
+    it('changes with every byte of the holder', () => {
       const claim = makeClaim();
       const msg = pureCircuits.message(claim);
-      for (const field of ['appId', 'policyHash', 'subjectHash', 'holder', 'salt'] as const) {
+      for (let i = 0; i < 32; i++) {
+        expect(pureCircuits.message({ ...claim, holder: flip(claim.holder, i) })).not.toEqual(msg);
+      }
+    });
+
+    it('changes with the version', () => {
+      const claim = makeClaim();
+      expect(pureCircuits.message({ ...claim, version: 2n })[0]).toBe(2n);
+    });
+
+    it('changes with every byte of every 32-byte field of the observation identity', () => {
+      const claim = makeClaim();
+      const msg = pureCircuits.message(claim);
+      for (const field of ['appId', 'policyHash', 'subjectHash', 'salt'] as const) {
         for (let i = 0; i < 32; i++) {
           expect(pureCircuits.message({ ...claim, [field]: flip(claim[field], i) })).not.toEqual(
             msg,
@@ -100,11 +84,16 @@ describe('mock attestation', () => {
       }
     });
 
+    it('distinguishes the window start from the window end', () => {
+      const claim = makeClaim({ windowStart: 100n, windowEnd: 200n });
+      const swapped = { ...claim, windowStart: 200n, windowEnd: 100n };
+      expect(pureCircuits.message(swapped)).not.toEqual(pureCircuits.message(claim));
+    });
+
     it('distinguishes absent (present all false) from a genuine 0 value', () => {
       const absent = makeClaim({ values: [0n, 0n, 0n], present: [false, false, false] });
       const presentZero = makeClaim({ values: [0n, 0n, 0n], present: [true, false, false] });
       expect(pureCircuits.message(absent)).not.toEqual(pureCircuits.message(presentZero));
-      expect(pureCircuits.message(presentZero)[14]).toBe(1n);
     });
   });
 
@@ -209,20 +198,56 @@ describe('mock attestation', () => {
       ).rejects.toThrow('Insufficient valid signatures');
     });
 
-    // Replaying accepted signatures with a mutated byte must fail the signature
-    // check. Every byte of the subject hash contributes to the observation
-    // identity, so omitting a byte from the signed message would allow replay.
+    // Every field but `holder` and `version` reaches the signature only through
+    // the nullifier, so changing any of them after signing must fail the check.
     it.each([
-      {
-        name: 'subjectHash[31]',
-        mutate: (c: A_Claim) => ({ ...c, subjectHash: flip(c.subjectHash, 31) }),
-      },
-    ])('rejects a replay of accepted signatures with $name mutated', async ({ mutate }) => {
-      const signed = signClaim(makeClaim(), [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
-      await sim.call('verifyAttestation', ps({ ...signed, holderSecret: holder }));
-      const replayed = { ...signed, claim: mutate(signed.claim) };
+      { name: 'policyHash', mutate: (c: A_Claim) => ({ ...c, policyHash: POLICY_B }) },
+      ...[0, 31].map((i) => ({
+        name: `subjectHash[${i}]`,
+        mutate: (c: A_Claim) => ({ ...c, subjectHash: flip(c.subjectHash, i) }),
+      })),
+      ...[0, 31].map((i) => ({
+        name: `salt[${i}]`,
+        mutate: (c: A_Claim) => ({ ...c, salt: flip(c.salt, i) }),
+      })),
+      { name: 'windowStart', mutate: (c: A_Claim) => ({ ...c, windowStart: c.windowStart - 1n }) },
+      { name: 'windowEnd', mutate: (c: A_Claim) => ({ ...c, windowEnd: c.windowEnd - 1n }) },
+      ...[0, 1, 2].flatMap((slot) => [
+        {
+          name: `values[${slot}]`,
+          mutate: (c: A_Claim) => ({
+            ...c,
+            values: c.values.map((value, i) => (i === slot ? value + 1n : value)),
+          }),
+        },
+        {
+          name: `present[${slot}]`,
+          mutate: (c: A_Claim) => ({
+            ...c,
+            present: c.present.map((value, i) => (i === slot ? !value : value)),
+          }),
+        },
+      ]),
+    ])('rejects a claim whose $name changed after signing', async ({ mutate }) => {
+      const claim = makeClaim({ values: [1n, 2n, 3n], present: [true, true, true] });
+      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
       await expect(
-        sim.call('verifyAttestation', ps({ ...replayed, holderSecret: holder })),
+        sim.call(
+          'verifyAttestation',
+          ps({ ...signed, claim: mutate(claim), holderSecret: holder }),
+        ),
+      ).rejects.toThrow('Insufficient valid signatures');
+    });
+
+    it('rejects a claim whose appId changed after signing', async () => {
+      // A contract sealed to the changed app id, so only the signature can reject it.
+      const otherApp = await MockAttestationSim.create(createPrivateState(holder), registryKeys, {
+        appId: OTHER_APP_ID,
+      });
+      const signed = signClaim(makeClaim(), notaryKeys, randomBytes(32));
+      const claim = { ...signed.claim, appId: OTHER_APP_ID };
+      await expect(
+        otherApp.call('verifyAttestation', ps({ ...signed, claim, holderSecret: holder })),
       ).rejects.toThrow('Insufficient valid signatures');
     });
 

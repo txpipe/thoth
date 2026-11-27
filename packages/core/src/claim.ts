@@ -1,15 +1,16 @@
+import { createHash } from 'node:crypto';
 import { convertBytesToUint } from '@midnight-ntwrk/compact-runtime';
 import { z } from 'zod';
 
 /**
- * A Compact `Vector<K, Field>` signed message. Its field order is the wire
- * layout in the `attestation.compact` header, which a kind's `message()`
- * reproduces.
+ * A signed message as Compact `Field`s. A standard kind's is the contract's
+ * seven-field `Vector<7, Field>`, in the order of the wire layout in the
+ * `attestation.compact` header, which a kind's `message()` reproduces.
  */
 export type FlatMessage = readonly bigint[];
 
 /**
- * The claim every standard kind signs: the header, one `present` flag per slot
+ * The claim every standard kind attests: the header, one `present` flag per slot
  * (`V` numeric slots, then `W` byte slots), `V` numeric `values` and `W` 32-byte
  * `byteValues`.
  *
@@ -158,57 +159,105 @@ export function claimSchema<V extends number = number, W extends number = 0>(
   >;
 }
 
-const UINT128_MAX = (1n << 128n) - 1n;
+// The width in bytes of each integer the nullifier hashes, from its Compact
+// type in `attestation.compact`: `Uint<32>` windows, `Uint<64>` values.
+const WINDOW_BYTES = 4;
+const VALUE_BYTES = 8;
 
-// Must equal the in-circuit cast in `attestation.compact`'s `splitBytes`; its
-// header gives the byte order.
-function splitBytes(bytes: Uint8Array): [bigint, bigint] {
+function assertBytes32(name: string, bytes: Uint8Array): void {
   if (bytes.length !== 32) {
-    throw new Error(`expected 32 bytes, got ${bytes.length}`);
+    throw new Error(`${name} must be 32 bytes, got ${bytes.length}`);
   }
+}
+
+// `value` little-endian in `width` bytes, as `persistentHash` writes a
+// `Uint<8 * width>`. An out-of-range value throws: wrapping it would give two
+// claims one nullifier.
+function uintBytes(name: string, value: bigint, width: number): Uint8Array {
+  if (value < 0n || value >= 1n << BigInt(8 * width)) {
+    throw new Error(`${name} must be in [0, 2^${8 * width}), got ${value}`);
+  }
+  const bytes = new Uint8Array(width);
+  let rest = value;
+  for (let i = 0; i < width; i++) {
+    bytes[i] = Number(rest & 0xffn);
+    rest >>= 8n;
+  }
+  return bytes;
+}
+
+/**
+ * Hash a parsed {@link Claim}'s observation identity: the nullifier the
+ * contract's `nullifierOf` computes over `toContractClaim(claim)`. The attestors
+ * sign it through {@link claimToMessage}, and the contract rejects it a second
+ * time as a replay. It is the SHA-256 of every claim field but `version` and
+ * `holder`; the wire layout in the `attestation.compact` header and
+ * `docs/DESIGN.md` gives the preimage.
+ *
+ * @throws if `appId`, `policyHash`, `subjectHash`, `salt` or a byte value is
+ *   not 32 bytes, a window bound is not below 2^32, a value is not below 2^64,
+ *   or `present` does not have one flag per value.
+ */
+export function nullifierOf<V extends number, W extends number = 0>(
+  claim: Claim<V, W>,
+): Uint8Array {
+  const c = toContractClaim(claim);
+  assertBytes32('appId', c.appId);
+  assertBytes32('policyHash', c.policyHash);
+  assertBytes32('subjectHash', c.subjectHash);
+  assertBytes32('salt', c.salt);
+  const hash = createHash('sha256');
+  hash.update(c.appId);
+  hash.update(c.policyHash);
+  hash.update(c.subjectHash);
+  hash.update(c.salt);
+  hash.update(uintBytes('windowStart', c.windowStart, WINDOW_BYTES));
+  hash.update(uintBytes('windowEnd', c.windowEnd, WINDOW_BYTES));
+  c.values.forEach((value, i) => {
+    hash.update(uintBytes(`values[${i}]`, value, VALUE_BYTES));
+  });
+  for (const half of c.byteHalves) {
+    hash.update(half);
+  }
+  hash.update(Uint8Array.from([...c.present, ...c.bytePresent], (present) => (present ? 1 : 0)));
+  return new Uint8Array(hash.digest());
+}
+
+const UINT248_MAX = (1n << 248n) - 1n;
+
+// A 32-byte value as the two fields the circuit holds it as: byte 31, then
+// bytes 0-30 little-endian. Must equal `limbs` in `attestation.compact`.
+function limbs(name: string, bytes: Uint8Array): [bigint, bigint] {
+  assertBytes32(name, bytes);
   return [
-    convertBytesToUint(UINT128_MAX, 16, bytes.slice(0, 16), 'Uint<128>', 'claimToMessage'),
-    convertBytesToUint(UINT128_MAX, 16, bytes.slice(16, 32), 'Uint<128>', 'claimToMessage'),
+    BigInt(bytes[31] ?? 0),
+    convertBytesToUint(UINT248_MAX, 31, bytes.slice(0, 31), 'Uint<248>', 'claimToMessage'),
   ];
 }
 
 /**
- * Encode a parsed {@link Claim} into the flat message the contract's
- * `buildMessage` rebuilds. The wire layout is in the `attestation.compact`
- * header and the table in `docs/DESIGN.md`.
+ * Encode a parsed {@link Claim} into the seven-field message the contract's
+ * `buildMessage` rebuilds: the claim's version, its layout, its nullifier
+ * ({@link nullifierOf}) and its holder. The wire layout is in the
+ * `attestation.compact` header and the table in `docs/DESIGN.md`.
  *
  * A kind whose claim is exactly the standard shape implements `message()` with
  * this; a kind that extends the claim keeps its own encoder.
  *
  * @throws if `appId`, `policyHash`, `subjectHash`, `holder`, `salt` or a byte
- *   value is not 32 bytes, or if `present` does not have one flag per value.
+ *   value is not 32 bytes, a window bound is not below 2^32, a value is not
+ *   below 2^64, or `present` does not have one flag per value.
  */
 export function claimToMessage<V extends number, W extends number = 0>(
   claim: Claim<V, W>,
 ): FlatMessage {
-  const numericCount = claim.values.length;
-  const byteCount = claim.byteValues.length;
-  if (claim.present.length !== numericCount + byteCount) {
-    throw new Error(
-      `present must have length ${numericCount + byteCount}, got ${claim.present.length}`,
-    );
-  }
-  const flags = claim.present.map((present) => (present ? 1n : 0n));
-  const byteFlags = flags.slice(numericCount).flatMap((flag) => [flag, flag]);
+  const nullifier = nullifierOf(claim);
   return [
     claim.version,
-    ...splitBytes(claim.appId),
-    ...splitBytes(claim.policyHash),
-    claim.windowStart,
-    claim.windowEnd,
-    ...splitBytes(claim.subjectHash),
-    ...splitBytes(claim.holder),
-    ...splitBytes(claim.salt),
-    BigInt(2 * byteCount),
-    ...flags.slice(0, numericCount),
-    ...byteFlags,
-    ...claim.values,
-    ...claim.byteValues.flatMap((bytes) => splitBytes(bytes)),
+    BigInt(claim.values.length),
+    BigInt(2 * claim.byteValues.length),
+    ...limbs('nullifier', nullifier),
+    ...limbs('holder', claim.holder),
   ];
 }
 

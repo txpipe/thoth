@@ -3,30 +3,34 @@
 // `persistentCommit(claim, rand)`. The registry counts the signatures that
 // verify; this module applies the threshold #N and defines the signed message.
 //
-// Wire layout (buildMessage), K = 14 + 2*V + 2*B fields:
-//   [ version,
-//     appId[0..16] as Uint<128>, appId[16..32] as Uint<128>,
-//     policyHash[0..16] as Uint<128>, policyHash[16..32] as Uint<128>,
-//     windowStart, windowEnd,
-//     subjectHash[0..16] as Uint<128>, subjectHash[16..32] as Uint<128>,
-//     holder[0..16] as Uint<128>, holder[16..32] as Uint<128>,
-//     salt[0..16] as Uint<128>, salt[16..32] as Uint<128>,
-//     B as Field,
-//     present[0] as Field, ..., present[V-1] as Field,
-//     bytePresent[0] as Field, ..., bytePresent[B-1] as Field,
-//     values[0] as Field, ..., values[V-1] as Field,
-//     byteHalves[0] as Field, ..., byteHalves[B-1] as Field ]
-// Byte ranges are half-open (appId[0..16] is bytes 0-15). Each 32-byte field
-// is split in two halves so every byte is signed; a 16-byte half is read
-// little-endian (byte 0 least significant) when cast to Uint<128>, the
-// runtime's `convertBytesToUint` convention, which `claimToMessage` in
-// `@txpipe/thoth-core/claim` mirrors. The header signs B because K alone fixes
-// only 2*V + 2*B: two layouts (V=3, B=4 and V=1, B=6) share a length, and a
-// message signed under one must fail verification under the other.
+// Wire layout (buildMessage): attestors sign seven fields,
+//   [ version, V as Field, B as Field,
+//     nullifier[31], nullifier[0..31],
+//     holder[31], holder[0..31] ]
+// A 32-byte value is two fields: byte 31, then bytes 0-30 read little-endian
+// (byte 0 least significant, the runtime's `convertBytesToUint` convention).
+// Byte ranges are half-open (holder[0..31] is bytes 0-30). Both fit a Field
+// without wraparound, so the pair is injective.
+// The nullifier is the SHA-256 (`persistentHash<Observation>`) of the
+// observation identity, 136 + 9*V + 17*B bytes in this order:
+//   appId (32), policyHash (32), subjectHash (32), salt (32),
+//   windowStart (4), windowEnd (4),
+//   values[0], ..., values[V-1] (8 each),
+//   byteHalves[0], ..., byteHalves[B-1] (16 each),
+//   present[0], ..., present[V-1] (1 each),
+//   bytePresent[0], ..., bytePresent[B-1] (1 each)
+// Integers are little-endian at their width; a Boolean is one byte, 0 or 1.
+// `version` and `holder` reach the message directly, every other claim field
+// through the nullifier (ADR 0015). `claimToMessage` and `nullifierOf` in
+// `@txpipe/thoth-core/claim` mirror this.
+// The message carries V and B because the identity's length fixes only
+// 9*V + 17*B: two layouts (V=34, B=0 and V=0, B=18) can serialize to the same
+// bytes, and a message signed under one must fail verification under the
+// other. The sealed appId does not separate them: every contract of one app
+// seals the same one.
 //
-// Module parameters (import "attestation"<K, V, B, N, M>), fixed when a
+// Module parameters (import "attestation"<V, B, N, M>), fixed when a
 // contract embeds the module:
-//   #K — signed-message length in fields, per the layout above.
 //   #V — number of numeric value slots (Claim.values: Vector<V, Uint<64>>).
 //   #B — number of byte halves (Claim.byteHalves: Vector<B, Bytes<16>>): two
 //        adjacent halves per 32-byte byte value, so B = 2W and B must be even.
@@ -38,9 +42,9 @@
 //   #M — number of signature slots, the registry's key count.
 pragma language_version >= 0.22;
 
-module attestation<#K, #V, #B, #N, #M> {
+module attestation<#V, #B, #N, #M> {
   import CompactStandardLibrary;
-  import "attestor_registry"<M, K> prefix Registry_;
+  import "attestor_registry"<M> prefix Registry_;
 
   export struct ClaimEntry {
     holder: Field;
@@ -66,6 +70,8 @@ module attestation<#K, #V, #B, #N, #M> {
   // Observation identity (ADR 0006). Holder and version are not hashed directly;
   // the holder reaches it only through the kind's salt.
   // The secret salt keeps the public nullifier from confirming guessed values (ADR 0012).
+  // The attestors sign its hash, so reordering, adding or retyping a field
+  // changes what they sign (ADR 0015).
   struct Observation {
     appId: Bytes<32>;
     policyHash: Bytes<32>;
@@ -103,45 +109,23 @@ module attestation<#K, #V, #B, #N, #M> {
     return jubjubPointX(hashToCurve<Vector<2, Bytes<32>>>([pad(32, "thoth:holder:v1"), secret]));
   }
 
-  /// Split 32 bytes into two 16-byte halves, each cast to a Field, so every
-  /// byte reaches the signed message (a single Field holds only 31 bytes).
-  circuit splitBytes(b: Bytes<32>): Vector<2, Field> {
-    return [(slice<16>(b, 0) as Uint<128>) as Field, (slice<16>(b, 16) as Uint<128>) as Field];
+  /// A 32-byte value as two message fields: byte 31, then bytes 0-30 read
+  /// little-endian. This is how a circuit already holds 32 bytes, so nothing
+  /// is sliced at a byte boundary.
+  circuit limbs(b: Bytes<32>): Vector<2, Field> {
+    return [slice<1>(b, 31) as Field, degradeToTransient(b)];
   }
 
-  /// Cast one 16-byte half to a Field for the signed message.
-  circuit halfAsField(h: Bytes<16>): Field {
-    return (h as Uint<128>) as Field;
+  circuit messageOf(version: Uint<8>, nullifier: Bytes<32>, holder: Bytes<32>): Vector<7, Field> {
+    const n = limbs(nullifier);
+    const h = limbs(holder);
+    return [version as Field, V as Field, B as Field, n[0], n[1], h[0], h[1]];
   }
 
-  /// The flat signed message, per the wire layout in the file header. A #K
-  /// that does not match the layout is a compile error at specialization.
-  export pure circuit buildMessage(c: Claim): Vector<K, Field> {
-    const appId = splitBytes(c.appId);
-    const policyHash = splitBytes(c.policyHash);
-    const subjectHash = splitBytes(c.subjectHash);
-    const holder = splitBytes(c.holder);
-    const salt = splitBytes(c.salt);
-    const header: Vector<14, Field> =
-            [c.version as Field,
-             appId[0],
-             appId[1],
-             policyHash[0],
-             policyHash[1],
-             c.windowStart as Field,
-             c.windowEnd as Field,
-             subjectHash[0],
-             subjectHash[1],
-             holder[0],
-             holder[1],
-             salt[0],
-             salt[1],
-             B as Field,];
-    const presentFields: Vector<V, Field> = map((p: Boolean) => p as Field, c.present);
-    const bytePresentFields: Vector<B, Field> = map((p: Boolean) => p as Field, c.bytePresent);
-    const valuesFields: Vector<V, Field> = map((v: Uint<64>) => v as Field, c.values);
-    const byteFields: Vector<B, Field> = map(halfAsField, c.byteHalves);
-    return [...header, ...presentFields, ...bytePresentFields, ...valuesFields, ...byteFields];
+  /// The signed message, per the wire layout in the file header: the claim's
+  /// version, this contract's layout, the claim's nullifier and its holder.
+  export pure circuit buildMessage(c: Claim): Vector<7, Field> {
+    return messageOf(c.version, nullifierOf(c), c.holder);
   }
 
   /// The claim id `verifyAttestation` stores under. Exported pure so tests
@@ -188,7 +172,9 @@ module attestation<#K, #V, #B, #N, #M> {
     assert(claim.appId == appId, "App id mismatch");
     assert(policyHashes.member(disclose(claim.policyHash)), "Unaccepted policy");
 
-    const msg = buildMessage(claim);
+    // One hash of the claim serves the signatures and the replay check.
+    const nullifier = nullifierOf(claim);
+    const msg = messageOf(claim.version, nullifier, claim.holder);
     assert(Registry_countValidSignatures(msg, sigs) >= (N as Uint<64>),
            "Insufficient valid signatures"
            );
@@ -218,7 +204,6 @@ module attestation<#K, #V, #B, #N, #M> {
     const secret = getHolderSecret();
     assert(claim.holder == holderCommitment(secret), "Holder mismatch");
 
-    const nullifier = nullifierOf(claim);
     assert(!nullifiers.member(disclose(nullifier)), "Observation replay");
     nullifiers.insert(disclose(nullifier));
 
