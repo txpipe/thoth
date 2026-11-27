@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 658 208" fill="none">
+  <title>Thoth</title>
+  <!-- Ibis-fused capital T -->
+  <path
+    fill="#FFFFFF"
+    fill-rule="evenodd"
+    d="M4 4
+       C28 24 58 31 94 31
+       C120 31 142 21 166 21
+       C186 21 198 29 208 36
+       C242 42 276 58 298 86
+       C273 68 238 58 196 58
+       C182 58 171 61 162 61
+       V206 H134 V61
+       H82
+       C56 61 37 56 22 45
+       C36 48 47 48 58 46
+       C33 39 16 25 4 4 Z
+       M169 32.5
+       A8.5 8.5 0 1 0 169 49.5
+       A8.5 8.5 0 1 0 169 32.5 Z"
+  />
+  <!-- Lowercase h (first, tucked cleanly under ibis beak) -->
+  <path
+    fill="#FFFFFF"
+    d="M196 68 H222 V108
+       C229 94 242 87 259 87
+       C286 87 304 106 304 136
+       V206 H278 V138
+       C278 120 267 111 251 111
+       C234 111 222 122 222 141
+       V206 H196 Z"
+  />
+  <!-- Lowercase o (pure geometric circle matching Dolos / Boros / Scrolls) -->
+  <path
+    fill="#FFFFFF"
+    fill-rule="evenodd"
+    d="M380 86
+       A60 60 0 1 0 380 206
+       A60 60 0 1 0 380 86 Z
+       M380 112
+       A34 34 0 1 1 380 180
+       A34 34 0 1 1 380 112 Z"
+  />
+  <!-- Lowercase t (vertical counterpart to f in Griffin) -->
+  <path
+    fill="#FFFFFF"
+    d="M472 50 H498 V88 H526 V113 H498 V158
+       C498 174 507 181 524 181
+       H530 V206 H520
+       C488 206 472 190 472 158
+       V113 H454 V88 H472 Z"
+  />
+  <!-- Lowercase h (second, full ascender matching l in Dolos / n in Griffin) -->
+  <path
+    fill="#FFFFFF"
+    d="M546 38 H572 V108
+       C579 94 592 87 609 87
+       C636 87 654 106 654 136
+       V206 H628 V138
+       C628 120 617 111 601 111
+       C584 111 572 122 572 141
+       V206 H546 Z"
+  />
+</svg>

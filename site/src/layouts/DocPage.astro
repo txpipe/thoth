@@ -47,7 +47,9 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
     <header class="site-header">
       <div class="site-header-inner">
         <div class="site-brand">
-          <a class="wordmark" href={home}>Thoth</a>
+          <a class="wordmark" href={home}>
+            <img src={withBase('/thoth.svg', base)} alt="Thoth" width="82" height="26" />
+          </a>
           <span class="site-tagline">private N-of-M attestation</span>
         </div>
         <div class="site-actions">
@@ -169,8 +171,13 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
       </main>
     </div>
     <footer class="site-footer">
-      <span>Copyright 2026 TxPipe</span>
-      <span>Apache-2.0 · <a href={`${REPO_URL}/blob/main/LICENSE`}>License</a></span>
+      <a class="txpipe-brand" href="https://txpipe.io">
+        <img src={withBase('/txpipe.svg', base)} alt="" width="41" height="28" />
+        TxPipe.io
+      </a>
+      <span>
+        Copyright 2026 TxPipe · Apache-2.0 · <a href={`${REPO_URL}/blob/main/LICENSE`}>License</a>
+      </span>
     </footer>
     <script>
       import { watchOverflow } from '../lib/overflow';
