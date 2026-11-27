@@ -28,6 +28,7 @@ To move to a new compiler, update in one change:
   if the new compiler needs a newer CLI);
 - the `+<version>` in the `compact` scripts of the root and
   `packages/contracts` `package.json`;
+- `COMPILER_VERSION` in `packages/contracts/bench/options.ts`;
 - this section, the contracts README and `AGENTS.md`.
 
 ## Repository layout
@@ -41,6 +42,7 @@ thoth/
 │   ├── contracts/              # @txpipe/thoth-contracts: Compact modules
 │   │   ├── attestation.compact        # N-of-M verification, replay and window checks, claims vault
 │   │   ├── attestor_registry.compact  # pinned attestor keys, signature counting
+│   │   ├── bench/                     # proving benchmark (npm run bench)
 │   │   ├── examples/example_app.compact  # a 2-of-3 embedding
 │   │   └── test/                      # simulator tests, mock contracts, helpers
 │   ├── core/                   # @txpipe/thoth-core: keyless claim and law types
@@ -74,6 +76,7 @@ Run them from the repo root:
 | `npm run build`            | Builds every package into its `dist/`                                             |
 | `npm run compact`          | Compiles the mock contracts with proving keys                                     |
 | `npm run compact:no-zk`    | Compiles the mock contracts without proving keys (faster)                         |
+| `npm run bench`            | Proves every mock circuit on a real proof server and reports its cost             |
 | `npm run changeset`        | Adds a changeset for your change                                                  |
 | `npm run changeset:status` | Lists the changesets on your branch and the bumps they make                       |
 
@@ -84,6 +87,34 @@ Workspaces import each other through their built `dist/`. The root `build` and
 first; if you add a package that another workspace imports, add it to that
 chain too. A stale `dist/` shows up as confusing type errors such as "Generic
 type requires N type argument(s)".
+
+### Proving benchmark
+
+`npm run bench` compiles the mocks with proving keys and proves every circuit
+of both mocks on the pinned proof server (`midnightntwrk/proof-server:9.0.0`).
+For each circuit it prints k, rows, proving key size, proof size, the first
+and the warm proving time, the server's CPU time per warm proof and its peak
+memory, as the table in the
+[contracts README](packages/contracts/README.md#proving-cost). The proof
+server checks every proof against the circuit's verifier key, and the run
+fails if a circuit does not prove or if the server accepts a proof under the
+wrong verifier key. It needs Docker and the Compact compiler, and it is not
+part of `npm test` or CI. Run it after you change a circuit, and update the
+README table from its output.
+
+The benchmark starts a fresh server container for each circuit, so it can
+read that circuit's CPU time and peak memory from the container's cgroup
+(Linux, cgroup v2). An interrupted run removes its containers. These variables
+change how it runs:
+
+| Variable           | Default                     | What it does                                                                                     |
+| ------------------ | --------------------------- | ------------------------------------------------------------------------------------------------ |
+| `BENCH_DOCKER`     | `docker`                    | The Docker command, such as `sudo -n docker`                                                     |
+| `BENCH_PARAMS`     | `thoth-bench-zk-params`     | The volume or host directory that caches the server's public parameters                          |
+| `BENCH_RUNS`       | `3`                         | Warm proofs per circuit after the first, an integer of at least 1                                |
+| `BENCH_OUT`        | `bench/results/latest.json` | Where the JSON report goes; a relative path is from where you run npm                            |
+| `PROOF_SERVER_URL` | unset                       | Prove on this running server instead; CPU time and peak memory are then reported as not measured |
+| `ZKIR_BIN`         | found under `~/.compact`    | The `zkir-v3` binary that reports k and rows                                                     |
 
 `packages/zk-tls/test/live.test.ts` runs against two real witnesses and skips
 unless `WITNESS_URLS` names them; see the attestor guide's
