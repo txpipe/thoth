@@ -89,7 +89,7 @@ export const formatTable = (rows: readonly CircuitRow[]): string =>
           `${seconds(r.firstMs)}${r.firstWasCached ? ' (key was cached)' : ''}`,
           seconds(r.warmMedianMs),
           r.warmCpuSeconds === null ? NOT_MEASURED : r.warmCpuSeconds.toFixed(1),
-          r.peakMemoryBytes === null ? NOT_MEASURED : Math.round(r.peakMemoryBytes / 1e6),
+          r.peakMemoryBytes === null ? NOT_MEASURED : count(Math.round(r.peakMemoryBytes / 1e6)),
         ].join(' | '),
       )
       .map((line) => `| ${line} |`),

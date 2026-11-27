@@ -17,7 +17,7 @@ const measured = (overrides: Partial<CircuitMeasurement> = {}): CircuitMeasureme
     { ms: 1_200, cpuSeconds: 10.2 },
     { ms: 1_250, cpuSeconds: 10.6 },
   ],
-  peakMemoryBytes: 380_000_000,
+  peakMemoryBytes: 3_162_000_000,
   ...overrides,
 });
 
@@ -43,7 +43,7 @@ describe('formatTable', () => {
   it('prints one line per circuit with its sizes, times, CPU time and peak memory', () => {
     const [, , line] = formatTable([summarize(measured())]).split('\n');
     expect(line).toBe(
-      '| mock_attestation | openAndRead | 14 | 8,610 | 24.6 | 5,772 | 1.60 | 1.25 | 10.6 | 380 |',
+      '| mock_attestation | openAndRead | 14 | 8,610 | 24.6 | 5,772 | 1.60 | 1.25 | 10.6 | 3,162 |',
     );
   });
 
