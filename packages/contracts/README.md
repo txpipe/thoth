@@ -37,7 +37,7 @@ import "attestor_registry"<3> prefix R_;
 
 export { A_Claim, A_ClaimEntry };
 
-export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault, A_nullifiers };
+export { A_appId, A_freshnessWindow, A_maxWindow, A_policyHashes, A_claimsVault };
 
 witness seedPolicies(): Vector<1, Bytes<32>>;
 
@@ -61,9 +61,9 @@ export pure circuit message(a: A_Claim): Vector<7, Field> {
   return A_buildMessage(a);
 }
 
-// An app predicate: open a vaulted claim and read it in-circuit.
-export circuit requireStars(id: Bytes<32>, min: Uint<64>): [] {
-  const c = A_openClaim(id);
+// An app predicate: open a vaulted claim by its nullifier and read it in-circuit.
+export circuit requireStars(nullifier: Bytes<32>, min: Uint<64>): [] {
+  const c = A_openClaim(nullifier);
   assert(c.present[0], "slot 0 not measured");
   assert(c.values[0] >= min, "too few stars");
 }
@@ -97,19 +97,19 @@ server verified every proof against its verifier key.
 
 | Mock                   | Circuit               | k   | Rows   | Proving key (MB) | Proof (B) | First proof (s) | Warm proof (s) | CPU per warm proof (s) | Peak memory (MB) |
 | ---------------------- | --------------------- | --- | ------ | ---------------- | --------- | --------------- | -------------- | ---------------------- | ---------------- |
-| mock_attestation       | verifyAttestation     | 15  | 21,253 | 49.3             | 5,772     | 3.24            | 2.50           | 20.4                   | 765              |
-| mock_attestation       | openAndRead           | 14  | 8,610  | 24.6             | 5,772     | 1.54            | 1.15           | 10.4                   | 450              |
-| mock_attestation       | openAndReadPresence   | 14  | 8,580  | 24.6             | 5,772     | 1.56            | 1.17           | 10.4                   | 457              |
-| mock_attestation       | openAndRequireMetric0 | 14  | 8,570  | 24.6             | 5,772     | 1.54            | 1.15           | 10.4                   | 469              |
-| mock_attestation       | openAndBindHost       | 14  | 14,633 | 24.6             | 5,772     | 1.59            | 1.22           | 10.8                   | 458              |
-| mock_attestation_bytes | verifyAttestation     | 15  | 25,076 | 49.3             | 5,772     | 3.27            | 2.55           | 20.7                   | 759              |
-| mock_attestation_bytes | openAndReadBytes      | 15  | 19,188 | 49.3             | 5,772     | 2.95            | 2.22           | 19.3                   | 759              |
+| mock_attestation       | verifyAttestation     | 14  | 13,646 | 24.7             | 5,772     | 1.87            | 1.48           | 11.4                   | 454              |
+| mock_attestation       | openAndRead           | 13  | 6,657  | 12.3             | 5,772     | 0.84            | 0.67           | 6.0                    | 255              |
+| mock_attestation       | openAndReadPresence   | 13  | 6,627  | 12.3             | 5,772     | 0.85            | 0.70           | 6.1                    | 244              |
+| mock_attestation       | openAndRequireMetric0 | 13  | 6,617  | 12.3             | 5,772     | 0.85            | 0.66           | 6.0                    | 213              |
+| mock_attestation       | openAndBindHost       | 14  | 12,680 | 24.6             | 5,772     | 1.59            | 1.21           | 10.7                   | 434              |
+| mock_attestation_bytes | verifyAttestation     | 14  | 15,599 | 24.7             | 5,772     | 1.88            | 1.51           | 11.6                   | 455              |
+| mock_attestation_bytes | openAndReadBytes      | 15  | 17,236 | 49.3             | 5,772     | 2.93            | 2.19           | 19.2                   | 757              |
 
 How to read it:
 
 - A circuit of `k` is proved as `2^k` rows, so each step in `k` roughly
-  doubles the time and the proving key: a `verifyAttestation` proof (`k = 15`)
-  takes about twice as long as opening a numeric claim (`k = 14`).
+  doubles the time and the proving key: a `verifyAttestation` proof (`k = 14`)
+  takes about twice as long as opening a numeric claim (`k = 13`).
 - The first proof of a circuit parses its proving key, so it takes about a
   third longer. The server keeps the last five keys it parsed; a later proof
   of a cached circuit takes the warm time.
@@ -117,7 +117,8 @@ How to read it:
 - CPU time is the server's, summed over its threads. Peak memory is the
   server container's high-water mark, page cache included, while it proves
   that circuit alone. A server that proves `verifyAttestation` needs about
-  0.8 GB; one that only opens numeric claims needs under 0.5 GB.
+  0.5 GB, and one that only opens numeric claims about 0.25 GB. Opening a
+  byte value (`k = 15`) needs about 0.8 GB.
 
 `CONTRIBUTING.md` explains how to
 [run the benchmark](https://github.com/txpipe-shop/thoth/blob/main/CONTRIBUTING.md#proving-benchmark).
@@ -140,7 +141,7 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
   the SHA-256 of the observation identity. Attestors sign it, and it blocks
   replay.
 - [Claims vault](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
-  the accepted claims, keyed by `persistentCommit(claim, rand)`.
+  the accepted claims, keyed by their nullifier.
 
 ## Guarantees and limits
 
@@ -166,9 +167,9 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
   (`"Window in the future"`) and before `windowEnd + freshnessWindow`
   (`"Window too old"`). A zero `freshnessWindow` does not disable the check.
 - The caller's secret matches `holder` (`"Holder mismatch"`).
-- The observation identity has not been accepted before (`"Observation
-  replay"`). This also rejects the same claim resubmitted under the same vault
-  randomness, so the vault needs no check of its own.
+- The observation identity has not been accepted before: its nullifier is
+  not in the claims vault (`"Observation replay"`). The claim is then vaulted
+  under that nullifier.
 
 What the module does not check, and what your app does itself:
 
@@ -202,15 +203,24 @@ What the module does not check, and what your app does itself:
   say), keep your own set keyed on that fact. That set is public, so it
   confirms guesses at whatever it keys on
   ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
-  The ledger stores each claim's nullifier, commitment, vault pseudonym
-  (derived from the holder secret) and window in public, and the transaction
+  The ledger stores each claim's nullifier, as its vault key, with its vault
+  pseudonym (derived from the holder secret) and window in public, and the transaction
   discloses which accepted policy it used.
 - Holder secrets are not checked for freshness. Use a fresh, high-entropy
   secret per claim and keep it to open that claim. Where the salt follows the
   holder, a guessable secret makes the salt guessable too, and the nullifier
-  can then confirm guessed values. Reusing a secret links its
+  can then confirm guessed values. Reusing a secret links its holder
   commitments and vault entries.
-- `openClaim` consumes no nullifier, so opening is repeatable. "Use once"
+- `openClaim(nullifier)` rejects an unknown nullifier (`"Unknown claim"`),
+  a caller whose secret does not own the entry (`"Claim not bound to caller"`)
+  and a witness claim that does not hash to the nullifier (`"Claim does not
+  match nullifier"`). The holder computes the nullifier off-chain with
+  `nullifierOf(claim)` from `@txpipe/thoth-core/claim`.
+- `openClaim` returns the observation identity, not `holder` or `version`:
+  the nullifier does not bind them, so it does not check them, and a predicate
+  that reads either one does not compile. Key holder state on the vault
+  pseudonym instead.
+- `openClaim` consumes nothing, so opening is repeatable. "Use once"
   rules are your own state, keyed on the vault pseudonym. Never re-export
   `openClaim` as a top-level entry point: its return value is tainted and
   would force a `disclose()` that publishes every value.
@@ -241,6 +251,12 @@ What the module does not check, and what your app does itself:
   already see the values. The
   attestors derive it from the evidence, so a client cannot vary it to replay
   one observation ([ADR 0012](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0012-nullifier-hashes-a-secret-attestor-derived-salt.md)).
+- **The claims vault is keyed by the nullifier.** Vault membership is the
+  replay check, and you open a claim with its nullifier and the holder secret,
+  so your client keeps no randomness per claim. The vault key reveals no more
+  than the nullifier the same transaction publishes; for a chain-event kind
+  that is which event the claim attests
+  ([ADR 0016](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0016-claims-vault-keyed-by-the-nullifier.md)).
 - **No kind on-chain; the policy hash is the commitment.** A requester cannot
   substitute a laxer policy, and a new kind needs no change here: you accept
   it by sealing its policy hash ([ADR 0002](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0002-no-kind-on-chain-policy-hash.md)).
