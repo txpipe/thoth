@@ -1,11 +1,9 @@
 import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
+import type { SlotSignature as ClientSlotSignature } from '@txpipe/thoth-client';
 import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js';
 
-/** One signature and the registry slot whose key the contract checks it against. */
-export type SlotSignature = {
-  readonly registryIndex: bigint;
-  readonly signature: JubjubSchnorrSignature;
-};
+/** One `getSignatures` entry: a signature and the registry slot it names. */
+export type SlotSignature = ClientSlotSignature<JubjubSchnorrSignature>;
 
 /**
  * Private state the simulator threads through a mock contract's witnesses.
