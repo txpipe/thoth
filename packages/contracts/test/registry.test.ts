@@ -127,6 +127,13 @@ describe('named signatures', () => {
     );
   });
 
+  // The highest slot then 0: one past 65,535 must not wrap to 0 in the order check.
+  it('rejects the highest slot followed by slot 0', async () => {
+    await expect(submit(named([65_535, sig(b)], [0, sig(a)]))).rejects.toThrow(
+      'Registry slots not increasing',
+    );
+  });
+
   it('rejects an empty slot, even with a signature that verifies for the empty key', async () => {
     const msg = pureCircuits.message(claim);
     expect(
