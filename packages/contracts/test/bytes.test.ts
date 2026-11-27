@@ -272,6 +272,14 @@ describe('signature and identity coverage', () => {
     },
   );
 
+  it('rejects a claim whose byte flag changed after signing', async () => {
+    const claim = makeByteClaim({ byteValue: new Uint8Array(32) });
+    const submission = signed(claim);
+    await expect(
+      submit({ ...submission, claim: { ...claim, bytePresent: [false, false] } }),
+    ).rejects.toThrow('Insufficient valid signatures');
+  });
+
   it('accepts claims differing only in byte value, then rejects the replay', async () => {
     const first = signed(makeByteClaim({ byteValue: padded32('abc') }));
     const second = signed(makeByteClaim({ byteValue: padded32('xyz') }));
