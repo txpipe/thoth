@@ -21,7 +21,7 @@ import type { AttestationVerifier, AttestorTransport, TrustedSet } from '@txpipe
 import { buildTrustedSet } from '@txpipe/thoth-client';
 import type { Attestation } from '@txpipe/thoth-core';
 import type { FlatMessage } from '@txpipe/thoth-core/claim';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { APP_ID, HOLDER, LOCATOR, OBSERVATION, POLICY } from '../output/fixtures.js';
 
 type FakePublicKey = { readonly id: string };
@@ -139,22 +139,30 @@ describe('cardanoClient', () => {
   });
 
   it('recovers from a timed-out attestor to meet the threshold', async () => {
-    const attestors = [makeAttestor('attestor-0'), makeAttestor('attestor-1')];
-    const transport = transportFor(attestors);
-    const slow: AttestorTransport<CardanoDefinition, FakePublicKey, FakeSignature> = {
-      request: (descriptor, input) =>
-        descriptor.id === 'attestor-0'
-          ? new Promise<Attestation<typeof expectedClaim, FakePublicKey, FakeSignature>>(() => {})
-          : transport.request(descriptor, input),
-    };
+    // Fake timers: the spare attestor's real work must not race its own short deadline.
+    vi.useFakeTimers();
+    try {
+      const attestors = [makeAttestor('attestor-0'), makeAttestor('attestor-1')];
+      const transport = transportFor(attestors);
+      const slow: AttestorTransport<CardanoDefinition, FakePublicKey, FakeSignature> = {
+        request: (descriptor, input) =>
+          descriptor.id === 'attestor-0'
+            ? new Promise<Attestation<typeof expectedClaim, FakePublicKey, FakeSignature>>(() => {})
+            : transport.request(descriptor, input),
+      };
 
-    const attestment = await clientFor(attestors, { transport: slow }).collect(
-      LOCATOR,
-      options({ threshold: 1, attestorTimeoutMs: 10, attestorIds: ['attestor-0', 'attestor-1'] }),
-    );
+      const pending = clientFor(attestors, { transport: slow }).collect(
+        LOCATOR,
+        options({ threshold: 1, attestorTimeoutMs: 10, attestorIds: ['attestor-0', 'attestor-1'] }),
+      );
+      await vi.advanceTimersByTimeAsync(10);
+      const attestment = await pending;
 
-    expect(collectedSlots(attestment)).toEqual([1]);
-    expect(attestment.failures).toEqual([{ registryIndex: 0, reason: 'timeout' }]);
+      expect(collectedSlots(attestment)).toEqual([1]);
+      expect(attestment.failures).toEqual([{ registryIndex: 0, reason: 'timeout' }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('returns at the threshold without waiting for the remaining candidates', async () => {
