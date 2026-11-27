@@ -149,7 +149,7 @@ module attestation<#V, #B, #N, #M> {
     return deriveHolder(secret);
   }
 
-  /// The per-claim holder commitment (ADR 0004): SHA-256 of the 22-byte tag
+  /// The per-claim holder commitment: SHA-256 of the 22-byte tag
   /// `thoth:holder-commit:v1`, then the secret. It is a different function
   /// from `deriveHolder`, so one secret yields unrelated values in the two
   /// roles. Exported pure so `holderCommitmentOf` in

@@ -145,7 +145,7 @@ export function subjectHashOf(fields: readonly Uint8Array[]): Uint8Array {
  * Equals the circuit's `holderCommitment(secret)`: SHA-256 of the 22-byte tag
  * `thoth:holder-commit:v1`, then the secret. It is a different function from
  * the vault pseudonym the contract derives from the same secret, so the two
- * values are unrelated. Use a fresh secret per claim (ADR 0004).
+ * values are unrelated. Use a fresh secret per claim.
  *
  * @param secret — 32 bytes.
  * @throws if the secret is not 32 bytes.

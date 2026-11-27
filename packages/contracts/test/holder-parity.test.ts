@@ -6,7 +6,7 @@
 // ADR 0004 binds each claim to a per-claim holder commitment. The client
 // derives it off-chain for the claim context and the contract re-derives it
 // in-circuit from the caller's secret, so the two must agree byte for byte.
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { holderCommitmentOf } from '@txpipe/thoth-core/claim-context';
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
@@ -59,7 +59,7 @@ describe('holderCommitment circuit', () => {
     // deriveHolder (exported as holderOf) is the vault pseudonym, a Field.
     // Read the commitment as an integer in either byte order: the two roles
     // must not collapse to one value.
-    for (const secret of [filled(7), randomBytes(32)]) {
+    for (const secret of [filled(7), new SeededRandom(SEED).bytes(32)]) {
       const pseudonym = pureCircuits.holderOf(secret);
       const commitment = pureCircuits.holderCommitment(secret);
 
