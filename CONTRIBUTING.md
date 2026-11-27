@@ -41,7 +41,7 @@ thoth/
 │   ├── client/                 # @txpipe/thoth-client: trusted set, transport, attestation checks
 │   ├── contracts/              # @txpipe/thoth-contracts: Compact modules
 │   │   ├── attestation.compact        # N-of-M verification, replay and window checks, claims vault
-│   │   ├── attestor_registry.compact  # pinned attestor keys, signature counting
+│   │   ├── attestor_registry.compact  # pinned attestor keys, checks the N named signatures
 │   │   ├── bench/                     # proving benchmark (npm run bench)
 │   │   ├── examples/example_app.compact  # a 2-of-3 embedding
 │   │   └── test/                      # simulator tests, mock contracts, helpers

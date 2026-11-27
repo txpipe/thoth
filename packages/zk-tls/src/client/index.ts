@@ -390,9 +390,10 @@ export type ZkFetchAttestationInput = AttestationInput<
 >;
 
 /**
- * Ask the selected attestors to sign the shared claim and vet each answer.
- * The contract counts the threshold; the client only checks that every
- * collected attestation commits to the same message.
+ * Ask the selected attestors to sign the shared claim and vet each answer,
+ * one attestation per attestor asked. The contract takes exactly N signatures;
+ * the client only checks that every collected attestation commits to the same
+ * message.
  *
  * @throws `AttestorNotInTrustedSetError` if an id is not in the trusted set.
  * @throws `AttestationMismatchError` on the first rejected attestation.
