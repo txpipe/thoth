@@ -18,7 +18,7 @@ Once it is published, it installs as `@txpipe/thoth-client`. It needs `zod@^4.6.
 
 ## Usage
 
-A kind's client does three things with this package: build the trusted set from the app's registry, reach one attestor through a transport it supplies, and vet the attestation that comes back.
+A kind's client does three things with this package: build the trusted set from the app's registry, reach one attestor through a transport it supplies, and vet the attestation that comes back. A dApp then names the collected signatures by their slots for the contract.
 
 ```ts
 import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
@@ -27,6 +27,7 @@ import {
   buildTrustedSet,
   memberOf,
   resolveAttestation,
+  slotSignaturesOf,
 } from '@txpipe/thoth-client';
 import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
 
@@ -76,7 +77,10 @@ const collected = await resolveAttestation({
   expectedClaim: claim, // the parsed claim you asked for
   verifier: jubjubVerifier,
 }); // throws AttestationMismatchError
-// Place collected.attestation.signature at collected.registryIndex.
+
+// Your collect gathers N of these. A dApp names their signatures by slot, in
+// slot order, for its contract's getSignatures witness.
+const signatures = slotSignaturesOf(gathered); // gathered: the N collected attestations
 ```
 
 `attestorOf(trusted, id)` returns the descriptor alone and `attestorIdsOf(trusted)` lists every member's id. The errors come from `@txpipe/thoth-client/errors`; each carries the attestor's id, and `AttestationMismatchError` and `InvalidTrustedSetError` add a `reason` naming the failed check.
@@ -86,13 +90,14 @@ const collected = await resolveAttestation({
 - [Attestor](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#roles): an entity that verifies evidence under a policy and signs a claim. Its descriptor (`id`, keyless `definition`, `publicKey`) comes from [`@txpipe/thoth-core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core).
 - [Trusted set](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the app's pinned attestors, each with its registry slot. `TrustedSet` in code; each member is a `TrustedAttestor`.
 - [Registry slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the position of an attestor's key in the app's [registry](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain). `registryIndex` in code, bounded by `registrySize`, the contract's `#M`.
-- [Attestation](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the signed artifact one attestor returns, with the claim, the message, its public key and its signature. `CollectedAttestation` pairs one with the slot it answered from.
+- [Attestation](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection): the signed artifact one attestor returns, with the claim, the message, its public key and its signature. `CollectedAttestation` pairs one with the slot it answered from, and `slotSignaturesOf` turns a set of them into the contract's `SlotSignature` entries.
 
 ## Guarantees and limits
 
 - `buildTrustedSet` rejects an invalid registry size, an empty set, duplicate ids, duplicate public keys, duplicate slots and slots outside `[0, registrySize)`, so a `TrustedSet` is valid by construction. It may pin fewer attestors than the registry holds.
 - `resolveAttestation` checks that the member is in the trusted set, that the returned key is the pinned key, that the claim equals the parsed claim you asked for, that the message encodes that claim, and that the signature verifies. A verifier that throws counts as an invalid signature. It compares schema outputs and does not apply input transforms again.
-- `registryIndex` is positional and app-owned. The contract verifies `signatures[i]` against `keys[i]`, and the signed message binds no slot, registry or contract. You assign each attestor the index of its key in your deployed registry; a wrong slot is not detected here, only by the contract. Never order signatures by anything else.
+- `registryIndex` is app-owned and names each signature. The contract takes exactly `N` `{ registryIndex, signature }` entries in increasing slot order and verifies each signature against `keys[registryIndex]`; the signed message binds no slot, registry or contract. You assign each attestor the index of its key in your deployed registry; a wrong slot is not detected here, only by the contract. `slotSignaturesOf` sorts by slot and throws a `RangeError` for a slot outside the contract's `Uint<16>` range (`[0, 65535]`) or two entries for one slot; never name or order a signature by anything else.
+- `slotSignaturesOf` does not count: pass it exactly the threshold's attestations, as a kind's `collect` returns them. The contract rejects any other number.
 - The threshold and the registry are enforced by the contract, not here. This package vets one attestation at a time; the kind's client drives the fan-out and the threshold.
 - No transport is included. The kind's client or the app supplies one and decodes wire values into the typed `Attestation` before vetting.
 - Honest attestors are assumed. Vetting proves who signed, not that what they signed is true; N colluding attestors can certify a false claim (ADR 0003).
@@ -113,4 +118,4 @@ const collected = await resolveAttestation({
 - [`@txpipe/thoth-core`](https://github.com/txpipe-shop/thoth/tree/main/packages/core): `AttestorDescriptor`, `Attestation`, `AttestationInput`
 - [`@txpipe/thoth-attestor`](https://github.com/txpipe-shop/thoth/tree/main/packages/attestor): the attestor-side `Attestor.attest` that `AttestorTransport` mirrors
 - [`@txpipe/thoth-zk-tls`](https://github.com/txpipe-shop/thoth/tree/main/packages/zk-tls): the zkFetch kind, a client built on this package
-- [`@txpipe/thoth-contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies the signatures positionally
+- [`@txpipe/thoth-contracts`](https://github.com/txpipe-shop/thoth/tree/main/packages/contracts): the on-chain registry that verifies each signature against the slot it names

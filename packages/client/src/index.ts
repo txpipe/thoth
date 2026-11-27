@@ -16,9 +16,10 @@ import {
 /**
  * One pinned attestor and the registry slot this app assigned to it.
  *
- * `attestor_registry.compact` verifies `signatures[i]` against `keys[i]`, so
- * `registryIndex` is the index of `attestor.publicKey` in the app's deployed
- * registry. The app assigns it; the attestor does not know it.
+ * `attestor_registry.compact` verifies each signature against
+ * `keys[registryIndex]`, the slot the signature names, so `registryIndex` is
+ * the index of `attestor.publicKey` in the app's deployed registry. The app
+ * assigns it; the attestor does not know it.
  */
 export interface TrustedAttestor<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
@@ -185,6 +186,53 @@ export interface CollectedAttestation<C, PK, S, Msg = FlatMessage> {
   readonly registryIndex: number;
   /** The attestation collected from that slot. */
   readonly attestation: Attestation<C, PK, S, Msg>;
+}
+
+/**
+ * One signature and the registry slot whose key the contract checks it
+ * against: an entry of the attestation module's `getSignatures` witness.
+ */
+export interface SlotSignature<S> {
+  /** The registry slot, as the contract's `Uint<16>`. */
+  readonly registryIndex: bigint;
+  /** The signature collected from that slot. */
+  readonly signature: S;
+}
+
+/** The highest slot the contract's `Uint<16>` registry slot can hold. */
+const MAX_SLOT = 65_535;
+
+/**
+ * Name each collected signature by its registry slot, in slot order: the
+ * value a dApp's `getSignatures` witness returns.
+ *
+ * Pass exactly the threshold's attestations, as a kind's `collect` returns
+ * them. The contract checks `entries[j].signature` against the key in slot
+ * `entries[j].registryIndex` and requires the slots to increase, so the slot
+ * comes from the trusted set, never from the order the replies arrived in.
+ *
+ * @throws {RangeError} if a slot is not an integer in `[0, 65535]`, the
+ *   range of the contract's `Uint<16>` slot, or two attestations name the same
+ *   slot.
+ */
+export function slotSignaturesOf<S>(
+  collected: readonly CollectedAttestation<unknown, unknown, S, unknown>[],
+): SlotSignature<S>[] {
+  for (const { registryIndex } of collected) {
+    if (!Number.isInteger(registryIndex) || registryIndex < 0 || registryIndex > MAX_SLOT) {
+      throw new RangeError(`registry slot ${registryIndex} is not an integer in [0, ${MAX_SLOT}]`);
+    }
+  }
+  const sorted = [...collected].sort((a, b) => a.registryIndex - b.registryIndex);
+  sorted.forEach((entry, i) => {
+    if (i > 0 && sorted[i - 1]?.registryIndex === entry.registryIndex) {
+      throw new RangeError(`two signatures name registry slot ${entry.registryIndex}`);
+    }
+  });
+  return sorted.map(({ registryIndex, attestation }) => ({
+    registryIndex: BigInt(registryIndex),
+    signature: attestation.signature,
+  }));
 }
 
 /** Signature verification for the app's signature scheme. */

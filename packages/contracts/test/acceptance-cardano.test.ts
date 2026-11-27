@@ -15,20 +15,14 @@ import {
 } from '@txpipe/thoth-cardano';
 import { cardanoAttestor } from '@txpipe/thoth-cardano/attestor';
 import { type CardanoAttestationInput, cardanoClient } from '@txpipe/thoth-cardano/client';
-import { buildTrustedSet } from '@txpipe/thoth-client';
+import { buildTrustedSet, slotSignaturesOf } from '@txpipe/thoth-client';
 import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
 import type { Claim } from '@txpipe/thoth-core/claim';
 import { nullifierOf, toContractClaim } from '@txpipe/thoth-core/claim';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { type B_Claim, pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { jubjubKeyPair, type Submission, submit } from './helpers/acceptance.js';
-import {
-  APP_ID,
-  DUMMY_SIGNATURE,
-  flip,
-  makeNotaryKey,
-  nullifierOfByteClaim,
-} from './helpers/fixtures.js';
+import { APP_ID, flip, makeNotaryKey, nullifierOfByteClaim } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { MockAttestationBytesSim } from './helpers/sim.js';
 
@@ -113,8 +107,8 @@ const clientWith = () =>
     read: async () => observation,
   });
 
-// Collect the honest threshold set through the cardano client and lay its
-// signatures out at their registry slots, the dummy filling the unqueried one.
+// Collect the honest threshold set through the cardano client and name its
+// signatures by their registry slots.
 const collectSubmission = async (secret = holderSecret): Promise<Submission> => {
   const client = clientWith();
   const { claim, collected } = await client.collect(locator, {
@@ -124,12 +118,7 @@ const collectSubmission = async (secret = holderSecret): Promise<Submission> => 
     attestorTimeoutMs: 5_000,
   });
   honestClaim = claim;
-  const signatures = registryKeys.map(
-    (_, slot) =>
-      collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
-      DUMMY_SIGNATURE,
-  );
-  return { claim: toContractClaim(claim), signatures };
+  return { claim: toContractClaim(claim), signatures: slotSignaturesOf(collected) };
 };
 
 // A fresh ledger that seals the app id and the policy the attestors enforced,
@@ -169,7 +158,8 @@ describe('cardano cross-seam acceptance', () => {
       values: [1_700_000_000n, 1000n, 5_000_000n],
       byteValues: [Uint8Array.from(Buffer.from(TX_HASH, 'hex'))],
     });
-    expect(honest.signatures[2]).toBe(DUMMY_SIGNATURE);
+    // Exactly the threshold, in slot order; the unqueried slot 2 is not named.
+    expect(honest.signatures.map((entry) => entry.registryIndex)).toEqual([0n, 1n]);
   });
 
   it('has every attestor derive the same event salt', () => {

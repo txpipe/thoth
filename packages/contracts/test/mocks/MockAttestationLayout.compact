@@ -4,7 +4,7 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           V=0 values  W=3 byte slots  N=2 threshold  M=3 signatures
+//           V=0 values  W=3 byte slots  N=2 threshold  M=3 registry slots
 import "../../attestation"<0, 3, 2, 3> prefix L_;
 
 import "../../attestor_registry"<3> prefix R_;

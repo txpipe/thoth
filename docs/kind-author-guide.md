@@ -350,8 +350,11 @@ The client runs on the user's machine and builds on `@txpipe/thoth-client` (see 
 - Derive the expected claim from the evidence yourself. Then vet every reply
   with `resolveAttestation({ trusted, member, attestation, verifier,
   expectedClaim })`, using `jubjubVerifier` from `@txpipe/thoth-client/jubjub`.
-- Group the replies by exact message. Place each signature at its member's
-  `registryIndex`, never by reply order.
+- Group the replies by exact message, and return exactly `threshold`
+  collected attestations over one message, sorted by `registryIndex`. The
+  contract takes exactly N signatures, each named by its slot, so a dApp
+  passes your result to `slotSignaturesOf` for its `getSignatures` witness.
+  Name a signature by its member's `registryIndex`, never by reply order.
 - Keep request secrets on the user's machine. The attestors see evidence, not
   credentials.
 

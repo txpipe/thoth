@@ -1,11 +1,15 @@
 // Thoth attestor registry module: the app's M pinned attestor public keys and
-// `countValidSignatures` over the attestation module's seven-field signed
-// message. It counts the signatures that verify; the attestation module that
-// embeds it defines the message and applies the threshold.
+// `requireSignatures`, which checks N signatures over the attestation module's
+// seven-field signed message, each against the key of the registry slot it
+// names. The attestation module that embeds it defines the message and N.
 //
 // The keys are a sealed, unexported ledger that only `initRegistry` writes,
 // once, at deploy. Do not re-export `initRegistry`: a sealed field cannot be
 // written from an exported circuit, so that is a compile error.
+//
+// Module parameters (import "attestor_registry"<M>):
+//   #M — number of registry slots, the number of pinned keys. A slot is a
+//        `Uint<16>`, so M is at most 65,536.
 pragma language_version >= 0.22;
 
 module attestor_registry<#M> {
@@ -30,33 +34,46 @@ module attestor_registry<#M> {
     assert(keysDistinct(ks), "Duplicate registry keys");
   }
 
-  /// Whether one signature verifies against its registry slot.
-  circuit slotValid(
-            msg: Vector<7, Field>,
-            sig: JubjubSchnorrSignature,
-            pk: JubjubPoint,
-            slotEmpty: Boolean
-            ): Boolean {
-    if (slotEmpty) {
-      return false;
-    }
-    return jubjubSchnorrVerify<7>(msg, sig, pk);
+  /// One signature and the registry slot whose key it is checked against.
+  export struct SlotSignature {
+    registryIndex: Uint<16>;
+    signature: JubjubSchnorrSignature;
   }
 
-  /// Number of the M signatures that verify against their own slot:
-  /// `sigs[i]` against `keys[i]`.
-  export circuit countValidSignatures(
-                   msg: Vector<7, Field>,
-                   sigs: Vector<M, JubjubSchnorrSignature>
-                   ): Uint<64> {
-    const verdicts: Vector<M, Boolean> =
-            map((key: JubjubPoint, sig: JubjubSchnorrSignature) =>
-                slotValid(msg, sig, key, key == default<JubjubPoint>),
-                keys,
-                sigs);
-    return fold((acc: Uint<64>, ok: Boolean) => (acc + (ok ? 1 : 0)) as Uint<64>,
-                0 as Uint<64>,
-                verdicts);
+  /// The key in slot `slot` of `ks`, or the empty key when `slot >= M`. It
+  /// compares `slot` with every slot, so the work is the same whichever slot
+  /// is named, and a vector subscript must be a constant anyway.
+  circuit keyAt(ks: Vector<M, JubjubPoint>, slot: Uint<16>): JubjubPoint {
+    const found = fold((acc: [Field, JubjubPoint], k: JubjubPoint) =>
+                       [acc[0] + 1, acc[0] == (slot as Field) ? k : acc[1]],
+                       [0 as Field, default<JubjubPoint>],
+                       ks);
+    return found[1];
+  }
+
+  /// Require each of the N signatures to verify over `msg` against the key in
+  /// the slot it names: `sigs[j].signature` against
+  /// `keys[sigs[j].registryIndex]`. Slots must strictly increase, so no slot
+  /// counts twice, and each must be below M and hold a key: an empty slot has
+  /// no attestor behind it. The slots stay private: every key is read, and no
+  /// ledger operation depends on which slots are named.
+  export circuit requireSignatures<#N>(msg: Vector<7, Field>, sigs: Vector<N, SlotSignature>): [] {
+    // order[1] is one past the last slot seen; a Uint<17> holds 65,536.
+    const order = fold((acc: [Boolean, Uint<17>], s: SlotSignature) =>
+                       [acc[0] && (s.registryIndex as Uint<17>) >= acc[1],
+                        (s.registryIndex + 1) as Uint<17>],
+                       [true, 0 as Uint<17>],
+                       sigs);
+    assert(order[0], "Registry slots not increasing");
+    // The slots increase, so bounding the last bounds them all.
+    assert(order[1] <= (M as Uint<17>), "Registry slot out of range");
+    const ks = keys;
+    for (const s of sigs) {
+      const key = keyAt(ks, s.registryIndex);
+      // The stdlib verifier rejects the empty key by aborting; this names it.
+      assert(key != default<JubjubPoint>, "Empty registry slot");
+      assert(jubjubSchnorrVerify<7>(msg, s.signature, key), "Insufficient valid signatures");
+    }
   }
 
   /// How many slots of `ks` hold `k`. Empty slots count like any other, so a

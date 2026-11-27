@@ -17,12 +17,7 @@ import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits as bytesPureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits as layoutPureCircuits } from '../artifacts/mock_attestation_layout/contract/index.js';
-import {
-  DEFAULT_HOLDER_SECRET,
-  DUMMY_SIGNATURE,
-  makeClaim,
-  makeNotaryKey,
-} from './helpers/fixtures.js';
+import { atSlots, DEFAULT_HOLDER_SECRET, makeClaim, makeNotaryKey } from './helpers/fixtures.js';
 import { createPrivateState } from './helpers/private-state.js';
 import { RUNS, randomClaim, SEED, SeededRandom } from './helpers/random-claims.js';
 import { signMessage } from './helpers/sign.js';
@@ -74,11 +69,11 @@ describe('claimToMessage end to end', () => {
     const msg = claimToMessage({ ...claim, byteValues: [] });
 
     // Sign the off-chain encoder's message directly with the first two keys.
-    const signatures = [
+    const signatures = atSlots([
       signMessage(notaryKeys[0].sk, msg).signature,
       signMessage(notaryKeys[1].sk, msg).signature,
-      DUMMY_SIGNATURE, // empty third slot — never verifies
-    ];
+      null, // slot 2 does not sign
+    ]);
 
     const sim = await MockAttestationSim.create(createPrivateState(holder), registryKeys);
     await sim.call('verifyAttestation', {

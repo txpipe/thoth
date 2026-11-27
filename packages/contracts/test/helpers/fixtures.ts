@@ -13,6 +13,7 @@ import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js
 import { pureCircuits } from '../../artifacts/mock_attestation/contract/index.js';
 import type { B_Claim } from '../../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits as bytesPureCircuits } from '../../artifacts/mock_attestation_bytes/contract/index.js';
+import type { SlotSignature } from './private-state.js';
 import { signClaim as signSingle } from './sign.js';
 
 export const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
@@ -120,24 +121,32 @@ export const flip = (bytes: Uint8Array, i: number): Uint8Array => {
 
 export type SignedClaim = {
   claim: A_Claim;
-  signatures: JubjubSchnorrSignature[]; // valid sigs for the keys given; absent slot = dummy (never verifies)
+  signatures: SlotSignature[]; // one per signing slot, in slot order
 };
 
-// Dummy signature for an empty slot: identity announcement, zero response —
-// it can never verify against a non-empty registry slot.
-export const DUMMY_SIGNATURE: JubjubSchnorrSignature = {
+// A signature for the empty key: identity announcement, zero response. It is a
+// valid Schnorr signature for the identity point off-chain, so it stands in
+// for a signature someone forged for an empty registry slot.
+export const EMPTY_KEY_SIGNATURE: JubjubSchnorrSignature = {
   announcement: { x: 0n, y: 1n },
   response: 0n,
 };
 
-// Sign a claim with the given notary keys. A `null` key yields the dummy
-// signature, which never verifies.
-export const signClaim = (claim: A_Claim, keys: readonly (NotaryKey | null)[]): SignedClaim => {
-  const signatures: JubjubSchnorrSignature[] = keys.map((key) =>
-    key === null ? DUMMY_SIGNATURE : signSingle(key.sk, claim).signature,
+// Name each signature by its position: `signatures[i]` is slot i's, and a
+// `null` slot did not sign, so it is left out.
+export const atSlots = (signatures: readonly (JubjubSchnorrSignature | null)[]): SlotSignature[] =>
+  signatures.flatMap((signature, slot) =>
+    signature === null ? [] : [{ registryIndex: BigInt(slot), signature }],
   );
-  return { claim, signatures };
-};
+
+// Sign a claim with the notary key at each registry slot; a `null` slot does
+// not sign.
+export const signClaim = (claim: A_Claim, keys: readonly (NotaryKey | null)[]): SignedClaim => ({
+  claim,
+  signatures: atSlots(
+    keys.map((key) => (key === null ? null : signSingle(key.sk, claim).signature)),
+  ),
+});
 
 /** The nullifier the numeric mock vaults `claim` under. */
 export const nullifierOfClaim = (claim: A_Claim): Uint8Array => pureCircuits.nullifierOf(claim);

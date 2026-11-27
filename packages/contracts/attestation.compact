@@ -1,7 +1,7 @@
 // Thoth attestation module: verifies an N-of-M attested `Claim`, rejects
 // claims for another app, replays and out-of-window claims, and vaults it under
-// its nullifier. The registry counts the signatures that verify; this module
-// applies the threshold #N and defines the signed message.
+// its nullifier. The registry checks the #N signatures the prover supplies,
+// each against the key of the slot it names; this module defines the message.
 //
 // Wire layout (buildMessage): attestors sign seven fields,
 //   [ version, V as Field, W as Field,
@@ -35,8 +35,9 @@
 //   #V — number of numeric value slots (Claim.values: Vector<V, Uint<64>>).
 //   #W — number of byte slots (Claim.byteValues: Vector<W, Bytes<32>>), the
 //        client's byteSlots. W = 0 is the numeric-only layout.
-//   #N — the threshold: at least #N of the #M signatures must verify.
-//   #M — number of signature slots, the registry's key count.
+//   #N — the threshold: `getSignatures` supplies exactly #N signatures, each
+//        named by a distinct registry slot, and every one must verify.
+//   #M — number of registry slots, the registry's key count.
 pragma language_version >= 0.22;
 
 module attestation<#V, #W, #N, #M> {
@@ -106,7 +107,10 @@ module attestation<#V, #W, #N, #M> {
   /// observation already accepted, so membership is the replay check.
   export ledger claimsVault: Map<Bytes<32>, ClaimEntry>;
 
-  witness getAttestationWitness(): [Claim, Vector<M, JubjubSchnorrSignature>];
+  witness getAttestationWitness(): Claim;
+  // A witness of its own, so `openClaim` does not take signature inputs it
+  // never reads.
+  witness getSignatures(): Vector<N, Registry_SlotSignature>;
   witness getHolderSecret(): Bytes<32>;
 
   /// The vault pseudonym of a holder secret: hashToCurve over the
@@ -174,7 +178,7 @@ module attestation<#V, #W, #N, #M> {
 
   /// Verify an attested claim and store it in the claims vault.
   export circuit verifyAttestation(): [] {
-    const [claim, sigs] = getAttestationWitness();
+    const claim = getAttestationWitness();
     assert(claim.version == 1, "Unsupported claim version");
     assert(claim.appId == appId, "App id mismatch");
     assert(policyHashes.member(disclose(claim.policyHash)), "Unaccepted policy");
@@ -183,9 +187,7 @@ module attestation<#V, #W, #N, #M> {
     // vault key.
     const nullifier = nullifierOf(claim);
     const msg = messageOf(claim.version, nullifier, claim.holder);
-    assert(Registry_countValidSignatures(msg, sigs) >= (N as Uint<64>),
-           "Insufficient valid signatures"
-           );
+    Registry_requireSignatures<N>(msg, getSignatures());
 
     const validSlots =
             map((present: Boolean, value: Uint<64>) => present || value == 0,
@@ -230,7 +232,7 @@ module attestation<#V, #W, #N, #M> {
   /// state. Never re-export it as a top-level entry point: its return value is
   /// tainted and would force a disclose that reveals every value.
   export circuit openClaim(nullifier: Bytes<32>): Observation {
-    const [claim,] = getAttestationWitness();
+    const claim = getAttestationWitness();
     const key = disclose(nullifier);
     assert(claimsVault.member(key), "Unknown claim");
     assert(claimsVault.lookup(key).holder == disclose(deriveHolder(getHolderSecret())),

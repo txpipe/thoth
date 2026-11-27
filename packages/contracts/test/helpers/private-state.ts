@@ -1,5 +1,9 @@
 import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
+import type { SlotSignature as ClientSlotSignature } from '@txpipe/thoth-client';
 import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js';
+
+/** One `getSignatures` entry: a signature and the registry slot it names. */
+export type SlotSignature = ClientSlotSignature<JubjubSchnorrSignature>;
 
 /**
  * Private state the simulator threads through a mock contract's witnesses.
@@ -9,7 +13,7 @@ import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js
  */
 export type PrivateState<Claim = A_Claim> = {
   readonly claim: Claim | null;
-  readonly signatures: JubjubSchnorrSignature[];
+  readonly signatures: readonly SlotSignature[];
   readonly holderSecret: Uint8Array;
 };
 
