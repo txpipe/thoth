@@ -2,17 +2,23 @@ name: Test Suite
 
 on:
   pull_request:
-    paths-ignore:
-      - "**.md"
-      - ".gitignore"
-      - "biome.json"
+    paths:
+      - "**"
+      - "!**.md"
+      - "!.gitignore"
+      - "!biome.json"
+      # witness-pin.test.ts reads this guide, so a change to it runs the tests.
+      - "packages/zk-tls/docs/attestor-guide.md"
   push:
     branches:
       - main
-    paths-ignore:
-      - "**.md"
-      - ".gitignore"
-      - "biome.json"
+    paths:
+      - "**"
+      - "!**.md"
+      - "!.gitignore"
+      - "!biome.json"
+      # witness-pin.test.ts reads this guide, so a change to it runs the tests.
+      - "packages/zk-tls/docs/attestor-guide.md"
   workflow_call:
 
 jobs:
