@@ -114,7 +114,9 @@ const proved = await client.proveReq(
   { holder, windowStart: BigInt(start), windowEnd: BigInt(start + 60) },
 );
 
-const attestment = await proved.attest(); // or .attest(txpipeDescriptor.id)
+// Ask exactly the contract's N attestors (2 here); with no ids, attest() asks
+// every pinned attestor and returns one attestation for each.
+const attestment = await proved.attest(txpipeDescriptor.id, eryxDescriptor.id);
 ```
 
 `proveReq` fetches through every pinned attestor's witness and requires them
@@ -123,7 +125,10 @@ the holder and window through the [claim context](../../../CONTEXT.md#the-claim)
 digest ([ADR 0011](../../../docs/adr/0011-evidence-binds-the-claim-context.md)).
 Leave room in `windowEnd` for a slow proof: evidence observed after it is
 refused (see [Collecting a threshold](#collecting-a-threshold)).
-`attest` then asks the named attestors, or all of them, to sign it.
+`attest` then asks the named attestors, or all of them, to sign it. It
+returns one attestation per attestor asked, in the order asked, and throws on
+the first one that fails, so it does not wait for a threshold or try a spare;
+`collect` does both.
 
 ## Collecting a threshold
 
@@ -348,9 +353,15 @@ separately if you need to.
 ## Handing it to the contract
 
 `attestment.claim` is the claim every attestor signed and `attestment.message`
-is its flat encoding; `attestment.collected` holds exactly `threshold`
-attestations, sorted by the `registryIndex` your trusted set assigned to the
-attestor that signed each. The contract takes the claim in its own shape,
+is its flat encoding. Each entry of `attestment.collected` carries the
+`registryIndex` your trusted set assigned to the attestor that signed it. How
+many entries there are depends on how you collected:
+
+- `collect` returns exactly `threshold` attestations, sorted by slot.
+- `proved.attest(...ids)` returns one attestation per attestor asked, in the
+  order asked, and every pinned attestor's when you pass no ids.
+
+The contract takes the claim in its own shape,
 `toContractClaim(attestment.claim)`, for numeric-only claims too (the
 [wire order](../../../docs/DESIGN.md#wire-order) shows that shape), and exactly
 N signatures, each named by its slot, in slot order. `slotSignaturesOf` builds
@@ -366,9 +377,12 @@ const claim = toContractClaim(attestment.claim);
 const signatures = slotSignaturesOf(attestment.collected);
 ```
 
-Set `threshold` to the contract's N: the contract rejects more or fewer
-signatures, and one that does not verify fails the proof instead of being
-skipped. Which slots signed stays private.
+Hand `slotSignaturesOf` exactly N attestations: set `collect`'s `threshold`
+to the contract's N, or pass `attest` exactly N ids. If you asked more
+attestors, choose N of the entries before you call it; it sorts them by slot
+but does not count them. The contract rejects more or fewer signatures, and
+one that does not verify fails the proof instead of being skipped. Which slots
+signed stays private.
 
 See `@txpipe/thoth-contracts` for the circuit and the registry wiring.
 
