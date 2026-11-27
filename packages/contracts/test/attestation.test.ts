@@ -186,18 +186,6 @@ describe('mock attestation', () => {
       ).rejects.toThrow('Insufficient valid signatures');
     });
 
-    it('rejects a tampered claim (value flipped)', async () => {
-      const claim = makeClaim({ values: [12345n, 0n, 0n], present: [true, false, false] });
-      const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
-      const tampered = {
-        claim: { ...signed.claim, values: [54321n, 0n, 0n] },
-        commitRand: signed.commitRand,
-      };
-      await expect(
-        sim.call('verifyAttestation', ps({ ...signed, ...tampered, holderSecret: holder })),
-      ).rejects.toThrow('Insufficient valid signatures');
-    });
-
     // Every field but `holder` and `version` reaches the signature only through
     // the nullifier, so changing any of them after signing must fail the check.
     it.each([
