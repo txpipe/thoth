@@ -114,9 +114,9 @@ const { claim, collected } = await client.collect(request, {
   attestorTimeoutMs: 5_000,
 });
 
-// 4. Your contract's getAttestationWitness returns toContractClaim(claim), the
-//    signatures by slot and a commitment randomness; getHolderSecret returns
-//    holderSecret. Then you call verifyAttestation.
+// 4. Your contract's getAttestationWitness returns toContractClaim(claim) and
+//    the signatures by slot; getHolderSecret returns holderSecret. Then you call
+//    verifyAttestation, and open the claim later by nullifierOf(claim).
 ```
 
 [`examples/example_app.compact`](packages/contracts/examples/example_app.compact)

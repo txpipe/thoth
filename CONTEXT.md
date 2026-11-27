@@ -191,11 +191,11 @@ The N in N-of-M: how many registry keys must sign the same message.
 _Avoid_: Quorum, majority.
 
 **Nullifier**:
-The SHA-256 of the observation identity. The attestors sign it in the message, and the contract stores it so the same observation is not accepted twice. It is public. In zkFetch it hashes a secret salt, so a guess at a claim's values cannot be confirmed by recomputing it; a chain-event kind's salt is public, so the nullifier reveals which event the claim attests (ADR 0012, ADR 0014).
+The SHA-256 of the observation identity. The attestors sign it in the message, and the contract keys the claims vault by it, so the same observation is not accepted twice. It is public. In zkFetch it hashes a secret salt, so a guess at a claim's values cannot be confirmed by recomputing it; a chain-event kind's salt is public, so the nullifier reveals which event the claim attests (ADR 0012, ADR 0014).
 _Avoid_: Replay marker, nonce.
 
 **Claims vault**:
-The store of accepted claims, keyed by a commitment. It does not store claim values on-chain.
+The store of accepted claims, keyed by their nullifier. Each entry holds the vault pseudonym and the window, not the claim values. A holder opens a claim with its nullifier and their secret and gets back its observation identity (ADR 0016).
 _Avoid_: Vault, storage.
 
 ## Relationships

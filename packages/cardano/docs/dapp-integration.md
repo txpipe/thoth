@@ -209,17 +209,19 @@ from.
 import { toContractClaim } from '@txpipe/thoth-core/claim';
 
 // In your contract's getAttestationWitness:
-return [toContractClaim(attestment.claim), signatures, commitRand];
+return [toContractClaim(attestment.claim), signatures];
 ```
 
-`getAttestationWitness` returns the claim in the contract's shape, one
-signature per registry slot, and 32 random bytes for the vault commitment.
+`getAttestationWitness` returns the claim in the contract's shape and one
+signature per registry slot.
 Place each `attestment.collected[i].attestation.signature` at that entry's
 `registryIndex` in the signature vector; slots you did not collect need a
 placeholder signature that never verifies, as the acceptance test does.
 `verifyAttestation` rebuilds the signed message with `buildMessage`, counts the
 signatures that verify against the sealed registry, and checks the policy hash,
-holder, window and nullifier before it vaults the claim. The
+holder, window and nullifier before it vaults the claim under its nullifier.
+Your predicate opens it with `openClaim(nullifierOf(attestment.claim))` and the
+holder secret. The
 [contracts README](../../contracts/README.md#guarantees-and-limits) lists every
 check.
 
