@@ -126,14 +126,6 @@ is a 2-of-3 contract and the
 [attestor guide](packages/zk-tls/docs/attestor-guide.md) cover each side in
 full.
 
-## Midnight City demo
-
-Midnight City is a proof of concept built on Thoth, preserved on the
-[`midnight-city-demo`](https://github.com/txpipe/thoth/tree/midnight-city-demo)
-branch. It is a demo, not supported code. It is pinned to an older Thoth that
-parses identifiers with a temporary `bytes8` rule, which the byte value slots
-replace.
-
 ## Roadmap
 
 - [`v0`](https://github.com/txpipe/thoth/milestone/1): the work before the first tag.

@@ -113,7 +113,7 @@ Who reads what:
 
 | Doc                                                   | Reader                                              | Contains                                                                                           |
 | ----------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `README.md`                                           | someone evaluating Thoth                            | what it is, status, how it works, which package to use, the demo, roadmap links                    |
+| `README.md`                                           | someone evaluating Thoth                            | what it is, status, how it works, which package to use, roadmap links                              |
 | `packages/*/README.md`                                | a developer using that package (it is the npm page) | the package README template below                                                                  |
 | `docs/kind-author-guide.md`, `packages/zk-tls/docs/*` | a developer building a kind or integrating a dApp   | step-by-step guides                                                                                |
 | `docs/policies/*.md`                                  | someone adapting a real API or UTxO to Thoth        | one source per file: the source, the request, the policy, what it certifies and its limits         |
