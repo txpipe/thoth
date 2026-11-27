@@ -16,9 +16,10 @@ import {
 /**
  * One pinned attestor and the registry slot this app assigned to it.
  *
- * `attestor_registry.compact` verifies `signatures[i]` against `keys[i]`, so
- * `registryIndex` is the index of `attestor.publicKey` in the app's deployed
- * registry. The app assigns it; the attestor does not know it.
+ * `attestor_registry.compact` verifies each signature against
+ * `keys[registryIndex]`, the slot the signature names, so `registryIndex` is
+ * the index of `attestor.publicKey` in the app's deployed registry. The app
+ * assigns it; the attestor does not know it.
  */
 export interface TrustedAttestor<
   D extends AttestorDefinition<string, z.ZodType, z.ZodType, z.ZodType>,
