@@ -3,10 +3,21 @@
 import { createHash, randomInt } from 'node:crypto';
 import type { Claim } from '@txpipe/thoth-core/claim';
 
+// A malformed seed would silently draw another stream than the run it means to
+// replay, so anything but a safe integer throws.
+const seedFrom = (value: string | undefined): number => {
+  if (value === undefined || value === '') {
+    return randomInt(2 ** 31);
+  }
+  const seed = Number(value);
+  if (!Number.isSafeInteger(seed)) {
+    throw new Error(`THOTH_SEED must be a safe integer, got '${value}'`);
+  }
+  return seed;
+};
+
 /** The seed this run draws claims from: `THOTH_SEED`, or a fresh one. */
-export const SEED: number = process.env.THOTH_SEED
-  ? Number.parseInt(process.env.THOTH_SEED, 10)
-  : randomInt(2 ** 31);
+export const SEED: number = seedFrom(process.env.THOTH_SEED);
 
 /**
  * A deterministic byte stream: SHA-256 of the seed and a counter, so the same
@@ -46,6 +57,7 @@ export class SeededRandom {
     return raw & ((1n << BigInt(bits)) - 1n);
   }
 
+  /** `true` or `false`, each half the time. */
   boolean(): boolean {
     return (this.bytes(1)[0] ?? 0) % 2 === 1;
   }
