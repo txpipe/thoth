@@ -5,7 +5,7 @@ import {
   DEFAULT_FRESHNESS_WINDOW,
   DEFAULT_MAX_WINDOW,
 } from './fixtures.js';
-import type { PrivateState } from './private-state.js';
+import type { PrivateState, SlotSignature } from './private-state.js';
 
 /**
  * The context each witness reads. Every artifact's `WitnessContext` is
@@ -27,7 +27,7 @@ export type DeploySeals = {
 
 /**
  * Witness implementations shared by every mock artifact: the attestation
- * witness pair is typed to the artifact's `Claim`, everything else is
+ * witness is typed to the artifact's `Claim`, everything else is
  * artifact-independent.
  *
  * @typeParam Claim — the artifact's claim type.
@@ -44,14 +44,17 @@ export const makeWitnesses = <Claim>(
     policyHashes = ACCEPTED_POLICIES,
   }: DeploySeals = {},
 ) => ({
-  getAttestationWitness: ({
-    privateState,
-  }: WitnessBase<Claim>): [PrivateState<Claim>, [Claim, PrivateState<Claim>['signatures']]] => {
+  getAttestationWitness: ({ privateState }: WitnessBase<Claim>): [PrivateState<Claim>, Claim] => {
     if (!privateState.claim) {
       throw new Error('getAttestationWitness: no claim in private state');
     }
-    return [privateState, [privateState.claim, privateState.signatures]];
+    return [privateState, privateState.claim];
   },
+
+  getSignatures: ({ privateState }: WitnessBase<Claim>): [PrivateState<Claim>, SlotSignature[]] => [
+    privateState,
+    [...privateState.signatures],
+  ],
 
   getHolderSecret: ({ privateState }: WitnessBase<Claim>): [PrivateState<Claim>, Uint8Array] => [
     privateState,

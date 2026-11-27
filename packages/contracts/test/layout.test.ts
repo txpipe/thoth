@@ -10,8 +10,8 @@ import type { L_Claim } from '../artifacts/mock_attestation_layout/contract/inde
 import { pureCircuits } from '../artifacts/mock_attestation_layout/contract/index.js';
 import {
   APP_ID,
+  atSlots,
   DEFAULT_HOLDER_SECRET,
-  DUMMY_SIGNATURE,
   makeNotaryKey,
   nowSeconds,
   POLICY_A,
@@ -60,11 +60,12 @@ const competing: Claim<11, 0> = {
   byteValues: [],
 };
 
-const signedBy = (message: readonly bigint[]) => [
-  signMessage(notaryKeys[0].sk, message).signature,
-  signMessage(notaryKeys[1].sk, message).signature,
-  DUMMY_SIGNATURE,
-];
+const signedBy = (message: readonly bigint[]) =>
+  atSlots([
+    signMessage(notaryKeys[0].sk, message).signature,
+    signMessage(notaryKeys[1].sk, message).signature,
+    null,
+  ]);
 
 let sim: MockAttestationLayoutSim;
 

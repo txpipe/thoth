@@ -2,15 +2,14 @@
 // message and the nullifier, the absent-slot law in the simulator, byte-value
 // predicates, signature coverage over the value, and that the salted nullifier
 // does not confirm a guessed value.
-import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import { claimToMessage, toContractClaim } from '@txpipe/thoth-core/claim';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { pureCircuits as mockPureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import type { B_Claim } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import { pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import {
+  atSlots,
   DEFAULT_HOLDER_SECRET,
-  DUMMY_SIGNATURE,
   flip,
   makeByteClaim,
   makeClaim,
@@ -18,7 +17,7 @@ import {
   nullifierOfByteClaim,
   padded32,
 } from './helpers/fixtures.js';
-import { createPrivateState } from './helpers/private-state.js';
+import { createPrivateState, type SlotSignature } from './helpers/private-state.js';
 import { signMessage } from './helpers/sign.js';
 import { MockAttestationBytesSim } from './helpers/sim.js';
 
@@ -45,20 +44,20 @@ const coreOf = (claim: B_Claim) => ({
 
 type Submission = {
   claim: B_Claim;
-  signatures: JubjubSchnorrSignature[];
+  signatures: SlotSignature[];
 };
 
-// A threshold signature set over the claim's own compiled message: the first
-// two keys sign, the third slot stays empty (never verifies).
+// A threshold signature set over the claim's own compiled message: slots 0
+// and 1 sign, slot 2 does not.
 const signed = (claim: B_Claim): Submission => {
   const message = pureCircuits.message(claim);
   return {
     claim,
-    signatures: [
+    signatures: atSlots([
       signMessage(notaryKeys[0].sk, message).signature,
       signMessage(notaryKeys[1].sk, message).signature,
-      DUMMY_SIGNATURE,
-    ],
+      null,
+    ]),
   };
 };
 

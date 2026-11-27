@@ -1,6 +1,12 @@
 import type { JubjubSchnorrSignature } from '@midnight-ntwrk/compact-runtime';
 import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js';
 
+/** One signature and the registry slot whose key the contract checks it against. */
+export type SlotSignature = {
+  readonly registryIndex: bigint;
+  readonly signature: JubjubSchnorrSignature;
+};
+
 /**
  * Private state the simulator threads through a mock contract's witnesses.
  *
@@ -9,7 +15,7 @@ import type { A_Claim } from '../../artifacts/mock_attestation/contract/index.js
  */
 export type PrivateState<Claim = A_Claim> = {
   readonly claim: Claim | null;
-  readonly signatures: JubjubSchnorrSignature[];
+  readonly signatures: readonly SlotSignature[];
   readonly holderSecret: Uint8Array;
 };
 

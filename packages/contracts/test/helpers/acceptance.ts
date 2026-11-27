@@ -4,6 +4,7 @@ import type { JubjubPoint, JubjubSchnorrSignature } from '@midnight-ntwrk/compac
 import type { KeyPair } from '@txpipe/thoth-attestor';
 import type { B_Claim } from '../../artifacts/mock_attestation_bytes/contract/index.js';
 import { makeNotaryKey } from './fixtures.js';
+import type { SlotSignature } from './private-state.js';
 import { signMessage } from './sign.js';
 import type { MockAttestationBytesSim } from './sim.js';
 
@@ -13,10 +14,10 @@ export const jubjubKeyPair = (): KeyPair<JubjubPoint, JubjubSchnorrSignature> =>
   return { publicKey: pk, signer: { sign: (message) => signMessage(sk, message).signature } };
 };
 
-/** A claim and its signatures at their registry slots. */
+/** A claim and its signatures, each named by its registry slot. */
 export type Submission = {
   claim: B_Claim;
-  signatures: JubjubSchnorrSignature[];
+  signatures: readonly SlotSignature[];
 };
 
 /** Submit `submission` to `verifyAttestation` as the holder of `holderSecret`. */

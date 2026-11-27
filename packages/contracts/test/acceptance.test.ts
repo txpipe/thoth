@@ -8,7 +8,7 @@
 // a nullifier the honest submission left behind.
 import { randomBytes } from 'node:crypto';
 import { descriptorOf } from '@txpipe/thoth-attestor';
-import { buildTrustedSet } from '@txpipe/thoth-client';
+import { buildTrustedSet, slotSignaturesOf } from '@txpipe/thoth-client';
 import { jubjubVerifier } from '@txpipe/thoth-client/jubjub';
 import { type Claim, nullifierOf, toContractClaim } from '@txpipe/thoth-core/claim';
 import {
@@ -32,7 +32,6 @@ import { pureCircuits } from '../artifacts/mock_attestation_bytes/contract/index
 import { jubjubKeyPair, type Submission, submit } from './helpers/acceptance.js';
 import {
   APP_ID,
-  DUMMY_SIGNATURE,
   flip,
   makeNotaryKey,
   nullifierOfByteClaim,
@@ -119,8 +118,8 @@ const collectOptions = (secret: Uint8Array) => ({
   attestorTimeoutMs: 5_000,
 });
 
-// Collect the honest threshold set through the zkFetch client and lay its
-// signatures out at their registry slots, the dummy filling the unqueried one.
+// Collect the honest threshold set through the zkFetch client and name its
+// signatures by their registry slots.
 const collectSubmission = async (): Promise<Submission> => {
   const client = clientWith(
     Object.fromEntries(
@@ -148,12 +147,7 @@ const collectSubmission = async (): Promise<Submission> => {
   );
   const { claim, collected } = await client.collect(request, collectOptions(holderSecret));
   honestClaim = claim;
-  const signatures = registryKeys.map(
-    (_, slot) =>
-      collected.find((entry) => entry.registryIndex === slot)?.attestation.signature ??
-      DUMMY_SIGNATURE,
-  );
-  return { claim: toContractClaim(claim), signatures };
+  return { claim: toContractClaim(claim), signatures: slotSignaturesOf(collected) };
 };
 
 // A fresh ledger that seals the app id and the policy the attestors enforced,
@@ -188,7 +182,8 @@ describe('cross-seam acceptance', () => {
       values: [42n, 0n, 0n],
       byteValues: [padded32(OWNER)],
     });
-    expect(honest.signatures[2]).toBe(DUMMY_SIGNATURE);
+    // Exactly the threshold, in slot order; the unqueried slot 2 is not named.
+    expect(honest.signatures.map((entry) => entry.registryIndex)).toEqual([0n, 1n]);
   });
 
   it('has every attestor sign the claim context digest the witnesses signed as the salt', () => {

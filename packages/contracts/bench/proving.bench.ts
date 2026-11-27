@@ -11,9 +11,9 @@ import { expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits as bytesPureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
 import {
+  atSlots,
   DEFAULT_BYTE_VALUE,
   DEFAULT_HOLDER_SECRET,
-  DUMMY_SIGNATURE,
   makeByteClaim,
   makeClaim,
   makeNotaryKey,
@@ -55,7 +55,7 @@ const capture = async (): Promise<Captured[]> => {
   const holderSecret = DEFAULT_HOLDER_SECRET;
   const captured: Captured[] = [];
 
-  // Two of three attestors sign, as a client sends a threshold of signatures.
+  // Slots 0 and 2 sign: a client sends exactly the threshold's signatures, by slot.
   const signers = [keys[0], null, keys[2]];
   const numeric = await MockAttestationSim.create(createPrivateState(holderSecret), registryKeys);
   const filled = (byte: number) => new Uint8Array(32).fill(byte);
@@ -86,9 +86,7 @@ const capture = async (): Promise<Captured[]> => {
   const byteSigned = {
     ...createPrivateState(holderSecret),
     claim: byteClaim,
-    signatures: signers.map((key) =>
-      key === null ? DUMMY_SIGNATURE : signMessage(key.sk, message).signature,
-    ),
+    signatures: atSlots(signers.map((key) => key && signMessage(key.sk, message).signature)),
   };
   const onBytes = async (circuit: string, ...args: unknown[]) => {
     const proofData = await bytes.callForProof(circuit, byteSigned, ...args);
