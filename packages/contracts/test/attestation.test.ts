@@ -251,6 +251,16 @@ describe('mock attestation', () => {
       ).rejects.toThrow('Insufficient valid signatures');
     });
 
+    it('rejects a claim whose version changed after signing', async () => {
+      // Signed as version 2 and presented as the supported version 1, so only the
+      // signature can reject it.
+      const signed = signClaim(makeClaim({ version: 2n }), notaryKeys, randomBytes(32));
+      const claim = { ...signed.claim, version: 1n };
+      await expect(
+        sim.call('verifyAttestation', ps({ ...signed, claim, holderSecret: holder })),
+      ).rejects.toThrow('Insufficient valid signatures');
+    });
+
     it('rejects an unsupported version', async () => {
       const claim = makeClaim();
       const signed = signClaim(claim, [notaryKeys[0], notaryKeys[1], null], randomBytes(32));
