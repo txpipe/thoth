@@ -86,6 +86,14 @@ module attestation<#V, #B, #N, #M> {
     bytePresent: Vector<B, Boolean>;
   }
 
+  // 22 tag bytes keep the preimage at 54 bytes, one SHA-256 block: a block
+  // holds at most 55 input bytes after padding, and a second block costs the
+  // circuit about 1,850 rows.
+  struct HolderPreimage {
+    tag: Bytes<22>;
+    secret: Bytes<32>;
+  }
+
   /// The app this contract accepts claims for, sealed by the top-level
   /// constructor (ADR 0013).
   export sealed ledger appId: Bytes<32>;
@@ -141,12 +149,15 @@ module attestation<#V, #B, #N, #M> {
     return deriveHolder(secret);
   }
 
-  /// The per-claim holder commitment (ADR 0004). Its tag differs from
-  /// `deriveHolder`'s, so one secret yields unrelated values in the two roles.
-  /// Exported pure so `holderCommitmentOf` in
+  /// The per-claim holder commitment (ADR 0004): SHA-256 of the 22-byte tag
+  /// `thoth:holder-commit:v1`, then the secret. It is a different function
+  /// from `deriveHolder`, so one secret yields unrelated values in the two
+  /// roles. Exported pure so `holderCommitmentOf` in
   /// `@txpipe/thoth-core/claim-context` can match it.
   export pure circuit holderCommitment(secret: Bytes<32>): Bytes<32> {
-    return persistentHash<Vector<2, Bytes<32>>>([pad(32, "thoth:holder-commitment:v1"), secret]);
+    return persistentHash<HolderPreimage>(
+             HolderPreimage { tag: pad(22, "thoth:holder-commit:v1"), secret: secret }
+             );
   }
 
   /// The nullifier the attestors sign and `verifyAttestation` records: the
