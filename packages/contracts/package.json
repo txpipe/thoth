@@ -1,6 +1,6 @@
 {
   "name": "@txpipe/thoth-contracts",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Thoth Compact modules: N-of-M attestation and attestor registry.",
   "type": "module",
   "license": "Apache-2.0",

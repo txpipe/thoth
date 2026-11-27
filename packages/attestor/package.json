@@ -1,6 +1,6 @@
 {
   "name": "@txpipe/thoth-attestor",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Attestor host types and helpers for the Thoth N-of-M attestation system.",
   "type": "module",
   "license": "Apache-2.0",
@@ -48,7 +48,7 @@
     "types": "tsc -b"
   },
   "dependencies": {
-    "@txpipe/thoth-core": "^0.0.0"
+    "@txpipe/thoth-core": "^0.1.0"
   },
   "peerDependencies": {
     "zod": "^4.6.7"

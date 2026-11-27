@@ -1,6 +1,6 @@
 {
   "name": "@txpipe/thoth-cardano",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "cardano@1 chain-event attestor kind for the Thoth N-of-M attestation system.",
   "type": "module",
   "license": "Apache-2.0",
@@ -63,9 +63,9 @@
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "0.21.0",
-    "@txpipe/thoth-attestor": "^0.0.0",
-    "@txpipe/thoth-client": "^0.0.0",
-    "@txpipe/thoth-core": "^0.0.0",
+    "@txpipe/thoth-attestor": "^0.1.0",
+    "@txpipe/thoth-client": "^0.1.0",
+    "@txpipe/thoth-core": "^0.1.0",
     "@utxorpc/sdk": "^0.9.0",
     "@utxorpc/spec": "^0.19.2",
     "bech32": "^2.0.0"
