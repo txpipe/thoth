@@ -26,6 +26,7 @@ const base = import.meta.env.BASE_URL;
                   href={withBase(item.route, base)}
                   aria-current={item.id === currentId ? 'page' : undefined}
                 >
+                  {item.parent && <span class="visually-hidden">{item.parent} </span>}
                   {item.title}
                 </a>
               </li>

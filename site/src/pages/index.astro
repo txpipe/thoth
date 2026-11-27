@@ -15,6 +15,7 @@ const { Content, headings } = await render(entry);
   groups={navGroups(docs)}
   currentId={entry.id}
   headings={headings}
+  sourcePath={`${entry.id}.md`}
 >
   <Content />
 </DocPage>

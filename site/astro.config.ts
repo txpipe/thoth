@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { rehypeHeadingIds, unified } from '@astrojs/markdown-remark';
 import { defineConfig } from 'astro/config';
+import { externalLinks } from './src/lib/external-links';
 import { headingLinks } from './src/lib/heading-links';
 import { retitle } from './src/lib/retitle';
 import { rewriteLinks } from './src/lib/rewrite-links';
@@ -21,7 +22,12 @@ export default defineConfig({
         [rewriteLinks, { repoRoot, base }],
         [retitle, { repoRoot }],
       ],
-      rehypePlugins: [rehypeHeadingIds, headingLinks, wrapTables],
+      rehypePlugins: [
+        rehypeHeadingIds,
+        headingLinks,
+        wrapTables,
+        [externalLinks, { siteUrl: `${site}${base}` }],
+      ],
     }),
   },
 });

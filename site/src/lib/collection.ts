@@ -16,9 +16,14 @@ export type DocEntry = CollectionEntry<'docs'>;
 export interface NavItem {
   id: string;
   route: string;
+  /** The nav label: short, since the group and the nesting give context. */
   title: string;
+  /** The doc's full site title, for places without that context (the pager). */
+  pageTitle: string;
   /** A package guide, shown under its package's README. */
   nested: boolean;
+  /** For a nested guide, its package's short name, which screen readers hear first. */
+  parent?: string;
 }
 
 export interface NavGroup {
@@ -77,11 +82,14 @@ export function navGroups(docs: DocEntry[]): NavGroup[] {
     const repoPath = `${entry.id}.md`;
     const group = navGroup(repoPath);
     const items = groups.get(group) ?? [];
+    const nested = isPackageGuide(repoPath);
     items.push({
       id: entry.id,
       route: routeFor(repoPath),
       title: navLabel(repoPath, label),
-      nested: isPackageGuide(repoPath),
+      pageTitle: label,
+      nested,
+      parent: nested ? repoPath.split('/')[1] : undefined,
     });
     groups.set(group, items);
   }

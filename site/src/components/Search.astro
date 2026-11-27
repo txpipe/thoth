@@ -1,0 +1,176 @@
+---
+// Site search: a header button and a modal dialog over the Pagefind index the
+// build writes to dist/pagefind. The index loads on first open.
+---
+
+<button class="search-button" type="button" data-open-search aria-haspopup="dialog">
+  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+    <circle cx="7" cy="7" r="4.75" fill="none" stroke="currentColor" stroke-width="1.5"></circle>
+    <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+    ></path>
+  </svg>
+  <span class="search-button-label">Search</span>
+  <kbd class="search-button-key" aria-hidden="true">/</kbd>
+</button>
+
+<dialog class="search-dialog" aria-labelledby="search-title">
+  <form class="search-form" method="dialog" role="search">
+    <h2 class="visually-hidden" id="search-title">Search the docs</h2>
+    <label class="visually-hidden" for="search-input">Search the docs</label>
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+      <circle cx="7" cy="7" r="4.75" fill="none" stroke="currentColor" stroke-width="1.5"></circle>
+      <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+      ></path>
+    </svg>
+    <input
+      id="search-input"
+      class="search-input"
+      type="search"
+      placeholder="Search the docs"
+      autocomplete="off"
+      spellcheck="false"
+      aria-describedby="search-status"
+    />
+    <button class="search-close" type="button" data-close-search>Esc</button>
+  </form>
+  <p class="search-status" id="search-status" role="status"></p>
+  <ol class="search-results"></ol>
+</dialog>
+
+<script>
+  interface SubResult {
+    title: string;
+    url: string;
+    excerpt: string;
+  }
+  interface ResultData {
+    url: string;
+    excerpt: string;
+    meta: { title?: string };
+    sub_results?: SubResult[];
+  }
+  interface Pagefind {
+    options(options: { baseUrl: string }): Promise<void>;
+    debouncedSearch(
+      term: string,
+    ): Promise<{ results: { data(): Promise<ResultData> }[] } | null>;
+  }
+
+  const dialog = document.querySelector<HTMLDialogElement>('.search-dialog');
+  const input = document.querySelector<HTMLInputElement>('.search-input');
+  const status = document.getElementById('search-status');
+  const list = document.querySelector<HTMLOListElement>('.search-results');
+  const base = import.meta.env.BASE_URL;
+  let pagefind: Promise<Pagefind | null> | undefined;
+
+  // The index exists only in a built site; `astro dev` says so instead of failing.
+  const load = () => {
+    pagefind ??= import(/* @vite-ignore */ `${base.replace(/\/?$/, '/')}pagefind/pagefind.js`)
+      .then(async (module: Pagefind) => {
+        await module.options({ baseUrl: base });
+        return module;
+      })
+      .catch(() => null);
+    return pagefind;
+  };
+
+  const link = (url: string, title: string, excerpt: string) => {
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    const heading = document.createElement('span');
+    heading.className = 'search-result-title';
+    heading.textContent = title;
+    const text = document.createElement('span');
+    text.className = 'search-result-excerpt';
+    // Pagefind escapes the page text and marks the matches with <mark>.
+    text.innerHTML = excerpt;
+    anchor.append(heading, text);
+    return anchor;
+  };
+
+  const run = async () => {
+    if (!input || !status || !list) return;
+    const term = input.value.trim();
+    if (!term) {
+      list.replaceChildren();
+      status.textContent = '';
+      return;
+    }
+    const engine = await load();
+    if (!engine) {
+      status.textContent = 'Search works on the built site: run npm run build, then preview it.';
+      return;
+    }
+    const search = await engine.debouncedSearch(term);
+    if (!search || input.value.trim() !== term) return;
+    const pages = await Promise.all(search.results.slice(0, 8).map((result) => result.data()));
+    list.replaceChildren(
+      ...pages.map((page) => {
+        const item = document.createElement('li');
+        const title = page.meta.title ?? page.url;
+        item.append(link(page.url, title, page.excerpt));
+        const sections = (page.sub_results ?? []).filter((sub) => sub.url !== page.url).slice(0, 3);
+        if (sections.length > 0) {
+          const nested = document.createElement('ul');
+          for (const section of sections) {
+            const sub = document.createElement('li');
+            sub.append(link(section.url, section.title, section.excerpt));
+            nested.append(sub);
+          }
+          item.append(nested);
+        }
+        return item;
+      }),
+    );
+    const count = search.results.length;
+    status.textContent =
+      count === 0
+        ? `No results for “${term}”.`
+        : `${count} ${count === 1 ? 'page matches' : 'pages match'} “${term}”${count > 8 ? '; showing the top 8' : ''}.`;
+  };
+
+  const open = (query = '') => {
+    if (!dialog || !input) return;
+    if (!dialog.open) dialog.showModal();
+    if (query) input.value = query;
+    input.select();
+    void load();
+    void run();
+  };
+
+  input?.addEventListener('input', () => void run());
+  // Enter opens the top result. Escape closes the dialog in one press; a
+  // search field would otherwise spend the first press clearing itself.
+  input?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      dialog?.close();
+    }
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    list?.querySelector('a')?.click();
+  });
+  // A click on the backdrop lands on the dialog element itself.
+  dialog?.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  // A result on this page only scrolls; close the dialog so it shows.
+  list?.addEventListener('click', (event) => {
+    if ((event.target as Element).closest('a')) dialog?.close();
+  });
+  document.addEventListener('click', (event) => {
+    const trigger = (event.target as Element).closest<HTMLElement>('[data-open-search]');
+    if (trigger) open(trigger.dataset.query);
+    if ((event.target as Element).closest('[data-close-search]')) dialog?.close();
+  });
+  // `/` or Ctrl+K / Cmd+K opens search unless the reader is typing somewhere.
+  document.addEventListener('keydown', (event) => {
+    const target = event.target as HTMLElement;
+    const typing = target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
+    const shortcut =
+      (event.key === '/' && !typing) || (event.key === 'k' && (event.metaKey || event.ctrlKey));
+    if (!shortcut || dialog?.open) return;
+    event.preventDefault();
+    open();
+  });
+</script>

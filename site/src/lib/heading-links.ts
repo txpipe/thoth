@@ -43,6 +43,9 @@ export function headingLinks() {
         properties: {
           className: ['heading-anchor'],
           href: `#${id}`,
+          // A pointer convenience: the table of contents already links every
+          // section, so the anchor stays out of the tab order.
+          tabIndex: -1,
           ariaLabel: label ? `Link to ${label}` : 'Link to section',
         },
         children: [],

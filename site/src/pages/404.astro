@@ -5,18 +5,82 @@ import { getDocs, navGroups } from '../lib/collection';
 import { REPO_URL, routeFor, withBase } from '../lib/docs';
 
 const docs = await getDocs();
+const groups = navGroups(docs);
 const base = import.meta.env.BASE_URL;
+const pages = groups
+  .flatMap((group) => group.items)
+  .map((item) => ({ url: withBase(item.route, base), title: item.pageTitle }));
 ---
 
-<DocPage title="Page not found" groups={navGroups(docs)} currentId="" headings={[]}>
+<DocPage title="Page not found" groups={groups} currentId="" headings={[]}>
   <h1>Page not found</h1>
   <p>
     This address isn't a page on the Thoth docs site. The doc may have moved, or the link points at
     a file the site doesn't publish.
   </p>
+  <p class="not-found-guess" hidden>Did you mean <a href={withBase('/', base)}></a>?</p>
   <ul>
+    <li><button class="link-button" type="button" data-open-search>Search the docs</button></li>
     <li><a href={withBase('/', base)}>Start from the introduction</a></li>
     <li><a href={withBase(routeFor('CONTEXT.md'), base)}>Look a term up in the glossary</a></li>
     <li><a href={REPO_URL}>Browse the repository on GitHub</a></li>
   </ul>
+  <script is:inline type="application/json" id="site-pages" set:html={JSON.stringify(pages)} />
 </DocPage>
+
+<script>
+  // Suggest the page whose address is closest to the one that missed, and
+  // seed search with the address's words.
+  const pages: { url: string; title: string }[] = JSON.parse(
+    document.getElementById('site-pages')?.textContent ?? '[]',
+  );
+  const words = (path: string) =>
+    decodeURIComponent(path)
+      .toLowerCase()
+      .replace(/\.md$|\/$/g, '')
+      .split(/[^a-z0-9]+/)
+      .filter((word) => word && word !== 'thoth' && word !== 'readme');
+  const distance = (a: string, b: string) => {
+    const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+    for (let i = 1; i <= a.length; i += 1) {
+      let previous = row[0] ?? 0;
+      row[0] = i;
+      for (let j = 1; j <= b.length; j += 1) {
+        const current = row[j] ?? 0;
+        row[j] = Math.min(
+          current + 1,
+          (row[j - 1] ?? 0) + 1,
+          previous + (a[i - 1] === b[j - 1] ? 0 : 1),
+        );
+        previous = current;
+      }
+    }
+    return row[b.length] ?? 0;
+  };
+  const missed = words(window.location.pathname).join(' ');
+  if (missed) {
+    let best: { url: string; title: string } | undefined;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const page of pages) {
+      const candidate = words(new URL(page.url, window.location.origin).pathname).join(' ');
+      if (!candidate) continue;
+      const score = distance(missed, candidate) / Math.max(missed.length, candidate.length);
+      if (score < bestScore) {
+        bestScore = score;
+        best = page;
+      }
+    }
+    const guess = document.querySelector<HTMLElement>('.not-found-guess');
+    const link = guess?.querySelector('a');
+    // Only suggest a close match; a distant one sends the reader the wrong way.
+    if (best && bestScore <= 0.5 && guess && link) {
+      link.href = best.url;
+      link.textContent = best.title;
+      guess.hidden = false;
+    }
+    // Search on the address's last segment: earlier ones are folders like docs/.
+    const last = window.location.pathname.split('/').filter(Boolean).at(-1) ?? '';
+    const search = document.querySelector<HTMLElement>('[data-open-search].link-button');
+    if (search) search.dataset.query = words(last).join(' ');
+  }
+</script>

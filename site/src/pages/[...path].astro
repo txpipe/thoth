@@ -29,6 +29,7 @@ const { Content, headings } = await render(entry);
   currentId={entry.id}
   headings={headings}
   compact={entry.id.startsWith(`${POLICY_DIR}/`)}
+  sourcePath={`${entry.id}.md`}
 >
   <Content />
 </DocPage>

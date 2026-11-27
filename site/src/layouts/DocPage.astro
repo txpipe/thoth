@@ -3,6 +3,7 @@ import interLatinWoff2 from '@fontsource-variable/inter/files/inter-latin-wght-n
 import type { MarkdownHeading } from 'astro';
 import Mermaid from '../components/Mermaid.astro';
 import Nav from '../components/Nav.astro';
+import Search from '../components/Search.astro';
 import { type NavGroup, neighborsOf } from '../lib/collection';
 import { REPO_URL, withBase } from '../lib/docs';
 import '../styles/fonts.css';
@@ -16,9 +17,11 @@ interface Props {
   headings: MarkdownHeading[];
   /** Short docs, such as policy examples: sections open on a tick, not a full rule. */
   compact?: boolean;
+  /** The doc's repo path, for the edit link; pages that aren't docs leave it out. */
+  sourcePath?: string;
 }
 
-const { title, groups, currentId, headings, compact = false } = Astro.props;
+const { title, groups, currentId, headings, compact = false, sourcePath } = Astro.props;
 const base = import.meta.env.BASE_URL;
 const home = withBase('/', base);
 const pageTitle = title === 'Thoth' ? 'Thoth' : `${title} · Thoth`;
@@ -48,6 +51,7 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
           <span class="site-tagline">private N-of-M attestation</span>
         </div>
         <div class="site-actions">
+          <Search />
           <a class="repo" href={REPO_URL}>
             <!-- GitHub mark from Octicons (MIT), https://github.com/primer/octicons -->
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
@@ -93,11 +97,23 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
         }
       </div>
       <div class="menu-backdrop" hidden></div>
-      <main id="content" class="content prose" data-compact={compact ? '' : undefined}>
+      <main
+        id="content"
+        class="content prose"
+        data-compact={compact ? '' : undefined}
+        data-pagefind-body={sourcePath ? '' : undefined}
+      >
         <Fragment set:html={contentHtml} />
         {
+          sourcePath && (
+            <p class="doc-edit" data-pagefind-ignore>
+              <a href={`${REPO_URL}/edit/main/${sourcePath}`}>Edit this page on GitHub</a>
+            </p>
+          )
+        }
+        {
           (prev || next) && (
-            <nav class="doc-pager" aria-label="Pagination">
+            <nav class="doc-pager" aria-label="Pagination" data-pagefind-ignore>
               {prev && (
                 <a class="doc-pager-link prev" href={withBase(prev.route, base)} rel="prev">
                   <span class="doc-pager-label">
@@ -119,7 +135,7 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
                     </svg>
                     Previous
                   </span>
-                  <span class="doc-pager-title">{prev.title}</span>
+                  <span class="doc-pager-title">{prev.pageTitle}</span>
                 </a>
               )}
               {next && (
@@ -143,13 +159,13 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
                       />
                     </svg>
                   </span>
-                  <span class="doc-pager-title">{next.title}</span>
+                  <span class="doc-pager-title">{next.pageTitle}</span>
                 </a>
               )}
             </nav>
           )
         }
-        <p class="visually-hidden" role="status" id="copy-status"></p>
+        <p class="visually-hidden" role="status" id="copy-status" data-pagefind-ignore></p>
       </main>
     </div>
     <footer class="site-footer">
@@ -159,25 +175,59 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
     <script>
       import { watchOverflow } from '../lib/overflow';
 
-      // The menu button exists only on narrow screens (CSS shows it), where the
-      // nav and the contents sit in a drawer. Wide screens show both as columns.
+      // Below 78rem the menu button opens a drawer. On laptop widths the nav
+      // stays a column and the drawer is the contents (.doc-meta); on phones
+      // the drawer is the whole .site-menu. CSS decides which.
       const root = document.documentElement;
       const button = document.querySelector<HTMLButtonElement>('.menu-button');
       const drawer = document.getElementById('site-menu');
       const backdrop = document.querySelector<HTMLElement>('.menu-backdrop');
+      const panel = () =>
+        drawer && getComputedStyle(drawer).display === 'contents'
+          ? document.querySelector<HTMLElement>('.doc-meta')
+          : drawer;
+      // While the drawer is open everything else is inert, so Tab stays in it.
+      const outside = () =>
+        [
+          ...document.querySelectorAll<HTMLElement>(
+            '.skip, .site-brand, .search-button, .repo, main, .site-footer',
+          ),
+          ...(panel() === drawer ? [] : document.querySelectorAll<HTMLElement>('.sidebar')),
+        ];
+      let collapsed = false;
       const setMenu = (open: boolean, { restoreFocus = false } = {}) => {
-        button?.setAttribute('aria-expanded', String(open));
+        if (!button) return;
+        const target = panel();
+        button.setAttribute('aria-expanded', String(open));
         root.toggleAttribute('data-menu-open', open);
         if (backdrop) backdrop.hidden = !open;
-        if (open) {
-          const target =
-            drawer?.querySelector<HTMLElement>('[aria-current="page"]') ??
-            drawer?.querySelector<HTMLElement>('a');
-          target?.focus({ preventScroll: true });
-          target?.scrollIntoView({ block: 'center' });
-        } else if (restoreFocus) {
-          button?.focus();
+        for (const element of document.querySelectorAll<HTMLElement>('[data-menu-inert]')) {
+          element.inert = false;
+          delete element.dataset.menuInert;
         }
+        if (!open) {
+          if (restoreFocus) button.focus();
+          return;
+        }
+        for (const element of outside()) {
+          element.inert = true;
+          element.dataset.menuInert = '';
+        }
+        // On a phone the nav and the contents share the drawer: fold the nav
+        // groups that don't hold this page, once, so the contents stay close.
+        if (drawer && target === drawer && !collapsed) {
+          collapsed = true;
+          for (const group of drawer.querySelectorAll<HTMLDetailsElement>('.sidebar details')) {
+            if (!group.querySelector('[aria-current="page"]')) group.open = false;
+          }
+        }
+        // Land on the section being read, else the current page, else the top.
+        const focus =
+          target?.querySelector<HTMLElement>('[aria-current="location"]') ??
+          target?.querySelector<HTMLElement>('[aria-current="page"]') ??
+          target?.querySelector<HTMLElement>('a');
+        focus?.focus({ preventScroll: true });
+        focus?.scrollIntoView({ block: 'nearest' });
       };
       button?.addEventListener('click', () => {
         setMenu(button.getAttribute('aria-expanded') !== 'true');
@@ -188,13 +238,30 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
           setMenu(false, { restoreFocus: true });
         }
       });
-      // A contents link scrolls the page under the drawer, so close it first.
+      // A link in the drawer closes it. A contents link then hands focus to its
+      // section, which the hidden link can no longer hold.
       drawer?.addEventListener('click', (event) => {
-        if ((event.target as Element).closest('a')) setMenu(false);
+        const link = (event.target as Element).closest('a');
+        if (!link || !root.hasAttribute('data-menu-open')) return;
+        setMenu(false);
+        if (!link.hash || link.pathname !== window.location.pathname) return;
+        const section = document.getElementById(decodeURIComponent(link.hash.slice(1)));
+        if (!section) return;
+        requestAnimationFrame(() => {
+          if (!section.hasAttribute('tabindex')) section.setAttribute('tabindex', '-1');
+          section.focus({ preventScroll: true });
+        });
       });
-      window.addEventListener('resize', () => {
-        if (button && getComputedStyle(button).display === 'none') setMenu(false);
-      });
+      // The button names what the drawer holds at this width.
+      const label = () => button?.setAttribute('aria-label', panel() === drawer ? 'Menu' : 'On this page');
+      label();
+      // The drawer changes shape at each breakpoint; close it when one is crossed.
+      for (const query of ['(max-width: 78rem)', '(max-width: 56rem)']) {
+        window.matchMedia(query).addEventListener('change', () => {
+          setMenu(false);
+          label();
+        });
+      }
 
       // Mark the section being read: the last heading scrolled past the header.
       const tocLinks = Array.from(

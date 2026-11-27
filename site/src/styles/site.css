@@ -204,6 +204,180 @@ a:hover {
   color: #fff;
 }
 
+/* Search: a header button like the GitHub pill, and a dialog near the top. */
+.search-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 11rem;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  border: 1px solid var(--stroke-4);
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--fg-4);
+  font: inherit;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.search-button:hover {
+  border-color: var(--stroke-2);
+  color: #fff;
+}
+
+.search-button-label {
+  flex: 1;
+  text-align: left;
+}
+
+.search-button-key {
+  padding: 0 0.45em;
+  border: 1px solid var(--stroke-4);
+  border-radius: var(--radius-sm);
+  color: var(--fg-4);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+
+.search-dialog {
+  width: min(40rem, calc(100% - 2 * var(--container-pad-md)));
+  max-height: min(36rem, calc(100% - 6rem));
+  margin: 5rem auto auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--stroke-3);
+  border-radius: var(--radius-lg);
+  background: var(--page-bg);
+  color: var(--fg-1);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.55);
+}
+
+.search-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.search-dialog::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+
+.search-form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--stroke-4);
+  color: var(--fg-4);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border: 0;
+  background: none;
+  color: var(--fg-1);
+  font: inherit;
+  font-size: var(--fs-base);
+}
+
+/* The dialog has its own Esc button; the field's built-in clear button would repeat it. */
+.search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search-input::placeholder {
+  color: var(--fg-5);
+}
+
+.search-input:focus-visible {
+  outline: none;
+}
+
+.search-form:focus-within {
+  border-bottom-color: color-mix(in srgb, var(--cyan-400) 60%, transparent);
+}
+
+.search-close {
+  padding: 0.1em 0.5em;
+  border: 1px solid var(--stroke-4);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--fg-4);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.search-status {
+  margin: 0;
+  padding: var(--space-3) var(--space-4) 0;
+  color: var(--fg-4);
+  font-size: var(--fs-xs);
+}
+
+.search-status:empty {
+  display: none;
+}
+
+.search-results {
+  margin: 0;
+  padding: var(--space-2) var(--space-2) var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.search-results ul {
+  margin: 0 0 var(--space-2) var(--space-4);
+  padding: 0 0 0 var(--space-2);
+  border-left: 1px solid var(--stroke-4);
+  list-style: none;
+}
+
+.search-results a {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--fg-2);
+  text-decoration: none;
+}
+
+.search-results a:hover,
+.search-results a:focus-visible {
+  background: var(--bg-card);
+  color: #fff;
+}
+
+.search-result-title {
+  display: block;
+  color: var(--fg-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.search-results ul .search-result-title {
+  font-weight: var(--fw-regular);
+}
+
+.search-result-excerpt {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--fg-3);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+.search-result-excerpt mark {
+  background: none;
+  color: var(--pink-200);
+  font-weight: var(--fw-semibold);
+}
+
 .site-body {
   display: grid;
   /* nav | reading column | margin; capped rails keep 200% text scaling inside the viewport */
@@ -254,6 +428,12 @@ a:hover {
 
 .sidebar-groups summary:hover {
   color: var(--fg-2);
+}
+
+/* The sidebar scrolls, which clips anything drawn outside it: keep the ring inside. */
+.sidebar-groups summary:focus-visible {
+  border-radius: var(--radius-sm);
+  outline-offset: -2px;
 }
 
 .sidebar summary::-webkit-details-marker {
@@ -627,16 +807,23 @@ a:hover {
   text-decoration-color: var(--pink-200);
 }
 
-/* Mark links that leave the docs site with a small north-east arrow. */
-.prose a[href^="http://"]:not([href^="https://txpipe.github.io/thoth"])::after,
-.prose
-  a[href^="https://"]:not([href^="https://txpipe.github.io/thoth"])::after {
-  content: "";
-  display: inline-block;
-  width: 0.72em;
-  height: 0.72em;
+/* Mark links that leave the docs site with a small north-east arrow; the
+   build wraps it with the link's last word so it never sits on a line alone. */
+.external-tail {
+  white-space: nowrap;
+}
+
+/* A long code path still wraps inside itself; only its end holds the arrow. */
+.external-tail > code {
+  white-space: normal;
+}
+
+/* An inline box with no characters, not an inline-block: a line can't break
+   before it, so the arrow always ends the link's last line. */
+.prose .external-icon {
+  display: inline;
   margin-left: 0.22em;
-  vertical-align: 0.04em;
+  padding-left: 0.72em;
   background-color: currentColor;
   opacity: 0.75;
   -webkit-mask:
@@ -645,19 +832,16 @@ a:hover {
   mask:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M4.5 2.5h5v5M9.5 2.5L2.5 9.5'/%3E%3C/svg%3E")
     center / contain no-repeat;
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease;
+  transition: opacity 120ms ease;
 }
 
-.prose
-  a[href^="http://"]:not([href^="https://txpipe.github.io/thoth"]):hover::after,
-.prose
-  a[href^="https://"]:not(
-    [href^="https://txpipe.github.io/thoth"]
-  ):hover::after {
+.prose a.external:hover .external-icon {
   opacity: 1;
-  transform: translate(1px, -1px);
+}
+
+/* Show code as typed: the code font's ligatures would turn ->> or != into glyphs. */
+.prose :is(code, pre) {
+  font-variant-ligatures: none;
 }
 
 .prose code {
@@ -674,6 +858,12 @@ a:hover {
 /* Inline code can hold a hash or path with no break opportunity. */
 .prose :not(pre, td, th) > code {
   overflow-wrap: anywhere;
+}
+
+/* Table cells are dense already: code there drops the chip's border. */
+.prose :is(td, th) code {
+  padding: 0 0.2em;
+  border-color: transparent;
 }
 
 .prose pre {
@@ -863,6 +1053,28 @@ a:hover {
   margin-top: var(--space-2);
 }
 
+.diagram-steps {
+  margin-top: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--stroke-4);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  font-size: var(--fs-sm);
+}
+
+.diagram-steps p {
+  margin: 0 0 var(--space-3);
+  color: var(--fg-3);
+}
+
+.diagram-steps ol {
+  margin: 0;
+}
+
+.diagram-steps ol ol {
+  margin-top: var(--space-2);
+}
+
 /* Diagrams and tables scroll sideways on narrow screens; fade the hidden edge. */
 :is(.mermaid, .prose .table-wrap)[data-overflow="end"] {
   mask-image: linear-gradient(
@@ -935,6 +1147,55 @@ a:hover {
 }
 
 /* Previous / next reading path at the foot of each document. */
+/* A glossary term a link points at: it clears the header and is marked on arrival. */
+.prose .glossary-term {
+  scroll-margin-top: calc(var(--header-height) + var(--space-8));
+}
+
+.prose .glossary-term:target {
+  margin-inline: calc(-1 * var(--space-4));
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--pink-400);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: color-mix(in srgb, var(--pink-500) 8%, var(--bg-card));
+}
+
+/* A button that reads as a prose link, for actions that aren't navigation. */
+.prose .link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cyan-100);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--cyan-100) 45%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.prose .link-button:hover {
+  color: var(--pink-200);
+}
+
+.prose .doc-edit {
+  margin-top: var(--space-16);
+  font-size: var(--fs-sm);
+}
+
+.prose .doc-edit a {
+  color: var(--fg-3);
+  text-decoration: none;
+}
+
+.prose .doc-edit a:hover {
+  color: var(--fg-1);
+  text-decoration: underline;
+}
+
+.doc-edit + .doc-pager {
+  margin-top: var(--space-6);
+}
+
 .doc-pager {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1018,21 +1279,10 @@ a:hover {
   letter-spacing: 0.04em;
 }
 
+/* Below 78rem the margin column goes: the contents move into a drawer behind
+   the header's menu button. Laptop widths keep the nav as a column and the
+   drawer holds the contents; phones put both in the drawer. */
 @media (max-width: 78rem) {
-  /* One column: the frame narrows to the reading measure so the header, the
-     column and the footer share one left edge. */
-  .site-body,
-  .site-footer,
-  .site-header-inner {
-    max-width: calc(var(--content-width) + var(--container-pad-lg) * 2);
-  }
-
-  .site-body {
-    grid-template-columns: minmax(0, 1fr);
-    column-gap: 0;
-    min-height: 0;
-  }
-
   .menu-button {
     display: grid;
     place-items: center;
@@ -1099,9 +1349,14 @@ a:hover {
     transform: translateY(-6px) rotate(-45deg);
   }
 
-  /* The drawer: the nav, then the page's contents, under the header.
-     Closed, it is hidden, so its links leave the tab order. */
-  .site-menu {
+  :root[data-menu-open] {
+    overflow: hidden;
+  }
+
+  /* The drawer panel, under the header. Closed, it is hidden, so its links
+     leave the tab order. */
+  .site-menu,
+  .doc-meta {
     position: fixed;
     z-index: 20;
     top: var(--header-height);
@@ -1109,13 +1364,16 @@ a:hover {
     bottom: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-8);
     width: min(22rem, 100%);
+    max-height: none;
+    /* A grid child keeps honouring align-self when fixed; stretch fills the height. */
+    align-self: stretch;
     padding: var(--space-6) var(--container-pad-md) var(--space-12);
     overflow-y: auto;
     overscroll-behavior: contain;
     border-left: 1px solid var(--stroke-4);
     background: var(--page-bg);
+    font-size: var(--fs-sm);
     transform: translateX(100%);
     visibility: hidden;
     transition:
@@ -1123,11 +1381,11 @@ a:hover {
       visibility 0s linear 200ms;
   }
 
-  :root[data-menu-open] {
-    overflow: hidden;
+  .site-menu {
+    gap: var(--space-8);
   }
 
-  :root[data-menu-open] .site-menu {
+  :root[data-menu-open] :is(.site-menu, .doc-meta) {
     transform: none;
     visibility: visible;
     transition: transform 200ms ease;
@@ -1140,6 +1398,55 @@ a:hover {
     display: block;
     background: rgb(0 0 0 / 0.55);
   }
+}
+
+/* Laptop widths: nav | reading column, and the drawer holds only the contents. */
+@media (min-width: 56.0625rem) and (max-width: 78rem) {
+  :root {
+    --page-width: calc(
+      var(--nav-width) +
+      var(--column-gap) +
+      var(--content-width) +
+      var(--container-pad-lg) +
+      var(--container-pad-lg)
+    );
+  }
+
+  .site-body {
+    grid-template-columns: var(--nav-width) minmax(0, var(--content-width));
+  }
+
+  .sidebar {
+    width: var(--nav-width);
+  }
+
+  .site-menu {
+    display: contents;
+    visibility: visible;
+  }
+
+  /* A page without a table of contents has nothing to put in the drawer. */
+  :root:not(:has(.doc-meta)) .menu-button {
+    display: none;
+  }
+}
+
+/* Phones and narrow windows: one column, and the drawer holds the nav, then
+   the contents. */
+@media (max-width: 56rem) {
+  /* The frame narrows to the reading measure so the header, the column and
+     the footer share one left edge. */
+  .site-body,
+  .site-footer,
+  .site-header-inner {
+    max-width: calc(var(--content-width) + var(--container-pad-lg) * 2);
+  }
+
+  .site-body {
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 0;
+    min-height: 0;
+  }
 
   .sidebar {
     position: static;
@@ -1149,13 +1456,27 @@ a:hover {
     overflow: visible;
   }
 
+  /* Folded groups sit close together, so the contents stay in reach. */
+  .sidebar-groups details + details {
+    margin-top: var(--space-4);
+  }
+
+  .sidebar-groups details:not([open]) summary {
+    margin-bottom: 0;
+  }
+
   .doc-meta {
     position: static;
-    max-height: none;
+    z-index: auto;
+    width: auto;
+    padding: var(--space-6) 0 0;
     overflow: visible;
-    padding-top: var(--space-6);
     border-top: 1px solid var(--stroke-4);
-    font-size: var(--fs-sm);
+    border-left: 0;
+    background: none;
+    transform: none;
+    visibility: inherit;
+    transition: none;
   }
 
   .content {
@@ -1179,6 +1500,26 @@ a:hover {
 
   .site-tagline {
     display: none;
+  }
+
+  /* Icons only, so the header holds the wordmark, search, GitHub and the menu. */
+  .search-button {
+    min-width: 0;
+    padding: var(--space-2);
+  }
+
+  .search-button-label,
+  .search-button-key {
+    display: none;
+  }
+
+  .repo {
+    padding: var(--space-2);
+    font-size: 0;
+  }
+
+  .site-actions {
+    gap: var(--space-2);
   }
 
   .prose h1 + p {
@@ -1249,8 +1590,22 @@ a:hover {
     height: 2.75rem;
   }
 
+  .search-button {
+    min-height: 2.75rem;
+  }
+
+  .search-results a {
+    min-height: 2.75rem;
+  }
+
+  /* A full touch target, pulled into the heading's line so it doesn't push it apart. */
   .prose :is(h2, h3) .heading-anchor {
-    padding: 0.2em 0.3em;
+    display: inline-grid;
+    place-items: center;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    margin-block: -0.75rem;
+    padding: 0;
   }
 }
 
@@ -1265,10 +1620,7 @@ a:hover {
   .doc-meta a,
   .prose a,
   .prose a code,
-  .prose
-    a[href^="http://"]:not([href^="https://txpipe.github.io/thoth"])::after,
-  .prose
-    a[href^="https://"]:not([href^="https://txpipe.github.io/thoth"])::after,
+  .prose .external-icon,
   .prose :is(h2, h3) .heading-anchor,
   .prose .doc-pager-link,
   .doc-pager-label,
@@ -1278,12 +1630,14 @@ a:hover {
   .code-block-copy,
   .code-block::before,
   .code-block::after,
+  .search-button,
   .menu-button,
   .menu-button-bars,
   .menu-button-bars::before,
   .menu-button-bars::after,
   .site-menu,
-  :root[data-menu-open] .site-menu {
+  .doc-meta,
+  :root[data-menu-open] :is(.site-menu, .doc-meta) {
     transition: none;
   }
 }

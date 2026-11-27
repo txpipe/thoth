@@ -29,6 +29,74 @@
     return 'Diagram';
   }
 
+  // A sequence diagram read as text: who takes part, then each message and
+  // note in order, with loops and branches as nested lists. Returns null for
+  // other diagram types, which fall back to their source.
+  function sequenceSteps(source: string): HTMLElement | null {
+    const lines = source
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('%%'));
+    if (lines[0] !== 'sequenceDiagram') return null;
+    const names = new Map<string, string>();
+    const root = document.createElement('div');
+    const intro = document.createElement('p');
+    const list = document.createElement('ol');
+    const stack: HTMLOListElement[] = [list];
+    const add = (text: string) => {
+      const item = document.createElement('li');
+      item.textContent = text;
+      stack.at(-1)?.append(item);
+      return item;
+    };
+    const name = (id: string) => names.get(id.trim()) ?? id.trim();
+    for (const line of lines.slice(1)) {
+      const participant = /^(?:participant|actor)\s+(\S+)(?:\s+as\s+(.+))?$/.exec(line);
+      if (participant) {
+        const [, id = '', alias] = participant;
+        names.set(id, (alias ?? id).trim());
+        continue;
+      }
+      const message = /^([^-<>]+?)\s*(-{1,2}>{1,2}|-{1,2}[x)])\s*([^:]+?)\s*:\s*(.*)$/.exec(line);
+      if (message) {
+        const [, from = '', arrow = '', to = '', text = ''] = message;
+        const verb = arrow.startsWith('--') ? 'replies to' : 'sends';
+        add(
+          verb === 'sends'
+            ? `${name(from)} sends ${name(to)}: ${text}`
+            : `${name(from)} replies to ${name(to)}: ${text}`,
+        );
+        continue;
+      }
+      const note = /^Note\s+(?:over|left of|right of)\s+([^:]+):\s*(.*)$/i.exec(line);
+      if (note) {
+        const [, who = '', text = ''] = note;
+        const parties = who.split(',').map(name);
+        add(parties.length === 1 ? `${parties[0]}: ${text}` : text);
+        continue;
+      }
+      const block = /^(loop|alt|opt|par|critical|else|and)\b\s*(.*)$/.exec(line);
+      if (block) {
+        const [, keyword = '', text = ''] = block;
+        if (keyword === 'else' || keyword === 'and') stack.pop();
+        const lead = { loop: 'Repeat', alt: 'If', opt: 'Optionally', else: 'Otherwise' }[keyword];
+        const item = add(lead ? `${lead} ${text}:`.replace(/\s+:$/, ':') : `${text}:`);
+        const nested = document.createElement('ol');
+        item.append(nested);
+        stack.push(nested);
+        continue;
+      }
+      if (line === 'end' && stack.length > 1) {
+        stack.pop();
+        continue;
+      }
+      add(line);
+    }
+    intro.textContent = `Participants: ${[...names.values()].join(', ')}.`;
+    root.append(intro, list);
+    return root;
+  }
+
   const blocks = document.querySelectorAll<HTMLPreElement>('pre[data-language="mermaid"]');
   if (blocks.length > 0) {
     const { default: mermaid } = await import('mermaid');
@@ -81,16 +149,23 @@
       container.className = 'mermaid';
       container.textContent = source;
 
-      // Preserve the linear Mermaid text as a collapsible text alternative.
+      // The diagram as text, collapsed under it: the steps when it is a
+      // sequence diagram, else its Mermaid source.
       const details = document.createElement('details');
       details.className = 'diagram-source';
       const summary = document.createElement('summary');
-      summary.textContent = 'Diagram source';
-      const pre = document.createElement('pre');
-      const code = document.createElement('code');
-      code.textContent = source;
-      pre.append(code);
-      details.append(summary, pre);
+      const steps = sequenceSteps(source);
+      summary.textContent = steps ? 'Diagram as text' : 'Diagram source';
+      if (steps) {
+        steps.className = 'diagram-steps';
+        details.append(summary, steps);
+      } else {
+        const pre = document.createElement('pre');
+        const code = document.createElement('code');
+        code.textContent = source;
+        pre.append(code);
+        details.append(summary, pre);
+      }
 
       figure.append(container, details);
       return { block, figure, container, label: describeDiagram(source) };
