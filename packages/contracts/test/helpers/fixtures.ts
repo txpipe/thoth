@@ -127,7 +127,7 @@ export type SignedClaim = {
 // A signature for the empty key: identity announcement, zero response. It is a
 // valid Schnorr signature for the identity point off-chain, so it stands in
 // for a signature someone forged for an empty registry slot.
-export const DUMMY_SIGNATURE: JubjubSchnorrSignature = {
+export const EMPTY_KEY_SIGNATURE: JubjubSchnorrSignature = {
   announcement: { x: 0n, y: 1n },
   response: 0n,
 };

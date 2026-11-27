@@ -13,7 +13,7 @@ import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import { Contract as DoubleInitContract } from '../artifacts/mock_registry_double_init/contract/index.js';
 import {
   DEFAULT_HOLDER_SECRET,
-  DUMMY_SIGNATURE,
+  EMPTY_KEY_SIGNATURE,
   makeClaim,
   makeNotaryKey,
   type NotaryKey,
@@ -134,11 +134,11 @@ describe('named signatures', () => {
         new CompactTypeVector(msg.length, CompactTypeField),
         msg,
         empty,
-        DUMMY_SIGNATURE,
+        EMPTY_KEY_SIGNATURE,
       ),
     ).toBe(true);
     await expect(
-      submit(named([0, sig(a)], [2, DUMMY_SIGNATURE]), [a.pk, b.pk, empty]),
+      submit(named([0, sig(a)], [2, EMPTY_KEY_SIGNATURE]), [a.pk, b.pk, empty]),
     ).rejects.toThrow('Empty registry slot');
   });
 
