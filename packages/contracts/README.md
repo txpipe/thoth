@@ -86,6 +86,42 @@ documents each parameter and the wire layout `buildMessage` produces;
 [docs/DESIGN.md](https://github.com/txpipe-shop/thoth/blob/main/docs/DESIGN.md#wire-order)
 has the same layout as a table. Attestors sign that exact field vector.
 
+### Proving cost
+
+What each circuit of the two test mocks costs to prove, measured with
+`npm run bench` on an AMD Ryzen 7 5700G (8 cores, 16 threads, 31 GiB) and the
+proof server `midnightntwrk/proof-server:9.0.0`, three warm proofs per
+circuit. Both mocks are 2-of-3 with `V = 3`: `mock_attestation` has no byte
+value (`K = 20`, `B = 0`) and `mock_attestation_bytes` has one (`K = 24`,
+`B = 2`). The proof server verified every proof against its verifier key.
+
+| Mock                   | Circuit               | k   | Rows   | Proving key (MB) | Proof (B) | First proof (s) | Warm proof (s) | CPU per warm proof (s) | Peak memory (MB) |
+| ---------------------- | --------------------- | --- | ------ | ---------------- | --------- | --------------- | -------------- | ---------------------- | ---------------- |
+| mock_attestation       | verifyAttestation     | 17  | 90,590 | 197.2            | 5,772     | 12.20           | 9.27           | 74.9                   | 3,162            |
+| mock_attestation       | openAndRead           | 14  | 8,610  | 24.6             | 5,772     | 1.53            | 1.15           | 10.3                   | 422              |
+| mock_attestation       | openAndReadPresence   | 14  | 8,580  | 24.6             | 5,772     | 1.55            | 1.15           | 10.4                   | 437              |
+| mock_attestation       | openAndRequireMetric0 | 14  | 8,570  | 24.6             | 5,772     | 1.56            | 1.15           | 10.5                   | 446              |
+| mock_attestation       | openAndBindHost       | 14  | 14,633 | 24.6             | 5,772     | 1.61            | 1.22           | 10.8                   | 446              |
+| mock_attestation_bytes | verifyAttestation     | 17  | 94,609 | 197.2            | 5,772     | 12.43           | 9.34           | 75.1                   | 3,166            |
+| mock_attestation_bytes | openAndReadBytes      | 15  | 19,188 | 49.3             | 5,772     | 2.94            | 2.23           | 19.4                   | 758              |
+
+How to read it:
+
+- A circuit of `k` is proved as `2^k` rows, so each step in `k` roughly
+  doubles the time and the proving key: a `verifyAttestation` proof takes
+  about 8 times as long as opening a claim.
+- The first proof of a circuit parses its proving key, so it takes about a
+  third longer. The server keeps the last five keys it parsed; a later proof
+  of a cached circuit takes the warm time.
+- Your dApp ships each circuit's proving key and uploads it with every proof.
+- CPU time is the server's, summed over its threads. Peak memory is the
+  server container's high-water mark, page cache included, while it proves
+  that circuit alone. A server that proves `verifyAttestation` needs about
+  3.2 GB; one that only opens claims needs under 0.8 GB.
+
+`CONTRIBUTING.md` explains how to
+[run the benchmark](https://github.com/txpipe-shop/thoth/blob/main/CONTRIBUTING.md#proving-benchmark).
+
 ## Concepts
 
 From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
