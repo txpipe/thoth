@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { rehypeHeadingIds, unified } from '@astrojs/markdown-remark';
 import { defineConfig } from 'astro/config';
+import { codeHints } from './src/lib/code-hints';
 import { externalLinks } from './src/lib/external-links';
 import { headingLinks } from './src/lib/heading-links';
 import { retitle } from './src/lib/retitle';
@@ -19,13 +20,14 @@ export default defineConfig({
     shikiConfig: { theme: 'synthwave-84' },
     processor: unified({
       remarkPlugins: [
-        [rewriteLinks, { repoRoot, base }],
+        [rewriteLinks, { repoRoot, base, siteUrl: `${site}${base}` }],
         [retitle, { repoRoot }],
       ],
       rehypePlugins: [
         rehypeHeadingIds,
         headingLinks,
         wrapTables,
+        codeHints,
         [externalLinks, { siteUrl: `${site}${base}` }],
       ],
     }),

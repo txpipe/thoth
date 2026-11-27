@@ -72,6 +72,22 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
             aria-label="Menu"
           >
             <span class="menu-button-bars" aria-hidden="true"></span>
+            <svg
+              class="menu-button-toc"
+              viewBox="0 0 16 16"
+              width="16"
+              height="16"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                d="M6 4h8M6 8h8M6 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01"></path>
+            </svg>
+            <span class="menu-button-label" aria-hidden="true">On this page</span>
           </button>
         </div>
       </div>
@@ -183,8 +199,9 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
       import { watchOverflow } from '../lib/overflow';
 
       // Below 78rem the menu button opens a drawer. On laptop widths the nav
-      // stays a column and the drawer is the contents (.doc-meta); on phones
-      // the drawer is the whole .site-menu. CSS decides which.
+      // stays a column, the drawer is the contents (.doc-meta) and the button
+      // reads "On this page"; on phones the drawer is the whole .site-menu
+      // behind a menu icon. CSS decides which.
       const root = document.documentElement;
       const button = document.querySelector<HTMLButtonElement>('.menu-button');
       const drawer = document.getElementById('site-menu');

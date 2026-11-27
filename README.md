@@ -11,7 +11,10 @@
   <br>
 </div>
 
-Your contract accepts an off-chain fact only when N of the M attestors it pinned have signed it, and the fact reaches the contract as private input.
+Thoth lets your Midnight contract accept a fact from outside the chain, such as
+a value from a web API, once N of M independent attestors have checked it and
+signed it. You choose the M attestors and the threshold N, and the fact reaches
+the contract as private input.
 
 > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
 
@@ -21,16 +24,14 @@ Pick your path below, or jump to the [quickstart](#quickstart) to run a 2-of-3
 flow locally.
 
 - **dApp developer**: Embed verification in your contract with
-  [`@txpipe/thoth-contracts`](packages/contracts/README.md), then integrate a
-  client for your source. For web APIs, follow the
-  [zkFetch dApp guide](packages/zk-tls/docs/dapp-integration.md) for
-  [`@txpipe/thoth-zk-tls`](packages/zk-tls/README.md), or start from the
-  [GitHub stars](docs/policies/github-stars.md) and
-  [Strava](docs/policies/strava-latest-activity.md)
-  [policy](CONTEXT.md#the-claim) examples. For Cardano events, follow the
-  [Cardano dApp guide](packages/cardano/docs/dapp-integration.md) for
-  [`@txpipe/thoth-cardano`](packages/cardano/README.md) and the
-  [Cardano output](docs/policies/cardano-output.md) policy example.
+  [`@txpipe/thoth-contracts`](packages/contracts/README.md), then follow the dApp
+  guide for your source:
+  - web APIs: the [zkFetch dApp guide](packages/zk-tls/docs/dapp-integration.md),
+    with the [GitHub stars](docs/policies/github-stars.md) and
+    [Strava](docs/policies/strava-latest-activity.md) policy examples;
+  - Cardano events: the
+    [Cardano dApp guide](packages/cardano/docs/dapp-integration.md), with the
+    [Cardano output](docs/policies/cardano-output.md) policy example.
 - **Attestor operator**: Run an [attestor](CONTEXT.md#roles) against your own
   source and share its [descriptor](CONTEXT.md#roles) with dApps. For zkFetch,
   follow the [zkFetch attestor guide](packages/zk-tls/docs/attestor-guide.md)

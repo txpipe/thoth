@@ -149,8 +149,8 @@
       container.className = 'mermaid';
       container.textContent = source;
 
-      // The diagram as text, collapsed under it: the steps when it is a
-      // sequence diagram, else its Mermaid source.
+      // The diagram as text under it, collapsed unless the diagram overflows:
+      // the steps when it is a sequence diagram, else its Mermaid source.
       const details = document.createElement('details');
       details.className = 'diagram-source';
       const summary = document.createElement('summary');
@@ -168,7 +168,7 @@
       }
 
       figure.append(container, details);
-      return { block, figure, container, label: describeDiagram(source) };
+      return { block, figure, container, details, label: describeDiagram(source) };
     });
 
     // Mermaid measures its text; wait for the web font before swapping in
@@ -176,7 +176,7 @@
     await document.fonts.ready;
     for (const { block, figure } of entries) block.replaceWith(figure);
     await mermaid.run({ nodes: entries.map((entry) => entry.container) });
-    for (const { container, label } of entries) {
+    for (const { container, details, label } of entries) {
       // Mermaid's SVG text nodes sit in layout order rather than reading order;
       // hide the SVG internals behind a labeled role="img" wrapper while the
       // disclosure below carries the full step-by-step source.
@@ -190,6 +190,9 @@
         graphic.append(svg);
       }
       watchOverflow(container, container, `Scrollable ${label.toLowerCase()}`);
+      // A diagram wider than the screen shows only some of its lanes; open
+      // the text version so the reader gets the whole of it without scrolling.
+      if (container.scrollWidth > container.clientWidth + 1) details.open = true;
     }
   }
 </script>

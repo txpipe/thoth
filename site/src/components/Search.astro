@@ -31,7 +31,9 @@
       spellcheck="false"
       aria-describedby="search-status"
     />
-    <button class="search-close" type="button" data-close-search>Esc</button>
+    <button class="search-close" type="button" data-close-search aria-label="Close search (Esc)">
+      Esc
+    </button>
   </form>
   <p class="search-status" id="search-status" role="status"></p>
   <ol class="search-results"></ol>
@@ -74,19 +76,32 @@
     return pagefind;
   };
 
+  // Each result link is named by its title; the excerpt is its description.
+  let ids = 0;
   const link = (url: string, title: string, excerpt: string) => {
     const anchor = document.createElement('a');
     anchor.href = url;
+    const id = `search-result-${(ids += 1)}`;
     const heading = document.createElement('span');
     heading.className = 'search-result-title';
+    heading.id = `${id}-title`;
     heading.textContent = title;
     const text = document.createElement('span');
     text.className = 'search-result-excerpt';
+    text.id = `${id}-excerpt`;
     // Pagefind escapes the page text and marks the matches with <mark>.
     text.innerHTML = excerpt;
+    anchor.setAttribute('aria-labelledby', heading.id);
+    anchor.setAttribute('aria-describedby', text.id);
     anchor.append(heading, text);
     return anchor;
   };
+
+  // Pagefind ranks pages that only share a stem or a prefix with the query.
+  // A page counts as a match only when its excerpt or a section's marks a word.
+  const marked = (page: ResultData) =>
+    page.excerpt.includes('<mark>') ||
+    (page.sub_results ?? []).some((sub) => sub.excerpt.includes('<mark>'));
 
   const run = async () => {
     if (!input || !status || !list) return;
@@ -103,7 +118,11 @@
     }
     const search = await engine.debouncedSearch(term);
     if (!search || input.value.trim() !== term) return;
-    const pages = await Promise.all(search.results.slice(0, 8).map((result) => result.data()));
+    const loaded = await Promise.all(search.results.slice(0, 24).map((result) => result.data()));
+    if (input.value.trim() !== term) return;
+    const matches = loaded.filter(marked);
+    const pages = matches.slice(0, 8);
+    list.scrollTop = 0;
     list.replaceChildren(
       ...pages.map((page) => {
         const item = document.createElement('li');
@@ -122,7 +141,7 @@
         return item;
       }),
     );
-    const count = search.results.length;
+    const count = matches.length;
     status.textContent =
       count === 0
         ? `No results for “${term}”.`
@@ -149,6 +168,17 @@
     if (event.key !== 'Enter') return;
     event.preventDefault();
     list?.querySelector('a')?.click();
+  });
+  // The arrow keys move between the field and the results, in reading order.
+  dialog?.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    if (!input || !list) return;
+    const stops = [input, ...list.querySelectorAll<HTMLAnchorElement>('a')];
+    const at = stops.indexOf(document.activeElement as HTMLInputElement);
+    if (at < 0 || stops.length < 2) return;
+    event.preventDefault();
+    const next = event.key === 'ArrowDown' ? Math.min(at + 1, stops.length - 1) : Math.max(at - 1, 0);
+    stops[next]?.focus();
   });
   // A click on the backdrop lands on the dialog element itself.
   dialog?.addEventListener('click', (event) => {

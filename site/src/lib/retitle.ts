@@ -1,7 +1,7 @@
 // Sets a doc's H1 on the site where the repo's own opening doesn't fit the page.
 
 import path from 'node:path';
-import type { Root } from 'mdast';
+import type { PhrasingContent, Root } from 'mdast';
 import { headingFor } from './docs';
 
 export interface Options {
@@ -14,6 +14,23 @@ export interface Options {
 const BANNER = /^<div align="center">/;
 const TAGLINE = /<strong>([^<]+)<\/strong>/;
 
+// A hyphenated word in a display heading, such as "N-of-M", would break at its
+// hyphens on a phone; each one renders as a span that doesn't wrap.
+function unbroken(text: string): PhrasingContent[] {
+  return text
+    .split(/(\S+-\S+)/)
+    .filter(Boolean)
+    .map((part) =>
+      part.includes('-') && !/\s/.test(part)
+        ? {
+            type: 'emphasis',
+            data: { hName: 'span', hProperties: { className: ['nowrap'] } },
+            children: [{ type: 'text', value: part }],
+          }
+        : { type: 'text', value: part },
+    );
+}
+
 export function retitle(options: Options) {
   return (tree: Root, file: { path?: string }): void => {
     if (!file.path) return;
@@ -21,11 +38,7 @@ export function retitle(options: Options) {
     if (first?.type === 'html' && BANNER.test(first.value)) {
       const tagline = TAGLINE.exec(first.value)?.[1];
       if (!tagline) throw new Error(`${file.path}: the opening banner has no <strong> tagline`);
-      tree.children[0] = {
-        type: 'heading',
-        depth: 1,
-        children: [{ type: 'text', value: tagline }],
-      };
+      tree.children[0] = { type: 'heading', depth: 1, children: unbroken(tagline) };
       return;
     }
     const id = path.relative(options.repoRoot, file.path).split(path.sep).join('/');

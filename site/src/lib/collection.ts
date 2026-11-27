@@ -24,6 +24,11 @@ export interface NavItem {
   nested: boolean;
   /** For a nested guide, its package's short name, which screen readers hear first. */
   parent?: string;
+  /**
+   * For a package README, the npm scope its label drops (`@txpipe/thoth-`). The
+   * nav shows it dimmed, so the full package name matches the page's title.
+   */
+  scope?: string;
 }
 
 export interface NavGroup {
@@ -83,13 +88,16 @@ export function navGroups(docs: DocEntry[]): NavGroup[] {
     const group = navGroup(repoPath);
     const items = groups.get(group) ?? [];
     const nested = isPackageGuide(repoPath);
+    const short = navLabel(repoPath, label);
+    const scope = !nested && label.endsWith(short) ? label.slice(0, -short.length) : '';
     items.push({
       id: entry.id,
       route: routeFor(repoPath),
-      title: navLabel(repoPath, label),
+      title: short,
       pageTitle: label,
       nested,
       parent: nested ? repoPath.split('/')[1] : undefined,
+      scope: scope || undefined,
     });
     groups.set(group, items);
   }

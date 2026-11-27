@@ -1,6 +1,7 @@
 // Rewrites repo links in the published docs to site routes and checks them.
 // Links into the glossary land on the term they name, and a link whose text is
-// the target's file path shows the target's site title instead.
+// the target's file path shows the target's site title instead. A link to the
+// site itself, such as the README's "Docs site" entry, is dropped.
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -16,12 +17,40 @@ const BLOB = `${REPO_URL}/blob/main/`;
 export interface Options {
   repoRoot: string;
   base: string;
+  /** The published site's root URL, with its base and no trailing slash. */
+  siteUrl: string;
 }
 
 type MarkdownTree = ReturnType<typeof fromMarkdown>;
-type Link = Extract<MarkdownTree['children'][number], { type: 'paragraph' }>['children'][number] & {
-  type: 'link';
-};
+type Paragraph = Extract<MarkdownTree['children'][number], { type: 'paragraph' }>;
+type Link = Paragraph['children'][number] & { type: 'link' };
+type Parent = { type: string; children: unknown[] };
+
+// Words a description can drop and still say the same as a title.
+const FILLER = new Set(['a', 'an', 'and', 'how', 'its', 'of', 'the', 'to']);
+
+function contentWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word && !FILLER.has(word));
+}
+
+/**
+ * Whether a description only restates a title: each of its words starts a
+ * title word or is started by one, so "how to add an attestor kind" restates
+ * "Adding an attestor kind" and "the glossary" restates "Glossary".
+ */
+function restates(description: string, title: string): boolean {
+  const words = contentWords(description);
+  const titleWords = contentWords(title);
+  return (
+    words.length > 0 &&
+    words.every((word) =>
+      titleWords.some((other) => other.startsWith(word) || word.startsWith(other)),
+    )
+  );
+}
 
 interface Doc {
   anchors: Set<string>;
@@ -80,8 +109,16 @@ export function rewriteLinks(options: Options) {
 
     // Point a link at a published doc's route. A glossary link whose text names
     // a term goes to that term; a link whose text is the file path reads as the
-    // doc's site title, the name the nav uses.
-    function toSite(node: { url: string }, repoPath: string, fragment: string, url: string): void {
+    // doc's site title, the name the nav uses. In a "path: description" list
+    // entry, a description that only restates that title drops.
+    function toSite(
+      node: { url: string },
+      repoPath: string,
+      fragment: string,
+      url: string,
+      parent: Parent | undefined,
+      index: number | undefined,
+    ): void {
       const target = docFor(repoPath);
       let anchor = fragment;
       if ('children' in node) {
@@ -97,6 +134,21 @@ export function rewriteLinks(options: Options) {
               ? { type: 'inlineCode', value: target.title }
               : { type: 'text', value: target.title },
           ];
+          const rest = index === undefined ? undefined : parent?.children[index + 1];
+          const isLast = index !== undefined && parent?.children.length === index + 2;
+          if (
+            isLast &&
+            rest &&
+            typeof rest === 'object' &&
+            'type' in rest &&
+            rest.type === 'text' &&
+            'value' in rest &&
+            typeof rest.value === 'string' &&
+            rest.value.startsWith(':') &&
+            restates(rest.value.slice(1), target.title)
+          ) {
+            parent?.children.splice(index + 1, 1);
+          }
         }
       }
       node.url = withBase(routeFor(repoPath), options.base) + (anchor ? `#${anchor}` : '');
@@ -112,7 +164,11 @@ export function rewriteLinks(options: Options) {
       }
     }
 
-    function rewrite(node: { url: string }): void {
+    function rewrite(
+      node: { url: string },
+      index: number | undefined,
+      parent: Parent | undefined,
+    ): void {
       const url = node.url;
       if (!url || url.startsWith('/') || url.startsWith('//')) return;
 
@@ -130,7 +186,7 @@ export function rewriteLinks(options: Options) {
           throw new Error(`${source}: ${url} does not resolve`);
         }
         checkAnchor(repoPath, fragment, source, url);
-        toSite(node, repoPath, fragment, url);
+        toSite(node, repoPath, fragment, url, parent, index);
         return;
       }
 
@@ -151,7 +207,7 @@ export function rewriteLinks(options: Options) {
       const isDirectory = statSync(absolute).isDirectory();
       if (!isDirectory && isPublished(target)) {
         checkAnchor(target, fragment, source, url);
-        toSite(node, target, fragment, url);
+        toSite(node, target, fragment, url, parent, index);
         return;
       }
       node.url = `${REPO_URL}/${isDirectory ? 'tree' : 'blob'}/main/${target}${
@@ -159,7 +215,17 @@ export function rewriteLinks(options: Options) {
       }`;
     }
 
-    visit(tree, 'link', rewrite);
-    visit(tree, 'definition', rewrite);
+    // A list entry that only links the site to itself has nothing to offer on it.
+    visit(tree, 'listItem', (item, index, list) => {
+      const [paragraph, ...others] = item.children;
+      const [first] = paragraph?.type === 'paragraph' ? paragraph.children : [];
+      const self = first?.type === 'link' && first.url.replace(/\/$/, '') === options.siteUrl;
+      if (!self || others.length > 0 || !list || index === undefined) return;
+      list.children.splice(index, 1);
+      return index;
+    });
+
+    visit(tree, 'link', (node, index, parent) => rewrite(node, index, parent));
+    visit(tree, 'definition', (node, index, parent) => rewrite(node, index, parent));
   };
 }
