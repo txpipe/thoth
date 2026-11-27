@@ -1,6 +1,6 @@
 # The claims vault is keyed by the nullifier
 
-Status: accepted
+Status: accepted, amended by [ADR 0017](0017-registry-checks-the-n-named-signatures.md): `getAttestationWitness` returns only the claim, and the signatures have a witness of their own, `getSignatures`.
 
 The claims vault used to be keyed by a claim id, `persistentCommit(claim, rand)`, with 32 bytes of commitment randomness the holder chose and kept, and replay was a separate nullifier set. `verifyAttestation` hashed nearly the same fields twice, once for the nullifier and once for the id, and every `openClaim` recomputed the id. Issue #309 measured the second hash at about a third of what was left of `verifyAttestation` once attestors signed the nullifier ([ADR 0015](0015-attestors-sign-the-nullifier.md)).
 

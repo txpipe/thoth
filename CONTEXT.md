@@ -161,7 +161,7 @@ The signed artifact one attestor returns: the claim, the message, the public key
 _Avoid_: Proof.
 
 **Attestment**:
-The collected N-of-M set for one claim: the shared claim, its message, and one attestation per answered attestor, each at its registry slot. Not final until the contract accepts it.
+The collected N-of-M set for one claim: the shared claim, its message, and one attestation per answered attestor, each tagged with its registry slot. Not final until the contract accepts it.
 _Avoid_: Collection, bundle, proof.
 
 **Trusted set**:
@@ -173,7 +173,7 @@ One entry of a trusted set: an attestor's descriptor paired with the registry sl
 _Avoid_: Pinned attestor, entry.
 
 **Registry slot**:
-The position of an attestor's key in the app's registry, `registryIndex` in code. The app assigns it; the attestor does not know it. Signatures are placed by it and by nothing else.
+The position of an attestor's key in the app's registry, `registryIndex` in code. The app assigns it; the attestor does not know it. Each signature the contract checks names its slot, and the slot comes from the trusted set and from nothing else.
 _Avoid_: Attestor index, rank.
 
 **Collection options**:
@@ -183,11 +183,11 @@ _Avoid_: Intent, claim context, request.
 ### On-chain
 
 **Registry**:
-The pinned attestor public keys in a contract, sealed at deploy. Signatures are checked positionally against it.
+The pinned attestor public keys in a contract, sealed at deploy, one per registry slot. Each signature is checked against the key of the slot it names; which slots signed stays private (ADR 0017).
 _Avoid_: Trusted set.
 
 **Threshold**:
-The N in N-of-M: how many registry keys must sign the same message.
+The N in N-of-M: how many registry keys must sign the same message. The contract takes exactly N signatures from N distinct registry slots, in increasing slot order, and every one must verify.
 _Avoid_: Quorum, majority.
 
 **Nullifier**:
@@ -203,4 +203,4 @@ _Avoid_: Vault, storage.
 - A **kind** has one **law**; many **attestors** run it, each trusting its own **witness** (zkFetch) or its own chain source (chain-event kinds).
 - A **policy** belongs to one law; its **policyHash** is what the contract seals.
 - An **observation** produces one **claim** for each app id and slot count; the **nullifier** keys on its **observation identity**, so the same claim cannot be accepted twice ([details](packages/contracts/README.md#guarantees-and-limits)).
-- An **attestment** is N **attestations** over one **message**, each placed at its **registry slot** from the **trusted set**.
+- An **attestment** is N **attestations** over one **message**, each named by its **registry slot** from the **trusted set**.

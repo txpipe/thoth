@@ -151,7 +151,7 @@ sequenceDiagram
     end
 
     Note over Client,Contract: Step 3: submit to the contract
-    Client->>Contract: claim + N signatures (private witness data)
+    Client->>Contract: claim + N signatures named by registry slot (private witness data)
     Note over Contract: verify
     Note over Contract: run predicate
 ```
@@ -164,12 +164,16 @@ sequenceDiagram
 2. Each attestor verifies its own witness's evidence, checks that it signed
    the proposal's holder and window, derives the claim itself, salt included,
    and signs it.
-   The client checks every signature and places it at the attestor's registry
-   slot, which the app assigned in its trusted set.
-3. The contract verifies, in-circuit, the version, the policy hash, at least N
-   valid signatures each against its own registry slot, the absent slots, the
-   holder secret, the window and replay, then vaults the claim under its
-   nullifier ([ADR 0016](adr/0016-claims-vault-keyed-by-the-nullifier.md)). The
+   The client checks every signature and names it by the attestor's registry
+   slot, which the app assigned in its trusted set. It hands the contract
+   exactly N signatures, in slot order.
+3. The contract verifies, in-circuit, the version, the policy hash, N valid
+   signatures from distinct registry slots, each against the key of the slot
+   it names, without revealing which slots signed
+   ([ADR 0017](adr/0017-registry-checks-the-n-named-signatures.md)), the
+   absent slots, the holder secret, the window and replay, then vaults the
+   claim under its nullifier
+   ([ADR 0016](adr/0016-claims-vault-keyed-by-the-nullifier.md)). The
    [`@txpipe/thoth-contracts` README](../packages/contracts/README.md#guarantees-and-limits)
    lists every check. Only then does the app's predicate run; it opens the
    claim with the nullifier and the holder secret.

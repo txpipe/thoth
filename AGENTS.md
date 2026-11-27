@@ -9,8 +9,9 @@ Thoth is a private N-of-M attestation system for Midnight. Three layers:
 
 - **Contract layer** — `packages/contracts` (`@txpipe/thoth-contracts`):
   embeddable Compact modules that verify N-of-M signatures over a seven-field
-  signed message (`attestation.compact`), count valid signatures against a pinned key
-  vector (`attestor_registry.compact`) with the stdlib `jubjubSchnorrVerify`.
+  signed message (`attestation.compact`), checking each of the N signatures
+  against the pinned key of the registry slot it names
+  (`attestor_registry.compact`) with the stdlib `jubjubSchnorrVerify`.
 - **Attestor SDK** — `packages/attestor` + `packages/core`: the types and
   interfaces attestor kinds implement to provide attestation. Kinds verify
   evidence and sign a canonical claim. `packages/client` holds the dApp side
@@ -60,11 +61,15 @@ file.
   (`npm run changeset`); internal dependencies between them use a `^` range,
   never `*`, which changesets would publish as is
   ([`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-changeset)).
-- **`registryIndex` is positional and app-owned.** `attestor_registry.compact`
-  verifies signatures positionally (`signatures[i]` against `keys[i]`). The slot
-  lives only on the client's `TrustedSet` member (`{ attestor, registryIndex }`,
-  bounded by the registry's `registrySize`), never on `Attestor` or
-  `AttestorDescriptor`. Never order signatures by anything other than that slot.
+- **`registryIndex` is app-owned and names each signature.**
+  `attestor_registry.compact` takes exactly N `{ registryIndex, signature }`
+  entries in strictly increasing slot order and checks each signature against
+  `keys[registryIndex]`; the slots are private inputs, so never disclose one or
+  let a ledger operation depend on it. The slot lives only on the client's
+  `TrustedSet` member (`{ attestor, registryIndex }`, bounded by the registry's
+  `registrySize`), never on `Attestor` or `AttestorDescriptor`. Never name or
+  order a signature by anything other than that slot; `slotSignaturesOf` in
+  `@txpipe/thoth-client` builds the entries.
 
 ## Code conventions
 
@@ -178,9 +183,10 @@ READMEs don't repeat it.
 
 - Contract logic is tested with the simulator via vitest in
   `packages/contracts/test/`. The mock top-level shells
-  (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, W=0, M=3,
-  N=2 — and `MockAttestationBytes.compact` — V=3, W=1) specialize the
-  modules so tests run against real artifacts. `MockAttestationLayout.compact`
+  (`packages/contracts/test/mocks/MockAttestation.compact` — V=3, W=0, N=2,
+  M=3 — and `MockAttestationBytes.compact` — V=3, W=1, N=2, M=3) specialize
+  the modules so tests run against real artifacts; their `verifyAttestation`
+  takes exactly two signatures, each named by its slot. `MockAttestationLayout.compact`
   (V=0, W=3) is a layout whose claims can share identity bytes with a V=11,
   W=0 layout, for the cross-layout test. `MockAddressHash.compact` is the
   compiled oracle for the cardano address hash. `MockRegistryDoubleInit.compact`
