@@ -79,11 +79,12 @@ Run them from the repo root:
 
 For one package: `npm run <script> --workspace=packages/<name>`.
 
-Workspaces import each other through their built `dist/`. The root `build` and
-`types` scripts build `core`, `attestor`, `client`, `cardano` and `zk-tls`
-first; if you add a package that another workspace imports, add it to that
-chain too. A stale `dist/` shows up as confusing type errors such as "Generic
-type requires N type argument(s)".
+Workspaces import each other through their built `dist/`. npm runs a
+`--workspaces` script in the order of the root `workspaces` array, so that
+array lists each package after the packages it imports; `build` and `types`
+rely on it. When you add a package, put it after its dependencies and before
+the packages that import it. A stale `dist/` shows up as confusing type errors
+such as "Generic type requires N type argument(s)".
 
 `packages/zk-tls/test/live.test.ts` runs against two real witnesses and skips
 unless `WITNESS_URLS` names them; see the attestor guide's

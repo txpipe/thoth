@@ -45,10 +45,8 @@ jobs:
       - name: Compile contract artifacts
         run: npm run compact:no-zk
 
-      - name: Build
-        run: npm run build
-
-      - name: Run type checks
+      # `types` builds every package first.
+      - name: Build and type-check
         run: npm run types
 
       - name: Run tests
