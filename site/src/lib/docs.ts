@@ -72,12 +72,12 @@ export function titleFor(id: string, markdown: string | undefined): string {
 }
 
 /**
- * The H1 the site renders in place of a doc's own, if any. The home page keeps
- * the README's H1, the project name; the glossary's H1 names the context, which
- * reads as a second home page.
+ * The H1 the site renders in place of a doc's own, if any. The site header
+ * already carries the wordmark, so the home page and glossary both take their
+ * site titles instead of repeating "Thoth".
  */
 export function headingFor(id: string): string | undefined {
-  return id === 'README' ? undefined : TITLES[id];
+  return TITLES[id];
 }
 
 /** Whether a repo path is a guide that the nav nests under its package. */

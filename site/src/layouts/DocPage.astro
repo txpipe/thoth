@@ -1,7 +1,7 @@
 ---
 import type { MarkdownHeading } from 'astro';
 import Nav from '../components/Nav.astro';
-import type { NavGroup } from '../lib/collection';
+import { type NavGroup, neighborsOf } from '../lib/collection';
 import { REPO_URL, withBase } from '../lib/docs';
 import '../styles/tokens.css';
 import '../styles/site.css';
@@ -20,6 +20,7 @@ const base = import.meta.env.BASE_URL;
 const home = withBase('/', base);
 const pageTitle = title === 'Thoth' ? 'Thoth' : `${title} · Thoth`;
 const toc = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
+const { prev, next } = neighborsOf(groups, currentId);
 ---
 
 <!doctype html>
@@ -94,6 +95,60 @@ const toc = headings.filter((heading) => heading.depth === 2 || heading.depth ==
       <div class="menu-backdrop" hidden></div>
       <main id="content" class="content prose" data-compact={compact ? '' : undefined}>
         <slot />
+        {
+          (prev || next) && (
+            <nav class="doc-pager" aria-label="Pagination">
+              {prev && (
+                <a class="doc-pager-link prev" href={withBase(prev.route, base)} rel="prev">
+                  <span class="doc-pager-label">
+                    <svg
+                      viewBox="0 0 16 16"
+                      width="14"
+                      height="14"
+                      aria-hidden="true"
+                      focusable="false"
+                    >
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M10.5 3.5L6 8l4.5 4.5"
+                      />
+                    </svg>
+                    Previous
+                  </span>
+                  <span class="doc-pager-title">{prev.title}</span>
+                </a>
+              )}
+              {next && (
+                <a class="doc-pager-link next" href={withBase(next.route, base)} rel="next">
+                  <span class="doc-pager-label">
+                    Next
+                    <svg
+                      viewBox="0 0 16 16"
+                      width="14"
+                      height="14"
+                      aria-hidden="true"
+                      focusable="false"
+                    >
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M5.5 3.5L10 8l-4.5 4.5"
+                      />
+                    </svg>
+                  </span>
+                  <span class="doc-pager-title">{next.title}</span>
+                </a>
+              )}
+            </nav>
+          )
+        }
       </main>
     </div>
     <p class="visually-hidden" role="status" id="copy-status"></p>
@@ -157,6 +212,19 @@ const toc = headings.filter((heading) => heading.depth === 2 || heading.depth ==
         sections.forEach((section, index) => {
           if (section && section.getBoundingClientRect().top <= line) current = index;
         });
+        // Short sections at the end of a page cannot scroll past the top line;
+        // mark the last heading once the reader reaches the foot of the document.
+        const atBottom =
+          window.scrollY > 0 &&
+          window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+        if (atBottom) {
+          for (let index = sections.length - 1; index >= 0; index -= 1) {
+            if (sections[index]) {
+              current = index;
+              break;
+            }
+          }
+        }
         tocLinks.forEach((link, index) => {
           if (index === current) link.setAttribute('aria-current', 'location');
           else link.removeAttribute('aria-current');
@@ -195,17 +263,19 @@ const toc = headings.filter((heading) => heading.depth === 2 || heading.depth ==
         copy.className = 'code-block-copy';
         copy.textContent = 'Copy';
         let reset: ReturnType<typeof setTimeout> | undefined;
-        const flash = (label: string) => {
+        const flash = (label: string, state: string) => {
           copy.textContent = label;
+          copy.dataset.state = state;
           clearTimeout(reset);
           reset = setTimeout(() => {
             copy.textContent = 'Copy';
+            delete copy.dataset.state;
           }, 2000);
         };
         copy.addEventListener('click', async () => {
           try {
             await navigator.clipboard.writeText(pre.textContent ?? '');
-            flash('Copied');
+            flash('Copied', 'copied');
             announce('Copied the code to the clipboard.');
           } catch {
             // No clipboard access (an insecure context or a denied permission):
@@ -215,7 +285,7 @@ const toc = headings.filter((heading) => heading.depth === 2 || heading.depth ==
             const selection = window.getSelection();
             selection?.removeAllRanges();
             selection?.addRange(range);
-            flash('Selected');
+            flash('Selected', 'copied');
             announce('The clipboard is unavailable. The code is selected; copy it with your keyboard.');
           }
         });

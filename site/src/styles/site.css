@@ -229,6 +229,7 @@ a:hover {
   width: var(--nav-width);
   height: calc(100vh - var(--header-height));
   overflow-y: auto;
+  scrollbar-width: thin;
   /* Start level with the title, the way the margin column does. */
   padding-top: var(--body-top-gap);
   padding-bottom: var(--space-8);
@@ -246,6 +247,11 @@ a:hover {
   color: var(--fg-4);
   cursor: pointer;
   list-style: none;
+  transition: color 120ms ease;
+}
+
+.sidebar-groups summary:hover {
+  color: var(--fg-2);
 }
 
 .sidebar summary::-webkit-details-marker {
@@ -260,6 +266,7 @@ a:hover {
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: rotate(45deg);
+  transition: transform 150ms ease;
 }
 
 .sidebar-groups details:not([open]) summary::before {
@@ -299,6 +306,11 @@ a:hover {
   font-weight: var(--fw-semibold);
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  transition: color 120ms ease;
+}
+
+.sidebar-groups summary:hover .sidebar-group-label {
+  color: var(--fg-3);
 }
 
 .sidebar ul {
@@ -376,6 +388,7 @@ a:hover {
   top: calc(var(--header-height) + var(--space-8));
   max-height: calc(100vh - var(--header-height) - var(--space-12));
   overflow-y: auto;
+  scrollbar-width: thin;
   padding-top: 0.4rem; /* optical alignment with the title's cap height */
   font-size: 0.75rem;
   line-height: 1.5;
@@ -475,6 +488,7 @@ a:hover {
 .prose h2 {
   position: relative;
   margin-top: var(--space-16);
+  margin-bottom: var(--space-4);
   padding-top: var(--space-4);
   border-top: 1px solid var(--stroke-4);
   font-size: clamp(1.5rem, 0.8vw + 1.25rem, 2rem);
@@ -509,12 +523,45 @@ a:hover {
 
 .prose h3 {
   margin-top: var(--space-10);
+  margin-bottom: var(--space-3);
   font-size: 1.3125rem;
   letter-spacing: -0.005em;
 }
 
 .prose h4 {
   margin-top: var(--space-8);
+  margin-bottom: var(--space-2);
+}
+
+/* Inline section permalink: overrides h2's transparent clip-text fill so `#` stays legible. */
+.prose :is(h2, h3) .heading-anchor {
+  display: inline-block;
+  margin-left: 0.35em;
+  padding: 0 0.15em;
+  border-radius: var(--radius-sm);
+  color: var(--fg-4);
+  -webkit-text-fill-color: currentColor;
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  font-weight: var(--fw-regular);
+  line-height: 1;
+  letter-spacing: 0;
+  text-decoration: none;
+  vertical-align: 0.04em;
+  transition: color 120ms ease;
+}
+
+.prose :is(h2, h3) .heading-anchor::before {
+  content: "#";
+}
+
+.prose :is(h2, h3):hover .heading-anchor {
+  color: var(--cyan-100);
+}
+
+.prose :is(h2, h3) .heading-anchor:hover,
+.prose :is(h2, h3) .heading-anchor:focus-visible {
+  color: var(--pink-200);
 }
 
 /* The deck under the title is the doc's own summary, so it reads a step up. */
@@ -576,6 +623,39 @@ a:hover {
 
 .prose a:hover {
   text-decoration-color: var(--pink-200);
+}
+
+/* Mark links that leave the docs site with a small north-east arrow. */
+.prose a[href^="http://"]:not([href^="https://txpipe.github.io/thoth"])::after,
+.prose
+  a[href^="https://"]:not([href^="https://txpipe.github.io/thoth"])::after {
+  content: "";
+  display: inline-block;
+  width: 0.72em;
+  height: 0.72em;
+  margin-left: 0.22em;
+  vertical-align: 0.04em;
+  background-color: currentColor;
+  opacity: 0.75;
+  -webkit-mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M4.5 2.5h5v5M9.5 2.5L2.5 9.5'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M4.5 2.5h5v5M9.5 2.5L2.5 9.5'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.prose
+  a[href^="http://"]:not([href^="https://txpipe.github.io/thoth"]):hover::after,
+.prose
+  a[href^="https://"]:not(
+    [href^="https://txpipe.github.io/thoth"]
+  ):hover::after {
+  opacity: 1;
+  transform: translate(1px, -1px);
 }
 
 .prose code {
@@ -665,6 +745,11 @@ a:hover {
   color: #fff;
 }
 
+.code-block-copy[data-state="copied"] {
+  border-color: color-mix(in srgb, var(--cyan-100) 40%, transparent);
+  color: var(--cyan-100);
+}
+
 .code-block::before,
 .code-block::after {
   content: "";
@@ -700,6 +785,21 @@ a:hover {
   color: inherit;
   background: none;
   font-size: 1em;
+}
+
+/* Keep linked code chips readable as links without a double bottom line. */
+.prose a:has(> code:only-child) {
+  text-decoration: none;
+}
+
+.prose a code {
+  border-color: color-mix(in srgb, var(--cyan-100) 28%, transparent);
+  color: inherit;
+  transition: border-color 120ms ease;
+}
+
+.prose a:hover code {
+  border-color: color-mix(in srgb, var(--pink-200) 45%, transparent);
 }
 
 /* Mermaid replaces its <pre> with this element at runtime. */
@@ -761,11 +861,12 @@ a:hover {
 }
 
 .prose th {
-  color: var(--fg-4);
+  border-bottom-color: var(--stroke-2);
+  color: var(--fg-2);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: var(--fw-medium);
-  letter-spacing: 0.1em;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -776,6 +877,75 @@ a:hover {
 .prose td {
   color: var(--fg-3);
   font-variant-numeric: tabular-nums;
+}
+
+/* Previous / next reading path at the foot of each document. */
+.doc-pager {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-16);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--stroke-4);
+}
+
+.prose .doc-pager-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--stroke-4);
+  border-radius: var(--radius-md);
+  color: var(--fg-1);
+  text-decoration: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.prose .doc-pager-link.prev {
+  grid-column: 1;
+  align-items: flex-start;
+}
+
+.prose .doc-pager-link.next {
+  grid-column: 2;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.doc-pager-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--fg-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: color 120ms ease;
+}
+
+.doc-pager-title {
+  color: var(--fg-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: 1.4;
+}
+
+.prose .doc-pager-link:hover {
+  border-color: var(--stroke-2);
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  color: #fff;
+}
+
+.prose .doc-pager-link:hover .doc-pager-label {
+  color: var(--cyan-100);
+}
+
+.prose .doc-pager-link:hover .doc-pager-title {
+  color: #fff;
 }
 
 .site-footer {
@@ -968,9 +1138,18 @@ a:hover {
   .mermaid svg {
     min-width: 44rem;
   }
+
+  .doc-pager {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .prose .doc-pager-link.prev,
+  .prose .doc-pager-link.next {
+    grid-column: auto;
+  }
 }
 
-/* Touch: give every nav and contents link a 44px target. */
+/* Touch: give every nav, contents, and heading control a comfortable target. */
 @media (pointer: coarse) {
   .sidebar a,
   .doc-meta a {
@@ -981,6 +1160,14 @@ a:hover {
   .menu-button {
     width: 2.75rem;
     height: 2.75rem;
+  }
+
+  .code-block-copy {
+    min-height: 2.25rem;
+  }
+
+  .prose :is(h2, h3) .heading-anchor {
+    padding: 0.2em 0.3em;
   }
 }
 

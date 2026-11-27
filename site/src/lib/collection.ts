@@ -26,6 +26,22 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+export interface PageNeighbors {
+  prev?: NavItem;
+  next?: NavItem;
+}
+
+/** The previous and next docs in nav order across groups. */
+export function neighborsOf(groups: NavGroup[], currentId: string): PageNeighbors {
+  const flat = groups.flatMap((group) => group.items);
+  const index = flat.findIndex((item) => item.id === currentId);
+  if (index < 0) return {};
+  return {
+    prev: flat[index - 1],
+    next: flat[index + 1],
+  };
+}
+
 // Throws instead of shipping a site with a silently missing allowlist entry.
 export async function getDocs(): Promise<DocEntry[]> {
   const docs = await getCollection('docs');
