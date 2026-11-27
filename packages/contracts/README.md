@@ -17,10 +17,10 @@ driver: the off-chain message encoder matches the circuit only at that version.
 
 ## Usage
 
-| File                        | Module                        | Role                                                                                                                                                                                      |
-| --------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `attestation.compact`       | `attestation<#V, #W, #N, #M>` | Verifies at least `N` of `M` signatures over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
-| `attestor_registry.compact` | `attestor_registry<#M>`       | Seals the `M` pinned attestor keys at deploy and counts the signatures over the seven-field message that verify, each against its own slot.                                               |
+| File                        | Module                        | Role                                                                                                                                                                                                   |
+| --------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `attestation.compact`       | `attestation<#V, #W, #N, #M>` | Verifies `N` signatures from distinct registry slots over the signed message, rejects claims for another app, replays and out-of-window claims, and vaults the claim for the app's predicates to open. |
+| `attestor_registry.compact` | `attestor_registry<#M>`       | Seals the `M` pinned attestor keys at deploy and checks each signature over the seven-field message against the key of the slot it names.                                                              |
 
 Embed both modules in your top-level contract, seal the deploy-time values in
 the constructor, and export `verifyAttestation` as the entry point:
@@ -77,7 +77,23 @@ The module parameters, fixed when you embed:
 
 - `#V` numeric value slots and `#W` byte slots, each one 32-byte value
   (`W = 0` is the numeric-only layout).
-- `#N` of `#M` signatures must verify; `#M` is also the registry's key count.
+- `#N` signatures from distinct registry slots must verify, out of `#M`
+  slots; `#M` is also the registry's key count, at most 65,536.
+
+Your dApp implements two witnesses for `verifyAttestation`:
+`getAttestationWitness` returns the claim, and `getSignatures` returns exactly
+`#N` entries `{ registryIndex, signature }`, in increasing slot order.
+`slotSignaturesOf(collected)` from `@txpipe/thoth-client` builds them from a
+kind's collected attestations:
+
+```ts
+const { claim, collected } = await client.collect(/* ... */);
+const witnesses = {
+  getAttestationWitness: ({ privateState }) => [privateState, toContractClaim(claim)],
+  getSignatures: ({ privateState }) => [privateState, slotSignaturesOf(collected)],
+  // getHolderSecret, seedKeys, ...
+};
+```
 
 The header of
 [`attestation.compact`](https://github.com/txpipe-shop/thoth/blob/main/packages/contracts/attestation.compact)
@@ -97,13 +113,13 @@ server verified every proof against its verifier key.
 
 | Mock                   | Circuit               | k   | Rows   | Proving key (MB) | Proof (B) | First proof (s) | Warm proof (s) | CPU per warm proof (s) | Peak memory (MB) |
 | ---------------------- | --------------------- | --- | ------ | ---------------- | --------- | --------------- | -------------- | ---------------------- | ---------------- |
-| mock_attestation       | verifyAttestation     | 14  | 13,646 | 24.7             | 5,772     | 1.85            | 1.46           | 11.4                   | 430              |
-| mock_attestation       | openAndRead           | 13  | 6,657  | 12.3             | 5,772     | 0.84            | 0.65           | 6.0                    | 251              |
-| mock_attestation       | openAndReadPresence   | 13  | 6,627  | 12.3             | 5,772     | 0.85            | 0.66           | 6.0                    | 237              |
-| mock_attestation       | openAndRequireMetric0 | 13  | 6,617  | 12.3             | 5,772     | 0.85            | 0.66           | 6.0                    | 249              |
-| mock_attestation       | openAndBindHost       | 14  | 12,680 | 24.6             | 5,772     | 1.58            | 1.22           | 10.8                   | 448              |
-| mock_attestation_bytes | verifyAttestation     | 14  | 15,593 | 24.7             | 5,772     | 1.94            | 1.53           | 11.6                   | 465              |
-| mock_attestation_bytes | openAndReadBytes      | 14  | 8,626  | 24.6             | 5,772     | 1.58            | 1.15           | 10.4                   | 454              |
+| mock_attestation       | verifyAttestation     | 14  | 12,177 | 24.7             | 5,772     | 1.79            | 1.38           | 11.3                   | 444              |
+| mock_attestation       | openAndRead           | 13  | 6,639  | 12.3             | 5,772     | 0.84            | 0.65           | 6.0                    | 229              |
+| mock_attestation       | openAndReadPresence   | 13  | 6,609  | 12.3             | 5,772     | 0.84            | 0.66           | 6.0                    | 235              |
+| mock_attestation       | openAndRequireMetric0 | 13  | 6,599  | 12.3             | 5,772     | 0.84            | 0.66           | 6.0                    | 235              |
+| mock_attestation       | openAndBindHost       | 14  | 12,662 | 24.6             | 5,772     | 1.59            | 1.21           | 10.8                   | 448              |
+| mock_attestation_bytes | verifyAttestation     | 14  | 14,123 | 24.7             | 5,772     | 1.78            | 1.43           | 11.5                   | 462              |
+| mock_attestation_bytes | openAndReadBytes      | 14  | 8,608  | 24.6             | 5,772     | 1.57            | 1.16           | 10.4                   | 426              |
 
 How to read it:
 
@@ -133,10 +149,10 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
   window, `present` mask, numeric values and byte slots.
 - [Registry](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain)
   and [registry slot](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#signing-and-collection):
-  the pinned keys, checked positionally; `signatures[i]` is verified against
-  `keys[i]`.
+  the pinned keys, one per slot; each signature names its slot and is
+  verified against `keys[registryIndex]`.
 - [Threshold](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
-  the `N` in N-of-M.
+  the `N` in N-of-M, and the exact number of signatures the contract takes.
 - [Nullifier](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md#on-chain):
   the SHA-256 of the observation identity. Attestors sign it, and it blocks
   replay.
@@ -153,11 +169,17 @@ From the [glossary](https://github.com/txpipe-shop/thoth/blob/main/CONTEXT.md):
   policy.
 - `policyHash` is in the sealed `policyHashes` set (`"Unaccepted policy"`).
   The membership check discloses which accepted policy the claim used.
-- At least `N` of the `M` signatures verify, each against its own registry
-  slot (`"Insufficient valid signatures"`). Empty slots never count, and the
-  registry cannot see `N`: pin at least `N` distinct keys or no claim is ever
+- `getSignatures` supplies exactly `N` signatures, each named by a registry
+  slot. The slots strictly increase (`"Registry slots not increasing"`), so
+  none repeats, are below `M` (`"Registry slot out of range"`) and hold a key
+  (`"Empty registry slot"`), and every signature verifies against its slot's
+  key (`"Insufficient valid signatures"`). One invalid signature fails the
+  proof; it is not skipped. Pin at least `N` distinct keys or no claim is ever
   accepted. `initRegistry` rejects duplicate keys (`"Duplicate registry keys"`)
   and a second call (`"Registry already initialized"`).
+- Which slots signed stays private. The slots are private inputs, the circuit
+  reads every key to select a slot's, and no ledger operation or disclosed
+  value depends on a slot.
 - Every slot whose flag is false carries zero, numeric slots and byte slots
   alike: an absent byte slot is 32 zero bytes (`"Absent slot has nonzero
   value"`). A measured zero is valid with its flag true.
@@ -284,10 +306,14 @@ What the module does not check, and what your app does itself:
   ([ADR 0009](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0009-byte-value-slots-in-the-claim.md)).
   How a source string becomes those 32 bytes is the kind's parse rule, not the
   contract's ([ADR 0010](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0010-encoded-byte-rules.md)).
-- **Registry slots are positional and the keys are sealed.** You assign each
-  attestor its slot and place its signature there; the module never reorders.
-  `keys` is unexported and only `initRegistry` writes it, so the distinctness
-  check cannot be skipped.
+- **The registry checks the N signatures you name.** You send exactly `N`
+  signatures, each with the registry slot your trusted set assigned its
+  attestor, in slot order, and send no dummy for a slot that did not sign. A
+  proof costs `N` signature checks whatever `M` is, and does not reveal which
+  attestors signed
+  ([ADR 0017](https://github.com/txpipe-shop/thoth/blob/main/docs/adr/0017-registry-checks-the-n-named-signatures.md)).
+- **The registry's keys are sealed.** `keys` is unexported and only
+  `initRegistry` writes it, so the distinctness check cannot be skipped.
 
 ## Links
 
