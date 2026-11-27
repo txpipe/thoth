@@ -119,7 +119,7 @@ The measured values of a claim, one per value slot: numbers in the numeric slots
 _Avoid_: Data, payload.
 
 **Byte slot**:
-A value slot carrying a 32-byte string, for facts that are not numbers, such as identifiers (ADR 0009). A parse rule canonicalizes a source's string into the slot, zero-padded: `bytes` keeps its UTF-8 bytes, `hex` and `base64` decode it, and an optional `length` pins the exact byte count. Decoding folds only representations that carry no data, such as hex case; separators and whitespace are data (ADR 0010). The slot is exactly its bytes, and equality is byte equality. In the message and the contract's `Claim` it occupies two 16-byte byte halves (`byteHalves`), which a predicate reassembles in-circuit; the wire layout places them.
+A value slot carrying a 32-byte string, for facts that are not numbers, such as identifiers (ADR 0009). A parse rule canonicalizes a source's string into the slot, zero-padded: `bytes` keeps its UTF-8 bytes, `hex` and `base64` decode it, and an optional `length` pins the exact byte count. Decoding folds only representations that carry no data, such as hex case; separators and whitespace are data (ADR 0010). The slot is exactly its bytes, and equality is byte equality. In the contract's `Claim` and the nullifier's preimage it occupies two 16-byte byte halves (`byteHalves`), which a predicate reassembles in-circuit; the wire layout places them.
 _Avoid_: Blob, string slot.
 
 **Claim proposal**:
@@ -149,11 +149,11 @@ _Avoid_: Condition.
 ### Signing and collection
 
 **Message**:
-The flat list of field values the attestors sign and the contract rebuilds.
+The seven field values the attestors sign and the contract rebuilds: the claim's version, the layout, the nullifier and the holder. Every other claim field reaches it through the nullifier (ADR 0015).
 _Avoid_: Payload, digest.
 
 **Wire layout**:
-The order and encoding of the message's fields. The [`attestation.compact`](packages/contracts/attestation.compact) header and the table in [docs/DESIGN.md](docs/DESIGN.md#wire-order) write it out; `buildMessage` defines it and `claimToMessage` mirrors it.
+The order and encoding of the message's fields and of the nullifier's preimage, the observation identity. The [`attestation.compact`](packages/contracts/attestation.compact) header and the tables in [docs/DESIGN.md](docs/DESIGN.md#wire-order) write it out; `buildMessage` and the contract's `nullifierOf` define it, and `claimToMessage` and `nullifierOf` in `@txpipe/thoth-core/claim` mirror it. Changing the observation identity is a layout change: it changes what attestors sign.
 _Avoid_: Format, serialization.
 
 **Attestation**:
@@ -191,7 +191,7 @@ The N in N-of-M: how many registry keys must sign the same message.
 _Avoid_: Quorum, majority.
 
 **Nullifier**:
-The hash of the observation identity. The contract stores it so the same observation is not accepted twice. It is public. In zkFetch it hashes a secret salt, so a guess at a claim's values cannot be confirmed by recomputing it; a chain-event kind's salt is public, so the nullifier reveals which event the claim attests (ADR 0012, ADR 0014).
+The SHA-256 of the observation identity. The attestors sign it in the message, and the contract stores it so the same observation is not accepted twice. It is public. In zkFetch it hashes a secret salt, so a guess at a claim's values cannot be confirmed by recomputing it; a chain-event kind's salt is public, so the nullifier reveals which event the claim attests (ADR 0012, ADR 0014).
 _Avoid_: Replay marker, nonce.
 
 **Claims vault**:
