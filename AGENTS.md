@@ -151,9 +151,9 @@ would be empty):
    for.
 2. The status line, identical in every README and the root:
    > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
-3. `## Install`: how to install or use it today. A package with an npm name
-   gives it (`@txpipe/thoth-<name>`), plus one line saying whether it is
-   published yet; a private package skips both.
+3. `## Install`: how to install it. A package with an npm name gives the
+   `npm install @txpipe/thoth-<name>` command and its peer dependencies; a
+   private package says how to use it from the repo instead.
 4. `## Usage`: the shortest working example of the main task. For `core`,
    `attestor` and `client` the reader is a kind author, so the example is from
    their side.

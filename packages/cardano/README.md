@@ -6,15 +6,11 @@ The cardano@1 [chain-event kind](https://github.com/txpipe/thoth/blob/main/CONTE
 
 ## Install
 
-The package is not on npm. Build it from a checkout of this repo and install it by path:
-
 ```bash
-git clone https://github.com/txpipe/thoth && cd thoth
-npm install && npm run build
-cd /path/to/your-app && npm install /path/to/thoth/packages/cardano
+npm install @txpipe/thoth-cardano zod
 ```
 
-Once it is published, it installs as `@txpipe/thoth-cardano`. It needs `zod@^4.6.7` as a peer dependency.
+It needs `zod@^4.6.7` as a peer dependency.
 
 ## Usage
 
