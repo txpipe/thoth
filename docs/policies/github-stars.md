@@ -21,7 +21,7 @@ address.
 ## Policy
 
 ```ts
-import { zkFetchBodyHashOf, type ZkFetchPolicy } from '@thoth/zk-tls';
+import { zkFetchBodyHashOf, type ZkFetchPolicy } from '@txpipe/thoth-zk-tls';
 
 const SENTINEL = '{"thoth":"ignored"}';
 

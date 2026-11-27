@@ -6,9 +6,9 @@ attested by the `cardano@1` chain-event kind.
 ## Source
 
 The attestor reads the event from its own Cardano data node, a Dolos service.
-`createDolosSource` from `@thoth/cardano/dolos` reads a UTxO-RPC endpoint, and
-`readRawEvent` reads the transaction, its block and the node's tip in one call
-([package README](../../packages/cardano/README.md)).
+`createDolosSource` from `@txpipe/thoth-cardano/dolos` connects to a UTxO-RPC
+endpoint, and `readOutputObservation` reads the output, its block and the
+node's tip from it ([package README](../../packages/cardano/README.md)).
 The client reads the event once to check its own read against the locator and
 the policy before it contacts an attestor.
 
@@ -30,7 +30,7 @@ claim comes from the attestor's own read.
 ## Policy
 
 ```ts
-import { cardanoPolicyHashOf, type CardanoPolicy } from '@thoth/cardano';
+import { cardanoPolicyHashOf, type CardanoPolicy } from '@txpipe/thoth-cardano';
 
 export const policy: CardanoPolicy = {
   kind: 'output',

@@ -19,7 +19,7 @@ needs an OAuth token for the athlete.
 ## Policy
 
 ```ts
-import type { ZkFetchPolicy } from '@thoth/zk-tls';
+import type { ZkFetchPolicy } from '@txpipe/thoth-zk-tls';
 
 export const policy: ZkFetchPolicy = {
   allowedHosts: ['www.strava.com'],
