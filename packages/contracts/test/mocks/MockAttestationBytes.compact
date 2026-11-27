@@ -1,11 +1,11 @@
-// Test mock: the modules at V=3, B=2 (one byte value), 2-of-3, with the pure
+// Test mock: the modules at V=3, W=1 (one byte slot), 2-of-3, with the pure
 // circuits and byte-value predicates the simulator tests read.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           V=3 values  B=2 byte halves  N=2 threshold  M=3 signatures
-import "../../attestation"<3, 2, 2, 3> prefix B_;
+//           V=3 values  W=1 byte slot  N=2 threshold  M=3 signatures
+import "../../attestation"<3, 1, 2, 3> prefix B_;
 
 import "../../attestor_registry"<3> prefix R_;
 
@@ -37,11 +37,10 @@ export pure circuit keysDistinct(ks: Vector<3, JubjubPoint>): Boolean {
   return R_keysDistinct(ks);
 }
 
-// App-predicate demo: reassemble byte value 0 from its two halves and compare
-// it to a caller-supplied Bytes<32>.
+// App-predicate demo: compare byte value 0 to a caller-supplied Bytes<32>.
 export circuit openAndReadBytes(nullifier: Bytes<32>, expected: Bytes<32>): [] {
   const c = B_openClaim(nullifier);
-  assert(Bytes[...c.byteHalves[0], ...c.byteHalves[1]] == expected, "byteValue[0] mismatch");
+  assert(c.byteValues[0] == expected, "byteValue[0] mismatch");
 }
 
 witness seedAppId(): Bytes<32>;

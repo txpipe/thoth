@@ -1,11 +1,11 @@
-// Test mock: the modules at V=0, B=18 (nine byte values), 2-of-3, whose claims
-// can serialize to the same identity bytes as a V=34, B=0 layout's.
+// Test mock: the modules at V=0, W=3 (three byte slots), 2-of-3, whose claims
+// can serialize to the same identity bytes as a V=11, W=0 layout's.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           V=0 values  B=18 byte halves  N=2 threshold  M=3 signatures
-import "../../attestation"<0, 18, 2, 3> prefix L_;
+//           V=0 values  W=3 byte slots  N=2 threshold  M=3 signatures
+import "../../attestation"<0, 3, 2, 3> prefix L_;
 
 import "../../attestor_registry"<3> prefix R_;
 

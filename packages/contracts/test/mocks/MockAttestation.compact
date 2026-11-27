@@ -1,10 +1,10 @@
-// Test mock: the modules specialized to V=3, B=0, 2-of-3, with the pure
+// Test mock: the modules specialized to V=3, W=0, 2-of-3, with the pure
 // circuits, types and ledgers the simulator tests read.
 pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-//           V=3 values  B=0 byte halves  N=2 threshold  M=3 signatures
+//           V=3 values  W=0 byte slots  N=2 threshold  M=3 signatures
 import "../../attestation"<3, 0, 2, 3> prefix A_;
 
 import "../../attestor_registry"<3> prefix R_;

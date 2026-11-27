@@ -13,8 +13,8 @@ import { describe, expect, it } from 'vitest';
 
 const bytes32 = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
 
-// A value whose bytes differ across the 16-byte half boundary, so a swapped or
-// reversed half cannot pass the assertions below.
+// A value with a different byte at every position, so a reordered value
+// cannot pass the assertions below.
 const fullSpan = (): Uint8Array => Uint8Array.from({ length: 32 }, (_, i) => i);
 
 // Little-endian value of a byte vector, as Compact's `convertBytesToUint` reads
@@ -171,7 +171,7 @@ describe('claimToMessage', () => {
     expect(claimToMessage(claim)).toEqual([
       1n,
       3n, // V
-      2n, // B, two halves per byte slot
+      1n, // W, the byte-slot count
       BigInt(nullifier[31] ?? -1),
       le(nullifier.slice(0, 31)),
       31n, // holder byte 31
@@ -179,14 +179,14 @@ describe('claimToMessage', () => {
     ]);
   });
 
-  it('signs the byte-half count of a layout with two byte slots', () => {
+  it('signs the byte-slot count of a layout with two byte slots', () => {
     const claim = claimSchema(2, 2).parse({
       ...numericBase,
       present: [false, true, true, false],
       values: [0n, 0n],
       byteValues: [fullSpan(), new Uint8Array(32)],
     });
-    expect(claimToMessage(claim).slice(0, 3)).toEqual([1n, 2n, 4n]);
+    expect(claimToMessage(claim).slice(0, 3)).toEqual([1n, 2n, 2n]);
   });
 
   it.each([256n, -1n])('rejects version %s, outside Uint<8>', (version) => {
@@ -208,7 +208,7 @@ describe('nullifierOf', () => {
   it('matches the circuit nullifier of a fixed claim', () => {
     // From the compiled bytes mock's `nullifierOf` over this claim.
     expect(Buffer.from(nullifierOf(claimSchema(3, 1).parse(byteBase))).toString('hex')).toBe(
-      'ccc113c2157e731d3effe53b1dc58b7eca35c04e83ccd9d4a66cb0c72133d6a3',
+      '32075c25495f4acc3b5df19ba958d9c171fbaff68cb70e069d1a60d87eda2960',
     );
   });
 
@@ -251,6 +251,19 @@ describe('nullifierOf', () => {
 });
 
 describe('toContractClaim', () => {
+  it('carries each byte value whole, with one flag per byte slot', () => {
+    const claim = claimSchema(2, 2).parse({
+      ...numericBase,
+      present: [true, false, false, true],
+      values: [7n, 0n],
+      byteValues: [new Uint8Array(32), fullSpan()],
+    });
+    const contract = toContractClaim(claim);
+    expect(contract.present).toEqual([true, false]);
+    expect(contract.bytePresent).toEqual([false, true]);
+    expect(contract.byteValues).toEqual([new Uint8Array(32), fullSpan()]);
+  });
+
   it('rejects a mask without one flag per slot', () => {
     const claim = claimSchema().parse(byteBase);
     expect(() => toContractClaim({ ...claim, present: [true] })).toThrow(

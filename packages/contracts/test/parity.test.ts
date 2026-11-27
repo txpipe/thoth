@@ -1,8 +1,8 @@
 // Parity between the off-chain encoders in `@txpipe/thoth-core/claim`
 // (`claimToMessage`, `nullifierOf`, `toContractClaim`) and the contract's own
 // `buildMessage` and `nullifierOf` (`pureCircuits.message`, `pureCircuits.nullifierOf`),
-// over seeded random claims for both mocks. A failure names its seed: rerun with
-// `THOTH_SEED=<seed>` to replay it.
+// over seeded random claims for the numeric, bytes and layout mocks. A failure
+// names its seed: rerun with `THOTH_SEED=<seed>` to replay it.
 //
 // The end-to-end check signs `claimToMessage`'s output and submits it to the
 // simulator: the contract re-derives the message in-circuit, so it accepts only
@@ -16,6 +16,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import { pureCircuits } from '../artifacts/mock_attestation/contract/index.js';
 import { pureCircuits as bytesPureCircuits } from '../artifacts/mock_attestation_bytes/contract/index.js';
+import { pureCircuits as layoutPureCircuits } from '../artifacts/mock_attestation_layout/contract/index.js';
 import {
   DEFAULT_HOLDER_SECRET,
   DUMMY_SIGNATURE,
@@ -40,6 +41,7 @@ type Circuits = {
 const mocks: { name: string; v: number; w: number; circuits: Circuits }[] = [
   { name: 'numeric mock (V = 3, W = 0)', v: 3, w: 0, circuits: pureCircuits },
   { name: 'bytes mock (V = 3, W = 1)', v: 3, w: 1, circuits: bytesPureCircuits },
+  { name: 'layout mock (V = 0, W = 3)', v: 0, w: 3, circuits: layoutPureCircuits },
 ];
 
 describe.each(mocks)(`off-chain parity over random claims, $name (seed ${SEED})`, (mock) => {
