@@ -25,8 +25,8 @@ import {
 import { createPrivateState } from '../test/helpers/private-state.js';
 import { signMessage } from '../test/helpers/sign.js';
 import { MockAttestationBytesSim, MockAttestationSim } from '../test/helpers/sim.js';
+import { benchOptions } from './options.js';
 import {
-  type DockerOptions,
   externalProofServer,
   PROOF_SERVER_IMAGE,
   type ProofServer,
@@ -38,19 +38,14 @@ const ARTIFACTS = join(import.meta.dirname, '..', 'artifacts');
 const MOCKS = ['mock_attestation', 'mock_attestation_bytes'] as const;
 type Mock = (typeof MOCKS)[number];
 
-// The compiler the keys come from; its `zkir-v3` reports each circuit's k and rows.
-const COMPILER_VERSION = '0.36.1';
-
-// Set PROOF_SERVER_URL to prove on a server that is already running. The benchmark then cannot
-// read the server's CPU time or memory, and reports both as not measured.
-const EXTERNAL_URL = process.env.PROOF_SERVER_URL;
-const DOCKER: DockerOptions = {
-  docker: (process.env.BENCH_DOCKER ?? 'docker').split(/\s+/).filter(Boolean),
-  // A named volume by default, so the server downloads its public parameters once.
-  params: process.env.BENCH_PARAMS ?? 'thoth-bench-zk-params',
-};
-const WARM_RUNS = Number(process.env.BENCH_RUNS ?? 3);
-const OUT = process.env.BENCH_OUT ?? join(import.meta.dirname, 'results', 'latest.json');
+// Read once, before any circuit runs or any server starts, so a bad option fails at once.
+// With PROOF_SERVER_URL set, the benchmark proves on that server and cannot read its CPU time
+// or memory, so it reports both as not measured.
+const OPTIONS = benchOptions(process.env, {
+  cwd: process.cwd(),
+  home: homedir(),
+  defaultOut: join(import.meta.dirname, 'results', 'latest.json'),
+});
 
 type Captured = { mock: Mock; circuit: string; proofData: ProofData };
 
@@ -147,29 +142,23 @@ const preimageOf = ({ circuit, proofData }: Captured): Uint8Array =>
     circuit,
   );
 
-const zkirBin = (): string => {
-  if (process.env.ZKIR_BIN) {
-    return process.env.ZKIR_BIN;
-  }
-  // The Compact CLI installs each compiler under a directory named for the host platform.
-  const versions = join(homedir(), '.compact', 'versions', COMPILER_VERSION);
-  const [platform] = existsSync(versions) ? readdirSync(versions) : [];
-  if (!platform) {
-    throw new Error(`no compiler ${COMPILER_VERSION} under ${versions}; set ZKIR_BIN`);
-  }
-  return join(versions, platform, 'zkir-v3');
-};
-
-/** k and rows as `zkir-v3 mock-compile` reports them, without a proof server. */
+/**
+ * k and rows as `zkir-v3 mock-compile` reports them, without a proof server.
+ *
+ * @throws {Error} when `zkir-v3` fails or prints no k and rows.
+ */
 const circuitSize = (zkir: string): { k: number; rows: number } => {
   // zkir-v3 prints its report on stderr.
-  const { stdout, stderr, error } = spawnSync(zkirBin(), ['mock-compile', zkir], {
+  const { stdout, stderr, error, status } = spawnSync(OPTIONS.zkir, ['mock-compile', zkir], {
     encoding: 'utf8',
   });
   if (error) {
     throw error;
   }
   const output = `${stdout}${stderr}`;
+  if (status !== 0) {
+    throw new Error(`zkir-v3 mock-compile exited with ${status} for ${zkir}: ${output}`);
+  }
   const match = /k=(\d+), rows=(\d+)/.exec(output);
   if (!match) {
     throw new Error(`zkir-v3 mock-compile gave no k and rows for ${zkir}: ${output}`);
@@ -191,7 +180,7 @@ const request = async (server: ProofServer, path: string, body?: Uint8Array) => 
 const PROOF_TAG = new TextEncoder().encode('midnight:proof-versioned:');
 
 /**
- * Prove one circuit once, then `WARM_RUNS` more times with the same key.
+ * Prove one circuit once, then `warmRuns` more times with the same key.
  *
  * The server verifies each proof against the verifier key in the request before it answers, and
  * answers `Invalid proof` when it does not verify, so each proof that comes back is verified.
@@ -211,7 +200,7 @@ const measure = async (server: ProofServer, item: Captured): Promise<CircuitMeas
   const payload = createProvingPayload(preimage, undefined, material);
   const proofs = [];
   let proofBytes = 0;
-  for (let i = 0; i <= WARM_RUNS; i++) {
+  for (let i = 0; i <= OPTIONS.warmRuns; i++) {
     const before = server.usage();
     const start = performance.now();
     const proof = await request(server, '/prove', payload);
@@ -241,6 +230,7 @@ const measure = async (server: ProofServer, item: Captured): Promise<CircuitMeas
     first,
     warm,
     peakMemoryBytes: server.usage()?.peakMemoryBytes ?? null,
+    freshServer: server.started,
   };
 };
 
@@ -280,9 +270,9 @@ const requireWrongKeyRefused = async (server: ProofServer, items: Captured[]): P
 
 /** A fresh server per use when the benchmark runs its own, so each circuit is measured alone. */
 const openServer = (): Promise<ProofServer> =>
-  EXTERNAL_URL
-    ? Promise.resolve(externalProofServer(EXTERNAL_URL))
-    : startProofServer(`thoth-bench-${process.pid}`, DOCKER);
+  OPTIONS.externalUrl
+    ? Promise.resolve(externalProofServer(OPTIONS.externalUrl))
+    : startProofServer(`thoth-bench-${process.pid}`, OPTIONS.docker);
 
 const withServer = async <T>(use: (server: ProofServer) => Promise<T>): Promise<T> => {
   const server = await openServer();
@@ -331,16 +321,17 @@ it('proves and verifies every mock circuit', { timeout: 3_600_000 }, async () =>
 
   const cpu = cpus();
   const machine = `${cpu[0]?.model.trim() ?? 'unknown CPU'}, ${cpu.length} threads, ${Math.round(totalmem() / 2 ** 30)} GiB`;
-  const server = EXTERNAL_URL
-    ? `proof server ${proofServer} at ${EXTERNAL_URL}, not started by the benchmark, so CPU time and peak memory are not measured`
+  const server = OPTIONS.externalUrl
+    ? `proof server ${proofServer} at ${OPTIONS.externalUrl}, not started by the benchmark, so CPU time and peak memory are not measured`
     : `proof server ${proofServer} (${PROOF_SERVER_IMAGE}), a fresh container per circuit`;
-  const report = { machine, server, warmRuns: WARM_RUNS, controlRefused, rows, failures };
-  mkdirSync(dirname(OUT), { recursive: true });
-  writeFileSync(OUT, `${JSON.stringify(report, null, 2)}\n`);
+  const { warmRuns, out } = OPTIONS;
+  const report = { machine, server, warmRuns, controlRefused, rows, failures };
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`);
   console.log(
     [
       '',
-      `${machine}; ${server}; ${WARM_RUNS} warm proof${WARM_RUNS === 1 ? '' : 's'} per circuit.`,
+      `${machine}; ${server}; ${warmRuns} warm proof${warmRuns === 1 ? '' : 's'} per circuit.`,
       controlRefused
         ? 'The proof server verified every proof against its verifier key, and refused a proof under the wrong verifier key.'
         : 'The proof server did not refuse a proof under the wrong verifier key, so no proof here counts as verified.',

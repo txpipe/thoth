@@ -18,6 +18,7 @@ const measured = (overrides: Partial<CircuitMeasurement> = {}): CircuitMeasureme
     { ms: 1_250, cpuSeconds: 10.6 },
   ],
   peakMemoryBytes: 3_162_000_000,
+  freshServer: false,
   ...overrides,
 });
 
@@ -29,6 +30,27 @@ describe('summarize', () => {
     expect(row.firstMs).toBe(1_600);
   });
 
+  it('takes the mean of the two middle warm proofs when there is an even number', () => {
+    const row = summarize(
+      measured({
+        warm: [
+          { ms: 1_300, cpuSeconds: 11 },
+          { ms: 1_100, cpuSeconds: 10 },
+          { ms: 1_200, cpuSeconds: 10.4 },
+          { ms: 1_400, cpuSeconds: 12 },
+        ],
+      }),
+    );
+    expect(row.warmMedianMs).toBe(1_250);
+    expect(row.warmCpuSeconds).toBe(10.7);
+  });
+
+  it('refuses a circuit with no warm proof', () => {
+    expect(() => summarize(measured({ warm: [] }))).toThrow(
+      'mock_attestation.openAndRead: no warm proof to summarize',
+    );
+  });
+
   // Parsing a proving key adds about a third to a proof, so a first proof as fast as the warm
   // ones ran on a server that had already parsed the key.
   it('flags a first proof that was not slower than the warm ones as cached', () => {
@@ -36,6 +58,11 @@ describe('summarize', () => {
     expect(summarize(measured({ first: { ms: 1_300, cpuSeconds: 10.9 } })).firstWasCached).toBe(
       true,
     );
+  });
+
+  it('never flags a first proof on a fresh server, which has no key cached', () => {
+    const fast = measured({ freshServer: true, first: { ms: 1_300, cpuSeconds: 10.9 } });
+    expect(summarize(fast).firstWasCached).toBe(false);
   });
 });
 

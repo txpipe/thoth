@@ -19,10 +19,12 @@ export type CircuitMeasurement = {
   warm: ProofRun[];
   /** The server's peak memory while it proved this circuit, or `null` when not measured. */
   peakMemoryBytes: number | null;
+  /** True when the benchmark started the server for this circuit, so no key was cached. */
+  freshServer: boolean;
 };
 
 /** One circuit's line of the report. */
-export type CircuitRow = Omit<CircuitMeasurement, 'first' | 'warm'> & {
+export type CircuitRow = Omit<CircuitMeasurement, 'first' | 'warm' | 'freshServer'> & {
   firstMs: number;
   warmMs: number[];
   warmMedianMs: number;
@@ -50,7 +52,12 @@ const median = (values: readonly number[]): number => {
  *
  * @throws {Error} when there is no warm proof to take a median of.
  */
-export const summarize = ({ first, warm, ...sizes }: CircuitMeasurement): CircuitRow => {
+export const summarize = ({
+  first,
+  warm,
+  freshServer,
+  ...sizes
+}: CircuitMeasurement): CircuitRow => {
   if (warm.length === 0) {
     throw new Error(`${sizes.mock}.${sizes.circuit}: no warm proof to summarize`);
   }
@@ -62,7 +69,8 @@ export const summarize = ({ first, warm, ...sizes }: CircuitMeasurement): Circui
     warmMs: warm.map((run) => run.ms),
     warmMedianMs,
     // Parsing a proving key adds about a third to a proof at every k measured (14, 15 and 17).
-    firstWasCached: first.ms < warmMedianMs * CACHED_MARGIN,
+    // A server started for this circuit has parsed no key, whatever the timing says.
+    firstWasCached: !freshServer && first.ms < warmMedianMs * CACHED_MARGIN,
     warmCpuSeconds: cpu.every((s) => s !== null) ? median(cpu) : null,
   };
 };
