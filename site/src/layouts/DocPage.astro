@@ -56,6 +56,8 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
     <title>{pageTitle}</title>
     {description && <meta name="description" content={description} />}
     {canonical && <link rel="canonical" href={canonical} />}
+    <link rel="sitemap" type="application/xml" href={withBase('/sitemap.xml', base)} />
+
     <meta property="og:site_name" content="Thoth" />
     <meta property="og:type" content={currentId === 'README' ? 'website' : 'article'} />
     <meta property="og:title" content={pageTitle} />
