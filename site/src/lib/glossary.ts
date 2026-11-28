@@ -13,6 +13,8 @@ type MarkdownTree = ReturnType<typeof fromMarkdown>;
 type Paragraph = Extract<MarkdownTree['children'][number], { type: 'paragraph' }>;
 
 export interface Term {
+  /** The term's name as the glossary writes it. */
+  name: string;
   /** The id the term's paragraph carries on the site. */
   id: string;
   paragraph: Paragraph;
@@ -39,7 +41,7 @@ export function termsOf(tree: MarkdownTree, headingSlugs: ReadonlySet<string>): 
     const text = nodeToString(name);
     const base = slug(text);
     const id = headingSlugs.has(base) ? `term-${base}` : base;
-    terms.set(termKey(text), { id, paragraph });
+    terms.set(termKey(text), { name: text, id, paragraph });
   });
   return terms;
 }

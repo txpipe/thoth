@@ -1,9 +1,21 @@
 ---
 // Site search: a header button and a modal dialog over the Pagefind index the
 // build writes to dist/pagefind. The index loads on first open.
+import { getDocs, suggestionWords } from '../lib/collection';
+import { routeFor, withBase } from '../lib/docs';
+import { GLOSSARY } from '../lib/glossary';
+
+const base = import.meta.env.BASE_URL;
+const words = suggestionWords(await getDocs());
 ---
 
-<button class="search-button" type="button" data-open-search aria-haspopup="dialog">
+<button
+  class="search-button"
+  type="button"
+  data-open-search
+  aria-haspopup="dialog"
+  aria-label="Search"
+>
   <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
     <circle cx="7" cy="7" r="4.75" fill="none" stroke="currentColor" stroke-width="1.5"></circle>
     <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
@@ -13,9 +25,8 @@
   <kbd class="search-button-key" aria-hidden="true">/</kbd>
 </button>
 
-<dialog class="search-dialog" aria-labelledby="search-title">
+<dialog class="search-dialog" aria-label="Search">
   <form class="search-form" method="dialog" role="search">
-    <h2 class="visually-hidden" id="search-title">Search the docs</h2>
     <label class="visually-hidden" for="search-input">Search the docs</label>
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
       <circle cx="7" cy="7" r="4.75" fill="none" stroke="currentColor" stroke-width="1.5"></circle>
@@ -31,15 +42,24 @@
       spellcheck="false"
       aria-describedby="search-status"
     />
+    <!-- A keyboard reads "Esc"; a touch screen has no such key and reads "Close". -->
     <button class="search-close" type="button" data-close-search aria-label="Close search (Esc)">
-      Esc
+      <span class="search-close-key">Esc</span>
+      <span class="search-close-text">Close</span>
     </button>
   </form>
   <p class="search-status" id="search-status" role="status"></p>
+  <p class="search-empty" hidden>
+    <button class="search-suggest" type="button" hidden></button>
+    <a href={withBase(routeFor(GLOSSARY), base)}>Look a term up in the glossary</a>
+  </p>
   <ol class="search-results"></ol>
 </dialog>
+<script is:inline type="application/json" id="search-words" set:html={JSON.stringify(words)} />
 
 <script>
+  import { correct, wordsOf } from '../lib/fuzzy';
+
   interface SubResult {
     title: string;
     url: string;
@@ -62,10 +82,22 @@
   const input = document.querySelector<HTMLInputElement>('.search-input');
   const status = document.getElementById('search-status');
   const list = document.querySelector<HTMLOListElement>('.search-results');
+  const empty = document.querySelector<HTMLElement>('.search-empty');
+  const suggest = document.querySelector<HTMLButtonElement>('.search-suggest');
+  const vocabulary: string[] = JSON.parse(
+    document.getElementById('search-words')?.textContent ?? '[]',
+  );
   const base = import.meta.env.BASE_URL;
+  // The pages a query lists before the reader asks for the rest.
+  const FIRST = 8;
   let pagefind: Promise<Pagefind | null> | undefined;
+  // The query the list shows results for; while the field holds another, the
+  // list is stale.
+  let shown: string | undefined;
+  let found: ResultData[] = [];
+  // Enter arrived while the list was stale: follow the top result once it lands.
+  let wanted = false;
 
-  // The index exists only in a built site; `astro dev` says so instead of failing.
   const load = () => {
     pagefind ??= import(/* @vite-ignore */ `${base.replace(/\/?$/, '/')}pagefind/pagefind.js`)
       .then(async (module: Pagefind) => {
@@ -97,38 +129,38 @@
     return anchor;
   };
 
-  // Pagefind ranks pages that only share a stem or a prefix with the query.
-  // A page counts as a match only when its excerpt or a section's marks a word.
-  const marked = (page: ResultData) =>
-    page.excerpt.includes('<mark>') ||
-    (page.sub_results ?? []).some((sub) => sub.excerpt.includes('<mark>'));
+  // Pagefind falls back to pages that share only a letter or two with the
+  // query, so "xyz123" marks an "X". A marked word counts when it opens like a
+  // query word: on four letters, or on all but the last letter of a shorter
+  // query word, so "keys" still finds "key".
+  const opensLike = (mark: string, word: string) => {
+    const letters = Math.min(word.length, 4, Math.max(word.length - 1, 2));
+    return mark.slice(0, letters) === word.slice(0, letters);
+  };
+  const marks = (excerpt: string, query: string[]) =>
+    Array.from(excerpt.matchAll(/<mark>([^<]*)<\/mark>/g), (match) => match[1] ?? '')
+      .flatMap(wordsOf)
+      .some((mark) => query.some((word) => opensLike(mark, word)));
+  const matches = (page: ResultData, query: string[]) =>
+    marks(page.excerpt, query) ||
+    (page.sub_results ?? []).some((section) => marks(section.excerpt, query));
 
-  const run = async () => {
-    if (!input || !status || !list) return;
-    const term = input.value.trim();
-    if (!term) {
-      list.replaceChildren();
-      status.textContent = '';
-      return;
-    }
-    const engine = await load();
-    if (!engine) {
-      status.textContent = 'Search works on the built site: run npm run build, then preview it.';
-      return;
-    }
-    const search = await engine.debouncedSearch(term);
-    if (!search || input.value.trim() !== term) return;
-    const loaded = await Promise.all(search.results.slice(0, 24).map((result) => result.data()));
-    if (input.value.trim() !== term) return;
-    const matches = loaded.filter(marked);
-    const pages = matches.slice(0, 8);
+  const render = (term: string, all = false) => {
+    if (!status || !list || !empty || !suggest) return;
+    const query = wordsOf(term);
+    const pages = all ? found : found.slice(0, FIRST);
+    list.removeAttribute('aria-busy');
     list.scrollTop = 0;
     list.replaceChildren(
       ...pages.map((page) => {
         const item = document.createElement('li');
         const title = page.meta.title ?? page.url;
         item.append(link(page.url, title, page.excerpt));
-        const sections = (page.sub_results ?? []).filter((sub) => sub.url !== page.url).slice(0, 3);
+        // Pagefind lists the page's opening, under its title, as a section too.
+        const sections = (page.sub_results ?? [])
+          .filter((section) => section.url !== page.url && section.title !== title)
+          .filter((section) => marks(section.excerpt, query))
+          .slice(0, 3);
         if (sections.length > 0) {
           const nested = document.createElement('ul');
           for (const section of sections) {
@@ -141,11 +173,84 @@
         return item;
       }),
     );
-    const count = matches.length;
-    status.textContent =
-      count === 0
-        ? `No results for “${term}”.`
-        : `${count} ${count === 1 ? 'page matches' : 'pages match'} “${term}”${count > 8 ? '; showing the top 8' : ''}.`;
+    const count = found.length;
+    if (count > pages.length) {
+      const item = document.createElement('li');
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'search-more';
+      more.textContent = `Show all ${count} pages`;
+      more.addEventListener('click', () => {
+        render(term, true);
+        // The button is gone; carry on from the first page it revealed.
+        list.querySelectorAll<HTMLAnchorElement>(':scope > li > a')[FIRST]?.focus();
+      });
+      item.append(more);
+      list.append(item);
+    }
+    const fixed = count === 0 ? correct(term, vocabulary) : '';
+    suggest.hidden = !fixed;
+    suggest.dataset.query = fixed;
+    suggest.textContent = `Search for “${fixed}” instead`;
+    empty.hidden = count > 0;
+    if (count === 0) status.textContent = `No results for “${term}”.`;
+    else {
+      const pagesMatch = count === 1 ? 'page matches' : 'pages match';
+      const top = count > pages.length ? `; showing the top ${FIRST}` : '';
+      status.textContent = `${count} ${pagesMatch} “${term}”${top}.`;
+    }
+  };
+
+  // Enter follows the top result; with none, it takes the suggested query.
+  const follow = () => {
+    const top = list?.querySelector('a');
+    if (top) top.click();
+    else if (suggest && !suggest.hidden) suggest.click();
+  };
+
+  const run = async () => {
+    if (!input || !status || !list || !empty) return;
+    const term = input.value.trim();
+    if (!term) {
+      shown = '';
+      found = [];
+      list.replaceChildren();
+      list.removeAttribute('aria-busy');
+      empty.hidden = true;
+      status.textContent = '';
+      return;
+    }
+    if (term !== shown) {
+      list.setAttribute('aria-busy', 'true');
+      empty.hidden = true;
+      if (status.textContent !== 'Searching…') status.textContent = 'Searching…';
+    }
+    const engine = await load();
+    if (!engine) {
+      // Forget the failed load, so the next keystroke tries again.
+      pagefind = undefined;
+      shown = undefined;
+      found = [];
+      list.replaceChildren();
+      list.removeAttribute('aria-busy');
+      // The index exists only in a built site; `astro dev` has none.
+      status.textContent = import.meta.env.DEV
+        ? 'Search works on the built site: run npm run build, then preview it.'
+        : 'Search couldn’t load. Check your connection, then type to try again.';
+      return;
+    }
+    const search = await engine.debouncedSearch(term);
+    if (!search || input.value.trim() !== term) return;
+    const loaded = await Promise.all(search.results.slice(0, 24).map((result) => result.data()));
+    if (input.value.trim() !== term) return;
+    const query = wordsOf(term);
+    found = loaded.filter((page) => matches(page, query));
+    shown = term;
+    render(term);
+    if (wanted) {
+      wanted = false;
+      follow();
+    }
   };
 
   const open = (query = '') => {
@@ -157,9 +262,13 @@
     void run();
   };
 
-  input?.addEventListener('input', () => void run());
-  // Enter opens the top result. Escape closes the dialog in one press; a
-  // search field would otherwise spend the first press clearing itself.
+  input?.addEventListener('input', () => {
+    wanted = false;
+    void run();
+  });
+  // Escape closes the dialog in one press; a search field would otherwise
+  // spend the first press clearing itself. Enter waits for a stale list to
+  // catch up, so it never opens the previous query's result.
   input?.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -167,14 +276,27 @@
     }
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    list?.querySelector('a')?.click();
+    if (shown === input.value.trim()) follow();
+    else wanted = true;
   });
-  // The arrow keys move between the field and the results, in reading order.
+  dialog?.addEventListener('close', () => {
+    wanted = false;
+  });
+  suggest?.addEventListener('click', () => {
+    if (!input) return;
+    input.value = suggest.dataset.query ?? '';
+    input.focus();
+    void run();
+  });
+  // The arrow keys move between the field and the controls under it, in reading order.
   dialog?.addEventListener('keydown', (event) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    if (!input || !list) return;
-    const stops = [input, ...list.querySelectorAll<HTMLAnchorElement>('a')];
-    const at = stops.indexOf(document.activeElement as HTMLInputElement);
+    if (!input) return;
+    const stops = [
+      input,
+      ...dialog.querySelectorAll<HTMLElement>(':is(.search-empty, .search-results) :is(a, button)'),
+    ].filter((stop) => stop.offsetParent !== null);
+    const at = stops.indexOf(document.activeElement as HTMLElement);
     if (at < 0 || stops.length < 2) return;
     event.preventDefault();
     const next = event.key === 'ArrowDown' ? Math.min(at + 1, stops.length - 1) : Math.max(at - 1, 0);
@@ -184,9 +306,9 @@
   dialog?.addEventListener('click', (event) => {
     if (event.target === dialog) dialog.close();
   });
-  // A result on this page only scrolls; close the dialog so it shows.
-  list?.addEventListener('click', (event) => {
-    if ((event.target as Element).closest('a')) dialog?.close();
+  // A link to this page only scrolls; close the dialog so it shows.
+  dialog?.addEventListener('click', (event) => {
+    if ((event.target as Element).closest('a')) dialog.close();
   });
   document.addEventListener('click', (event) => {
     const trigger = (event.target as Element).closest<HTMLElement>('[data-open-search]');

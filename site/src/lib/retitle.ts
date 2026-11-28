@@ -31,6 +31,27 @@ function unbroken(text: string): PhrasingContent[] {
     );
 }
 
+// A package's title, such as "@txpipe/thoth-zk-tls dApp integration", is wider
+// than the column at display size: it may break after the npm scope, and never
+// inside the package's name.
+const SCOPED = /^(@[\w-]+\/)(\S+)([\s\S]*)$/;
+
+function scoped(text: string): PhrasingContent[] | undefined {
+  const match = SCOPED.exec(text);
+  if (!match) return undefined;
+  const [, scope = '', name = '', rest = ''] = match;
+  return [
+    { type: 'text', value: scope },
+    { type: 'emphasis', data: { hName: 'wbr' }, children: [] },
+    {
+      type: 'emphasis',
+      data: { hName: 'span', hProperties: { className: ['nowrap'] } },
+      children: [{ type: 'text', value: name }],
+    },
+    ...(rest ? [{ type: 'text', value: rest } as const] : []),
+  ];
+}
+
 export function retitle(options: Options) {
   return (tree: Root, file: { path?: string }): void => {
     if (!file.path) return;
@@ -43,8 +64,14 @@ export function retitle(options: Options) {
     }
     const id = path.relative(options.repoRoot, file.path).split(path.sep).join('/');
     const heading = headingFor(id.replace(/\.md$/, ''));
-    if (!heading) return;
     const h1 = tree.children.find((node) => node.type === 'heading' && node.depth === 1);
-    if (h1?.type === 'heading') h1.children = [{ type: 'text', value: heading }];
+    if (h1?.type !== 'heading') return;
+    if (heading) {
+      h1.children = [{ type: 'text', value: heading }];
+      return;
+    }
+    const [only, ...others] = h1.children;
+    const parts = only?.type === 'text' && others.length === 0 ? scoped(only.value) : undefined;
+    if (parts) h1.children = parts;
   };
 }

@@ -137,6 +137,8 @@
         activationBkgColor: 'rgba(255, 23, 159, 0.18)',
         activationBorderColor: token('--pink-400'),
       },
+      // A note longer than the lanes it spans wraps inside its box.
+      sequence: { wrap: true },
       securityLevel: 'strict',
     });
 
@@ -189,7 +191,8 @@
         svg.replaceWith(graphic);
         graphic.append(svg);
       }
-      watchOverflow(container, container, `Scrollable ${label.toLowerCase()}`);
+      // Lowercase only the label's own first word; the participants keep their names.
+      watchOverflow(container, container, `Scrollable ${label.charAt(0).toLowerCase()}${label.slice(1)}`);
       // A diagram wider than the screen shows only some of its lanes; open
       // the text version so the reader gets the whole of it without scrolling.
       if (container.scrollWidth > container.clientWidth + 1) details.open = true;

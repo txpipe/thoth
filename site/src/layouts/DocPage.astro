@@ -19,12 +19,26 @@ interface Props {
   compact?: boolean;
   /** The doc's repo path, for the edit link; pages that aren't docs leave it out. */
   sourcePath?: string;
+  /** One sentence on the page, for search engines and link previews. */
+  description?: string;
 }
 
-const { title, groups, currentId, headings, compact = false, sourcePath } = Astro.props;
+const {
+  title,
+  groups,
+  currentId,
+  headings,
+  compact = false,
+  sourcePath,
+  description,
+} = Astro.props;
 const base = import.meta.env.BASE_URL;
 const home = withBase('/', base);
-const pageTitle = title === 'Thoth' ? 'Thoth' : `${title} · Thoth`;
+const tagline = 'private N-of-M attestation';
+// The home page is the site itself, so its tab reads as the site, not as "Introduction".
+const pageTitle = currentId === 'README' ? `Thoth: ${tagline}` : `${title} · Thoth`;
+// Only a doc has one address worth sharing; the 404 page answers for any.
+const canonical = sourcePath && Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined;
 const toc = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
 const { prev, next } = neighborsOf(groups, currentId);
 const contentHtml = await Astro.slots.render('default');
@@ -40,6 +54,39 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
     <meta name="color-scheme" content="dark" />
     <link rel="icon" href={withBase('/favicon.svg', base)} type="image/svg+xml" />
     <title>{pageTitle}</title>
+    {description && <meta name="description" content={description} />}
+    {canonical && <link rel="canonical" href={canonical} />}
+    <meta property="og:site_name" content="Thoth" />
+    <meta property="og:type" content={currentId === 'README' ? 'website' : 'article'} />
+    <meta property="og:title" content={pageTitle} />
+    {description && <meta property="og:description" content={description} />}
+    {canonical && <meta property="og:url" content={canonical} />}
+    <!-- Without scripts the menu button can't open the drawer: drop it, and on
+         phones set the nav and the contents under the page instead. -->
+    <noscript>
+      <style is:inline>
+        /* `html` outranks the stylesheet's own rules, which load after this. */
+        @media (max-width: 78rem) {
+          html .menu-button {
+            display: none;
+          }
+        }
+
+        @media (max-width: 56rem) {
+          html .site-menu {
+            position: static;
+            width: auto;
+            margin-top: var(--space-16);
+            padding: var(--space-8) 0 0;
+            overflow: visible;
+            border-top: 1px solid var(--stroke-4);
+            border-left: 0;
+            transform: none;
+            visibility: visible;
+          }
+        }
+      </style>
+    </noscript>
     <link rel="preload" href={interLatinWoff2} as="font" type="font/woff2" crossorigin />
   </head>
   <body>
@@ -50,7 +97,7 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
           <a class="wordmark" href={home}>
             <img src={withBase('/thoth.svg', base)} alt="Thoth" width="82" height="26" />
           </a>
-          <span class="site-tagline">private N-of-M attestation</span>
+          <span class="site-tagline">{tagline}</span>
         </div>
         <div class="site-actions">
           <Search />
@@ -125,7 +172,12 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
         {
           sourcePath && (
             <p class="doc-edit" data-pagefind-ignore>
-              <a href={`${REPO_URL}/edit/main/${sourcePath}`}>Edit this page on GitHub</a>
+              <a class="external" href={`${REPO_URL}/edit/main/${sourcePath}`}>
+                <span class="external-tail">
+                  Edit this page on GitHub<span class="external-icon" aria-hidden="true" />
+                </span>
+                <span class="visually-hidden"> (external)</span>
+              </a>
             </p>
           )
         }
@@ -229,6 +281,15 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
           element.inert = false;
           delete element.dataset.menuInert;
         }
+        // On a phone the drawer is a dialog over the page; at laptop widths it
+        // is the contents nav, which keeps its own role and name.
+        if (drawer && open && target === drawer) {
+          drawer.setAttribute('role', 'dialog');
+          drawer.setAttribute('aria-modal', 'true');
+          drawer.setAttribute('aria-label', 'Menu');
+        } else if (drawer) {
+          for (const name of ['role', 'aria-modal', 'aria-label']) drawer.removeAttribute(name);
+        }
         if (!open) {
           if (restoreFocus) button.focus();
           return;
@@ -239,7 +300,9 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
         }
         // On a phone the nav and the contents share the drawer: fold the nav
         // groups that don't hold this page, once, so the contents stay close.
-        if (drawer && target === drawer && !collapsed) {
+        // A page outside the nav, such as the 404, keeps every group open.
+        const listed = drawer?.querySelector('.sidebar [aria-current="page"]');
+        if (drawer && target === drawer && listed && !collapsed) {
           collapsed = true;
           for (const group of drawer.querySelectorAll<HTMLDetailsElement>('.sidebar details')) {
             if (!group.querySelector('[aria-current="page"]')) group.open = false;
@@ -258,9 +321,11 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
       });
       backdrop?.addEventListener('click', () => setMenu(false, { restoreFocus: true }));
       document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && root.hasAttribute('data-menu-open')) {
-          setMenu(false, { restoreFocus: true });
-        }
+        // Search can open over the drawer; that Escape belongs to its dialog,
+        // which either handled the key already or is about to close on it.
+        if (event.key !== 'Escape' || event.defaultPrevented) return;
+        if (document.querySelector('dialog[open]')) return;
+        if (root.hasAttribute('data-menu-open')) setMenu(false, { restoreFocus: true });
       });
       // A link in the drawer closes it. A contents link then hands focus to its
       // section, which the hidden link can no longer hold.
@@ -298,7 +363,13 @@ const hasMermaid = contentHtml.includes('data-language="mermaid"');
       let frame = 0;
       const markSection = () => {
         frame = 0;
-        const line = (header?.offsetHeight ?? 0) + 32;
+        let line = (header?.offsetHeight ?? 0) + 32;
+        // A glossary term a link points at stops lower than a heading does,
+        // which leaves its section's heading under the line. While the term
+        // sits where it landed, the line drops to it.
+        const term = document.querySelector('.glossary-term:target');
+        const landed = term?.getBoundingClientRect().top ?? 0;
+        if (landed > line && landed <= line + 64) line = landed;
         let current = -1;
         sections.forEach((section, index) => {
           if (section && section.getBoundingClientRect().top <= line) current = index;

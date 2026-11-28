@@ -9,6 +9,9 @@ export interface Options {
   siteUrl: string;
 }
 
+// The longest last word that stays whole next to its arrow.
+const LONG = 20;
+
 const icon = (): Element => ({
   type: 'element',
   tagName: 'span',
@@ -36,9 +39,14 @@ export function externalLinks(options: Options) {
       if (last.type === 'text') {
         const match = /^([\s\S]*?)(\S+\s*)$/.exec(last.value);
         if (!match) return;
-        const [, head = '', word = ''] = match;
+        const [, lead = '', end = ''] = match;
+        // A long last word, such as a path, would overflow a phone if it
+        // couldn't wrap: only its final segment stays with the arrow.
+        const word = end.trimEnd();
+        const cut = word.length > LONG ? word.slice(0, -1).search(/[/.-][^/.-]*$/) + 1 : 0;
+        const head = lead + word.slice(0, cut);
         node.children.splice(-1, 1, ...(head ? [{ type: 'text', value: head } as const] : []));
-        tail.children = [{ type: 'text', value: word.trimEnd() }, icon()];
+        tail.children = [{ type: 'text', value: word.slice(cut) }, icon()];
       } else {
         // The tail's nowrap only governs the break between the code and the
         // arrow; the code itself still wraps inside (see .external-tail > code).

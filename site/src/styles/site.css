@@ -48,6 +48,9 @@
 html {
   background: var(--page-bg);
   scrollbar-color: var(--stroke-3) transparent;
+  /* Anything scrolled to (a heading, the skip link's target, a link reached
+     with Shift+Tab) stops clear of the sticky header. */
+  scroll-padding-top: calc(var(--header-height) + var(--space-5));
 }
 
 body {
@@ -320,6 +323,10 @@ a:hover {
   cursor: pointer;
 }
 
+.search-close-text {
+  display: none;
+}
+
 .search-status {
   margin: 0;
   padding: var(--space-3) var(--space-4) 0;
@@ -331,12 +338,55 @@ a:hover {
   display: none;
 }
 
+.search-empty {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-5);
+  margin: 0;
+  padding: var(--space-2) var(--space-4) 0;
+  font-size: var(--fs-sm);
+}
+
+.search-empty[hidden] {
+  display: none;
+}
+
+.search-empty a,
+.search-suggest,
+.search-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cyan-100);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--cyan-100) 45%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.search-empty a:hover,
+.search-suggest:hover,
+.search-more:hover {
+  color: var(--pink-200);
+}
+
+.search-more {
+  margin: var(--space-2) var(--space-3) 0;
+  font-size: var(--fs-sm);
+}
+
 .search-results {
   margin: 0;
   padding: var(--space-2) var(--space-2) var(--space-4);
   overflow-y: auto;
   overscroll-behavior: contain;
   list-style: none;
+}
+
+/* The list still shows the previous query while the next one is fetched. */
+.search-results[aria-busy="true"] {
+  opacity: 0.55;
 }
 
 .search-results ul {
@@ -411,7 +461,9 @@ a:hover {
   height: calc(100vh - var(--header-height));
   overflow-y: auto;
   scrollbar-width: thin;
-  /* Start level with the title, the way the margin column does. */
+  /* Start level with the title, the way the margin column does: the box rises
+     to the header, where it also sticks, and its padding is the gap. */
+  margin-top: calc(-1 * var(--body-top-gap));
   padding-top: var(--body-top-gap);
   padding-bottom: var(--space-8);
 }
@@ -438,8 +490,11 @@ a:hover {
   color: var(--fg-2);
 }
 
-/* The sidebar scrolls, which clips anything drawn outside it: keep the ring inside. */
-.sidebar-groups summary:focus-visible {
+/* The nav and the contents scroll, which clips anything drawn outside them:
+   keep the ring inside. */
+.sidebar-groups summary:focus-visible,
+.sidebar a:focus-visible,
+.doc-meta a:focus-visible {
   border-radius: var(--radius-sm);
   outline-offset: -2px;
 }
@@ -682,10 +737,6 @@ a:hover {
   background: var(--gradient-primary);
 }
 
-.prose :is(h1, h2, h3, h4) {
-  scroll-margin-top: calc(var(--header-height) + var(--space-5));
-}
-
 /* Every section opens on a rule with a magenta ink tick. */
 .prose h2 {
   position: relative;
@@ -792,6 +843,16 @@ a:hover {
 
 .prose li::marker {
   color: color-mix(in srgb, var(--pink-400) 65%, var(--fg-5));
+}
+
+/* A task list's checkbox stands in for the bullet. */
+.prose .task-list-item {
+  list-style: none;
+}
+
+.prose .task-list-item > input {
+  margin: 0 var(--space-2) 0 calc(-1 * var(--space-6));
+  accent-color: var(--pink-400);
 }
 
 /* A printed warning band, not a card: rules above and below, pink ink. */
@@ -923,6 +984,16 @@ a:hover {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+/* The wrapper clips its scroller's own ring, so the wrapper draws it. */
+.code-block .astro-code:focus-visible {
+  outline: none;
+}
+
+.code-block:has(.astro-code:focus-visible) {
+  outline: 2px solid var(--cyan-400);
+  outline-offset: 2px;
 }
 
 .code-block-bar {
@@ -1115,6 +1186,12 @@ a:hover {
   );
 }
 
+/* The fade is a mask, and a mask erases the focus ring with the edge: a
+   focused scroller shows whole. */
+:is(.mermaid, .prose .table-wrap):focus-visible {
+  mask-image: none;
+}
+
 /* Data tables, set like a printed table: rules top and bottom, not a grid.
    The build-time .table-wrap owns sideways scrolling so <table> keeps native semantics. */
 .prose .table-wrap {
@@ -1162,7 +1239,8 @@ a:hover {
 /* Previous / next reading path at the foot of each document. */
 /* A glossary term a link points at: it clears the header and is marked on arrival. */
 .prose .glossary-term {
-  scroll-margin-top: calc(var(--header-height) + var(--space-20));
+  /* On top of the page's scroll padding: the term stops under its section's heading. */
+  scroll-margin-top: calc(var(--space-20) - var(--space-5));
 }
 
 .prose .glossary-term:target {
@@ -1518,6 +1596,7 @@ a:hover {
     align-self: stretch;
     width: auto;
     height: auto;
+    margin: 0;
     padding: 0;
     overflow: visible;
   }
@@ -1611,6 +1690,28 @@ a:hover {
     min-width: 44rem;
   }
 
+  /* A cell is too narrow to hold a package name on one line, and a table of
+     three columns or more too narrow to read: its code wraps, and the table
+     keeps a readable measure and scrolls sideways instead. The last column
+     is the one that explains, so code in the others can't squeeze it. */
+  .prose :is(td, th) code.nowrap {
+    white-space: normal;
+  }
+
+  .prose table:has(th:nth-child(3)) {
+    min-width: 34rem;
+  }
+
+  .prose table:has(th:nth-child(3)) :is(th, td):last-child {
+    min-width: 13rem;
+  }
+
+  /* Keep the arrival card off the screen's edge. */
+  .prose .glossary-term:target {
+    margin-inline: calc(-1 * var(--space-2));
+    padding-inline: var(--space-2);
+  }
+
   .doc-pager {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1673,7 +1774,36 @@ a:hover {
     min-height: 2.75rem;
   }
 
-  .search-results a {
+  .search-results a,
+  .search-input {
+    min-height: 2.75rem;
+  }
+
+  /* No Esc key on a touch screen: the button says what it does. */
+  .search-close {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    border-color: transparent;
+    color: var(--fg-2);
+    font-family: var(--font-sans);
+    font-size: var(--fs-sm);
+  }
+
+  .search-close-key {
+    display: none;
+  }
+
+  .search-close-text {
+    display: inline;
+  }
+
+  .search-empty a,
+  .search-suggest,
+  .search-more,
+  .not-found-links a,
+  .not-found-under a {
+    display: inline-flex;
+    align-items: center;
     min-height: 2.75rem;
   }
 
@@ -1720,5 +1850,133 @@ a:hover {
   .doc-meta,
   :root[data-menu-open] :is(.site-menu, .doc-meta) {
     transition: none;
+  }
+}
+
+/* The narrowest phones: a package's name may break at its hyphens after all. */
+@media (max-width: 22.5rem) {
+  .prose h1 .nowrap {
+    white-space: normal;
+  }
+}
+
+/* High-contrast themes paint every border, so the nav's spare one would box
+   each link: only the current page keeps it. The wordmark is white artwork and
+   keeps its own dark ground. */
+@media (forced-colors: active) {
+  .sidebar a {
+    border-color: Canvas;
+  }
+
+  .sidebar a[aria-current="page"] {
+    border-color: Highlight;
+  }
+
+  .wordmark {
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    background: #141011;
+    forced-color-adjust: none;
+  }
+}
+
+/* Paper: the document alone, in dark ink. The page is drawn for a dark screen,
+   so its near-white text would vanish once the printer drops the background. */
+@media print {
+  :root {
+    --fg-1: #111;
+    --fg-2: #222;
+    --fg-3: #333;
+    --fg-4: #444;
+    --fg-5: #555;
+    --stroke-1: #555;
+    --stroke-2: #999;
+    --stroke-3: #bbb;
+    --stroke-4: #ccc;
+    --cyan-100: #0b5cad;
+    --bg-card: #fff;
+    --page-bg: #fff;
+    color-scheme: light;
+  }
+
+  body {
+    background: none;
+  }
+
+  .skip,
+  .site-header,
+  .site-menu,
+  .menu-backdrop,
+  .site-footer,
+  .doc-edit,
+  .doc-pager,
+  .code-block-bar,
+  .prose :is(h2, h3) .heading-anchor,
+  .diagram-source summary {
+    display: none;
+  }
+
+  .site-body {
+    display: block;
+    max-width: none;
+    padding: 0;
+  }
+
+  .content {
+    max-width: none;
+  }
+
+  .content::before {
+    content: none;
+  }
+
+  /* The heading gradient is clipped to the text with a transparent fill. */
+  .prose h2 {
+    background: none;
+    color: #111;
+  }
+
+  /* Syntax colours are picked for a dark ground. */
+  .prose pre,
+  .prose pre span {
+    color: #111 !important;
+  }
+
+  .prose pre,
+  .code-block {
+    background: none !important;
+    box-shadow: none;
+  }
+
+  .prose pre {
+    overflow: visible;
+    white-space: pre-wrap;
+  }
+
+  :is(.mermaid, .prose .table-wrap),
+  :is(.mermaid, .prose .table-wrap)[data-overflow] {
+    overflow: visible;
+    mask-image: none;
+  }
+
+  /* The diagram is drawn in the screen's light ink on dark boxes. */
+  .mermaid svg :is(text, tspan) {
+    fill: #111 !important;
+  }
+
+  .mermaid svg :is(rect, line, path, polygon) {
+    stroke: #555 !important;
+  }
+
+  .mermaid svg :is(rect, polygon) {
+    fill: #fff !important;
+  }
+
+  .prose :is(h2, h3) {
+    break-after: avoid;
+  }
+
+  .prose :is(pre, table, blockquote, .mermaid-figure) {
+    break-inside: avoid;
   }
 }

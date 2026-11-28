@@ -16,14 +16,6 @@ interface HastElement {
 
 type HastNode = HastElement | HastText | { type: string; children?: HastNode[] };
 
-function textOf(node: HastNode): string {
-  if (node.type === 'text' && 'value' in node) return node.value;
-  if ('children' in node && Array.isArray(node.children)) {
-    return node.children.map(textOf).join('');
-  }
-  return '';
-}
-
 /** Rehype plugin that appends a `#` permalink anchor inside each `h2` and `h3` with an id. */
 export function headingLinks() {
   return (tree: HastNode): void => {
@@ -34,7 +26,6 @@ export function headingLinks() {
       const id = heading.properties?.id;
       if (typeof id !== 'string' || !id) return;
 
-      const label = textOf(heading).trim();
       // Keep the anchor empty in HTML and draw `#` via CSS `::before` so Astro's
       // heading-collection pass does not append `#` to table-of-contents titles.
       heading.children.push({
@@ -44,9 +35,11 @@ export function headingLinks() {
           className: ['heading-anchor'],
           href: `#${id}`,
           // A pointer convenience: the table of contents already links every
-          // section, so the anchor stays out of the tab order.
+          // section, so the anchor stays out of the tab order. It is hidden
+          // from screen readers too, or its name would be read as part of
+          // every heading.
           tabIndex: -1,
-          ariaLabel: label ? `Link to ${label}` : 'Link to section',
+          ariaHidden: 'true',
         },
         children: [],
       });

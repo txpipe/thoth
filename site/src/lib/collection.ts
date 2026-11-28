@@ -1,6 +1,7 @@
 // Content collection queries shared by the pages, the nav and llms.txt.
 
 import { type CollectionEntry, getCollection } from 'astro:content';
+import { fromMarkdown } from 'mdast-util-from-markdown';
 import {
   DOC_FILES,
   GROUP_ORDER,
@@ -10,6 +11,8 @@ import {
   routeFor,
   titleFor,
 } from './docs';
+import { wordsOf } from './fuzzy';
+import { GLOSSARY, termsOf } from './glossary';
 
 export type DocEntry = CollectionEntry<'docs'>;
 
@@ -106,4 +109,19 @@ export function navGroups(docs: DocEntry[]): NavGroup[] {
     label,
     items: groups.get(label) ?? [],
   }));
+}
+
+/**
+ * The words search offers in place of a mistyped one: those of the page titles
+ * and the glossary's terms, lowercase. Words under four letters stay out, since
+ * a typo in one can't be told from another word.
+ */
+export function suggestionWords(docs: DocEntry[]): string[] {
+  const glossary = docs.find((entry) => `${entry.id}.md` === GLOSSARY);
+  const terms = glossary ? termsOf(fromMarkdown(glossary.body ?? ''), new Set()).values() : [];
+  const names = [
+    ...docs.map((entry) => titleFor(entry.id, entry.body)),
+    ...Array.from(terms, (term) => term.name),
+  ];
+  return [...new Set(names.flatMap(wordsOf).filter((word) => word.length >= 4))].sort();
 }

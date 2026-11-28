@@ -45,24 +45,42 @@ const base = import.meta.env.BASE_URL;
   // private window; the nav then just starts open.
   (() => {
     const key = 'thoth-nav-folded';
-    let folded = [];
-    try {
-      folded = JSON.parse(localStorage.getItem(key) ?? '[]');
-    } catch {}
-    const groups = document.querySelectorAll('.sidebar details[data-group]');
-    for (const group of groups) {
-      if (folded.includes(group.dataset.group) && !group.querySelector('[aria-current="page"]')) {
+    const read = () => {
+      try {
+        return JSON.parse(localStorage.getItem(key) ?? '[]');
+      } catch {
+        return [];
+      }
+    };
+    const folded = read();
+    for (const group of document.querySelectorAll('.sidebar details[data-group]')) {
+      const name = group.dataset.group;
+      if (folded.includes(name) && !group.querySelector('[aria-current="page"]')) {
         group.open = false;
       }
       group.querySelector('summary')?.addEventListener('click', () => {
         // The click lands before the toggle; read the state once it settles.
+        // Only this group's state is the reader's choice: the phone drawer
+        // folds the others by itself.
         requestAnimationFrame(() => {
-          const closed = [...groups].filter((other) => !other.open).map((other) => other.dataset.group);
+          const others = read().filter((other) => other !== name);
           try {
-            localStorage.setItem(key, JSON.stringify(closed));
+            localStorage.setItem(key, JSON.stringify(group.open ? others : [...others, name]));
           } catch {}
         });
       });
+    }
+
+    // On a short screen the nav scrolls by itself: bring the current page into
+    // it. scrollIntoView would move the page too.
+    const sidebar = document.querySelector('.sidebar');
+    const current = sidebar?.querySelector('[aria-current="page"]');
+    if (sidebar && current) {
+      const frame = sidebar.getBoundingClientRect();
+      const item = current.getBoundingClientRect();
+      if (item.top < frame.top || item.bottom > frame.bottom) {
+        sidebar.scrollTop += item.top - frame.top - (frame.height - item.height) / 2;
+      }
     }
   })();
 </script>

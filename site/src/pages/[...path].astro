@@ -2,7 +2,7 @@
 import { render } from 'astro:content';
 import DocPage from '../layouts/DocPage.astro';
 import { getDocs, navGroups, type DocEntry } from '../lib/collection';
-import { POLICY_DIR, routeFor, titleFor } from '../lib/docs';
+import { POLICY_DIR, routeFor, summaryOf, titleFor } from '../lib/docs';
 
 export async function getStaticPaths() {
   const docs = await getDocs();
@@ -30,6 +30,7 @@ const { Content, headings } = await render(entry);
   headings={headings}
   compact={entry.id.startsWith(`${POLICY_DIR}/`)}
   sourcePath={`${entry.id}.md`}
+  description={summaryOf(entry.body)}
 >
   <Content />
 </DocPage>
