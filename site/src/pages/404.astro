@@ -1,0 +1,133 @@
+---
+// GitHub Pages serves this for any path under the site that has no page.
+import DocPage from '../layouts/DocPage.astro';
+import { getDocs, navGroups } from '../lib/collection';
+import { REPO_URL, routeFor, withBase } from '../lib/docs';
+
+const docs = await getDocs();
+const groups = navGroups(docs);
+const base = import.meta.env.BASE_URL;
+const pages = groups
+  .flatMap((group) => group.items)
+  .map((item) => ({ url: withBase(item.route, base), title: item.pageTitle }));
+---
+
+<DocPage title="Page not found" groups={groups} currentId="" headings={[]}>
+  <h1>Page not found</h1>
+  <p>
+    This address isn't a page on the Thoth docs site. The doc may have moved, or the link points at
+    a file the site doesn't publish.
+  </p>
+  <p class="not-found-guess" hidden>Did you mean <a href={withBase('/', base)}></a>?</p>
+  <div class="not-found-under" hidden>
+    <p>These pages sit under this address:</p>
+    <ul></ul>
+  </div>
+  <ul class="not-found-links">
+    <li><button class="link-button" type="button" data-open-search>Search the docs</button></li>
+    <li><a href={withBase('/', base)}>Start from the introduction</a></li>
+    <li><a href={withBase(routeFor('CONTEXT.md'), base)}>Look a term up in the glossary</a></li>
+    <li><a href={REPO_URL}>Browse the repository on GitHub</a></li>
+  </ul>
+  <script is:inline type="application/json" id="site-pages" set:html={JSON.stringify(pages)} />
+</DocPage>
+
+<script>
+  import { distance, tolerance, wordsOf } from '../lib/fuzzy';
+
+  // Answer the address that missed: the page it names, the pages under it, or
+  // the page that best matches it word by word. Search opens on that page's title.
+  interface Page {
+    url: string;
+    title: string;
+  }
+  const pages: Page[] = JSON.parse(document.getElementById('site-pages')?.textContent ?? '[]');
+  // An address as the site names pages: lowercase, with no trailing slash,
+  // `index.html` or `.md`, and a README standing for its folder.
+  const clean = (pathname: string) => {
+    let path = pathname;
+    try {
+      path = decodeURIComponent(pathname);
+    } catch {
+      // A malformed escape: match the address as it is written.
+    }
+    return path
+      .toLowerCase()
+      .replace(/\/(index\.html)?$/, '')
+      .replace(/\.md$/, '')
+      .replace(/\/readme$/, '');
+  };
+  const words = (text: string) => wordsOf(text).filter((word) => word !== 'thoth');
+  // A missed word matches a page word it starts, that starts it, or that is a
+  // typo away.
+  const matches = (missed: string, word: string) =>
+    (missed.length >= 3 && word.startsWith(missed)) ||
+    (word.length >= 3 && missed.startsWith(word)) ||
+    distance(missed, word) <= tolerance(missed);
+  const hits = (missed: string[], candidate: string[]) =>
+    missed.filter((word) => candidate.some((other) => matches(word, other))).length;
+
+  const missed = clean(window.location.pathname);
+  const known = pages.map((page) => ({
+    page,
+    path: clean(new URL(page.url, window.location.origin).pathname),
+  }));
+  let best = known.find((entry) => entry.path === missed)?.page;
+  // A folder's address, such as docs/policies/, names no page but holds several.
+  const under = best
+    ? []
+    : known.filter((entry) => entry.path.startsWith(`${missed}/`)).map((entry) => entry.page);
+  if (!best && under.length === 0) {
+    // The last segment names the page, unless it is a folder that only ever
+    // holds pages, such as docs/: then the segment before it does. Earlier
+    // segments only break ties.
+    const paths = known.map((entry) => entry.path.split('/').filter(Boolean));
+    const leaves = new Set(paths.map((path) => path.at(-1)));
+    const folders = new Set(paths.flatMap((path) => path.slice(0, -1)));
+    const segments = missed.split('/').filter(Boolean);
+    let at = segments.length - 1;
+    const isFolder = (segment = '') => folders.has(segment) && !leaves.has(segment);
+    while (at > 0 && (isFolder(segments[at]) || words(segments[at] ?? '').length === 0)) at -= 1;
+    const name = words(segments[at] ?? '');
+    const above = words(segments.slice(0, at).join('/'));
+    if (name.length > 0) {
+      const ranked = known
+        .map(({ page, path }) => {
+          const candidate = [...words(path), ...words(page.title)];
+          return {
+            page,
+            own: hits(name, candidate),
+            folder: hits(above, candidate),
+            size: candidate.length,
+          };
+        })
+        .filter((entry) => entry.own * 2 >= name.length && entry.own > 0)
+        .sort((a, b) => b.own - a.own || b.folder - a.folder || a.size - b.size);
+      best = ranked[0]?.page;
+    }
+  }
+
+  const guess = document.querySelector<HTMLElement>('.not-found-guess');
+  const link = guess?.querySelector('a');
+  if (best && guess && link) {
+    link.href = best.url;
+    link.textContent = best.title;
+    guess.hidden = false;
+  }
+  const folder = document.querySelector<HTMLElement>('.not-found-under');
+  const list = folder?.querySelector('ul');
+  if (under.length > 0 && folder && list) {
+    for (const page of under) {
+      const item = document.createElement('li');
+      const anchor = document.createElement('a');
+      anchor.href = page.url;
+      anchor.textContent = page.title;
+      item.append(anchor);
+      list.append(item);
+    }
+    folder.hidden = false;
+  }
+  // Without a guess the address is noise as a query: search opens empty.
+  const search = document.querySelector<HTMLElement>('[data-open-search].link-button');
+  if (search) search.dataset.query = best?.title ?? '';
+</script>

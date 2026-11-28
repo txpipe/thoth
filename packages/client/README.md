@@ -6,15 +6,11 @@ The dApp side of Thoth, for kind authors writing a kind's client and for apps th
 
 ## Install
 
-The package is not on npm. Build it from a checkout of this repo and install it by path:
-
 ```bash
-git clone https://github.com/txpipe/thoth && cd thoth
-npm install && npm run build
-cd /path/to/your-app && npm install /path/to/thoth/packages/client
+npm install @txpipe/thoth-client zod
 ```
 
-Once it is published, it installs as `@txpipe/thoth-client`. It needs `zod@^4.6.7` as a peer dependency.
+It needs `zod@^4.6.7` as a peer dependency.
 
 ## Usage
 

@@ -5,6 +5,13 @@ the address of your Reclaim witness, and run that witness. The
 [package README](../README.md) explains the terms; the
 [dApp guide](dapp-integration.md) covers the other side.
 
+> **License.** `@txpipe/thoth-zk-tls` is AGPL-3.0-only because it links Reclaim
+> Protocol's AGPL-licensed `attestor-core`, the witness you run below. If you
+> serve this attestor to other dApps, the AGPL applies to that service. Read
+> the [package license](../README.md#license) before you deploy; if AGPL
+> doesn't fit your deployment, get a commercial license from Reclaim or use a
+> different attestor kind.
+
 ## Building an instance
 
 An attestor instance is a signing key pair and the public address of the

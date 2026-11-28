@@ -1,8 +1,50 @@
-# Thoth
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/thoth-logo-white.svg">
+    <img src="docs/assets/thoth-logo-black.svg" alt="Thoth" width="360">
+  </picture>
+  <p><strong>Private N-of-M attestation for Midnight</strong></p>
+  <a href="https://github.com/txpipe/thoth/blob/main/LICENSE"><img src="https://img.shields.io/github/license/txpipe/thoth?style=for-the-badge&color=blue" alt="License: Apache-2.0"></a>
+  <a href="https://github.com/txpipe/thoth/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/txpipe/thoth/test.yml?branch=main&style=for-the-badge&label=tests" alt="Test status"></a>
+  <a href="https://txpipe.github.io/thoth/"><img src="https://img.shields.io/badge/docs-txpipe.github.io%2Fthoth-blue?style=for-the-badge" alt="Documentation"></a>
+  <br>
+  <br>
+</div>
 
-Private N-of-M attestation for Midnight: your contract accepts an off-chain fact only when N of the M attestors it pinned have signed it, and the fact reaches the contract as private input.
+Thoth lets your Midnight contract accept a fact from outside the chain, such as
+a value from a web API, once N of M independent attestors have checked it and
+signed it. You choose the M attestors and the threshold N, and the fact reaches
+the contract as private input.
 
 > **In development.** Thoth is unaudited and has [known security issues](https://github.com/txpipe/thoth/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity). Don't use it to protect real value. The claim format may still change.
+
+## Start here
+
+Pick your path below, or jump to the [quickstart](#quickstart) to run a 2-of-3
+flow locally.
+
+- **dApp developer**: Embed verification in your contract with
+  [`@txpipe/thoth-contracts`](packages/contracts/README.md), then follow the dApp
+  guide for your source:
+  - web APIs: the [zkFetch dApp guide](packages/zk-tls/docs/dapp-integration.md),
+    with the [GitHub stars](docs/policies/github-stars.md) and
+    [Strava](docs/policies/strava-latest-activity.md) policy examples;
+  - Cardano events: the
+    [Cardano dApp guide](packages/cardano/docs/dapp-integration.md), with the
+    [Cardano output](docs/policies/cardano-output.md) policy example.
+- **Attestor operator**: Run an [attestor](CONTEXT.md#roles) against your own
+  source and share its [descriptor](CONTEXT.md#roles) with dApps. For zkFetch,
+  follow the [zkFetch attestor guide](packages/zk-tls/docs/attestor-guide.md)
+  for [`@txpipe/thoth-zk-tls`](packages/zk-tls/README.md). For Cardano,
+  configure `cardanoAttestor` in
+  [`@txpipe/thoth-cardano`](packages/cardano/README.md#usage).
+- **Kind author**: Follow the
+  [kind author guide](docs/kind-author-guide.md) to add a
+  [kind](CONTEXT.md#kinds) for another source of [evidence](CONTEXT.md#roles).
+  You define its [law](CONTEXT.md#kinds) with
+  [`@txpipe/thoth-core`](packages/core/README.md), pair it with a signing key in
+  [`@txpipe/thoth-attestor`](packages/attestor/README.md), and build its client
+  on [`@txpipe/thoth-client`](packages/client/README.md).
 
 ## What it is
 
@@ -59,11 +101,6 @@ kind's salt is public instead, since its values already sit on the chain
 | [`@txpipe/thoth-client`](packages/client/README.md)       | Write a kind's client: the trusted set and the attestation checks            |
 | [`@txpipe/thoth-attestor`](packages/attestor/README.md)   | Write a kind's attestor: pair its [law](CONTEXT.md#kinds) with a signing key |
 | [`@txpipe/thoth-core`](packages/core/README.md)           | Write a kind's law against the shared claim types                            |
-
-If you are building a dApp on web data, start with `@txpipe/thoth-contracts` and
-`@txpipe/thoth-zk-tls`; on chain data, start with `@txpipe/thoth-contracts` and
-`@txpipe/thoth-cardano`. To add a new kind of attestor, follow
-[docs/kind-author-guide.md](docs/kind-author-guide.md).
 
 ## Quickstart
 
@@ -126,14 +163,6 @@ is a 2-of-3 contract and the
 [attestor guide](packages/zk-tls/docs/attestor-guide.md) cover each side in
 full.
 
-## Midnight City demo
-
-Midnight City is a proof of concept built on Thoth, preserved on the
-[`midnight-city-demo`](https://github.com/txpipe/thoth/tree/midnight-city-demo)
-branch. It is a demo, not supported code. It is pinned to an older Thoth that
-parses identifiers with a temporary `bytes8` rule, which the byte value slots
-replace.
-
 ## Roadmap
 
 - [`v0`](https://github.com/txpipe/thoth/milestone/1): the work before the first tag.
@@ -142,6 +171,7 @@ replace.
 
 ## Links
 
+- [Docs site](https://txpipe.github.io/thoth/): these docs rendered as a website
 - [docs/DESIGN.md](docs/DESIGN.md): the architecture, the claim and its wire order
 - [docs/kind-author-guide.md](docs/kind-author-guide.md): how to add an attestor kind
 - [docs/adr/](docs/adr/): the design decisions and their reasons

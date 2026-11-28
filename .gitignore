@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+.astro/
 *.tsbuildinfo
 packages/contracts/artifacts/
 /artifacts/

@@ -1,0 +1,22 @@
+---
+import { render } from 'astro:content';
+import DocPage from '../layouts/DocPage.astro';
+import { getDocs, navGroups } from '../lib/collection';
+import { summaryOf, titleFor } from '../lib/docs';
+
+const docs = await getDocs();
+const entry = docs.find((doc) => doc.id === 'README');
+if (!entry) throw new Error('README.md is not in the docs collection');
+const { Content, headings } = await render(entry);
+---
+
+<DocPage
+  title={titleFor(entry.id, entry.body)}
+  groups={navGroups(docs)}
+  currentId={entry.id}
+  headings={headings}
+  sourcePath={`${entry.id}.md`}
+  description={summaryOf(entry.body)}
+>
+  <Content />
+</DocPage>

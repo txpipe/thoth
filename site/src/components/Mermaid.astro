@@ -1,0 +1,201 @@
+---
+// Client-side Mermaid renderer; included by DocPage only on pages with a mermaid block.
+---
+
+<script>
+  import { watchOverflow } from '../lib/overflow';
+
+  function describeDiagram(source: string): string {
+    const accTitle = source.match(/^\s*accTitle\s*:\s*(.+)$/m)?.[1]?.trim();
+    if (accTitle) return accTitle;
+
+    const firstLine = source
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line.length > 0 && !line.startsWith('%%'));
+
+    if (firstLine?.startsWith('sequenceDiagram')) {
+      const participants = Array.from(
+        source.matchAll(/^\s*(?:participant|actor)\s+(\S+)(?:\s+as\s+(.+))?$/gm),
+        (match) => (match[2] ?? match[1] ?? '').trim(),
+      ).filter(Boolean);
+      return participants.length > 0
+        ? `Sequence diagram: ${participants.join(', ')}`
+        : 'Sequence diagram';
+    }
+    if (firstLine?.startsWith('flowchart') || firstLine?.startsWith('graph')) {
+      return 'Flowchart diagram';
+    }
+    return 'Diagram';
+  }
+
+  // A sequence diagram read as text: who takes part, then each message and
+  // note in order, with loops and branches as nested lists. Returns null for
+  // other diagram types, which fall back to their source.
+  function sequenceSteps(source: string): HTMLElement | null {
+    const lines = source
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('%%'));
+    if (lines[0] !== 'sequenceDiagram') return null;
+    const names = new Map<string, string>();
+    const root = document.createElement('div');
+    const intro = document.createElement('p');
+    const list = document.createElement('ol');
+    const stack: HTMLOListElement[] = [list];
+    const add = (text: string) => {
+      const item = document.createElement('li');
+      item.textContent = text;
+      stack.at(-1)?.append(item);
+      return item;
+    };
+    const name = (id: string) => names.get(id.trim()) ?? id.trim();
+    for (const line of lines.slice(1)) {
+      const participant = /^(?:participant|actor)\s+(\S+)(?:\s+as\s+(.+))?$/.exec(line);
+      if (participant) {
+        const [, id = '', alias] = participant;
+        names.set(id, (alias ?? id).trim());
+        continue;
+      }
+      const message = /^([^-<>]+?)\s*(-{1,2}>{1,2}|-{1,2}[x)])\s*([^:]+?)\s*:\s*(.*)$/.exec(line);
+      if (message) {
+        const [, from = '', arrow = '', to = '', text = ''] = message;
+        const verb = arrow.startsWith('--') ? 'replies to' : 'sends';
+        add(
+          verb === 'sends'
+            ? `${name(from)} sends ${name(to)}: ${text}`
+            : `${name(from)} replies to ${name(to)}: ${text}`,
+        );
+        continue;
+      }
+      const note = /^Note\s+(?:over|left of|right of)\s+([^:]+):\s*(.*)$/i.exec(line);
+      if (note) {
+        const [, who = '', text = ''] = note;
+        const parties = who.split(',').map(name);
+        add(parties.length === 1 ? `${parties[0]}: ${text}` : text);
+        continue;
+      }
+      const block = /^(loop|alt|opt|par|critical|else|and)\b\s*(.*)$/.exec(line);
+      if (block) {
+        const [, keyword = '', text = ''] = block;
+        if (keyword === 'else' || keyword === 'and') stack.pop();
+        const lead = { loop: 'Repeat', alt: 'If', opt: 'Optionally', else: 'Otherwise' }[keyword];
+        const item = add(lead ? `${lead} ${text}:`.replace(/\s+:$/, ':') : `${text}:`);
+        const nested = document.createElement('ol');
+        item.append(nested);
+        stack.push(nested);
+        continue;
+      }
+      if (line === 'end' && stack.length > 1) {
+        stack.pop();
+        continue;
+      }
+      add(line);
+    }
+    intro.textContent = `Participants: ${[...names.values()].join(', ')}.`;
+    root.append(intro, list);
+    return root;
+  }
+
+  const blocks = document.querySelectorAll<HTMLPreElement>('pre[data-language="mermaid"]');
+  if (blocks.length > 0) {
+    const { default: mermaid } = await import('mermaid');
+    const root = getComputedStyle(document.documentElement);
+    const token = (name: string) => root.getPropertyValue(name).trim();
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'base',
+      look: 'classic',
+      // Draw the diagram from the site's tokens rather than Mermaid's palette.
+      themeVariables: {
+        fontFamily: token('--font-sans'),
+        fontSize: '15px',
+        background: 'transparent',
+        primaryColor: token('--bg-card'),
+        primaryTextColor: token('--fg-1'),
+        primaryBorderColor: token('--stroke-2'),
+        secondaryColor: token('--bg-card'),
+        tertiaryColor: token('--bg-card'),
+        mainBkg: token('--bg-card'),
+        nodeBorder: token('--stroke-2'),
+        lineColor: token('--stroke-1'),
+        textColor: token('--fg-2'),
+        edgeLabelBackground: token('--bg-card'),
+        actorBkg: token('--bg-card'),
+        actorBorder: token('--stroke-2'),
+        actorTextColor: token('--fg-1'),
+        actorLineColor: token('--stroke-2'),
+        signalColor: token('--cyan-100'),
+        signalTextColor: token('--fg-2'),
+        labelBoxBkgColor: token('--bg-card'),
+        labelBoxBorderColor: 'rgba(255, 23, 159, 0.40)',
+        labelTextColor: token('--fg-2'),
+        loopTextColor: token('--fg-2'),
+        noteBkgColor: 'rgba(255, 2, 230, 0.08)',
+        noteBorderColor: 'rgba(255, 23, 159, 0.35)',
+        noteTextColor: token('--fg-2'),
+        activationBkgColor: 'rgba(255, 23, 159, 0.18)',
+        activationBorderColor: token('--pink-400'),
+      },
+      // A note longer than the lanes it spans wraps inside its box.
+      sequence: { wrap: true },
+      securityLevel: 'strict',
+    });
+
+    const entries = Array.from(blocks, (block) => {
+      const source = (block.textContent ?? '').trim();
+      const figure = document.createElement('figure');
+      figure.className = 'mermaid-figure';
+
+      const container = document.createElement('div');
+      container.className = 'mermaid';
+      container.textContent = source;
+
+      // The diagram as text under it, collapsed unless the diagram overflows:
+      // the steps when it is a sequence diagram, else its Mermaid source.
+      const details = document.createElement('details');
+      details.className = 'diagram-source';
+      const summary = document.createElement('summary');
+      const steps = sequenceSteps(source);
+      summary.textContent = steps ? 'Diagram as text' : 'Diagram source';
+      if (steps) {
+        steps.className = 'diagram-steps';
+        details.append(summary, steps);
+      } else {
+        const pre = document.createElement('pre');
+        const code = document.createElement('code');
+        code.textContent = source;
+        pre.append(code);
+        details.append(summary, pre);
+      }
+
+      figure.append(container, details);
+      return { block, figure, container, details, label: describeDiagram(source) };
+    });
+
+    // Mermaid measures its text; wait for the web font before swapping in
+    // the containers, so the source stays visible until the layout is final.
+    await document.fonts.ready;
+    for (const { block, figure } of entries) block.replaceWith(figure);
+    await mermaid.run({ nodes: entries.map((entry) => entry.container) });
+    for (const { container, details, label } of entries) {
+      // Mermaid's SVG text nodes sit in layout order rather than reading order;
+      // hide the SVG internals behind a labeled role="img" wrapper while the
+      // disclosure below carries the full step-by-step source.
+      const svg = container.querySelector('svg');
+      if (svg) {
+        const graphic = document.createElement('div');
+        graphic.setAttribute('role', 'img');
+        graphic.setAttribute('aria-label', label);
+        svg.setAttribute('aria-hidden', 'true');
+        svg.replaceWith(graphic);
+        graphic.append(svg);
+      }
+      // Lowercase only the label's own first word; the participants keep their names.
+      watchOverflow(container, container, `Scrollable ${label.charAt(0).toLowerCase()}${label.slice(1)}`);
+      // A diagram wider than the screen shows only some of its lanes; open
+      // the text version so the reader gets the whole of it without scrolling.
+      if (container.scrollWidth > container.clientWidth + 1) details.open = true;
+    }
+  }
+</script>

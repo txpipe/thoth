@@ -16,6 +16,15 @@ updates:
         patterns: ["*"]
         exclude-patterns: ["@reclaimprotocol/*"]
         update-types: [minor, patch]
+  # The docs site is its own npm project with its own lockfile, not a workspace.
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    groups:
+      site:
+        patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:

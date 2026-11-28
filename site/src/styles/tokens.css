@@ -1,0 +1,253 @@
+/* shortcut: a vendored copy of txpipe-video's kit/tokens.css with no sync
+   step, so edit it here; move it to a design-system package when one exists. */
+/* =========================================================================
+   TxPipe Design System — Colors & Type
+   Sourced directly from txpipe-web2 (Tailwind v4 theme + tailwind.css)
+   ========================================================================= */
+
+/* Font: Inter (variable). Loaded from Google Fonts, matching root.tsx.
+   The codebase declares both --font-sans and --font-serif as Inter;
+   TxPipe is an Inter-only brand. */
+
+:root {
+  /* ---------- COLORS ---------- */
+
+  /* Foundations — the canvas */
+  --bg-base:        #0C0505;  /* near-black page background, slight red */
+  --bg-card:        #18181B;  /* zinc-900: card surfaces (used at /70 opacity) */
+  --bg-card-soft:   rgba(24, 24, 27, 0.70);
+  --bg-inverse:     #FFFFFF;
+
+  /* Primary — pink / magenta gradient */
+  --pink-100:       #FF7FC6;
+  --pink-200:       #FF46AC;
+  --pink-300:       #FE2C8C;   /* carousel-dot active */
+  --pink-400:       #FF179F;   /* selected-card border */
+  --pink-500:       #FF02E6;   /* card-primary gradient stop */
+  --pink-600:       #F41F95;   /* btn-primary stop, hover link color */
+  --pink-700:       #B10151;   /* btn-primary end stop */
+
+  /* Secondary — cyan / fluorescent blue gradient */
+  --cyan-100:       #83D9FF;   /* btn-gradient end, link/underline */
+  --cyan-200:       #71D9FF;   /* banner mid */
+  --cyan-300:       #68D1FF;   /* btn-gradient stop */
+  --cyan-400:       #3BE0FE;   /* munsell start, rounded-icon-munsell */
+  --cyan-500:       #23BAFE;   /* technologies label end */
+  --cyan-600:       #07B1FC;   /* btn-gradient border start */
+  --cyan-700:       #1A9BCB;   /* banner edges */
+  --cyan-800:       #0094AE;   /* munsell end */
+  --cyan-900:       #006577;   /* radial-skobeloff base */
+
+  /* Accent — radial atmospherics */
+  --grape:          #821DB6;   /* radial-grape base */
+  --majorelle-blue: #5A5BED;   /* radial-majorelle base */
+
+  /* Accent — gold (open-source star badge) */
+  --gold-100:       #FCF196;
+  --gold-200:       #B1A00B;
+
+  /* Accent — dApp & content tints */
+  --teal-bright:    #61FBF2;   /* Asteria title */
+  --honey:          #F6B51E;   /* GitHoney title */
+  --green:          #A5D6A7;   /* grants: delivered status */
+  --red:            #F87171;   /* form errors (tailwind red-400) */
+
+  /* Neutrals — text & dividers */
+  --fg-1:           rgba(255,255,255,0.95);   /* primary text, headings */
+  --fg-2:           rgba(255,255,255,0.85);   /* secondary text */
+  --fg-3:           rgba(255,255,255,0.70);   /* tertiary text */
+  --fg-4:           rgba(255,255,255,0.60);   /* descriptions, input placeholder */
+  --fg-5:           rgba(255,255,255,0.55);   /* sub-descriptions */
+  --fg-6:           rgba(255,255,255,0.50);   /* muted captions */
+  --fg-7:           rgba(255,255,255,0.20);   /* disabled / heavy mute */
+
+  --fg-pale:        #E4E4E7;  /* zinc-200 — card heading */
+  --fg-muted:       #A1A1AA;  /* zinc-400 — card body */
+  --fg-zinc:        #71717A;  /* zinc-500 — heading gradient stop */
+  --fg-list:        #C5C5C5;  /* details-list, professional-services body */
+  --divider:        #585858;  /* footer hairline */
+  --divider-soft:   #909C92;  /* horizontal/vertical rule mid */
+
+  /* Stroke palette (white-alpha) */
+  --stroke-1:       rgba(255,255,255,0.60);
+  --stroke-2:       rgba(255,255,255,0.20);
+  --stroke-3:       rgba(255,255,255,0.16);
+  --stroke-4:       rgba(255,255,255,0.10);
+
+  /* ---------- GRADIENTS (atmospheric — used everywhere) ---------- */
+  --gradient-primary:
+      linear-gradient(to right, var(--pink-600), var(--pink-700));
+  --gradient-banner:
+      linear-gradient(to right, var(--cyan-700), var(--cyan-200), var(--cyan-700));
+  --gradient-heading:
+      linear-gradient(135deg, #FFFFFF 0%, var(--fg-zinc) 100%);
+  --gradient-tech-label:
+      linear-gradient(to right, var(--cyan-100), var(--cyan-500));
+  --gradient-gold:
+      linear-gradient(to right, var(--gold-100), var(--gold-200));
+  --gradient-munsell:
+      linear-gradient(to right, var(--cyan-400), var(--cyan-800));
+  --gradient-card-primary:
+      linear-gradient(to bottom, rgba(255,2,230,0.12), transparent);
+  --gradient-card-secondary:
+      linear-gradient(to bottom, rgba(0,208,255,0.12), transparent);
+  --gradient-card-border:
+      linear-gradient(to bottom, rgba(255,255,255,0.60), transparent, rgba(255,255,255,0.60));
+  --gradient-hr:
+      linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.65), rgba(255,255,255,0));
+
+  /* Radial atmospherics */
+  --radial-grape:
+      radial-gradient(rgba(130,29,182,1), rgba(37,45,71,0) 55%);
+  --radial-majorelle:
+      radial-gradient(rgba(90,91,237,1), rgba(37,45,71,0) 40%);
+  --radial-skobeloff:
+      radial-gradient(rgba(0,101,119,1), rgba(37,45,71,0) 80%);
+
+  /* ---------- TYPE ---------- */
+  --font-sans:  Inter, 'Inter Fallback', system-ui, sans-serif;
+  --font-display: Inter, 'Inter Fallback', system-ui, sans-serif;
+  --font-mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Weights */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  /* Line heights */
+  --lh-tight:    1.1;
+  --lh-snug:     1.2;
+  --lh-base:     1.5;
+
+  /* Tracking */
+  --tracking-display: 0.035em;  /* large gradient headings */
+  --tracking-logo:    0.07em;   /* "TxPipe.io" wordmark */
+  --tracking-label:   0.4em;    /* small-caps "TECHNOLOGIES" labels */
+  --tracking-body:    0.02em;   /* body-paragraph subtle tracking */
+
+  /* Sizes (rem) */
+  --fs-display:  3rem;     /* 48px — hero on lg */
+  --fs-h1:       2.25rem;  /* 36px — page-title fallback */
+  --fs-h2:       2.25rem;  /* 36px — section titles */
+  --fs-h3:       1.5rem;   /* 24px */
+  --fs-h4:       1.25rem;  /* 20px */
+  --fs-lg:       1.125rem; /* 18px */
+  --fs-base:     1rem;     /* 16px — body */
+  --fs-sm:       0.875rem; /* 14px — captions */
+  --fs-xs:       0.75rem;  /* 12px — badge */
+
+  /* ---------- SPACING / RADIUS / SHADOW ---------- */
+  --radius-sm:   5px;    /* input */
+  --radius-md:   10px;   /* card-with-white-gradient */
+  --radius-lg:   14px;   /* trusted-by-card */
+  --radius-xl:   16px;   /* rounded-2xl on services */
+  --radius-2xl:  20px;   /* lets-connect outer */
+  --radius-pill: 9999px; /* btn, badge, rounded-icon */
+
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* Container side-padding (responsive scale used by .container) */
+  --container-pad-sm:  10px;
+  --container-pad-md:  20px;
+  --container-pad-lg:  40px;
+  --container-pad-xl:  82px;
+}
+
+/* =========================================================================
+   SEMANTIC TYPE RULES
+   ========================================================================= */
+
+html, body {
+  font-family: var(--font-sans);
+  background: var(--bg-base);
+  color: var(--fg-1);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, .h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 2vw + 1.5rem, 3rem);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  letter-spacing: 0;
+}
+
+/* Section titles get the signature white→zinc clip-text gradient */
+h2, .h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 1vw + 1.25rem, 2.25rem);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-display);
+  line-height: var(--lh-snug);
+  background: var(--gradient-heading);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+h3, .h3 {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+}
+
+h4, .h4 {
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+}
+
+.eyebrow {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  background: var(--gradient-tech-label);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.wordmark {
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-logo);
+  color: var(--fg-1);
+}
+
+p, .body {
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  color: var(--fg-3);
+  letter-spacing: var(--tracking-body);
+}
+
+.lede {
+  font-size: var(--fs-lg);
+  color: var(--fg-5);
+}
+
+small, .caption {
+  font-size: var(--fs-sm);
+  color: var(--fg-4);
+}
+
+code, kbd, samp, pre {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}

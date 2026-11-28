@@ -1,0 +1,86 @@
+---
+import type { NavGroup } from '../lib/collection';
+import { withBase } from '../lib/docs';
+
+interface Props {
+  groups: NavGroup[];
+  currentId: string;
+}
+
+const { groups, currentId } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-groups">
+    {
+      groups.map((group) => (
+        <details open data-group={group.label}>
+          <summary>
+            <span class="sidebar-group-label">{group.label}</span>
+          </summary>
+          <ul>
+            {group.items.map((item) => (
+              <li class:list={{ nested: item.nested }}>
+                <a
+                  href={withBase(item.route, base)}
+                  aria-current={item.id === currentId ? 'page' : undefined}
+                >
+                  {item.parent && <span class="visually-hidden">{item.parent} </span>}
+                  {item.scope && <span class="sidebar-scope">{item.scope}</span>}
+                  {item.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))
+    }
+  </div>
+</nav>
+
+<script is:inline>
+  // Nav groups the reader folds stay folded on the next page. The group that
+  // holds the current page always opens. Storage may be unavailable, as in a
+  // private window; the nav then just starts open.
+  (() => {
+    const key = 'thoth-nav-folded';
+    const read = () => {
+      try {
+        return JSON.parse(localStorage.getItem(key) ?? '[]');
+      } catch {
+        return [];
+      }
+    };
+    const folded = read();
+    for (const group of document.querySelectorAll('.sidebar details[data-group]')) {
+      const name = group.dataset.group;
+      if (folded.includes(name) && !group.querySelector('[aria-current="page"]')) {
+        group.open = false;
+      }
+      group.querySelector('summary')?.addEventListener('click', () => {
+        // The click lands before the toggle; read the state once it settles.
+        // Only this group's state is the reader's choice: the phone drawer
+        // folds the others by itself.
+        requestAnimationFrame(() => {
+          const others = read().filter((other) => other !== name);
+          try {
+            localStorage.setItem(key, JSON.stringify(group.open ? others : [...others, name]));
+          } catch {}
+        });
+      });
+    }
+
+    // On a short screen the nav scrolls by itself: bring the current page into
+    // it. scrollIntoView would move the page too.
+    const sidebar = document.querySelector('.sidebar');
+    const current = sidebar?.querySelector('[aria-current="page"]');
+    if (sidebar && current) {
+      const frame = sidebar.getBoundingClientRect();
+      const item = current.getBoundingClientRect();
+      if (item.top < frame.top || item.bottom > frame.bottom) {
+        sidebar.scrollTop += item.top - frame.top - (frame.height - item.height) / 2;
+      }
+    }
+  })();
+</script>
