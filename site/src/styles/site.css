@@ -1515,6 +1515,7 @@ a:hover {
 
   .sidebar {
     position: static;
+    align-self: stretch;
     width: auto;
     height: auto;
     padding: 0;
